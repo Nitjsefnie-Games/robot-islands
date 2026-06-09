@@ -1,0 +1,3317 @@
+{
+  "constants": {
+    "tier_weights": {
+      "keystone": 0.5,
+      "notable": 0.3,
+      "filler": 0.2
+    },
+    "filler_growth": 1.1,
+    "multiplicative_targets": {
+      "recipeRateMul:extraction": 3.1622776601683795,
+      "recipeRateMul:chemistry": 10,
+      "recipeRateMul:smelting": 10,
+      "recipeRateMul:electronics": 10,
+      "recipeRateMul:manufacturing": 10,
+      "powerConsumptionMul": 3.1622776601683795,
+      "recipeInputMul": 1.5,
+      "commRangeMul": 10,
+      "scannerCoverageMul": 10,
+      "storageCategoryCapMul:dry_goods": 3.1622776601683795,
+      "storageCategoryCapMul:liquid_gas": 3.1622776601683795,
+      "storageCategoryCapMul:components": 3.1622776601683795,
+      "storageCategoryCapMul:rare": 3.1622776601683795,
+      "routeCapacityMul": 10,
+      "maintenanceThresholdMul": 10,
+      "mineYieldBonusMul": 3.1622776601683795,
+      "droneScanRadiusMul": 10,
+      "satBufferCapMul": 10,
+      "powerProductionMul": 3.1622776601683795,
+      "droneFuelEfficiencyMul": 10,
+      "airshipRangeMul": 10,
+      "debrisProtectionMul": 10,
+      "batteryCapacityMul": 10,
+      "mineRareTrickleMul": 10,
+      "constructionTimeMul": 10,
+      "loggerYieldBonusMul": 3.1622776601683795,
+      "xpGainMul:(global)": 3,
+      "scannerDwellRateMul": 10,
+      "teleporterEfficiencyMul": 10,
+      "tradeFrequencyMul": 4,
+      "tradeSizeMul": 3,
+      "repairDroneReliabilityMul": 10,
+      "padExplosionReduceMul": 10,
+      "satFuelReserveMul": 10,
+      "loggerExoticTrickleMul": 10,
+      "drillYieldBonusMul": 3.1622776601683795,
+      "aquacultureYieldBonusMul": 3.1622776601683795,
+      "patronageYieldBonusMul": 3.1622776601683795,
+      "t5ExtractorYieldBonusMul": 3.1622776601683795
+    },
+    "additive_targets": {
+      "launchSuccessAdditive": 0.5,
+      "parallelBuildCapAdd": 2,
+      "queueCapAdd": 4,
+      "tradeReachAdd": 1,
+      "tradeSpreadShiftAdd": 0.08
+    }
+  },
+  "generation": [
+    {
+      "id": "mining.recipeRate.1",
+      "sub_path": "mining",
+      "depth": 1,
+      "cost": 1,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "extraction"
+      },
+      "description": "extraction recipe rate per node"
+    },
+    {
+      "id": "mining.recipeRate.2",
+      "sub_path": "mining",
+      "depth": 2,
+      "cost": 1,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "extraction"
+      },
+      "description": "extraction recipe rate per node"
+    },
+    {
+      "id": "mining.recipeRate.3",
+      "sub_path": "mining",
+      "depth": 3,
+      "cost": 2,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "extraction"
+      },
+      "description": "extraction recipe rate per node"
+    },
+    {
+      "id": "mining.recipeRate.4",
+      "sub_path": "mining",
+      "depth": 4,
+      "cost": 3,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "extraction"
+      },
+      "description": "extraction recipe rate per node"
+    },
+    {
+      "id": "mining.recipeRate.5",
+      "sub_path": "mining",
+      "depth": 5,
+      "cost": 4,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "extraction"
+      },
+      "description": "extraction recipe rate per node"
+    },
+    {
+      "id": "mining.recipeRate.6",
+      "sub_path": "mining",
+      "depth": 6,
+      "cost": 5,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "extraction"
+      },
+      "description": "extraction recipe rate per node"
+    },
+    {
+      "id": "mining.recipeRate.7",
+      "sub_path": "mining",
+      "depth": 7,
+      "cost": 8,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "extraction"
+      },
+      "description": "extraction recipe rate per node"
+    },
+    {
+      "id": "mining.recipeRate.8",
+      "sub_path": "mining",
+      "depth": 8,
+      "cost": 11,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "extraction"
+      },
+      "description": "extraction recipe rate per node"
+    },
+    {
+      "id": "mining.yieldBonus.1",
+      "sub_path": "mining",
+      "depth": 1,
+      "cost": 2,
+      "effect": {
+        "kind": "mineYieldBonusMul"
+      },
+      "description": "mine yield per node"
+    },
+    {
+      "id": "mining.yieldBonus.2",
+      "sub_path": "mining",
+      "depth": 2,
+      "cost": 3,
+      "effect": {
+        "kind": "mineYieldBonusMul"
+      },
+      "description": "mine yield per node"
+    },
+    {
+      "id": "mining.yieldBonus.3",
+      "sub_path": "mining",
+      "depth": 3,
+      "cost": 5,
+      "effect": {
+        "kind": "mineYieldBonusMul"
+      },
+      "description": "mine yield per node"
+    },
+    {
+      "id": "mining.yieldBonus.4",
+      "sub_path": "mining",
+      "depth": 4,
+      "cost": 8,
+      "effect": {
+        "kind": "mineYieldBonusMul"
+      },
+      "description": "mine yield per node"
+    },
+    {
+      "id": "mining.yieldBonus.5",
+      "sub_path": "mining",
+      "depth": 5,
+      "cost": 13,
+      "effect": {
+        "kind": "mineYieldBonusMul"
+      },
+      "description": "mine yield per node"
+    },
+    {
+      "id": "forestry.recipeRate.1",
+      "sub_path": "forestry",
+      "depth": 1,
+      "cost": 1,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "extraction"
+      },
+      "description": "extraction recipe rate per node"
+    },
+    {
+      "id": "forestry.recipeRate.2",
+      "sub_path": "forestry",
+      "depth": 2,
+      "cost": 1,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "extraction"
+      },
+      "description": "extraction recipe rate per node"
+    },
+    {
+      "id": "forestry.recipeRate.3",
+      "sub_path": "forestry",
+      "depth": 3,
+      "cost": 2,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "extraction"
+      },
+      "description": "extraction recipe rate per node"
+    },
+    {
+      "id": "forestry.recipeRate.4",
+      "sub_path": "forestry",
+      "depth": 4,
+      "cost": 3,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "extraction"
+      },
+      "description": "extraction recipe rate per node"
+    },
+    {
+      "id": "forestry.recipeRate.5",
+      "sub_path": "forestry",
+      "depth": 5,
+      "cost": 4,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "extraction"
+      },
+      "description": "extraction recipe rate per node"
+    },
+    {
+      "id": "forestry.recipeRate.6",
+      "sub_path": "forestry",
+      "depth": 6,
+      "cost": 5,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "extraction"
+      },
+      "description": "extraction recipe rate per node"
+    },
+    {
+      "id": "forestry.recipeRate.7",
+      "sub_path": "forestry",
+      "depth": 7,
+      "cost": 8,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "extraction"
+      },
+      "description": "extraction recipe rate per node"
+    },
+    {
+      "id": "forestry.recipeRate.8",
+      "sub_path": "forestry",
+      "depth": 8,
+      "cost": 11,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "extraction"
+      },
+      "description": "extraction recipe rate per node"
+    },
+    {
+      "id": "forestry.yieldBonus.1",
+      "sub_path": "forestry",
+      "depth": 1,
+      "cost": 2,
+      "effect": {
+        "kind": "loggerYieldBonusMul"
+      },
+      "description": "logger yield per node"
+    },
+    {
+      "id": "forestry.yieldBonus.2",
+      "sub_path": "forestry",
+      "depth": 2,
+      "cost": 3,
+      "effect": {
+        "kind": "loggerYieldBonusMul"
+      },
+      "description": "logger yield per node"
+    },
+    {
+      "id": "forestry.yieldBonus.3",
+      "sub_path": "forestry",
+      "depth": 3,
+      "cost": 5,
+      "effect": {
+        "kind": "loggerYieldBonusMul"
+      },
+      "description": "logger yield per node"
+    },
+    {
+      "id": "forestry.yieldBonus.4",
+      "sub_path": "forestry",
+      "depth": 4,
+      "cost": 8,
+      "effect": {
+        "kind": "loggerYieldBonusMul"
+      },
+      "description": "logger yield per node"
+    },
+    {
+      "id": "forestry.yieldBonus.5",
+      "sub_path": "forestry",
+      "depth": 5,
+      "cost": 13,
+      "effect": {
+        "kind": "loggerYieldBonusMul"
+      },
+      "description": "logger yield per node"
+    },
+    {
+      "id": "drilling.recipeRate.1",
+      "sub_path": "drilling",
+      "depth": 1,
+      "cost": 1,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "extraction"
+      },
+      "description": "extraction recipe rate per node"
+    },
+    {
+      "id": "drilling.recipeRate.2",
+      "sub_path": "drilling",
+      "depth": 2,
+      "cost": 1,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "extraction"
+      },
+      "description": "extraction recipe rate per node"
+    },
+    {
+      "id": "drilling.recipeRate.3",
+      "sub_path": "drilling",
+      "depth": 3,
+      "cost": 2,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "extraction"
+      },
+      "description": "extraction recipe rate per node"
+    },
+    {
+      "id": "drilling.recipeRate.4",
+      "sub_path": "drilling",
+      "depth": 4,
+      "cost": 3,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "extraction"
+      },
+      "description": "extraction recipe rate per node"
+    },
+    {
+      "id": "drilling.recipeRate.5",
+      "sub_path": "drilling",
+      "depth": 5,
+      "cost": 4,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "extraction"
+      },
+      "description": "extraction recipe rate per node"
+    },
+    {
+      "id": "drilling.recipeRate.6",
+      "sub_path": "drilling",
+      "depth": 6,
+      "cost": 5,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "extraction"
+      },
+      "description": "extraction recipe rate per node"
+    },
+    {
+      "id": "drilling.recipeRate.7",
+      "sub_path": "drilling",
+      "depth": 7,
+      "cost": 8,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "extraction"
+      },
+      "description": "extraction recipe rate per node"
+    },
+    {
+      "id": "drilling.recipeRate.8",
+      "sub_path": "drilling",
+      "depth": 8,
+      "cost": 11,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "extraction"
+      },
+      "description": "extraction recipe rate per node"
+    },
+    {
+      "id": "drilling.drillYield.1",
+      "sub_path": "drilling",
+      "depth": 1,
+      "cost": 1,
+      "effect": {
+        "kind": "drillYieldBonusMul"
+      },
+      "description": "drill yield per node"
+    },
+    {
+      "id": "drilling.drillYield.2",
+      "sub_path": "drilling",
+      "depth": 2,
+      "cost": 2,
+      "effect": {
+        "kind": "drillYieldBonusMul"
+      },
+      "description": "drill yield per node"
+    },
+    {
+      "id": "drilling.drillYield.3",
+      "sub_path": "drilling",
+      "depth": 3,
+      "cost": 2,
+      "effect": {
+        "kind": "drillYieldBonusMul"
+      },
+      "description": "drill yield per node"
+    },
+    {
+      "id": "drilling.drillYield.4",
+      "sub_path": "drilling",
+      "depth": 4,
+      "cost": 3,
+      "effect": {
+        "kind": "drillYieldBonusMul"
+      },
+      "description": "drill yield per node"
+    },
+    {
+      "id": "drilling.drillYield.5",
+      "sub_path": "drilling",
+      "depth": 5,
+      "cost": 5,
+      "effect": {
+        "kind": "drillYieldBonusMul"
+      },
+      "description": "drill yield per node"
+    },
+    {
+      "id": "drilling.drillYield.6",
+      "sub_path": "drilling",
+      "depth": 6,
+      "cost": 8,
+      "effect": {
+        "kind": "drillYieldBonusMul"
+      },
+      "description": "drill yield per node"
+    },
+    {
+      "id": "drilling.drillYield.7",
+      "sub_path": "drilling",
+      "depth": 7,
+      "cost": 11,
+      "effect": {
+        "kind": "drillYieldBonusMul"
+      },
+      "description": "drill yield per node"
+    },
+    {
+      "id": "drilling.drillYield.8",
+      "sub_path": "drilling",
+      "depth": 8,
+      "cost": 17,
+      "effect": {
+        "kind": "drillYieldBonusMul"
+      },
+      "description": "drill yield per node"
+    },
+    {
+      "id": "robotics.recipeRate.1",
+      "sub_path": "robotics",
+      "depth": 1,
+      "cost": 1,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "manufacturing"
+      },
+      "description": "manufacturing recipe rate per node"
+    },
+    {
+      "id": "robotics.recipeRate.2",
+      "sub_path": "robotics",
+      "depth": 2,
+      "cost": 2,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "manufacturing"
+      },
+      "description": "manufacturing recipe rate per node"
+    },
+    {
+      "id": "robotics.recipeRate.3",
+      "sub_path": "robotics",
+      "depth": 3,
+      "cost": 2,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "manufacturing"
+      },
+      "description": "manufacturing recipe rate per node"
+    },
+    {
+      "id": "robotics.recipeRate.4",
+      "sub_path": "robotics",
+      "depth": 4,
+      "cost": 3,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "manufacturing"
+      },
+      "description": "manufacturing recipe rate per node"
+    },
+    {
+      "id": "robotics.recipeRate.5",
+      "sub_path": "robotics",
+      "depth": 5,
+      "cost": 5,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "manufacturing"
+      },
+      "description": "manufacturing recipe rate per node"
+    },
+    {
+      "id": "robotics.recipeRate.6",
+      "sub_path": "robotics",
+      "depth": 6,
+      "cost": 8,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "manufacturing"
+      },
+      "description": "manufacturing recipe rate per node"
+    },
+    {
+      "id": "robotics.recipeRate.7",
+      "sub_path": "robotics",
+      "depth": 7,
+      "cost": 11,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "manufacturing"
+      },
+      "description": "manufacturing recipe rate per node"
+    },
+    {
+      "id": "robotics.recipeRate.8",
+      "sub_path": "robotics",
+      "depth": 8,
+      "cost": 17,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "manufacturing"
+      },
+      "description": "manufacturing recipe rate per node"
+    },
+    {
+      "id": "robotics.droneFuel.1",
+      "sub_path": "robotics",
+      "depth": 1,
+      "cost": 1,
+      "effect": {
+        "kind": "droneFuelEfficiencyMul"
+      },
+      "description": "drone fuel efficiency per node"
+    },
+    {
+      "id": "robotics.droneFuel.2",
+      "sub_path": "robotics",
+      "depth": 2,
+      "cost": 2,
+      "effect": {
+        "kind": "droneFuelEfficiencyMul"
+      },
+      "description": "drone fuel efficiency per node"
+    },
+    {
+      "id": "robotics.droneFuel.3",
+      "sub_path": "robotics",
+      "depth": 3,
+      "cost": 2,
+      "effect": {
+        "kind": "droneFuelEfficiencyMul"
+      },
+      "description": "drone fuel efficiency per node"
+    },
+    {
+      "id": "robotics.droneFuel.4",
+      "sub_path": "robotics",
+      "depth": 4,
+      "cost": 3,
+      "effect": {
+        "kind": "droneFuelEfficiencyMul"
+      },
+      "description": "drone fuel efficiency per node"
+    },
+    {
+      "id": "robotics.droneFuel.5",
+      "sub_path": "robotics",
+      "depth": 5,
+      "cost": 5,
+      "effect": {
+        "kind": "droneFuelEfficiencyMul"
+      },
+      "description": "drone fuel efficiency per node"
+    },
+    {
+      "id": "robotics.droneFuel.6",
+      "sub_path": "robotics",
+      "depth": 6,
+      "cost": 8,
+      "effect": {
+        "kind": "droneFuelEfficiencyMul"
+      },
+      "description": "drone fuel efficiency per node"
+    },
+    {
+      "id": "robotics.droneFuel.7",
+      "sub_path": "robotics",
+      "depth": 7,
+      "cost": 11,
+      "effect": {
+        "kind": "droneFuelEfficiencyMul"
+      },
+      "description": "drone fuel efficiency per node"
+    },
+    {
+      "id": "smelting.recipeRate.1",
+      "sub_path": "smelting",
+      "depth": 1,
+      "cost": 1,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "smelting"
+      },
+      "description": "smelting recipe rate per node"
+    },
+    {
+      "id": "smelting.recipeRate.2",
+      "sub_path": "smelting",
+      "depth": 2,
+      "cost": 1,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "smelting"
+      },
+      "description": "smelting recipe rate per node"
+    },
+    {
+      "id": "smelting.recipeRate.3",
+      "sub_path": "smelting",
+      "depth": 3,
+      "cost": 2,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "smelting"
+      },
+      "description": "smelting recipe rate per node"
+    },
+    {
+      "id": "smelting.recipeRate.4",
+      "sub_path": "smelting",
+      "depth": 4,
+      "cost": 3,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "smelting"
+      },
+      "description": "smelting recipe rate per node"
+    },
+    {
+      "id": "smelting.recipeRate.5",
+      "sub_path": "smelting",
+      "depth": 5,
+      "cost": 4,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "smelting"
+      },
+      "description": "smelting recipe rate per node"
+    },
+    {
+      "id": "smelting.recipeRate.6",
+      "sub_path": "smelting",
+      "depth": 6,
+      "cost": 5,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "smelting"
+      },
+      "description": "smelting recipe rate per node"
+    },
+    {
+      "id": "smelting.recipeRate.7",
+      "sub_path": "smelting",
+      "depth": 7,
+      "cost": 8,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "smelting"
+      },
+      "description": "smelting recipe rate per node"
+    },
+    {
+      "id": "smelting.recipeRate.8",
+      "sub_path": "smelting",
+      "depth": 8,
+      "cost": 11,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "smelting"
+      },
+      "description": "smelting recipe rate per node"
+    },
+    {
+      "id": "smelting.inputEff.3",
+      "sub_path": "smelting",
+      "depth": 3,
+      "cost": 3,
+      "effect": {
+        "kind": "recipeInputMul",
+        "reduce": true
+      },
+      "description": "material-input efficiency per node"
+    },
+    {
+      "id": "smelting.inputEff.4",
+      "sub_path": "smelting",
+      "depth": 4,
+      "cost": 5,
+      "effect": {
+        "kind": "recipeInputMul",
+        "reduce": true
+      },
+      "description": "material-input efficiency per node"
+    },
+    {
+      "id": "smelting.inputEff.5",
+      "sub_path": "smelting",
+      "depth": 5,
+      "cost": 10,
+      "effect": {
+        "kind": "recipeInputMul",
+        "reduce": true
+      },
+      "description": "material-input efficiency per node"
+    },
+    {
+      "id": "smelting.inputEff.6",
+      "sub_path": "smelting",
+      "depth": 6,
+      "cost": 17,
+      "effect": {
+        "kind": "recipeInputMul",
+        "reduce": true
+      },
+      "description": "material-input efficiency per node"
+    },
+    {
+      "id": "chemistry.recipeRate.1",
+      "sub_path": "chemistry",
+      "depth": 1,
+      "cost": 1,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "chemistry"
+      },
+      "description": "chemistry recipe rate per node"
+    },
+    {
+      "id": "chemistry.recipeRate.2",
+      "sub_path": "chemistry",
+      "depth": 2,
+      "cost": 1,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "chemistry"
+      },
+      "description": "chemistry recipe rate per node"
+    },
+    {
+      "id": "chemistry.recipeRate.3",
+      "sub_path": "chemistry",
+      "depth": 3,
+      "cost": 2,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "chemistry"
+      },
+      "description": "chemistry recipe rate per node"
+    },
+    {
+      "id": "chemistry.recipeRate.4",
+      "sub_path": "chemistry",
+      "depth": 4,
+      "cost": 3,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "chemistry"
+      },
+      "description": "chemistry recipe rate per node"
+    },
+    {
+      "id": "chemistry.recipeRate.5",
+      "sub_path": "chemistry",
+      "depth": 5,
+      "cost": 4,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "chemistry"
+      },
+      "description": "chemistry recipe rate per node"
+    },
+    {
+      "id": "chemistry.recipeRate.6",
+      "sub_path": "chemistry",
+      "depth": 6,
+      "cost": 5,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "chemistry"
+      },
+      "description": "chemistry recipe rate per node"
+    },
+    {
+      "id": "chemistry.recipeRate.7",
+      "sub_path": "chemistry",
+      "depth": 7,
+      "cost": 8,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "chemistry"
+      },
+      "description": "chemistry recipe rate per node"
+    },
+    {
+      "id": "chemistry.recipeRate.8",
+      "sub_path": "chemistry",
+      "depth": 8,
+      "cost": 11,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "chemistry"
+      },
+      "description": "chemistry recipe rate per node"
+    },
+    {
+      "id": "chemistry.inputEff.3",
+      "sub_path": "chemistry",
+      "depth": 3,
+      "cost": 3,
+      "effect": {
+        "kind": "recipeInputMul",
+        "reduce": true
+      },
+      "description": "material-input efficiency per node"
+    },
+    {
+      "id": "chemistry.inputEff.4",
+      "sub_path": "chemistry",
+      "depth": 4,
+      "cost": 5,
+      "effect": {
+        "kind": "recipeInputMul",
+        "reduce": true
+      },
+      "description": "material-input efficiency per node"
+    },
+    {
+      "id": "chemistry.inputEff.5",
+      "sub_path": "chemistry",
+      "depth": 5,
+      "cost": 10,
+      "effect": {
+        "kind": "recipeInputMul",
+        "reduce": true
+      },
+      "description": "material-input efficiency per node"
+    },
+    {
+      "id": "chemistry.inputEff.6",
+      "sub_path": "chemistry",
+      "depth": 6,
+      "cost": 17,
+      "effect": {
+        "kind": "recipeInputMul",
+        "reduce": true
+      },
+      "description": "material-input efficiency per node"
+    },
+    {
+      "id": "electronics.recipeRate.1",
+      "sub_path": "electronics",
+      "depth": 1,
+      "cost": 1,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "electronics"
+      },
+      "description": "electronics recipe rate per node"
+    },
+    {
+      "id": "electronics.recipeRate.2",
+      "sub_path": "electronics",
+      "depth": 2,
+      "cost": 1,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "electronics"
+      },
+      "description": "electronics recipe rate per node"
+    },
+    {
+      "id": "electronics.recipeRate.3",
+      "sub_path": "electronics",
+      "depth": 3,
+      "cost": 2,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "electronics"
+      },
+      "description": "electronics recipe rate per node"
+    },
+    {
+      "id": "electronics.recipeRate.4",
+      "sub_path": "electronics",
+      "depth": 4,
+      "cost": 3,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "electronics"
+      },
+      "description": "electronics recipe rate per node"
+    },
+    {
+      "id": "electronics.recipeRate.5",
+      "sub_path": "electronics",
+      "depth": 5,
+      "cost": 4,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "electronics"
+      },
+      "description": "electronics recipe rate per node"
+    },
+    {
+      "id": "electronics.recipeRate.6",
+      "sub_path": "electronics",
+      "depth": 6,
+      "cost": 5,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "electronics"
+      },
+      "description": "electronics recipe rate per node"
+    },
+    {
+      "id": "electronics.recipeRate.7",
+      "sub_path": "electronics",
+      "depth": 7,
+      "cost": 8,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "electronics"
+      },
+      "description": "electronics recipe rate per node"
+    },
+    {
+      "id": "electronics.recipeRate.8",
+      "sub_path": "electronics",
+      "depth": 8,
+      "cost": 11,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "electronics"
+      },
+      "description": "electronics recipe rate per node"
+    },
+    {
+      "id": "electronics.inputEff.3",
+      "sub_path": "electronics",
+      "depth": 3,
+      "cost": 3,
+      "effect": {
+        "kind": "recipeInputMul",
+        "reduce": true
+      },
+      "description": "material-input efficiency per node"
+    },
+    {
+      "id": "electronics.inputEff.4",
+      "sub_path": "electronics",
+      "depth": 4,
+      "cost": 5,
+      "effect": {
+        "kind": "recipeInputMul",
+        "reduce": true
+      },
+      "description": "material-input efficiency per node"
+    },
+    {
+      "id": "electronics.inputEff.5",
+      "sub_path": "electronics",
+      "depth": 5,
+      "cost": 10,
+      "effect": {
+        "kind": "recipeInputMul",
+        "reduce": true
+      },
+      "description": "material-input efficiency per node"
+    },
+    {
+      "id": "electronics.inputEff.6",
+      "sub_path": "electronics",
+      "depth": 6,
+      "cost": 17,
+      "effect": {
+        "kind": "recipeInputMul",
+        "reduce": true
+      },
+      "description": "material-input efficiency per node"
+    },
+    {
+      "id": "powerSystems.production.1",
+      "sub_path": "power_systems",
+      "depth": 1,
+      "cost": 1,
+      "effect": {
+        "kind": "powerProductionMul"
+      },
+      "description": "power production per node"
+    },
+    {
+      "id": "powerSystems.production.2",
+      "sub_path": "power_systems",
+      "depth": 2,
+      "cost": 1,
+      "effect": {
+        "kind": "powerProductionMul"
+      },
+      "description": "power production per node"
+    },
+    {
+      "id": "powerSystems.production.3",
+      "sub_path": "power_systems",
+      "depth": 3,
+      "cost": 2,
+      "effect": {
+        "kind": "powerProductionMul"
+      },
+      "description": "power production per node"
+    },
+    {
+      "id": "powerSystems.production.4",
+      "sub_path": "power_systems",
+      "depth": 4,
+      "cost": 3,
+      "effect": {
+        "kind": "powerProductionMul"
+      },
+      "description": "power production per node"
+    },
+    {
+      "id": "powerSystems.production.5",
+      "sub_path": "power_systems",
+      "depth": 5,
+      "cost": 4,
+      "effect": {
+        "kind": "powerProductionMul"
+      },
+      "description": "power production per node"
+    },
+    {
+      "id": "powerSystems.production.6",
+      "sub_path": "power_systems",
+      "depth": 6,
+      "cost": 5,
+      "effect": {
+        "kind": "powerProductionMul"
+      },
+      "description": "power production per node"
+    },
+    {
+      "id": "powerSystems.production.7",
+      "sub_path": "power_systems",
+      "depth": 7,
+      "cost": 8,
+      "effect": {
+        "kind": "powerProductionMul"
+      },
+      "description": "power production per node"
+    },
+    {
+      "id": "powerSystems.production.8",
+      "sub_path": "power_systems",
+      "depth": 8,
+      "cost": 11,
+      "effect": {
+        "kind": "powerProductionMul"
+      },
+      "description": "power production per node"
+    },
+    {
+      "id": "powerSystems.consumption.1",
+      "sub_path": "power_systems",
+      "depth": 1,
+      "cost": 2,
+      "effect": {
+        "kind": "powerConsumptionMul",
+        "reduce": true
+      },
+      "description": "power consumption per node"
+    },
+    {
+      "id": "powerSystems.consumption.2",
+      "sub_path": "power_systems",
+      "depth": 2,
+      "cost": 3,
+      "effect": {
+        "kind": "powerConsumptionMul",
+        "reduce": true
+      },
+      "description": "power consumption per node"
+    },
+    {
+      "id": "powerSystems.consumption.3",
+      "sub_path": "power_systems",
+      "depth": 3,
+      "cost": 5,
+      "effect": {
+        "kind": "powerConsumptionMul",
+        "reduce": true
+      },
+      "description": "power consumption per node"
+    },
+    {
+      "id": "powerSystems.consumption.4",
+      "sub_path": "power_systems",
+      "depth": 4,
+      "cost": 7,
+      "effect": {
+        "kind": "powerConsumptionMul",
+        "reduce": true
+      },
+      "description": "power consumption per node"
+    },
+    {
+      "id": "powerSystems.consumption.5",
+      "sub_path": "power_systems",
+      "depth": 5,
+      "cost": 10,
+      "effect": {
+        "kind": "powerConsumptionMul",
+        "reduce": true
+      },
+      "description": "power consumption per node"
+    },
+    {
+      "id": "powerSystems.consumption.6",
+      "sub_path": "power_systems",
+      "depth": 6,
+      "cost": 15,
+      "effect": {
+        "kind": "powerConsumptionMul",
+        "reduce": true
+      },
+      "description": "power consumption per node"
+    },
+    {
+      "id": "powerSystems.consumption.7",
+      "sub_path": "power_systems",
+      "depth": 7,
+      "cost": 23,
+      "effect": {
+        "kind": "powerConsumptionMul",
+        "reduce": true
+      },
+      "description": "power consumption per node"
+    },
+    {
+      "id": "storage.capDry.1",
+      "sub_path": "storage",
+      "depth": 1,
+      "cost": 1,
+      "effect": {
+        "kind": "storageCategoryCapMul",
+        "category": "dry_goods"
+      },
+      "description": "dry goods storage cap per node"
+    },
+    {
+      "id": "storage.capDry.2",
+      "sub_path": "storage",
+      "depth": 2,
+      "cost": 2,
+      "effect": {
+        "kind": "storageCategoryCapMul",
+        "category": "dry_goods"
+      },
+      "description": "dry goods storage cap per node"
+    },
+    {
+      "id": "storage.capDry.3",
+      "sub_path": "storage",
+      "depth": 3,
+      "cost": 2,
+      "effect": {
+        "kind": "storageCategoryCapMul",
+        "category": "dry_goods"
+      },
+      "description": "dry goods storage cap per node"
+    },
+    {
+      "id": "storage.capDry.4",
+      "sub_path": "storage",
+      "depth": 4,
+      "cost": 3,
+      "effect": {
+        "kind": "storageCategoryCapMul",
+        "category": "dry_goods"
+      },
+      "description": "dry goods storage cap per node"
+    },
+    {
+      "id": "storage.capLiq.1",
+      "sub_path": "storage",
+      "depth": 1,
+      "cost": 1,
+      "effect": {
+        "kind": "storageCategoryCapMul",
+        "category": "liquid_gas"
+      },
+      "description": "liquid gas storage cap per node"
+    },
+    {
+      "id": "storage.capLiq.2",
+      "sub_path": "storage",
+      "depth": 2,
+      "cost": 2,
+      "effect": {
+        "kind": "storageCategoryCapMul",
+        "category": "liquid_gas"
+      },
+      "description": "liquid gas storage cap per node"
+    },
+    {
+      "id": "storage.capLiq.3",
+      "sub_path": "storage",
+      "depth": 3,
+      "cost": 2,
+      "effect": {
+        "kind": "storageCategoryCapMul",
+        "category": "liquid_gas"
+      },
+      "description": "liquid gas storage cap per node"
+    },
+    {
+      "id": "storage.capLiq.4",
+      "sub_path": "storage",
+      "depth": 4,
+      "cost": 3,
+      "effect": {
+        "kind": "storageCategoryCapMul",
+        "category": "liquid_gas"
+      },
+      "description": "liquid gas storage cap per node"
+    },
+    {
+      "id": "storage.capComp.1",
+      "sub_path": "storage",
+      "depth": 1,
+      "cost": 1,
+      "effect": {
+        "kind": "storageCategoryCapMul",
+        "category": "components"
+      },
+      "description": "components storage cap per node"
+    },
+    {
+      "id": "storage.capComp.2",
+      "sub_path": "storage",
+      "depth": 2,
+      "cost": 2,
+      "effect": {
+        "kind": "storageCategoryCapMul",
+        "category": "components"
+      },
+      "description": "components storage cap per node"
+    },
+    {
+      "id": "storage.capComp.3",
+      "sub_path": "storage",
+      "depth": 3,
+      "cost": 2,
+      "effect": {
+        "kind": "storageCategoryCapMul",
+        "category": "components"
+      },
+      "description": "components storage cap per node"
+    },
+    {
+      "id": "storage.capComp.4",
+      "sub_path": "storage",
+      "depth": 4,
+      "cost": 3,
+      "effect": {
+        "kind": "storageCategoryCapMul",
+        "category": "components"
+      },
+      "description": "components storage cap per node"
+    },
+    {
+      "id": "storage.capRare.1",
+      "sub_path": "storage",
+      "depth": 1,
+      "cost": 1,
+      "effect": {
+        "kind": "storageCategoryCapMul",
+        "category": "rare"
+      },
+      "description": "rare storage cap per node"
+    },
+    {
+      "id": "storage.capRare.2",
+      "sub_path": "storage",
+      "depth": 2,
+      "cost": 2,
+      "effect": {
+        "kind": "storageCategoryCapMul",
+        "category": "rare"
+      },
+      "description": "rare storage cap per node"
+    },
+    {
+      "id": "storage.capRare.3",
+      "sub_path": "storage",
+      "depth": 3,
+      "cost": 2,
+      "effect": {
+        "kind": "storageCategoryCapMul",
+        "category": "rare"
+      },
+      "description": "rare storage cap per node"
+    },
+    {
+      "id": "storage.capRare.4",
+      "sub_path": "storage",
+      "depth": 4,
+      "cost": 3,
+      "effect": {
+        "kind": "storageCategoryCapMul",
+        "category": "rare"
+      },
+      "description": "rare storage cap per node"
+    },
+    {
+      "id": "transport.routeCapacity.1",
+      "sub_path": "transport",
+      "depth": 1,
+      "cost": 1,
+      "effect": {
+        "kind": "routeCapacityMul"
+      },
+      "description": "route capacity per node"
+    },
+    {
+      "id": "transport.routeCapacity.2",
+      "sub_path": "transport",
+      "depth": 2,
+      "cost": 1,
+      "effect": {
+        "kind": "routeCapacityMul"
+      },
+      "description": "route capacity per node"
+    },
+    {
+      "id": "transport.routeCapacity.3",
+      "sub_path": "transport",
+      "depth": 3,
+      "cost": 2,
+      "effect": {
+        "kind": "routeCapacityMul"
+      },
+      "description": "route capacity per node"
+    },
+    {
+      "id": "transport.routeCapacity.4",
+      "sub_path": "transport",
+      "depth": 4,
+      "cost": 3,
+      "effect": {
+        "kind": "routeCapacityMul"
+      },
+      "description": "route capacity per node"
+    },
+    {
+      "id": "transport.routeCapacity.5",
+      "sub_path": "transport",
+      "depth": 5,
+      "cost": 4,
+      "effect": {
+        "kind": "routeCapacityMul"
+      },
+      "description": "route capacity per node"
+    },
+    {
+      "id": "transport.routeCapacity.6",
+      "sub_path": "transport",
+      "depth": 6,
+      "cost": 5,
+      "effect": {
+        "kind": "routeCapacityMul"
+      },
+      "description": "route capacity per node"
+    },
+    {
+      "id": "transport.routeCapacity.7",
+      "sub_path": "transport",
+      "depth": 7,
+      "cost": 8,
+      "effect": {
+        "kind": "routeCapacityMul"
+      },
+      "description": "route capacity per node"
+    },
+    {
+      "id": "transport.routeCapacity.8",
+      "sub_path": "transport",
+      "depth": 8,
+      "cost": 11,
+      "effect": {
+        "kind": "routeCapacityMul"
+      },
+      "description": "route capacity per node"
+    },
+    {
+      "id": "transport.airshipRange.1",
+      "sub_path": "transport",
+      "depth": 1,
+      "cost": 2,
+      "effect": {
+        "kind": "airshipRangeMul"
+      },
+      "description": "airship range per node"
+    },
+    {
+      "id": "transport.airshipRange.2",
+      "sub_path": "transport",
+      "depth": 2,
+      "cost": 3,
+      "effect": {
+        "kind": "airshipRangeMul"
+      },
+      "description": "airship range per node"
+    },
+    {
+      "id": "transport.airshipRange.3",
+      "sub_path": "transport",
+      "depth": 3,
+      "cost": 5,
+      "effect": {
+        "kind": "airshipRangeMul"
+      },
+      "description": "airship range per node"
+    },
+    {
+      "id": "transport.airshipRange.4",
+      "sub_path": "transport",
+      "depth": 4,
+      "cost": 7,
+      "effect": {
+        "kind": "airshipRangeMul"
+      },
+      "description": "airship range per node"
+    },
+    {
+      "id": "transport.airshipRange.5",
+      "sub_path": "transport",
+      "depth": 5,
+      "cost": 10,
+      "effect": {
+        "kind": "airshipRangeMul"
+      },
+      "description": "airship range per node"
+    },
+    {
+      "id": "network.teleporter.1",
+      "sub_path": "network",
+      "depth": 1,
+      "cost": 2,
+      "effect": {
+        "kind": "teleporterEfficiencyMul"
+      },
+      "description": "teleporter efficiency per node"
+    },
+    {
+      "id": "network.teleporter.2",
+      "sub_path": "network",
+      "depth": 2,
+      "cost": 3,
+      "effect": {
+        "kind": "teleporterEfficiencyMul"
+      },
+      "description": "teleporter efficiency per node"
+    },
+    {
+      "id": "network.teleporter.3",
+      "sub_path": "network",
+      "depth": 3,
+      "cost": 5,
+      "effect": {
+        "kind": "teleporterEfficiencyMul"
+      },
+      "description": "teleporter efficiency per node"
+    },
+    {
+      "id": "network.teleporter.4",
+      "sub_path": "network",
+      "depth": 4,
+      "cost": 7,
+      "effect": {
+        "kind": "teleporterEfficiencyMul"
+      },
+      "description": "teleporter efficiency per node"
+    },
+    {
+      "id": "network.teleporter.5",
+      "sub_path": "network",
+      "depth": 5,
+      "cost": 10,
+      "effect": {
+        "kind": "teleporterEfficiencyMul"
+      },
+      "description": "teleporter efficiency per node"
+    },
+    {
+      "id": "launch.success.1",
+      "sub_path": "launch",
+      "depth": 1,
+      "cost": 1,
+      "effect": {
+        "kind": "launchSuccessAdditive"
+      },
+      "description": "launch success per node"
+    },
+    {
+      "id": "launch.success.2",
+      "sub_path": "launch",
+      "depth": 2,
+      "cost": 1,
+      "effect": {
+        "kind": "launchSuccessAdditive"
+      },
+      "description": "launch success per node"
+    },
+    {
+      "id": "launch.success.3",
+      "sub_path": "launch",
+      "depth": 3,
+      "cost": 2,
+      "effect": {
+        "kind": "launchSuccessAdditive"
+      },
+      "description": "launch success per node"
+    },
+    {
+      "id": "launch.success.4",
+      "sub_path": "launch",
+      "depth": 4,
+      "cost": 3,
+      "effect": {
+        "kind": "launchSuccessAdditive"
+      },
+      "description": "launch success per node"
+    },
+    {
+      "id": "launch.success.5",
+      "sub_path": "launch",
+      "depth": 5,
+      "cost": 4,
+      "effect": {
+        "kind": "launchSuccessAdditive"
+      },
+      "description": "launch success per node"
+    },
+    {
+      "id": "launch.success.6",
+      "sub_path": "launch",
+      "depth": 6,
+      "cost": 5,
+      "effect": {
+        "kind": "launchSuccessAdditive"
+      },
+      "description": "launch success per node"
+    },
+    {
+      "id": "launch.success.7",
+      "sub_path": "launch",
+      "depth": 7,
+      "cost": 8,
+      "effect": {
+        "kind": "launchSuccessAdditive"
+      },
+      "description": "launch success per node"
+    },
+    {
+      "id": "launch.satBuffer.1",
+      "sub_path": "launch",
+      "depth": 1,
+      "cost": 2,
+      "effect": {
+        "kind": "satBufferCapMul"
+      },
+      "description": "sat buffer cap per node"
+    },
+    {
+      "id": "launch.satBuffer.2",
+      "sub_path": "launch",
+      "depth": 2,
+      "cost": 3,
+      "effect": {
+        "kind": "satBufferCapMul"
+      },
+      "description": "sat buffer cap per node"
+    },
+    {
+      "id": "launch.satBuffer.3",
+      "sub_path": "launch",
+      "depth": 3,
+      "cost": 5,
+      "effect": {
+        "kind": "satBufferCapMul"
+      },
+      "description": "sat buffer cap per node"
+    },
+    {
+      "id": "launch.satBuffer.4",
+      "sub_path": "launch",
+      "depth": 4,
+      "cost": 8,
+      "effect": {
+        "kind": "satBufferCapMul"
+      },
+      "description": "sat buffer cap per node"
+    },
+    {
+      "id": "launch.satBuffer.5",
+      "sub_path": "launch",
+      "depth": 5,
+      "cost": 13,
+      "effect": {
+        "kind": "satBufferCapMul"
+      },
+      "description": "sat buffer cap per node"
+    },
+    {
+      "id": "communication.commRange.1",
+      "sub_path": "communication",
+      "depth": 1,
+      "cost": 1,
+      "effect": {
+        "kind": "commRangeMul"
+      },
+      "description": "comm range per node"
+    },
+    {
+      "id": "communication.commRange.2",
+      "sub_path": "communication",
+      "depth": 2,
+      "cost": 1,
+      "effect": {
+        "kind": "commRangeMul"
+      },
+      "description": "comm range per node"
+    },
+    {
+      "id": "communication.commRange.3",
+      "sub_path": "communication",
+      "depth": 3,
+      "cost": 2,
+      "effect": {
+        "kind": "commRangeMul"
+      },
+      "description": "comm range per node"
+    },
+    {
+      "id": "communication.commRange.4",
+      "sub_path": "communication",
+      "depth": 4,
+      "cost": 3,
+      "effect": {
+        "kind": "commRangeMul"
+      },
+      "description": "comm range per node"
+    },
+    {
+      "id": "communication.commRange.5",
+      "sub_path": "communication",
+      "depth": 5,
+      "cost": 4,
+      "effect": {
+        "kind": "commRangeMul"
+      },
+      "description": "comm range per node"
+    },
+    {
+      "id": "communication.commRange.6",
+      "sub_path": "communication",
+      "depth": 6,
+      "cost": 5,
+      "effect": {
+        "kind": "commRangeMul"
+      },
+      "description": "comm range per node"
+    },
+    {
+      "id": "communication.commRange.7",
+      "sub_path": "communication",
+      "depth": 7,
+      "cost": 8,
+      "effect": {
+        "kind": "commRangeMul"
+      },
+      "description": "comm range per node"
+    },
+    {
+      "id": "communication.commRange.8",
+      "sub_path": "communication",
+      "depth": 8,
+      "cost": 11,
+      "effect": {
+        "kind": "commRangeMul"
+      },
+      "description": "comm range per node"
+    },
+    {
+      "id": "discovery.scannerCoverage.1",
+      "sub_path": "discovery",
+      "depth": 1,
+      "cost": 1,
+      "effect": {
+        "kind": "scannerCoverageMul"
+      },
+      "description": "scanner coverage per node"
+    },
+    {
+      "id": "discovery.scannerCoverage.2",
+      "sub_path": "discovery",
+      "depth": 2,
+      "cost": 1,
+      "effect": {
+        "kind": "scannerCoverageMul"
+      },
+      "description": "scanner coverage per node"
+    },
+    {
+      "id": "discovery.scannerCoverage.3",
+      "sub_path": "discovery",
+      "depth": 3,
+      "cost": 2,
+      "effect": {
+        "kind": "scannerCoverageMul"
+      },
+      "description": "scanner coverage per node"
+    },
+    {
+      "id": "discovery.scannerCoverage.4",
+      "sub_path": "discovery",
+      "depth": 4,
+      "cost": 3,
+      "effect": {
+        "kind": "scannerCoverageMul"
+      },
+      "description": "scanner coverage per node"
+    },
+    {
+      "id": "discovery.scannerCoverage.5",
+      "sub_path": "discovery",
+      "depth": 5,
+      "cost": 4,
+      "effect": {
+        "kind": "scannerCoverageMul"
+      },
+      "description": "scanner coverage per node"
+    },
+    {
+      "id": "discovery.scannerCoverage.6",
+      "sub_path": "discovery",
+      "depth": 6,
+      "cost": 5,
+      "effect": {
+        "kind": "scannerCoverageMul"
+      },
+      "description": "scanner coverage per node"
+    },
+    {
+      "id": "discovery.scannerCoverage.7",
+      "sub_path": "discovery",
+      "depth": 7,
+      "cost": 8,
+      "effect": {
+        "kind": "scannerCoverageMul"
+      },
+      "description": "scanner coverage per node"
+    },
+    {
+      "id": "discovery.scannerCoverage.8",
+      "sub_path": "discovery",
+      "depth": 8,
+      "cost": 11,
+      "effect": {
+        "kind": "scannerCoverageMul"
+      },
+      "description": "scanner coverage per node"
+    },
+    {
+      "id": "discovery.droneScan.1",
+      "sub_path": "discovery",
+      "depth": 1,
+      "cost": 2,
+      "effect": {
+        "kind": "droneScanRadiusMul"
+      },
+      "description": "drone scan radius per node"
+    },
+    {
+      "id": "discovery.droneScan.2",
+      "sub_path": "discovery",
+      "depth": 2,
+      "cost": 3,
+      "effect": {
+        "kind": "droneScanRadiusMul"
+      },
+      "description": "drone scan radius per node"
+    },
+    {
+      "id": "discovery.droneScan.3",
+      "sub_path": "discovery",
+      "depth": 3,
+      "cost": 5,
+      "effect": {
+        "kind": "droneScanRadiusMul"
+      },
+      "description": "drone scan radius per node"
+    },
+    {
+      "id": "discovery.droneScan.4",
+      "sub_path": "discovery",
+      "depth": 4,
+      "cost": 8,
+      "effect": {
+        "kind": "droneScanRadiusMul"
+      },
+      "description": "drone scan radius per node"
+    },
+    {
+      "id": "discovery.droneScan.5",
+      "sub_path": "discovery",
+      "depth": 5,
+      "cost": 13,
+      "effect": {
+        "kind": "droneScanRadiusMul"
+      },
+      "description": "drone scan radius per node"
+    },
+    {
+      "id": "resilience.debris.1",
+      "sub_path": "resilience",
+      "depth": 1,
+      "cost": 1,
+      "effect": {
+        "kind": "debrisProtectionMul"
+      },
+      "description": "debris protection per node"
+    },
+    {
+      "id": "resilience.debris.2",
+      "sub_path": "resilience",
+      "depth": 2,
+      "cost": 1,
+      "effect": {
+        "kind": "debrisProtectionMul"
+      },
+      "description": "debris protection per node"
+    },
+    {
+      "id": "resilience.debris.3",
+      "sub_path": "resilience",
+      "depth": 3,
+      "cost": 2,
+      "effect": {
+        "kind": "debrisProtectionMul"
+      },
+      "description": "debris protection per node"
+    },
+    {
+      "id": "resilience.debris.4",
+      "sub_path": "resilience",
+      "depth": 4,
+      "cost": 3,
+      "effect": {
+        "kind": "debrisProtectionMul"
+      },
+      "description": "debris protection per node"
+    },
+    {
+      "id": "resilience.debris.5",
+      "sub_path": "resilience",
+      "depth": 5,
+      "cost": 4,
+      "effect": {
+        "kind": "debrisProtectionMul"
+      },
+      "description": "debris protection per node"
+    },
+    {
+      "id": "resilience.debris.6",
+      "sub_path": "resilience",
+      "depth": 6,
+      "cost": 5,
+      "effect": {
+        "kind": "debrisProtectionMul"
+      },
+      "description": "debris protection per node"
+    },
+    {
+      "id": "resilience.debris.7",
+      "sub_path": "resilience",
+      "depth": 7,
+      "cost": 8,
+      "effect": {
+        "kind": "debrisProtectionMul"
+      },
+      "description": "debris protection per node"
+    },
+    {
+      "id": "resilience.maintenance.1",
+      "sub_path": "resilience",
+      "depth": 1,
+      "cost": 1,
+      "effect": {
+        "kind": "maintenanceThresholdMul"
+      },
+      "description": "maintenance threshold per node"
+    },
+    {
+      "id": "resilience.maintenance.2",
+      "sub_path": "resilience",
+      "depth": 2,
+      "cost": 2,
+      "effect": {
+        "kind": "maintenanceThresholdMul"
+      },
+      "description": "maintenance threshold per node"
+    },
+    {
+      "id": "resilience.maintenance.3",
+      "sub_path": "resilience",
+      "depth": 3,
+      "cost": 2,
+      "effect": {
+        "kind": "maintenanceThresholdMul"
+      },
+      "description": "maintenance threshold per node"
+    },
+    {
+      "id": "resilience.maintenance.4",
+      "sub_path": "resilience",
+      "depth": 4,
+      "cost": 3,
+      "effect": {
+        "kind": "maintenanceThresholdMul"
+      },
+      "description": "maintenance threshold per node"
+    },
+    {
+      "id": "resilience.maintenance.5",
+      "sub_path": "resilience",
+      "depth": 5,
+      "cost": 5,
+      "effect": {
+        "kind": "maintenanceThresholdMul"
+      },
+      "description": "maintenance threshold per node"
+    },
+    {
+      "id": "resilience.maintenance.6",
+      "sub_path": "resilience",
+      "depth": 6,
+      "cost": 8,
+      "effect": {
+        "kind": "maintenanceThresholdMul"
+      },
+      "description": "maintenance threshold per node"
+    },
+    {
+      "id": "resilience.maintenance.7",
+      "sub_path": "resilience",
+      "depth": 7,
+      "cost": 11,
+      "effect": {
+        "kind": "maintenanceThresholdMul"
+      },
+      "description": "maintenance threshold per node"
+    },
+    {
+      "id": "patronage.patronageYield.1",
+      "sub_path": "patronage",
+      "depth": 1,
+      "cost": 1,
+      "effect": {
+        "kind": "patronageYieldBonusMul"
+      },
+      "description": "patronage yield per node"
+    },
+    {
+      "id": "patronage.patronageYield.2",
+      "sub_path": "patronage",
+      "depth": 2,
+      "cost": 2,
+      "effect": {
+        "kind": "patronageYieldBonusMul"
+      },
+      "description": "patronage yield per node"
+    },
+    {
+      "id": "patronage.patronageYield.3",
+      "sub_path": "patronage",
+      "depth": 3,
+      "cost": 2,
+      "effect": {
+        "kind": "patronageYieldBonusMul"
+      },
+      "description": "patronage yield per node"
+    },
+    {
+      "id": "patronage.patronageYield.4",
+      "sub_path": "patronage",
+      "depth": 4,
+      "cost": 3,
+      "effect": {
+        "kind": "patronageYieldBonusMul"
+      },
+      "description": "patronage yield per node"
+    },
+    {
+      "id": "patronage.patronageYield.5",
+      "sub_path": "patronage",
+      "depth": 5,
+      "cost": 5,
+      "effect": {
+        "kind": "patronageYieldBonusMul"
+      },
+      "description": "patronage yield per node"
+    },
+    {
+      "id": "patronage.patronageYield.6",
+      "sub_path": "patronage",
+      "depth": 6,
+      "cost": 8,
+      "effect": {
+        "kind": "patronageYieldBonusMul"
+      },
+      "description": "patronage yield per node"
+    },
+    {
+      "id": "patronage.patronageYield.7",
+      "sub_path": "patronage",
+      "depth": 7,
+      "cost": 11,
+      "effect": {
+        "kind": "patronageYieldBonusMul"
+      },
+      "description": "patronage yield per node"
+    },
+    {
+      "id": "patronage.patronageYield.8",
+      "sub_path": "patronage",
+      "depth": 8,
+      "cost": 17,
+      "effect": {
+        "kind": "patronageYieldBonusMul"
+      },
+      "description": "patronage yield per node"
+    },
+    {
+      "id": "aquaculture.recipeRate.1",
+      "sub_path": "aquaculture",
+      "depth": 1,
+      "cost": 1,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "extraction"
+      },
+      "description": "extraction recipe rate per node"
+    },
+    {
+      "id": "aquaculture.recipeRate.2",
+      "sub_path": "aquaculture",
+      "depth": 2,
+      "cost": 1,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "extraction"
+      },
+      "description": "extraction recipe rate per node"
+    },
+    {
+      "id": "aquaculture.recipeRate.3",
+      "sub_path": "aquaculture",
+      "depth": 3,
+      "cost": 2,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "extraction"
+      },
+      "description": "extraction recipe rate per node"
+    },
+    {
+      "id": "aquaculture.recipeRate.4",
+      "sub_path": "aquaculture",
+      "depth": 4,
+      "cost": 3,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "extraction"
+      },
+      "description": "extraction recipe rate per node"
+    },
+    {
+      "id": "aquaculture.recipeRate.5",
+      "sub_path": "aquaculture",
+      "depth": 5,
+      "cost": 4,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "extraction"
+      },
+      "description": "extraction recipe rate per node"
+    },
+    {
+      "id": "aquaculture.recipeRate.6",
+      "sub_path": "aquaculture",
+      "depth": 6,
+      "cost": 5,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "extraction"
+      },
+      "description": "extraction recipe rate per node"
+    },
+    {
+      "id": "aquaculture.recipeRate.7",
+      "sub_path": "aquaculture",
+      "depth": 7,
+      "cost": 8,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "extraction"
+      },
+      "description": "extraction recipe rate per node"
+    },
+    {
+      "id": "aquaculture.aquaYield.1",
+      "sub_path": "aquaculture",
+      "depth": 1,
+      "cost": 1,
+      "effect": {
+        "kind": "aquacultureYieldBonusMul"
+      },
+      "description": "aquaculture yield per node"
+    },
+    {
+      "id": "aquaculture.aquaYield.2",
+      "sub_path": "aquaculture",
+      "depth": 2,
+      "cost": 2,
+      "effect": {
+        "kind": "aquacultureYieldBonusMul"
+      },
+      "description": "aquaculture yield per node"
+    },
+    {
+      "id": "aquaculture.aquaYield.3",
+      "sub_path": "aquaculture",
+      "depth": 3,
+      "cost": 2,
+      "effect": {
+        "kind": "aquacultureYieldBonusMul"
+      },
+      "description": "aquaculture yield per node"
+    },
+    {
+      "id": "aquaculture.aquaYield.4",
+      "sub_path": "aquaculture",
+      "depth": 4,
+      "cost": 3,
+      "effect": {
+        "kind": "aquacultureYieldBonusMul"
+      },
+      "description": "aquaculture yield per node"
+    },
+    {
+      "id": "aquaculture.aquaYield.5",
+      "sub_path": "aquaculture",
+      "depth": 5,
+      "cost": 5,
+      "effect": {
+        "kind": "aquacultureYieldBonusMul"
+      },
+      "description": "aquaculture yield per node"
+    },
+    {
+      "id": "aquaculture.aquaYield.6",
+      "sub_path": "aquaculture",
+      "depth": 6,
+      "cost": 8,
+      "effect": {
+        "kind": "aquacultureYieldBonusMul"
+      },
+      "description": "aquaculture yield per node"
+    },
+    {
+      "id": "aquaculture.aquaYield.7",
+      "sub_path": "aquaculture",
+      "depth": 7,
+      "cost": 11,
+      "effect": {
+        "kind": "aquacultureYieldBonusMul"
+      },
+      "description": "aquaculture yield per node"
+    },
+    {
+      "id": "aquaculture.aquaYield.8",
+      "sub_path": "aquaculture",
+      "depth": 8,
+      "cost": 17,
+      "effect": {
+        "kind": "aquacultureYieldBonusMul"
+      },
+      "description": "aquaculture yield per node"
+    },
+    {
+      "id": "hydroprocessing.recipeRate.1",
+      "sub_path": "hydroprocessing",
+      "depth": 1,
+      "cost": 1,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "chemistry"
+      },
+      "description": "chemistry recipe rate per node"
+    },
+    {
+      "id": "hydroprocessing.recipeRate.2",
+      "sub_path": "hydroprocessing",
+      "depth": 2,
+      "cost": 1,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "chemistry"
+      },
+      "description": "chemistry recipe rate per node"
+    },
+    {
+      "id": "hydroprocessing.recipeRate.3",
+      "sub_path": "hydroprocessing",
+      "depth": 3,
+      "cost": 2,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "chemistry"
+      },
+      "description": "chemistry recipe rate per node"
+    },
+    {
+      "id": "hydroprocessing.recipeRate.4",
+      "sub_path": "hydroprocessing",
+      "depth": 4,
+      "cost": 3,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "chemistry"
+      },
+      "description": "chemistry recipe rate per node"
+    },
+    {
+      "id": "hydroprocessing.recipeRate.5",
+      "sub_path": "hydroprocessing",
+      "depth": 5,
+      "cost": 4,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "chemistry"
+      },
+      "description": "chemistry recipe rate per node"
+    },
+    {
+      "id": "hydroprocessing.recipeRate.6",
+      "sub_path": "hydroprocessing",
+      "depth": 6,
+      "cost": 5,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "chemistry"
+      },
+      "description": "chemistry recipe rate per node"
+    },
+    {
+      "id": "hydroprocessing.recipeRate.7",
+      "sub_path": "hydroprocessing",
+      "depth": 7,
+      "cost": 8,
+      "effect": {
+        "kind": "recipeRateMul",
+        "category": "chemistry"
+      },
+      "description": "chemistry recipe rate per node"
+    },
+    {
+      "id": "submarine.routeCapacity.1",
+      "sub_path": "submarine",
+      "depth": 1,
+      "cost": 1,
+      "effect": {
+        "kind": "routeCapacityMul"
+      },
+      "description": "route capacity per node"
+    },
+    {
+      "id": "submarine.routeCapacity.2",
+      "sub_path": "submarine",
+      "depth": 2,
+      "cost": 1,
+      "effect": {
+        "kind": "routeCapacityMul"
+      },
+      "description": "route capacity per node"
+    },
+    {
+      "id": "submarine.routeCapacity.3",
+      "sub_path": "submarine",
+      "depth": 3,
+      "cost": 2,
+      "effect": {
+        "kind": "routeCapacityMul"
+      },
+      "description": "route capacity per node"
+    },
+    {
+      "id": "submarine.routeCapacity.4",
+      "sub_path": "submarine",
+      "depth": 4,
+      "cost": 3,
+      "effect": {
+        "kind": "routeCapacityMul"
+      },
+      "description": "route capacity per node"
+    },
+    {
+      "id": "submarine.routeCapacity.5",
+      "sub_path": "submarine",
+      "depth": 5,
+      "cost": 4,
+      "effect": {
+        "kind": "routeCapacityMul"
+      },
+      "description": "route capacity per node"
+    },
+    {
+      "id": "submarine.routeCapacity.6",
+      "sub_path": "submarine",
+      "depth": 6,
+      "cost": 5,
+      "effect": {
+        "kind": "routeCapacityMul"
+      },
+      "description": "route capacity per node"
+    },
+    {
+      "id": "submarine.routeCapacity.7",
+      "sub_path": "submarine",
+      "depth": 7,
+      "cost": 8,
+      "effect": {
+        "kind": "routeCapacityMul"
+      },
+      "description": "route capacity per node"
+    },
+    {
+      "id": "submarine.airshipRange.1",
+      "sub_path": "submarine",
+      "depth": 1,
+      "cost": 2,
+      "effect": {
+        "kind": "airshipRangeMul"
+      },
+      "description": "airship range per node"
+    },
+    {
+      "id": "submarine.airshipRange.2",
+      "sub_path": "submarine",
+      "depth": 2,
+      "cost": 3,
+      "effect": {
+        "kind": "airshipRangeMul"
+      },
+      "description": "airship range per node"
+    },
+    {
+      "id": "submarine.airshipRange.3",
+      "sub_path": "submarine",
+      "depth": 3,
+      "cost": 5,
+      "effect": {
+        "kind": "airshipRangeMul"
+      },
+      "description": "airship range per node"
+    },
+    {
+      "id": "submarine.airshipRange.4",
+      "sub_path": "submarine",
+      "depth": 4,
+      "cost": 8,
+      "effect": {
+        "kind": "airshipRangeMul"
+      },
+      "description": "airship range per node"
+    },
+    {
+      "id": "submarine.airshipRange.5",
+      "sub_path": "submarine",
+      "depth": 5,
+      "cost": 13,
+      "effect": {
+        "kind": "airshipRangeMul"
+      },
+      "description": "airship range per node"
+    },
+    {
+      "id": "oceanography.scannerCoverage.1",
+      "sub_path": "oceanography",
+      "depth": 1,
+      "cost": 1,
+      "effect": {
+        "kind": "scannerCoverageMul"
+      },
+      "description": "scanner coverage per node"
+    },
+    {
+      "id": "oceanography.scannerCoverage.2",
+      "sub_path": "oceanography",
+      "depth": 2,
+      "cost": 1,
+      "effect": {
+        "kind": "scannerCoverageMul"
+      },
+      "description": "scanner coverage per node"
+    },
+    {
+      "id": "oceanography.scannerCoverage.3",
+      "sub_path": "oceanography",
+      "depth": 3,
+      "cost": 2,
+      "effect": {
+        "kind": "scannerCoverageMul"
+      },
+      "description": "scanner coverage per node"
+    },
+    {
+      "id": "oceanography.scannerCoverage.4",
+      "sub_path": "oceanography",
+      "depth": 4,
+      "cost": 3,
+      "effect": {
+        "kind": "scannerCoverageMul"
+      },
+      "description": "scanner coverage per node"
+    },
+    {
+      "id": "oceanography.scannerCoverage.5",
+      "sub_path": "oceanography",
+      "depth": 5,
+      "cost": 4,
+      "effect": {
+        "kind": "scannerCoverageMul"
+      },
+      "description": "scanner coverage per node"
+    },
+    {
+      "id": "oceanography.scannerCoverage.6",
+      "sub_path": "oceanography",
+      "depth": 6,
+      "cost": 5,
+      "effect": {
+        "kind": "scannerCoverageMul"
+      },
+      "description": "scanner coverage per node"
+    },
+    {
+      "id": "oceanography.scannerCoverage.7",
+      "sub_path": "oceanography",
+      "depth": 7,
+      "cost": 8,
+      "effect": {
+        "kind": "scannerCoverageMul"
+      },
+      "description": "scanner coverage per node"
+    },
+    {
+      "id": "oceanography.t5ExtractorYield.1",
+      "sub_path": "oceanography",
+      "depth": 1,
+      "cost": 1,
+      "effect": {
+        "kind": "t5ExtractorYieldBonusMul"
+      },
+      "description": "T5-extractor yield per node"
+    },
+    {
+      "id": "oceanography.t5ExtractorYield.2",
+      "sub_path": "oceanography",
+      "depth": 2,
+      "cost": 2,
+      "effect": {
+        "kind": "t5ExtractorYieldBonusMul"
+      },
+      "description": "T5-extractor yield per node"
+    },
+    {
+      "id": "oceanography.t5ExtractorYield.3",
+      "sub_path": "oceanography",
+      "depth": 3,
+      "cost": 2,
+      "effect": {
+        "kind": "t5ExtractorYieldBonusMul"
+      },
+      "description": "T5-extractor yield per node"
+    },
+    {
+      "id": "oceanography.t5ExtractorYield.4",
+      "sub_path": "oceanography",
+      "depth": 4,
+      "cost": 3,
+      "effect": {
+        "kind": "t5ExtractorYieldBonusMul"
+      },
+      "description": "T5-extractor yield per node"
+    },
+    {
+      "id": "oceanography.t5ExtractorYield.5",
+      "sub_path": "oceanography",
+      "depth": 5,
+      "cost": 5,
+      "effect": {
+        "kind": "t5ExtractorYieldBonusMul"
+      },
+      "description": "T5-extractor yield per node"
+    },
+    {
+      "id": "oceanography.t5ExtractorYield.6",
+      "sub_path": "oceanography",
+      "depth": 6,
+      "cost": 8,
+      "effect": {
+        "kind": "t5ExtractorYieldBonusMul"
+      },
+      "description": "T5-extractor yield per node"
+    },
+    {
+      "id": "oceanography.t5ExtractorYield.7",
+      "sub_path": "oceanography",
+      "depth": 7,
+      "cost": 11,
+      "effect": {
+        "kind": "t5ExtractorYieldBonusMul"
+      },
+      "description": "T5-extractor yield per node"
+    },
+    {
+      "id": "oceanography.t5ExtractorYield.8",
+      "sub_path": "oceanography",
+      "depth": 8,
+      "cost": 17,
+      "effect": {
+        "kind": "t5ExtractorYieldBonusMul"
+      },
+      "description": "T5-extractor yield per node"
+    }
+  ],
+  "pools_real": {
+    "recipeRateMul:extraction": {
+      "additive": false,
+      "target": 3.1622776601683795,
+      "n_members": 31,
+      "tiers_present": {
+        "keystone": 0,
+        "notable": 0,
+        "filler": 31
+      },
+      "product": 3.162277660168378,
+      "sum": null,
+      "ramp_ratios": [
+        1,
+        1,
+        1,
+        1.1,
+        1,
+        1,
+        1,
+        1.1,
+        1,
+        1,
+        1,
+        1.1000000000000003,
+        1,
+        1,
+        1,
+        1.1,
+        1,
+        1,
+        1,
+        1.1,
+        1,
+        1,
+        1,
+        1.1,
+        1,
+        1,
+        1,
+        1.1000000000000003,
+        1,
+        1
+      ]
+    },
+    "mineYieldBonusMul": {
+      "additive": false,
+      "target": 3.1622776601683795,
+      "n_members": 5,
+      "tiers_present": {
+        "keystone": 0,
+        "notable": 0,
+        "filler": 5
+      },
+      "product": 3.162277660168379,
+      "sum": null,
+      "ramp_ratios": [
+        1.1,
+        1.1000000000000003,
+        1.1,
+        1.1
+      ]
+    },
+    "loggerYieldBonusMul": {
+      "additive": false,
+      "target": 3.1622776601683795,
+      "n_members": 5,
+      "tiers_present": {
+        "keystone": 0,
+        "notable": 0,
+        "filler": 5
+      },
+      "product": 3.162277660168379,
+      "sum": null,
+      "ramp_ratios": [
+        1.1,
+        1.1000000000000003,
+        1.1,
+        1.1
+      ]
+    },
+    "drillYieldBonusMul": {
+      "additive": false,
+      "target": 3.1622776601683795,
+      "n_members": 8,
+      "tiers_present": {
+        "keystone": 0,
+        "notable": 0,
+        "filler": 8
+      },
+      "product": 3.1622776601683786,
+      "sum": null,
+      "ramp_ratios": [
+        1.1,
+        1.1,
+        1.1,
+        1.1,
+        1.0999999999999999,
+        1.1,
+        1.1
+      ]
+    },
+    "recipeRateMul:manufacturing": {
+      "additive": false,
+      "target": 10,
+      "n_members": 8,
+      "tiers_present": {
+        "keystone": 0,
+        "notable": 0,
+        "filler": 8
+      },
+      "product": 9.999999999999998,
+      "sum": null,
+      "ramp_ratios": [
+        1.1,
+        1.1,
+        1.1,
+        1.1,
+        1.1,
+        1.1,
+        1.1
+      ]
+    },
+    "droneFuelEfficiencyMul": {
+      "additive": false,
+      "target": 10,
+      "n_members": 7,
+      "tiers_present": {
+        "keystone": 0,
+        "notable": 0,
+        "filler": 7
+      },
+      "product": 9.999999999999998,
+      "sum": null,
+      "ramp_ratios": [
+        1.1,
+        1.1,
+        1.1000000000000003,
+        1.1,
+        1.0999999999999999,
+        1.1
+      ]
+    },
+    "recipeRateMul:smelting": {
+      "additive": false,
+      "target": 10,
+      "n_members": 8,
+      "tiers_present": {
+        "keystone": 0,
+        "notable": 0,
+        "filler": 8
+      },
+      "product": 9.999999999999998,
+      "sum": null,
+      "ramp_ratios": [
+        1.1,
+        1.1,
+        1.1,
+        1.1,
+        1.1,
+        1.1,
+        1.1
+      ]
+    },
+    "recipeInputMul": {
+      "additive": false,
+      "target": 1.5,
+      "n_members": 12,
+      "tiers_present": {
+        "keystone": 0,
+        "notable": 0,
+        "filler": 12
+      },
+      "product": 1.4999999999999993,
+      "sum": null,
+      "ramp_ratios": [
+        1,
+        1,
+        1.1000000000000003,
+        1,
+        1,
+        1.1,
+        1,
+        1,
+        1.0999999999999999,
+        1,
+        1
+      ]
+    },
+    "recipeRateMul:chemistry": {
+      "additive": false,
+      "target": 10,
+      "n_members": 15,
+      "tiers_present": {
+        "keystone": 0,
+        "notable": 0,
+        "filler": 15
+      },
+      "product": 9.999999999999998,
+      "sum": null,
+      "ramp_ratios": [
+        1,
+        1.1,
+        1,
+        1.1,
+        1,
+        1.1000000000000003,
+        1,
+        1.1,
+        1,
+        1.0999999999999999,
+        1,
+        1.1,
+        1,
+        1.1000000000000003
+      ]
+    },
+    "recipeRateMul:electronics": {
+      "additive": false,
+      "target": 10,
+      "n_members": 8,
+      "tiers_present": {
+        "keystone": 0,
+        "notable": 0,
+        "filler": 8
+      },
+      "product": 9.999999999999998,
+      "sum": null,
+      "ramp_ratios": [
+        1.1,
+        1.1,
+        1.1,
+        1.1,
+        1.1,
+        1.1,
+        1.1
+      ]
+    },
+    "powerProductionMul": {
+      "additive": false,
+      "target": 3.1622776601683795,
+      "n_members": 8,
+      "tiers_present": {
+        "keystone": 0,
+        "notable": 0,
+        "filler": 8
+      },
+      "product": 3.1622776601683786,
+      "sum": null,
+      "ramp_ratios": [
+        1.1,
+        1.1,
+        1.1,
+        1.1,
+        1.0999999999999999,
+        1.1,
+        1.1
+      ]
+    },
+    "powerConsumptionMul": {
+      "additive": false,
+      "target": 3.1622776601683795,
+      "n_members": 7,
+      "tiers_present": {
+        "keystone": 0,
+        "notable": 0,
+        "filler": 7
+      },
+      "product": 3.162277660168378,
+      "sum": null,
+      "ramp_ratios": [
+        1.1,
+        1.0999999999999999,
+        1.1,
+        1.1,
+        1.0999999999999999,
+        1.1
+      ]
+    },
+    "storageCategoryCapMul:dry_goods": {
+      "additive": false,
+      "target": 3.1622776601683795,
+      "n_members": 4,
+      "tiers_present": {
+        "keystone": 0,
+        "notable": 0,
+        "filler": 4
+      },
+      "product": 3.1622776601683786,
+      "sum": null,
+      "ramp_ratios": [
+        1.1,
+        1.1,
+        1.1
+      ]
+    },
+    "storageCategoryCapMul:liquid_gas": {
+      "additive": false,
+      "target": 3.1622776601683795,
+      "n_members": 4,
+      "tiers_present": {
+        "keystone": 0,
+        "notable": 0,
+        "filler": 4
+      },
+      "product": 3.1622776601683786,
+      "sum": null,
+      "ramp_ratios": [
+        1.1,
+        1.1,
+        1.1
+      ]
+    },
+    "storageCategoryCapMul:components": {
+      "additive": false,
+      "target": 3.1622776601683795,
+      "n_members": 4,
+      "tiers_present": {
+        "keystone": 0,
+        "notable": 0,
+        "filler": 4
+      },
+      "product": 3.1622776601683786,
+      "sum": null,
+      "ramp_ratios": [
+        1.1,
+        1.1,
+        1.1
+      ]
+    },
+    "storageCategoryCapMul:rare": {
+      "additive": false,
+      "target": 3.1622776601683795,
+      "n_members": 4,
+      "tiers_present": {
+        "keystone": 0,
+        "notable": 0,
+        "filler": 4
+      },
+      "product": 3.1622776601683786,
+      "sum": null,
+      "ramp_ratios": [
+        1.1,
+        1.1,
+        1.1
+      ]
+    },
+    "routeCapacityMul": {
+      "additive": false,
+      "target": 10,
+      "n_members": 15,
+      "tiers_present": {
+        "keystone": 0,
+        "notable": 0,
+        "filler": 15
+      },
+      "product": 9.999999999999998,
+      "sum": null,
+      "ramp_ratios": [
+        1,
+        1.1,
+        1,
+        1.1,
+        1,
+        1.1000000000000003,
+        1,
+        1.1,
+        1,
+        1.0999999999999999,
+        1,
+        1.1,
+        1,
+        1.1000000000000003
+      ]
+    },
+    "airshipRangeMul": {
+      "additive": false,
+      "target": 10,
+      "n_members": 10,
+      "tiers_present": {
+        "keystone": 0,
+        "notable": 0,
+        "filler": 10
+      },
+      "product": 9.999999999999998,
+      "sum": null,
+      "ramp_ratios": [
+        1,
+        1.1,
+        1,
+        1.1000000000000003,
+        1,
+        1.1,
+        1,
+        1.1,
+        1
+      ]
+    },
+    "teleporterEfficiencyMul": {
+      "additive": false,
+      "target": 10,
+      "n_members": 5,
+      "tiers_present": {
+        "keystone": 0,
+        "notable": 0,
+        "filler": 5
+      },
+      "product": 9.999999999999996,
+      "sum": null,
+      "ramp_ratios": [
+        1.1,
+        1.1,
+        1.1,
+        1.1
+      ]
+    },
+    "launchSuccessAdditive": {
+      "additive": true,
+      "target": 0.5,
+      "n_members": 7,
+      "tiers_present": {
+        "keystone": 0,
+        "notable": 0,
+        "filler": 7
+      },
+      "product": null,
+      "sum": 0.5,
+      "ramp_ratios": [
+        1.1,
+        1.1,
+        1.1,
+        1.1000000000000003,
+        1.0999999999999999,
+        1.1
+      ]
+    },
+    "satBufferCapMul": {
+      "additive": false,
+      "target": 10,
+      "n_members": 5,
+      "tiers_present": {
+        "keystone": 0,
+        "notable": 0,
+        "filler": 5
+      },
+      "product": 9.999999999999996,
+      "sum": null,
+      "ramp_ratios": [
+        1.1,
+        1.1,
+        1.1,
+        1.1
+      ]
+    },
+    "commRangeMul": {
+      "additive": false,
+      "target": 10,
+      "n_members": 8,
+      "tiers_present": {
+        "keystone": 0,
+        "notable": 0,
+        "filler": 8
+      },
+      "product": 9.999999999999998,
+      "sum": null,
+      "ramp_ratios": [
+        1.1,
+        1.1,
+        1.1,
+        1.1,
+        1.1,
+        1.1,
+        1.1
+      ]
+    },
+    "scannerCoverageMul": {
+      "additive": false,
+      "target": 10,
+      "n_members": 15,
+      "tiers_present": {
+        "keystone": 0,
+        "notable": 0,
+        "filler": 15
+      },
+      "product": 9.999999999999998,
+      "sum": null,
+      "ramp_ratios": [
+        1,
+        1.1,
+        1,
+        1.1,
+        1,
+        1.1000000000000003,
+        1,
+        1.1,
+        1,
+        1.0999999999999999,
+        1,
+        1.1,
+        1,
+        1.1000000000000003
+      ]
+    },
+    "droneScanRadiusMul": {
+      "additive": false,
+      "target": 10,
+      "n_members": 5,
+      "tiers_present": {
+        "keystone": 0,
+        "notable": 0,
+        "filler": 5
+      },
+      "product": 9.999999999999996,
+      "sum": null,
+      "ramp_ratios": [
+        1.1,
+        1.1,
+        1.1,
+        1.1
+      ]
+    },
+    "debrisProtectionMul": {
+      "additive": false,
+      "target": 10,
+      "n_members": 7,
+      "tiers_present": {
+        "keystone": 0,
+        "notable": 0,
+        "filler": 7
+      },
+      "product": 9.999999999999998,
+      "sum": null,
+      "ramp_ratios": [
+        1.1,
+        1.1,
+        1.1000000000000003,
+        1.1,
+        1.0999999999999999,
+        1.1
+      ]
+    },
+    "maintenanceThresholdMul": {
+      "additive": false,
+      "target": 10,
+      "n_members": 7,
+      "tiers_present": {
+        "keystone": 0,
+        "notable": 0,
+        "filler": 7
+      },
+      "product": 9.999999999999998,
+      "sum": null,
+      "ramp_ratios": [
+        1.1,
+        1.1,
+        1.1000000000000003,
+        1.1,
+        1.0999999999999999,
+        1.1
+      ]
+    },
+    "patronageYieldBonusMul": {
+      "additive": false,
+      "target": 3.1622776601683795,
+      "n_members": 8,
+      "tiers_present": {
+        "keystone": 0,
+        "notable": 0,
+        "filler": 8
+      },
+      "product": 3.1622776601683786,
+      "sum": null,
+      "ramp_ratios": [
+        1.1,
+        1.1,
+        1.1,
+        1.1,
+        1.0999999999999999,
+        1.1,
+        1.1
+      ]
+    },
+    "aquacultureYieldBonusMul": {
+      "additive": false,
+      "target": 3.1622776601683795,
+      "n_members": 8,
+      "tiers_present": {
+        "keystone": 0,
+        "notable": 0,
+        "filler": 8
+      },
+      "product": 3.1622776601683786,
+      "sum": null,
+      "ramp_ratios": [
+        1.1,
+        1.1,
+        1.1,
+        1.1,
+        1.0999999999999999,
+        1.1,
+        1.1
+      ]
+    },
+    "t5ExtractorYieldBonusMul": {
+      "additive": false,
+      "target": 3.1622776601683795,
+      "n_members": 8,
+      "tiers_present": {
+        "keystone": 0,
+        "notable": 0,
+        "filler": 8
+      },
+      "product": 3.1622776601683786,
+      "sum": null,
+      "ramp_ratios": [
+        1.1,
+        1.1,
+        1.1,
+        1.1,
+        1.0999999999999999,
+        1.1,
+        1.1
+      ]
+    }
+  },
+  "pools_synthetic": {
+    "multiplicative_mixed": {
+      "commRangeMul": {
+        "additive": false,
+        "target": 10,
+        "product": 9.999999999999998,
+        "sum": null,
+        "tier_shares": {
+          "keystone": 0.5,
+          "notable": 0.29999999999999993,
+          "filler": 0.19999999999999996
+        },
+        "tier_counts": {
+          "keystone": 1,
+          "notable": 1,
+          "filler": 3
+        }
+      }
+    },
+    "additive_mixed": {
+      "launchSuccessAdditive": {
+        "additive": true,
+        "target": 0.5,
+        "product": null,
+        "sum": 0.5,
+        "tier_shares": {
+          "keystone": 0.5,
+          "notable": 0.3,
+          "filler": 0.2
+        },
+        "tier_counts": {
+          "keystone": 1,
+          "notable": 1,
+          "filler": 3
+        }
+      }
+    },
+    "startdepth_filler": {
+      "recipeInputMul": {
+        "additive": false,
+        "target": 1.5,
+        "product": 1.4999999999999998,
+        "sum": null,
+        "tier_shares": {
+          "filler": 0.9999999999999996
+        },
+        "tier_counts": {
+          "filler": 4
+        }
+      }
+    }
+  },
+  "edges": {
+    "idempotent": true,
+    "idempotent_max_delta": 0,
+    "unknown_kind_magnitude": 0,
+    "nonconforming": [
+      {
+        "id": "discovery.droneScan.foo",
+        "magnitude": 1
+      },
+      {
+        "id": "discovery.droneScan.2",
+        "magnitude": 1.1
+      }
+    ]
+  }
+}

@@ -1,0 +1,1228 @@
+{
+  "unit": "U37",
+  "description": "Scout-drone dispatch gates, tier resolution, range=fuel*efficiency*skill, travel time, scan radius, per-tick corridor reveal with antenna-gated dark-mode buffering + flush-on-return, T4 instant pulse, T5 path-drawn drone, probability-engine rare bias, weather destruction roll (INVARIANT). RNG via replicated PRNG seeded by world seed + vehicle id.",
+  "constants": {
+    "fuel_efficiency_by_tier": {
+      "1": 3,
+      "2": 6,
+      "3": 9,
+      "4": 12,
+      "5": 15,
+      "6": 18
+    },
+    "scan_radius_by_tier": {
+      "1": 2,
+      "2": 4,
+      "3": 8,
+      "4": 0,
+      "5": 12,
+      "6": 16
+    },
+    "weather_multiplier_by_tier": {
+      "1": 1.5,
+      "2": 1,
+      "3": 0.7,
+      "4": 0.5,
+      "5": 0.5,
+      "6": 0.2
+    },
+    "straight_line_speed_tiles_per_sec": 0.5,
+    "path_drawn_efficiency": 8,
+    "path_drawn_speed_tiles_per_sec": 0.8,
+    "path_drawn_weather_multiplier": 0.5,
+    "path_drawn_scan_radius": 12,
+    "min_fuel_per_drone": 10,
+    "max_fuel_per_drone": 50,
+    "pulse_radius_tiles": 48,
+    "pulse_fuel_cost": 10,
+    "cell_size_tiles": 16
+  },
+  "probability_bias": [
+    {
+      "engineCount": 0,
+      "bias": 0
+    },
+    {
+      "engineCount": 1,
+      "bias": 0.25
+    },
+    {
+      "engineCount": 2,
+      "bias": 0.4
+    },
+    {
+      "engineCount": 3,
+      "bias": 0.5
+    },
+    {
+      "engineCount": 4,
+      "bias": 0.6
+    },
+    {
+      "engineCount": 5,
+      "bias": 0.6
+    },
+    {
+      "name": "mixed_nonengine_ignored",
+      "buildings": [
+        "probability_engine",
+        "antenna_t1",
+        "probability_engine"
+      ],
+      "bias": 0.4
+    }
+  ],
+  "point_to_segment_distsq": [
+    {
+      "name": "degenerate_AB_equal",
+      "px": 5,
+      "py": 5,
+      "ax": 0,
+      "ay": 0,
+      "bx": 0,
+      "by": 0,
+      "distSq": 50
+    },
+    {
+      "name": "foot_inside_segment",
+      "px": 5,
+      "py": 0,
+      "ax": 0,
+      "ay": 0,
+      "bx": 10,
+      "by": 0,
+      "distSq": 0
+    },
+    {
+      "name": "clamp_before_A",
+      "px": -5,
+      "py": 0,
+      "ax": 0,
+      "ay": 0,
+      "bx": 10,
+      "by": 0,
+      "distSq": 25
+    },
+    {
+      "name": "clamp_after_B",
+      "px": 15,
+      "py": 3,
+      "ax": 0,
+      "ay": 0,
+      "bx": 10,
+      "by": 0,
+      "distSq": 34
+    },
+    {
+      "name": "on_segment_zero",
+      "px": 4,
+      "py": 0,
+      "ax": 0,
+      "ay": 0,
+      "bx": 10,
+      "by": 0,
+      "distSq": 0
+    },
+    {
+      "name": "diagonal",
+      "px": 0,
+      "py": 4,
+      "ax": 0,
+      "ay": 0,
+      "bx": 4,
+      "by": 4,
+      "distSq": 8
+    }
+  ],
+  "current_position": [
+    {
+      "name": "at_launch",
+      "kind": "straight_line",
+      "trip_half_tiles": 30,
+      "tier": 1,
+      "heading_x": 1,
+      "heading_y": 0,
+      "speed": 0.5,
+      "at_ms": 0,
+      "pos": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "name": "outbound_half",
+      "kind": "straight_line",
+      "trip_half_tiles": 30,
+      "tier": 1,
+      "heading_x": 1,
+      "heading_y": 0,
+      "speed": 0.5,
+      "at_ms": 30000,
+      "pos": {
+        "x": 15,
+        "y": 0
+      }
+    },
+    {
+      "name": "at_apex",
+      "kind": "straight_line",
+      "trip_half_tiles": 30,
+      "tier": 1,
+      "heading_x": 1,
+      "heading_y": 0,
+      "speed": 0.5,
+      "at_ms": 60000,
+      "pos": {
+        "x": 30,
+        "y": 0
+      }
+    },
+    {
+      "name": "return_half",
+      "kind": "straight_line",
+      "trip_half_tiles": 30,
+      "tier": 1,
+      "heading_x": 1,
+      "heading_y": 0,
+      "speed": 0.5,
+      "at_ms": 90000,
+      "pos": {
+        "x": 15,
+        "y": 0
+      }
+    },
+    {
+      "name": "at_return",
+      "kind": "straight_line",
+      "trip_half_tiles": 30,
+      "tier": 1,
+      "heading_x": 1,
+      "heading_y": 0,
+      "speed": 0.5,
+      "at_ms": 120000,
+      "pos": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "name": "past_return_clamped",
+      "kind": "straight_line",
+      "trip_half_tiles": 30,
+      "tier": 1,
+      "heading_x": 1,
+      "heading_y": 0,
+      "speed": 0.5,
+      "at_ms": 999999,
+      "pos": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "name": "poly_launch",
+      "kind": "path_drawn",
+      "waypoints": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 10,
+          "y": 0
+        },
+        {
+          "x": 10,
+          "y": 10
+        }
+      ],
+      "trip_half_tiles": 20,
+      "tier": 5,
+      "speed": 0.8,
+      "at_ms": 0,
+      "pos": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "name": "poly_mid_seg1",
+      "kind": "path_drawn",
+      "waypoints": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 10,
+          "y": 0
+        },
+        {
+          "x": 10,
+          "y": 10
+        }
+      ],
+      "trip_half_tiles": 20,
+      "tier": 5,
+      "speed": 0.8,
+      "at_ms": 6250,
+      "pos": {
+        "x": 5,
+        "y": 0
+      }
+    },
+    {
+      "name": "poly_apex",
+      "kind": "path_drawn",
+      "waypoints": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 10,
+          "y": 0
+        },
+        {
+          "x": 10,
+          "y": 10
+        }
+      ],
+      "trip_half_tiles": 20,
+      "tier": 5,
+      "speed": 0.8,
+      "at_ms": 25000,
+      "pos": {
+        "x": 10,
+        "y": 10
+      }
+    },
+    {
+      "name": "poly_return_mid",
+      "kind": "path_drawn",
+      "waypoints": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 10,
+          "y": 0
+        },
+        {
+          "x": 10,
+          "y": 10
+        }
+      ],
+      "trip_half_tiles": 20,
+      "tier": 5,
+      "speed": 0.8,
+      "at_ms": 31250,
+      "pos": {
+        "x": 10,
+        "y": 5
+      }
+    },
+    {
+      "name": "poly_return",
+      "kind": "path_drawn",
+      "waypoints": [
+        {
+          "x": 0,
+          "y": 0
+        },
+        {
+          "x": 10,
+          "y": 0
+        },
+        {
+          "x": 10,
+          "y": 10
+        }
+      ],
+      "trip_half_tiles": 20,
+      "tier": 5,
+      "speed": 0.8,
+      "at_ms": 50000,
+      "pos": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ],
+  "dispatch": [
+    {
+      "name": "invalid_direction_zero",
+      "input": {
+        "island": {
+          "id": "home",
+          "level": 1,
+          "inventory": {
+            "biofuel": 100
+          }
+        },
+        "call": {
+          "origin_x": 100,
+          "origin_y": 100,
+          "heading_x": 0,
+          "heading_y": 0,
+          "fuel_units": 20,
+          "at_ms": 1000
+        }
+      },
+      "expected": {
+        "result": {
+          "ok": false,
+          "reason": "invalid-direction"
+        },
+        "drone_count": 0,
+        "inventory_after": {
+          "biofuel": 100
+        }
+      }
+    },
+    {
+      "name": "already_in_flight",
+      "input": {
+        "island": {
+          "id": "home",
+          "level": 1,
+          "inventory": {
+            "biofuel": 100
+          }
+        },
+        "pre_dispatches": [
+          {
+            "origin_x": 100,
+            "origin_y": 100,
+            "heading_x": 1,
+            "heading_y": 0,
+            "fuel_units": 20,
+            "at_ms": 1000
+          }
+        ],
+        "call": {
+          "origin_x": 100,
+          "origin_y": 100,
+          "heading_x": 0,
+          "heading_y": 1,
+          "fuel_units": 20,
+          "at_ms": 2000
+        }
+      },
+      "expected": {
+        "result": {
+          "ok": false,
+          "reason": "already-in-flight"
+        },
+        "drone_count": 1,
+        "inventory_after": {
+          "biofuel": 80
+        }
+      },
+      "note": "second launch from the same pad while the first is active -> already-in-flight; drone_count stays 1"
+    },
+    {
+      "name": "insufficient_fuel_wrong_grade",
+      "input": {
+        "island": {
+          "id": "home",
+          "level": 15,
+          "inventory": {
+            "biofuel": 100
+          }
+        },
+        "call": {
+          "origin_x": 0,
+          "origin_y": 0,
+          "heading_x": 1,
+          "heading_y": 0,
+          "fuel_units": 20,
+          "at_ms": 1000
+        }
+      },
+      "expected": {
+        "result": {
+          "ok": false,
+          "reason": "insufficient-fuel"
+        },
+        "drone_count": 0,
+        "inventory_after": {
+          "biofuel": 100
+        }
+      },
+      "note": "tier-3 island, only tier-1 fuel stocked: no fallback to a cheaper grade"
+    },
+    {
+      "name": "insufficient_fuel_zero_loaded",
+      "input": {
+        "island": {
+          "id": "home",
+          "level": 1,
+          "inventory": {
+            "biofuel": 100
+          }
+        },
+        "call": {
+          "origin_x": 0,
+          "origin_y": 0,
+          "heading_x": 1,
+          "heading_y": 0,
+          "fuel_units": 0,
+          "at_ms": 1000
+        }
+      },
+      "expected": {
+        "result": {
+          "ok": false,
+          "reason": "insufficient-fuel"
+        },
+        "drone_count": 0,
+        "inventory_after": {
+          "biofuel": 100
+        }
+      },
+      "note": "fuel_units <= 0 -> insufficient-fuel"
+    },
+    {
+      "name": "success_t1_straightline",
+      "input": {
+        "island": {
+          "id": "home",
+          "level": 1,
+          "inventory": {
+            "biofuel": 100
+          }
+        },
+        "call": {
+          "origin_x": 0,
+          "origin_y": 0,
+          "heading_x": 3,
+          "heading_y": 4,
+          "fuel_units": 20,
+          "at_ms": 1000
+        }
+      },
+      "expected": {
+        "result": {
+          "ok": true,
+          "drone": {
+            "launch_id": "drone-1",
+            "home_id": "home",
+            "origin_x": 0,
+            "origin_y": 0,
+            "heading_x": 0.6,
+            "heading_y": 0.8,
+            "trip_half_tiles": 30,
+            "scan_half_width": 2,
+            "launch_at_ms": 1000,
+            "return_at_ms": 121000,
+            "tier": 1,
+            "fuel_units": 20,
+            "fuel_kind": "biofuel",
+            "status": "active",
+            "waypoints": [],
+            "dark": false,
+            "rare_bias": 0
+          }
+        },
+        "drone_count": 1,
+        "inventory_after": {
+          "biofuel": 80
+        }
+      },
+      "note": "heading (3,4) normalises to (0.6,0.8); fuel 20 * eff 3 = range 60 -> trip_half 30, return 1000+120000"
+    },
+    {
+      "name": "selected_tier_lower_honored",
+      "input": {
+        "island": {
+          "id": "home",
+          "level": 50,
+          "inventory": {
+            "diesel": 100,
+            "plasma_charge": 100
+          }
+        },
+        "call": {
+          "origin_x": 0,
+          "origin_y": 0,
+          "heading_x": 1,
+          "heading_y": 0,
+          "fuel_units": 10,
+          "at_ms": 1000,
+          "selected_tier": 2
+        }
+      },
+      "expected": {
+        "result": {
+          "ok": true,
+          "drone": {
+            "launch_id": "drone-1",
+            "home_id": "home",
+            "origin_x": 0,
+            "origin_y": 0,
+            "heading_x": 1,
+            "heading_y": 0,
+            "trip_half_tiles": 30,
+            "scan_half_width": 4,
+            "launch_at_ms": 1000,
+            "return_at_ms": 121000,
+            "tier": 2,
+            "fuel_units": 10,
+            "fuel_kind": "diesel",
+            "status": "active",
+            "waypoints": [],
+            "dark": false,
+            "rare_bias": 0
+          }
+        },
+        "drone_count": 1,
+        "inventory_after": {
+          "diesel": 90,
+          "plasma_charge": 100
+        }
+      },
+      "note": "tier-5 island flying a tier-2 drone burns diesel, not plasma_charge"
+    },
+    {
+      "name": "selected_tier_above_island_fallback",
+      "input": {
+        "island": {
+          "id": "home",
+          "level": 1,
+          "inventory": {
+            "biofuel": 100,
+            "plasma_charge": 100
+          }
+        },
+        "call": {
+          "origin_x": 0,
+          "origin_y": 0,
+          "heading_x": 1,
+          "heading_y": 0,
+          "fuel_units": 10,
+          "at_ms": 1000,
+          "selected_tier": 5
+        }
+      },
+      "expected": {
+        "result": {
+          "ok": true,
+          "drone": {
+            "launch_id": "drone-1",
+            "home_id": "home",
+            "origin_x": 0,
+            "origin_y": 0,
+            "heading_x": 1,
+            "heading_y": 0,
+            "trip_half_tiles": 15,
+            "scan_half_width": 2,
+            "launch_at_ms": 1000,
+            "return_at_ms": 61000,
+            "tier": 1,
+            "fuel_units": 10,
+            "fuel_kind": "biofuel",
+            "status": "active",
+            "waypoints": [],
+            "dark": false,
+            "rare_bias": 0
+          }
+        },
+        "drone_count": 1,
+        "inventory_after": {
+          "biofuel": 90,
+          "plasma_charge": 100
+        }
+      },
+      "note": "requested tier 5 > island tier 1 -> fallback to tier 1 (biofuel)"
+    },
+    {
+      "name": "selected_tier_6_unreachable_via_level",
+      "input": {
+        "island": {
+          "id": "home",
+          "level": 9999,
+          "inventory": {
+            "plasma_charge": 100,
+            "antimatter_propellant": 100
+          }
+        },
+        "call": {
+          "origin_x": 0,
+          "origin_y": 0,
+          "heading_x": 1,
+          "heading_y": 0,
+          "fuel_units": 10,
+          "at_ms": 1000,
+          "selected_tier": 6
+        }
+      },
+      "expected": {
+        "result": {
+          "ok": true,
+          "drone": {
+            "launch_id": "drone-1",
+            "home_id": "home",
+            "origin_x": 0,
+            "origin_y": 0,
+            "heading_x": 1,
+            "heading_y": 0,
+            "trip_half_tiles": 75,
+            "scan_half_width": 12,
+            "launch_at_ms": 1000,
+            "return_at_ms": 301000,
+            "tier": 5,
+            "fuel_units": 10,
+            "fuel_kind": "plasma_charge",
+            "status": "active",
+            "waypoints": [],
+            "dark": false,
+            "rare_bias": 0
+          }
+        },
+        "drone_count": 1,
+        "inventory_after": {
+          "plasma_charge": 90,
+          "antimatter_propellant": 100
+        }
+      },
+      "note": "level->tier step function caps at 5, so a requested tier 6 > island tier 5 -> fallback to island tier 5 (plasma_charge), NOT antimatter_propellant"
+    },
+    {
+      "name": "pathdrawn_t5_ok",
+      "input": {
+        "island": {
+          "id": "home",
+          "level": 50,
+          "inventory": {
+            "plasma_charge": 100
+          }
+        },
+        "call": {
+          "origin_x": 0,
+          "origin_y": 0,
+          "heading_x": 1,
+          "heading_y": 0,
+          "fuel_units": 10,
+          "at_ms": 1000,
+          "waypoints": [
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 10,
+              "y": 0
+            },
+            {
+              "x": 10,
+              "y": 10
+            }
+          ]
+        }
+      },
+      "expected": {
+        "result": {
+          "ok": true,
+          "drone": {
+            "launch_id": "drone-1",
+            "home_id": "home",
+            "origin_x": 0,
+            "origin_y": 0,
+            "heading_x": 1,
+            "heading_y": 0,
+            "trip_half_tiles": 20,
+            "scan_half_width": 12,
+            "launch_at_ms": 1000,
+            "return_at_ms": 51000,
+            "tier": 5,
+            "fuel_units": 10,
+            "fuel_kind": "plasma_charge",
+            "status": "active",
+            "waypoints": [
+              {
+                "x": 0,
+                "y": 0
+              },
+              {
+                "x": 10,
+                "y": 0
+              },
+              {
+                "x": 10,
+                "y": 10
+              }
+            ],
+            "dark": false,
+            "rare_bias": 0
+          }
+        },
+        "drone_count": 1,
+        "inventory_after": {
+          "plasma_charge": 90
+        }
+      },
+      "note": "path length 20, round-trip 40 <= fuel 10 * path-eff 8 = 80; forces tier 5, trip_half 20, return 1000+(40/0.8)*1000"
+    },
+    {
+      "name": "pathdrawn_path_too_long",
+      "input": {
+        "island": {
+          "id": "home",
+          "level": 50,
+          "inventory": {
+            "plasma_charge": 100
+          }
+        },
+        "call": {
+          "origin_x": 0,
+          "origin_y": 0,
+          "heading_x": 1,
+          "heading_y": 0,
+          "fuel_units": 10,
+          "at_ms": 1000,
+          "waypoints": [
+            {
+              "x": 0,
+              "y": 0
+            },
+            {
+              "x": 100,
+              "y": 0
+            }
+          ]
+        }
+      },
+      "expected": {
+        "result": {
+          "ok": false,
+          "reason": "path-too-long"
+        },
+        "drone_count": 0,
+        "inventory_after": {
+          "plasma_charge": 100
+        }
+      },
+      "note": "path length 100, round-trip 200 > 80 -> path-too-long"
+    }
+  ],
+  "pulse": [
+    {
+      "name": "no_launch_tower",
+      "input": {
+        "origin": {
+          "id": "home",
+          "level": 30,
+          "cryogenic_hydrogen": 100,
+          "has_launch_tower": false
+        },
+        "islands": [
+          {
+            "id": "home",
+            "cx": 0,
+            "cy": 0,
+            "populated": true,
+            "discovered": true
+          }
+        ],
+        "at_ms": 0
+      },
+      "expected": {
+        "result": {
+          "ok": false,
+          "reason": "no-launch-tower",
+          "discoveredIslandIds": []
+        },
+        "fuel_after": 100,
+        "discovered_after": {
+          "home": true
+        }
+      }
+    },
+    {
+      "name": "tier_too_low",
+      "input": {
+        "origin": {
+          "id": "home",
+          "level": 1,
+          "cryogenic_hydrogen": 100,
+          "has_launch_tower": true
+        },
+        "islands": [
+          {
+            "id": "home",
+            "cx": 0,
+            "cy": 0,
+            "populated": true,
+            "discovered": true
+          }
+        ],
+        "at_ms": 0
+      },
+      "expected": {
+        "result": {
+          "ok": false,
+          "reason": "tier-too-low",
+          "discoveredIslandIds": []
+        },
+        "fuel_after": 100,
+        "discovered_after": {
+          "home": true
+        }
+      }
+    },
+    {
+      "name": "insufficient_fuel",
+      "input": {
+        "origin": {
+          "id": "home",
+          "level": 30,
+          "cryogenic_hydrogen": 5,
+          "has_launch_tower": true
+        },
+        "islands": [
+          {
+            "id": "home",
+            "cx": 0,
+            "cy": 0,
+            "populated": true,
+            "discovered": true
+          }
+        ],
+        "at_ms": 0
+      },
+      "expected": {
+        "result": {
+          "ok": false,
+          "reason": "insufficient-fuel",
+          "discoveredIslandIds": []
+        },
+        "fuel_after": 5,
+        "discovered_after": {
+          "home": true
+        }
+      }
+    },
+    {
+      "name": "no_origin_spec",
+      "input": {
+        "origin": {
+          "id": "home",
+          "level": 30,
+          "cryogenic_hydrogen": 100,
+          "has_launch_tower": true
+        },
+        "islands": [],
+        "at_ms": 0
+      },
+      "expected": {
+        "result": {
+          "ok": false,
+          "reason": "no-origin-spec",
+          "discoveredIslandIds": []
+        },
+        "fuel_after": 100,
+        "discovered_after": {}
+      },
+      "note": "origin id absent from the island list -> no-origin-spec"
+    },
+    {
+      "name": "success_reveals_within_radius",
+      "input": {
+        "origin": {
+          "id": "home",
+          "level": 30,
+          "cryogenic_hydrogen": 100,
+          "has_launch_tower": true
+        },
+        "islands": [
+          {
+            "id": "home",
+            "cx": 0,
+            "cy": 0,
+            "populated": true,
+            "discovered": true
+          },
+          {
+            "id": "isl_in",
+            "cx": 30,
+            "cy": 0,
+            "discovered": false
+          },
+          {
+            "id": "isl_edge",
+            "cx": 48,
+            "cy": 0,
+            "discovered": false
+          },
+          {
+            "id": "isl_out",
+            "cx": 49,
+            "cy": 0,
+            "discovered": false
+          },
+          {
+            "id": "isl_already",
+            "cx": 10,
+            "cy": 0,
+            "discovered": true
+          }
+        ],
+        "at_ms": 12345
+      },
+      "expected": {
+        "result": {
+          "ok": true,
+          "discoveredIslandIds": [
+            "isl_in",
+            "isl_edge"
+          ]
+        },
+        "fuel_after": 90,
+        "discovered_after": {
+          "home": true,
+          "isl_in": true,
+          "isl_edge": true,
+          "isl_out": false,
+          "isl_already": true
+        }
+      },
+      "note": "reveals isl_in + isl_edge (48 inclusive); isl_out (49) excluded; fuel 100->90; fires regardless of count"
+    }
+  ],
+  "tick_reveal": [
+    {
+      "name": "in_range_flushes_cells",
+      "input": {
+        "islands": [
+          {
+            "id": "home",
+            "cx": 0,
+            "cy": 0,
+            "populated": true,
+            "discovered": true,
+            "antenna": "antenna_t6"
+          }
+        ],
+        "drone": {
+          "origin_x": 0.5,
+          "origin_y": 0.5,
+          "heading_x": 1,
+          "heading_y": 0,
+          "trip_half_tiles": 15,
+          "scan_half_width": 2,
+          "launch_at_ms": 0,
+          "return_at_ms": 60000,
+          "tier": 1,
+          "rare_bias": 0
+        },
+        "pre_generate_cells_radius": 200,
+        "steps": [
+          {
+            "label": "full_flight",
+            "prev_ms": 0,
+            "now_ms": 60000
+          }
+        ]
+      },
+      "expected": {
+        "steps": [
+          {
+            "label": "full_flight",
+            "revealed_cells_added": 6,
+            "newly_discovered": [],
+            "returned": 1,
+            "lost": 0,
+            "drone_status": "returned",
+            "drone_dark": false,
+            "buffer_size": 0,
+            "revealed_cells_total": 6
+          }
+        ],
+        "discovered_after": {
+          "home": true
+        }
+      },
+      "note": "antenna covers the flight: single full-flight tick reveals corridor immediately, buffer empties, status returned"
+    },
+    {
+      "name": "dark_mode_buffers_then_flush_on_return",
+      "input": {
+        "islands": [
+          {
+            "id": "home",
+            "cx": 0,
+            "cy": 0,
+            "populated": true,
+            "discovered": true
+          }
+        ],
+        "drone": {
+          "origin_x": 0.5,
+          "origin_y": 0.5,
+          "heading_x": 1,
+          "heading_y": 0,
+          "trip_half_tiles": 15,
+          "scan_half_width": 2,
+          "launch_at_ms": 0,
+          "return_at_ms": 60000,
+          "tier": 1,
+          "rare_bias": 0
+        },
+        "pre_generate_cells_radius": 200,
+        "steps": [
+          {
+            "label": "mid_flight_dark",
+            "prev_ms": 0,
+            "now_ms": 30000
+          },
+          {
+            "label": "return",
+            "prev_ms": 30000,
+            "now_ms": 60001
+          }
+        ]
+      },
+      "expected": {
+        "steps": [
+          {
+            "label": "mid_flight_dark",
+            "revealed_cells_added": 0,
+            "newly_discovered": [],
+            "returned": 0,
+            "lost": 0,
+            "drone_status": "active",
+            "drone_dark": true,
+            "buffer_size": 6,
+            "revealed_cells_total": 0
+          },
+          {
+            "label": "return",
+            "revealed_cells_added": 6,
+            "newly_discovered": [],
+            "returned": 1,
+            "lost": 0,
+            "drone_status": "returned",
+            "drone_dark": true,
+            "buffer_size": 0,
+            "revealed_cells_total": 6
+          }
+        ],
+        "discovered_after": {
+          "home": true
+        }
+      },
+      "note": "no antenna: mid tick buffers (dark, 0 revealed); return tick flushes. This path lies entirely in CLEAR weather (destruction chance 0), so the drone survives DETERMINISTICALLY regardless of RNG — the whole golden (incl. returned=1, status=returned, 6 revealed on the return step) is EXACT and replayable. The INVARIANT weather roll only matters where the path crosses storm/severe/catastrophic cells (§9)."
+    },
+    {
+      "name": "rare_bias_widening_bypasses_antenna_gate",
+      "input": {
+        "islands": [
+          {
+            "id": "home",
+            "cx": 0,
+            "cy": 0,
+            "populated": true,
+            "discovered": true
+          },
+          {
+            "id": "rare_one",
+            "cx": 56,
+            "cy": -56,
+            "discovered": false,
+            "modifiers": [
+              "aetheric_anomaly",
+              "volcanic"
+            ]
+          },
+          {
+            "id": "plain_one",
+            "cx": 40,
+            "cy": -56,
+            "discovered": false,
+            "modifiers": []
+          }
+        ],
+        "drone": {
+          "origin_x": 0.5,
+          "origin_y": 0.5,
+          "heading_x": 1,
+          "heading_y": 0,
+          "trip_half_tiles": 100,
+          "scan_half_width": 40,
+          "launch_at_ms": 0,
+          "return_at_ms": 400000,
+          "tier": 1,
+          "rare_bias": 0.6
+        },
+        "pre_generate_cells_radius": 400,
+        "steps": [
+          {
+            "label": "mid_flight_dark",
+            "prev_ms": 0,
+            "now_ms": 200000
+          }
+        ]
+      },
+      "expected": {
+        "steps": [
+          {
+            "label": "mid_flight_dark",
+            "revealed_cells_added": 0,
+            "newly_discovered": [
+              "rare_one"
+            ],
+            "returned": 0,
+            "lost": 0,
+            "drone_status": "active",
+            "drone_dark": true,
+            "buffer_size": 68,
+            "revealed_cells_total": 0
+          }
+        ],
+        "discovered_after": {
+          "home": true,
+          "rare_one": true,
+          "plain_one": false
+        }
+      },
+      "note": "rare island in the expanded-only band flips discovered mid-flight in dark mode (bias bypasses antenna gate; widening reaches it); ordinary island in the same band stays undiscovered."
+    }
+  ],
+  "weather_roll_invariant": [
+    {
+      "property": "seed_format",
+      "value": "`${worldSeed}_vehicle_${vehicleId}`"
+    },
+    {
+      "property": "final_chance",
+      "value": "WEATHER_DESTRUCTION_CHANCE[cellState] * tierMultiplier, per rasterized path cell; first cell whose rng()<finalChance destroys",
+      "tierMultipliers": {
+        "1": 1.5,
+        "2": 1,
+        "3": 0.7,
+        "4": 0.5,
+        "5": 0.5,
+        "6": 0.2
+      }
+    },
+    {
+      "property": "deterministic_replay",
+      "sameSeedSameVehicle_equal": true,
+      "differentVehicle_independentStream": true
+    }
+  ],
+  "skill_multiplier_property": [
+    {
+      "property": "fuel_efficiency_multiplier",
+      "rule": "range = fuel_units * fuel_efficiency_by_tier[tier] * fuel_efficiency_multiplier; with mult>1 the outbound (trip_half_tiles) and return time grow proportionally; the fuel cost (fuel_units deducted) is unchanged.",
+      "baseline_mul": 1
+    },
+    {
+      "property": "scan_radius_multiplier",
+      "rule": "scan_half_width = scan_radius_by_tier[tier] * scan_radius_multiplier; with mult>1 the corridor widens proportionally.",
+      "baseline_mul": 1
+    }
+  ]
+}
