@@ -1,0 +1,463 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Design spec — Active-Play Production Bonus</title>
+  <style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--ivory);
+      color: var(--gray-700);
+      line-height: 1.58;
+      padding: 56px 32px 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { margin: 0 auto; max-width: 960px; }
+
+    header.page-head { margin-bottom: 40px; max-width: 840px; }
+    .eyebrow {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--gray-500);
+      margin-bottom: 12px;
+    }
+    h1 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 38px;
+      line-height: 1.14;
+      color: var(--slate);
+      margin-bottom: 18px;
+      letter-spacing: -0.01em;
+    }
+    .context-box {
+      background: var(--gray-150);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      font-size: 14.5px;
+      color: var(--gray-700);
+    }
+    .context-box .label {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 56px;
+    }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+    }
+    .summary .k {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      margin-bottom: 6px;
+    }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent  { color: var(--clay); }
+    .summary .v.ok      { color: var(--olive); }
+
+    .decision {
+      background: var(--white);
+      border: var(--border);
+      border-left: 4px solid var(--clay);
+      border-radius: var(--radius);
+      padding: 22px 26px;
+      margin-bottom: 56px;
+    }
+    .decision .d-tag {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--clay);
+      margin-bottom: 8px;
+    }
+    .decision .d-head {
+      font-family: var(--serif);
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--slate);
+      margin-bottom: 10px;
+      letter-spacing: -0.01em;
+    }
+    .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 760px; }
+    .decision .d-body + .d-body { margin-top: 8px; }
+
+    section { margin-bottom: 60px; }
+    .sec-head {
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+      margin-bottom: 8px;
+    }
+    .sec-head .num {
+      font-family: var(--mono);
+      font-size: 12px;
+      background: var(--oat);
+      color: var(--slate);
+      padding: 3px 9px;
+      border-radius: 8px;
+    }
+    .sec-head h2 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 26px;
+      color: var(--slate);
+      letter-spacing: -0.01em;
+    }
+    .sec-intro {
+      font-size: 14.5px;
+      color: var(--gray-500);
+      max-width: 740px;
+      margin-bottom: 24px;
+    }
+    p.body { font-size: 14.5px; max-width: 760px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+    code {
+      font-family: var(--mono);
+      font-size: 0.88em;
+      background: var(--gray-150);
+      border: 1px solid var(--gray-300);
+      border-radius: 5px;
+      padding: 1px 5px;
+      color: #C9B98A;
+    }
+    pre.code-block {
+      font-family: var(--mono);
+      font-size: 13px;
+      background: var(--gray-150);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      max-width: 760px;
+      margin-bottom: 14px;
+      overflow-x: auto;
+      color: #C9B98A;
+      line-height: 1.6;
+    }
+
+    .tbl {
+      width: 100%;
+      border: var(--border);
+      border-radius: var(--radius);
+      border-collapse: separate;
+      border-spacing: 0;
+      overflow: hidden;
+      font-size: 13.5px;
+    }
+    .tbl th, .tbl td {
+      text-align: left;
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--gray-300);
+      vertical-align: top;
+    }
+    .tbl th {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--gray-500);
+      background: var(--gray-150);
+      font-weight: 600;
+    }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+
+    .changes { display: flex; flex-direction: column; gap: 12px; }
+    .change {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      gap: 4px 24px;
+    }
+    @media (max-width: 720px) { .change { grid-template-columns: 1fr; } }
+    .change .file {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      color: var(--clay);
+      word-break: break-all;
+    }
+    .change .what { font-size: 14px; color: var(--gray-700); }
+    .change .what .lead { color: var(--slate); font-weight: 600; }
+
+    .checklist { display: flex; flex-direction: column; gap: 10px; max-width: 760px; }
+    .check {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      background: var(--white);
+      border: var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+    }
+    .check .box {
+      width: 18px; height: 18px;
+      border-radius: 5px;
+      border: 2px solid var(--gray-500);
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .check .ck-text { font-size: 14px; color: var(--gray-700); }
+    .check .ck-text strong { color: var(--slate); }
+
+    .risks {
+      border: var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--white);
+    }
+    .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: var(--border); }
+    .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: var(--border); }
+    @media (max-width: 780px) {
+      .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); }
+    }
+    .risks .head {
+      background: var(--gray-150);
+      font-weight: 600;
+      color: var(--slate);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .sev {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-weight: 600;
+    }
+    .sev.high { background: #4A2A1C; color: #F0B79C; }
+    .sev.med  { background: var(--oat);  color: var(--slate); }
+    .sev.low  { background: #2D3A24; color: #B6CC96; }
+
+    .deferred { display: flex; flex-direction: column; gap: 14px; max-width: 840px; }
+    .defer {
+      background: var(--white);
+      border: var(--border);
+      border-left: 4px solid var(--gray-500);
+      border-radius: 10px;
+      padding: 16px 20px;
+    }
+    .defer .dt { font-weight: 600; font-size: 15px; color: var(--slate); margin-bottom: 4px; }
+    .defer .dd { font-size: 13.5px; color: var(--gray-500); }
+
+    .footer {
+      color: var(--gray-500);
+      font-size: 13px;
+      margin-top: 64px;
+      padding-top: 22px;
+      border-top: 1px solid var(--gray-300);
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Design spec · robot-islands</div>
+      <h1>Active-Play Production Bonus — a global recipe-rate buff that grows with focused play</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        Trading (SPEC §9.8) already rewards presence: trade cooldowns burn down only while
+        the tab is visible and focused. This spec adds a second active-play reward with a
+        different shape — every focused minute adds +0.1% to every recipe rate on every
+        island, and the bonus leaks away at 3× that rate whenever the player is gone.
+        Brainstormed and approved with the user on 2026-06-09; approach A
+        (world-level accumulator, frame-sampled multiplier) selected.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Accrual</div><div class="v accent">+0.1% / focused min</div></div>
+      <div class="cell"><div class="k">Decay</div><div class="v">−0.3% / min away</div></div>
+      <div class="cell"><div class="k">Cap</div><div class="v">None (decay-bounded)</div></div>
+      <div class="cell"><div class="k">Schema</div><div class="v ok">v21 → v22</div></div>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision</div>
+      <div class="d-head">A world-level <code>activeBonusMs</code> accumulator, ticked by the same online signal as trading, sampled per frame as a constant multiplier in <code>RatesContext</code>.</div>
+      <div class="d-body">The bonus drifts 0.1% per minute, so treating it as constant
+        within one frame (or one offline-catchup call) introduces imperceptible error and
+        leaves §15.3's constant-rate piecewise integration untouched. Exact time-varying
+        integration (approach B) was rejected as invisible precision at real complexity
+        cost; an online-time module refactor (approach C) was rejected as a refactor of
+        working trade plumbing we don't need yet.</div>
+      <div class="d-body">Deliberately not done: no cap (user decision — decay is the only
+        counterweight), and no anti-idle detection (focused-but-idle farming is the same
+        accepted limit as trade's online-time).</div>
+    </div>
+
+    <section>
+      <div class="sec-head"><span class="num">01</span><h2>The rule</h2></div>
+      <p class="sec-intro">One unified accrual/decay law covers every focus-loss mode.</p>
+      <p class="body"><strong>Focused frame-dt accrues (clamped); every other wall-clock
+        millisecond decays the balance at 3×.</strong> Per ticker frame, with
+        <code>online = document.visibilityState === 'visible' &amp;&amp; document.hasFocus()</code>
+        (the boolean <code>main.ts</code> already computes for trading) and
+        <code>frameDt</code> = wall-clock ms since the last frame:</p>
+      <pre class="code-block">accrued       = online ? min(frameDt, ONLINE_DT_CAP_MS) : 0   // cap = 3000ms, from trade.ts
+activeBonusMs = max(0, activeBonusMs + accrued − 3 × (frameDt − accrued))
+
+bonusFraction = activeBonusMs / 60_000 × 0.001                // +0.1% per focused minute
+activeBonusMul = 1 + bonusFraction                            // no cap</pre>
+      <table class="tbl">
+        <thead><tr><th>Focus-loss mode</th><th>What happens mechanically</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">Blurred but visible</td><td>rAF keeps firing; each frame's full dt decays at 3×.</td></tr>
+          <tr><td class="slate">Hidden tab / minimized</td><td>rAF stops; the gap arrives as one large <code>frameDt</code> on the refocus frame — accrual clamps to 3&nbsp;s, the remainder decays.</td></tr>
+          <tr><td class="slate">Game closed</td><td>At load, the same formula runs with <code>online = false</code> and <code>frameDt = now − snapshot.savedAt</code>, <em>before</em> offline catch-up advances islands.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">02</span><h2>Change inventory</h2></div>
+      <p class="sec-intro">Every file the implementation touches.</p>
+      <div class="changes">
+        <div class="change">
+          <div class="file">src/active-bonus.ts (new)</div>
+          <div class="what"><span class="lead">Pure module.</span> <code>ACTIVE_BONUS_PER_MIN = 0.001</code>, <code>ACTIVE_DECAY_RATIO = 3</code>, <code>tickActiveBonus(world, online, frameDtMs)</code> (mutates <code>world.activeBonusMs</code>), <code>activeBonusMul(world)</code>. No PixiJS imports.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/world.ts</div>
+          <div class="what"><span class="lead">State field.</span> <code>WorldState.activeBonusMs: number</code> (≥ 0), initialized 0 in <code>makeInitialWorld</code>.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/economy.ts:119–122, ~1075, ~1110</div>
+          <div class="what"><span class="lead">Multiplier slot.</span> <code>RatesContext.activeBonusMul?: number</code> (default 1), multiplied into the recipe-rate product at the same two sites as <code>ncBuff</code>. XP follows boosted production automatically.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/main.ts (ticker + 5 RatesContext sites)</div>
+          <div class="what"><span class="lead">Wiring.</span> Call <code>tickActiveBonus</code> each frame with the existing <code>tradeOnline</code> boolean; thread <code>activeBonusMul(world)</code> into all five <code>RatesContext</code> build sites (world-level — every island, unlike per-island <code>ncBuff</code>).</div>
+        </div>
+        <div class="change">
+          <div class="file">src/persistence.ts</div>
+          <div class="what"><span class="lead">Schema v21 → v22.</span> <code>SerializedSnapshotV21</code> alias; <code>migrateV21toV22</code> adds <code>activeBonusMs: 0</code>; wire into <code>loadWorld</code>; add 21 to <code>SUPPORTED_LOAD_VERSIONS</code>; apply closed-gap decay from <code>savedAt</code> after migration, before catch-up.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/hud.ts</div>
+          <div class="what"><span class="lead">HUD row.</span> "Active bonus" key/value row near the trade-countdown row, always visible: <code>+X.X%</code> (one decimal), <code>—</code> at 0. Identical across islands.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/inspector-ui.ts</div>
+          <div class="what"><span class="lead">Bonuses line.</span> Recipe-panel bonuses line appends <code>active ×1.032</code>-style entry when the multiplier &gt; 1, alongside <code>fledgling ×…</code> / skill entries.</div>
+        </div>
+        <div class="change">
+          <div class="file">SPEC.md</div>
+          <div class="what"><span class="lead">New §9.9.</span> "Active-Play Production Bonus": rule, rates, no-cap decision, decay-while-closed semantics, shared focus condition with §9.8.</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">03</span><h2>Verification</h2></div>
+      <p class="sec-intro">Pure-layer tests only, per repo convention (render code is read-only against state).</p>
+      <div class="checklist">
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>active-bonus.test.ts.</strong> Accrues focused dt; clamps single-frame accrual at 3 s; decays blurred dt at 3×; refocus gap charges 3 × (gap − 3 s); floors at 0; multiplier math; load-decay math.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>economy.test.ts.</strong> <code>activeBonusMul</code> scales recipe rates and XP; absent → identical to today (default 1).</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>persistence.test.ts.</strong> v21 fixture loads with <code>activeBonusMs: 0</code>; v22 round-trips identity; load-decay applied from <code>savedAt</code>.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>npm test &amp;&amp; npm run build.</strong> Full suite green, tsc strict clean.</div></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">04</span><h2>Risks &amp; balance</h2></div>
+      <div class="risks">
+        <div class="row">
+          <div class="cell head">Risk</div>
+          <div class="cell head">Sev</div>
+          <div class="cell head">Mitigation</div>
+        </div>
+        <div class="row">
+          <div class="cell">Uncapped growth: a 10 h focused marathon yields +60% on every recipe.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">User-accepted. Decay (−18%/h away, including closed) makes it effectively a same-session mechanic; overnight ⇒ 0.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Focused-but-idle farming (window focused, player absent).</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Same accepted limit as trade online-time — "covered but focused" isn't JS-detectable.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Frame-sampled multiplier vs. exact integration drift.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Drift is 0.1%/min; within-frame error ~0.0017%/s. Invisible; preserves §15.3 constant-rate invariant.</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">05</span><h2>Out of scope</h2></div>
+      <div class="deferred">
+        <div class="defer">
+          <div class="dt">Shared online-time module (approach C)</div>
+          <div class="dd">Extracting trade's visible+focused/online-dt plumbing into a common module. Revisit if a third active-play mechanic appears.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Anti-idle / input-based activity detection</div>
+          <div class="dd">Out of scope; focus is the agreed proxy for presence, consistent with trading.</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <p>Design spec · generated 2026-06-09 · relates to: SPEC.md §9.8 (trading online-time), §15.3 (economy integration) · md twin: 2026-06-09-active-play-bonus-design.md</p>
+    </div>
+
+  </div>
+</body>
+</html>
