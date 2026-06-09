@@ -15,8 +15,10 @@
 // Anchor selection is "any populated island in range" — the cable model is
 // route-based (`submarine_cable` RouteType), not a walked component.
 //
-// Scaffolding: not wired today because no building def carries
-// `oceanPlacement: true` yet (that flag arrives with the ocean catalog).
+// Wired since the ocean catalog landed: `oceanPlacement: true` defs route
+// through `validateOceanPlacement` (placement.ts), which calls
+// `candidateAnchors`; `main.ts` mounts the picker and hands `pickAnchor` to
+// `mountPlacementUi`.
 
 import { CELL_SIZE_TILES } from './constants.js';
 import { mountModal, type ModalHandle } from './ui-modal.js';
