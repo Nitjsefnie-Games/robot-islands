@@ -480,7 +480,14 @@ export interface BuildingDef {
    *  applies to every ResourceId whose `RESOURCE_STORAGE_CATEGORY` matches.
    *  Generic buildings (Crate, Warehouse) use `category: 'generic'` and bump
    *  capacity only for the single resource named on each PlacedBuilding's
-   *  `cargoLabel`. Undefined = the def doesn't contribute storage at all. */
+   *  `cargoLabel`. Undefined = the def doesn't contribute storage at all.
+   *
+   *  `capacity` is a percentage MULTIPLIER, not an absolute unit count: the
+   *  per-resource contribution is `capacity × storageBaseFor(r)` (= `capacity ×
+   *  max(5, baseCap(r))`, see storage-categories.ts). So a Crate (capacity 5)
+   *  adds 5× each labeled resource's base cap — +500 to iron_ore (base 100),
+   *  +100 to bolt (base 20) — keeping the boost proportional across resources
+   *  of differing base caps rather than a flat unit count. */
   readonly storage?: {
     readonly category: StorageCategory | 'generic';
     readonly capacity: number;
@@ -799,10 +806,12 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.single,
     fill: 0x8a6a3a,
     stroke: 0x402a10,
-    // rev-16 §13.3: +500 cap on ONE player-chosen resource per instance.
-    // Pallet-rack section analog. Generic storage — each PlacedBuilding picks
-    // its `cargoLabel` and only that resource's cap is raised.
-    storage: { category: 'generic', capacity: 500 },
+    // rev-16 §13.3: +5× base cap on ONE player-chosen resource per instance
+    // (percentage model — capacity is a multiplier; e.g. +500 to iron_ore base
+    // 100, +100 to bolt base 20). Pallet-rack section analog. Generic storage —
+    // each PlacedBuilding picks its `cargoLabel` and only that resource's cap is
+    // raised.
+    storage: { category: 'generic', capacity: 5 },
     // BOM source: WarehouseRack.com pallet-rack section per rev-16 §13.3.
     // 80 wood slats + 30 stone base = 110 kg.
     placementCost: { wood: 80, stone: 30 },
@@ -828,10 +837,11 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0xa08a5a,
     stroke: 0x504028,
-    // rev-16 §13.3: +200000 cap (200 t), dry-goods category only.
-    // Coban Machinery 50 t farm silo × 4 modules analog. Bumps every resource
-    // whose RESOURCE_STORAGE_CATEGORY === 'dry_goods'.
-    storage: { category: 'dry_goods', capacity: 200000 },
+    // rev-16 §13.3: +2000× base cap, dry-goods category only (percentage model
+    // — multiplier; +200000 to a base-100 dry good). Coban Machinery 50 t farm
+    // silo × 4 modules analog. Bumps every resource whose
+    // RESOURCE_STORAGE_CATEGORY === 'dry_goods'.
+    storage: { category: 'dry_goods', capacity: 2000 },
     // BOM source: Coban Machinery 50 t farm silo × 4 modules per rev-16 §13.3.
     // 5500 steel wall sheets + 1500 stone foundation + 200 iron_ingot door/hardware = 7.2 t.
     placementCost: { steel: 5500, stone: 1500, iron_ingot: 200 },
@@ -1582,9 +1592,10 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0x2a4078,
     stroke: 0x0a1a3a,
-    // rev-16 §13.3: +100000 cap (100 t), liquids/gases category only.
-    // Kennedy Tank mid-class industrial analog.
-    storage: { category: 'liquid_gas', capacity: 100000 },
+    // rev-16 §13.3: +1000× base cap, liquids/gases category only (percentage
+    // model — multiplier; +100000 to a base-100 liquid). Kennedy Tank mid-class
+    // industrial analog.
+    storage: { category: 'liquid_gas', capacity: 1000 },
     // BOM source: Kennedy Tank — mid-class industrial chemical tank per rev-16 §13.3.
     // 8000 steel shell + 3000 concrete bund + 1000 stone footing + 200 gear valve-train + 300 pipe manifold = 13.6 t.
     placementCost: { steel: 8000, concrete: 3000, stone: 1000, gear: 200, pipe: 300 },
@@ -1592,7 +1603,8 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
   },
   // rev-16 §13.3: Cold Storage — T2 specialized storage for temperature-
   // sensitive resources (cryogenic compound, cryo-coolant, liquid nitrogen,
-  // certain plastics). +50000 cap (50 t). Refrigerated warehouse module
+  // certain plastics). +1000× base cap (percentage model — multiplier; +50000
+  // to a base-50 temp-sensitive resource). Refrigerated warehouse module
   // analog. Cool steel-grey fill keys to the refrigeration role.
   cold_storage: {
     id: 'cold_storage',
@@ -1602,7 +1614,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0x8090a0,
     stroke: 0x2a3848,
-    storage: { category: 'temp_sensitive', capacity: 50000 },
+    storage: { category: 'temp_sensitive', capacity: 1000 },
     // BOM source: Small refrigerated warehouse module — insulated shell + compressor pad per rev-16 §13.3.
     // 200 steel_beam frame + 3000 concrete pad + 1000 stone foundation + 500 copper_ingot refrigeration coil + 200 gear compressor + 100 microchip control = 14.91 t.
     placementCost: { steel_beam: 200, concrete: 3000, stone: 1000, copper_ingot: 500, gear: 200, microchip: 100 },
@@ -1610,7 +1622,8 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
   },
   // rev-16 §13.3: Component Warehouse — T2 specialized storage for
   // manufactured T2-T3 components (wire, bolt, gear, microchip, etc.).
-  // +20000 cap (20 t). Industrial pallet-racked warehouse analog.
+  // +1000× base cap (percentage model — multiplier; +20000 to a base-20
+  // component). Industrial pallet-racked warehouse analog.
   // Industrial-tan fill keys to the parts-warehouse role.
   component_warehouse: {
     id: 'component_warehouse',
@@ -1620,7 +1633,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square2,
     fill: 0x806840,
     stroke: 0x3a2810,
-    storage: { category: 'components', capacity: 20000 },
+    storage: { category: 'components', capacity: 1000 },
     // BOM source: Industrial pallet-racked components warehouse — steel-shelf frame per rev-16 §13.3.
     // 160 steel_beam rack + 2000 concrete floor + 800 stone foundation + 500 iron_ingot bracket + 150 gear roller + 200 copper_ingot busbar = 11.8 t.
     placementCost: { steel_beam: 160, concrete: 2000, stone: 800, iron_ingot: 500, gear: 150, copper_ingot: 200 },
@@ -1722,9 +1735,10 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     glyph: '△',
   },
   // §4.6 / §8.4: Vault — T3 specialized storage for rare/valuable resources
-  // (helium_3, AI core, exotic alloy, T5 raws/components). +5000 cap.
-  // Dusky-violet fill — high-security vault aesthetic, tracking the "rare"
-  // category.
+  // (helium_3, AI core, exotic alloy, T5 raws/components). +1000× base cap
+  // (percentage model — multiplier; rare base 1 is floored to 5, so +5000 per
+  // rare resource, matching the pre-rescale flat value). Dusky-violet fill —
+  // high-security vault aesthetic, tracking the "rare" category.
   vault: {
     id: 'vault',
     displayName: 'Vault',
@@ -1733,7 +1747,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     footprint: SHAPES.square3,
     fill: 0x504860,
     stroke: 0x1a1830,
-    storage: { category: 'rare', capacity: 5000 },
+    storage: { category: 'rare', capacity: 1000 },
     // BOM source: UL-rated bank vault enclosure — reinforced concrete + steel liner per rev-16 §13.3.
     // 1200 steel_beam liner + 15000 concrete vault wall + 500 stone footing + 200 microchip biometric lock + 400 wire alarm mesh = 75.72 t.
     placementCost: { steel_beam: 1200, concrete: 15000, stone: 500, microchip: 200, wire: 400 },

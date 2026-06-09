@@ -499,10 +499,12 @@ A specialized building accepts only resources whose category matches. Categories
 
 **Generic storage** (Crate, Warehouse) holds one player-chosen resource per building. At placement, the player labels the building with the resource it will hold. Re-labeling is a free UI action and requires the building to be empty (or accepts a force-clear that destroys current contents).
 
-The cap for resource `r` on an island is the sum of:
+**Percentage model.** A storage building's `capacity` is a **multiplier**, not an absolute unit count. Its per-resource contribution is `capacity × storage_base(r)`, where `storage_base(r) = max(5, baseline_cap(r))` — the resource's baseline cap (the `RESOURCE_BASE_CAP` override if present, else its category default), floored at 5 so resources with a tiny or zero baseline (rare = 1, AI core = 0) still receive usable storage. The floor applies only to building *contributions*: the fresh-island baseline cap itself stays literal (AI core legitimately starts at 0 — no storage building, no holding). Scaling off each resource's base keeps a building's boost proportional across resources of differing magnitudes — a Crate (×5) adds +500 to iron ore (base 100) but +100 to bolt (base 20) — rather than granting a flat count that dwarfs small-base resources.
 
-* Specialized buildings whose category includes `r`, contributing their full capacity to `r`
-* Generic buildings explicitly assigned to `r`, contributing their capacity to `r`
+The cap for resource `r` on an island is the sum of its baseline cap plus:
+
+* Specialized buildings whose category includes `r`, each contributing `capacity × storage_base(r)`
+* Generic buildings explicitly assigned to `r`, each contributing `capacity × storage_base(r)`
 
 When resource `r` hits its cap, only buildings actively producing `r` stall. Other recipes on the island continue to run. Stalled production back-propagates: a stalled building stops consuming its inputs, which accumulate against their own caps and may trigger further upstream stalls.
 
@@ -925,13 +927,13 @@ The recipe ties T6 launch fuel back to the T4 antimatter chain — a player who 
 
 |Building|Footprint|Tier|Notes|
 |-|-|-|-|
-|Crate|1x1|T1|+500 cap on one player-chosen resource (generic, see §4.6)|
-|Warehouse|3x3|T1|+1000 cap on one player-chosen resource (generic, see §4.6)|
-|Silo|2x2|T1|+200000 cap; specialized to dry goods category only|
-|Tank|2x2|T2|+100000 cap; specialized to liquids/gases category only|
-|Cold Storage|2x2|T2|+50000 cap; specialized to temperature-sensitive category only|
-|Component Warehouse|2x2|T2|+20000 cap; specialized to manufactured-components category (T2-T3 fabricated parts)|
-|Vault|3x3|T3|+5000 cap; specialized to rare/valuable category only|
+|Crate|1x1|T1|×5 base-cap multiplier on one player-chosen resource (generic, see §4.6; e.g. +500 to a base-100 resource)|
+|Warehouse|3x3|T1|×10 base-cap multiplier on one player-chosen resource (generic, see §4.6)|
+|Silo|2x2|T1|×2000 base-cap multiplier; specialized to dry goods category only (+200000 to a base-100 dry good)|
+|Tank|2x2|T2|×1000 base-cap multiplier; specialized to liquids/gases category only|
+|Cold Storage|2x2|T2|×1000 base-cap multiplier; specialized to temperature-sensitive category only|
+|Component Warehouse|2x2|T2|×1000 base-cap multiplier; specialized to manufactured-components category (T2-T3 fabricated parts)|
+|Vault|3x3|T3|×1000 base-cap multiplier; specialized to rare/valuable category only (rare bases floor to 5 → +5000 each)|
 |Singularity Battery|2x2|T5|Effectively infinite electrical power storage (not a resource storage building)|
 
 ### 8.5 Power Generation
@@ -1972,7 +1974,7 @@ function computeRates(island: Island) {
 
 `findNextCapEvent` returns the timestamp at which any inventory hits its cap or empties given current rates, or `now` if nothing changes within the interval.
 
-Construction completions are also event boundaries: when `constructionRemainingMs` reaches zero during a segment, the loop iterates there. At that completion point a storage building's capacity is credited to the island's caps (§4.6) — base capacity for a fresh placement (floorLevel 0), the flat per-level increment for a completed floor upgrade (floorLevel ≥ 1); the same loop runs every segment, so a build completing mid-offline-catchup is credited correctly. Immediately after each segment `promoteQueuedBuilds` promotes the FIFO head of the build queue (lowest `queueSeq`) into any newly freed running slot, so queued builds start ticking within the same advance/offline-catchup call (§4.8).
+Construction completions are also event boundaries: when `constructionRemainingMs` reaches zero during a segment, the loop iterates there. At that completion point a storage building's capacity multiplier is credited to the island's caps (§4.6, expanded to `multiplier × storage_base(r)` per affected resource) — the base multiplier for a fresh placement (floorLevel 0), the flat per-level multiplier increment for a completed floor upgrade (floorLevel ≥ 1); the same loop runs every segment, so a build completing mid-offline-catchup is credited correctly. Immediately after each segment `promoteQueuedBuilds` promotes the FIFO head of the build queue (lowest `queueSeq`) into any newly freed running slot, so queued builds start ticking within the same advance/offline-catchup call (§4.8).
 
 ### 15.4 Inter-Island Flow Resolution
 

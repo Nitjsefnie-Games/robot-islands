@@ -336,13 +336,14 @@ describe('BUILDING_DEFS catalog', () => {
   });
 
   it('storage defs declare categorized storage; others do not', () => {
-    // §4.6 categorized routing: storage carries { category, capacity }.
-    expect(BUILDING_DEFS.crate.storage).toEqual({ category: 'generic', capacity: 500 });
-    expect(BUILDING_DEFS.silo.storage).toEqual({ category: 'dry_goods', capacity: 200000 });
-    expect(BUILDING_DEFS.tank.storage).toEqual({ category: 'liquid_gas', capacity: 100000 });
-    expect(BUILDING_DEFS.cold_storage.storage).toEqual({ category: 'temp_sensitive', capacity: 50000 });
-    expect(BUILDING_DEFS.component_warehouse.storage).toEqual({ category: 'components', capacity: 20000 });
-    expect(BUILDING_DEFS.vault.storage).toEqual({ category: 'rare', capacity: 5000 });
+    // §4.6 categorized routing: storage carries { category, capacity }, where
+    // `capacity` is a percentage MULTIPLIER (contribution = capacity × base cap).
+    expect(BUILDING_DEFS.crate.storage).toEqual({ category: 'generic', capacity: 5 });
+    expect(BUILDING_DEFS.silo.storage).toEqual({ category: 'dry_goods', capacity: 2000 });
+    expect(BUILDING_DEFS.tank.storage).toEqual({ category: 'liquid_gas', capacity: 1000 });
+    expect(BUILDING_DEFS.cold_storage.storage).toEqual({ category: 'temp_sensitive', capacity: 1000 });
+    expect(BUILDING_DEFS.component_warehouse.storage).toEqual({ category: 'components', capacity: 1000 });
+    expect(BUILDING_DEFS.vault.storage).toEqual({ category: 'rare', capacity: 1000 });
     // Non-storage defs must not declare `storage` (would silently
     // contribute to aggregateStorageCaps otherwise).
     expect(BUILDING_DEFS.mine.storage).toBeUndefined();

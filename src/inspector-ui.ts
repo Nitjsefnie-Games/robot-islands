@@ -53,7 +53,7 @@ import {
 } from './maintenance.js';
 import { ALL_RESOURCES, resolveRecipe, type Recipe, type ResourceId } from './recipes.js';
 import { effectiveSkillMultipliers, type SkillMultipliers } from './skilltree.js';
-import { RESOURCE_STORAGE_CATEGORY, type StorageCategory } from './storage-categories.js';
+import { RESOURCE_STORAGE_CATEGORY, storageBaseFor, type StorageCategory } from './storage-categories.js';
 import {
   BIOME_MAX_RADII,
   ISLAND_NAME_MAX_LEN,
@@ -774,17 +774,19 @@ export function mountInspectorUi(
   function renderCargoLabelUi(
     b: PlacedBuilding,
     state: IslandState,
-    capacity: number,
+    mult: number,
   ): void {
     cargoLabelControls.wrap.style.display = '';
     const current = b.cargoLabel;
     const proposed = pendingRelabel ?? current;
     cargoLabelControls.select.value = (proposed ?? 'iron_ore') as string;
     if (current === undefined) {
-      storageLine.textContent = `+${capacity} cap (unlabeled — pick a resource)`;
+      // §4.6 percentage model: contribution = mult × the chosen resource's
+      // base cap, so it isn't known until a resource is picked.
+      storageLine.textContent = `+${mult}× base cap (unlabeled — pick a resource)`;
       storageLine.style.color = 'var(--ri-fg-3)';
     } else {
-      storageLine.textContent = `+${capacity} cap on ${current}`;
+      storageLine.textContent = `+${mult * storageBaseFor(current)} cap on ${current}`;
       storageLine.style.color = 'var(--ri-fg-1)';
     }
     const held = current !== undefined ? (state.inventory[current] ?? 0) : 0;
@@ -1418,15 +1420,17 @@ export function mountInspectorUi(
     // report their category and capacity; generic buildings additionally
     // expose the cargo-label dropdown for relabeling.
     if (def.storage) {
-      const cap = floorScaledCapacity(building, def.storage.capacity);
+      // §4.6 percentage model: `storage.capacity` is a multiplier; the actual
+      // per-resource contribution is `mult × storageBaseFor(r)`.
+      const mult = floorScaledCapacity(building, def.storage.capacity);
       if (def.storage.category === 'generic') {
         // Generic: show "+cap on <label>" plus the dropdown.
-        renderCargoLabelUi(building, state, cap);
+        renderCargoLabelUi(building, state, mult);
       } else {
-        // Specialized: show "+cap to <category>" with the matching count.
+        // Specialized: contribution varies per resource, so show the multiplier.
         cargoLabelControls.wrap.style.display = 'none';
         const catLabel = STORAGE_CATEGORY_LABEL[def.storage.category];
-        storageLine.textContent = `+${cap} cap on ${catLabel}`;
+        storageLine.textContent = `+${mult}× base cap on ${catLabel}`;
         storageLine.style.color = 'var(--ri-fg-1)';
       }
       storageSection.wrap.style.display = '';

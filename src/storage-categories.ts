@@ -415,3 +415,27 @@ export function defaultCapForCategory(c: StorageCategory): number {
     case 'rare':           return 1;
   }
 }
+
+/**
+ * Per-resource baseline storage cap on a fresh island (no storage buildings):
+ * the `RESOURCE_BASE_CAP` override if present, else the category default. This
+ * is the literal starting cap — NOT floored (ai_core legitimately starts at 0,
+ * whole-unit-only).
+ */
+export function baselineCap(r: ResourceId): number {
+  const override = RESOURCE_BASE_CAP[r];
+  return override !== undefined ? override : defaultCapForCategory(RESOURCE_STORAGE_CATEGORY[r]);
+}
+
+/**
+ * §4.6 percentage storage: the per-resource "base" a storage building's
+ * capacity MULTIPLIER scales off. A storage building contributes
+ * `multiplier × storageBaseFor(r)` to resource `r`'s cap (the `multiplier`
+ * being `def.storage.capacity`, floor-scaled). Floored at 5 so resources with
+ * a tiny or zero baseline (rare = 1, ai_core = 0) still receive usable storage
+ * — otherwise `multiplier × 0` would leave ai_core permanently unstorable.
+ */
+export const MIN_STORAGE_BASE = 5;
+export function storageBaseFor(r: ResourceId): number {
+  return Math.max(MIN_STORAGE_BASE, baselineCap(r));
+}
