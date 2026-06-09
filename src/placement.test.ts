@@ -8,7 +8,7 @@ import { BUILDING_DEFS } from './building-defs.js';
 import { SHAPES } from './shape-mask.js';
 import type { PlacedBuilding } from './buildings.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
-import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
+import { RESOURCE_STORAGE_CATEGORY, storageBaseFor } from './storage-categories.js';
 import {
   applyRelabelStorageCap,
   applyUpgrade,
@@ -768,8 +768,10 @@ describe('demolishBuilding', () => {
   it('subtracts the storage contribution from category-matching resources when a Silo is demolished', () => {
     // §4.6: Silo is dry_goods-only — its demolition reverses the dry_goods
     // bump and leaves other categories untouched. demolish targets FINISHED
-    // buildings, so we plant an OPERATIONAL silo (init aggregates its
-    // +200000 cap) — placement no longer credits the cap (§storage-timing).
+    // buildings, so we plant an OPERATIONAL silo whose cap is aggregated at
+    // init — placement no longer credits the cap (§storage-timing). Percentage
+    // model: the dry_goods bump is 2000 × storageBaseFor(r) (= +200000 to a
+    // base-100 dry good, but +10000 to foundation_kit at base 5).
     const spec = makeSpec({
       buildings: [{ id: 'p-silo', defId: 'silo', x: 0, y: 0 }],
     });
@@ -780,7 +782,7 @@ describe('demolishBuilding', () => {
     for (const r of ALL_RESOURCES as ReadonlyArray<ResourceId>) {
       const expected =
         RESOURCE_STORAGE_CATEGORY[r] === 'dry_goods'
-          ? (before[r] ?? 0) + 200000
+          ? (before[r] ?? 0) + 2000 * storageBaseFor(r)
           : before[r];
       expect(state.storageCaps[r]).toBe(expected);
     }
@@ -811,6 +813,61 @@ describe('demolishBuilding', () => {
     for (const r of ALL_RESOURCES as ReadonlyArray<ResourceId>) {
       expect(state.storageCaps[r]).toBe(before[r]);
     }
+  });
+
+  it('Crate contributes multiplier × per-resource base (percentage model)', () => {
+    // §4.6 percentage storage: a storage building's `storage.capacity` is now a
+    // MULTIPLIER, and the per-resource contribution is `mult × max(5, baseCap(r))`.
+    // Crate mult = 5 → iron_ore (base 100) gets +500, bolt (base 20) gets +100.
+    const base = { ...makeState(makeSpec()).storageCaps };
+    const ironState = makeState(
+      makeSpec({ buildings: [{ id: 'c-iron', defId: 'crate', x: 0, y: 0, cargoLabel: 'iron_ore' }] }),
+    );
+    const boltState = makeState(
+      makeSpec({ buildings: [{ id: 'c-bolt', defId: 'crate', x: 0, y: 0, cargoLabel: 'bolt' }] }),
+    );
+    expect(ironState.storageCaps.iron_ore).toBe((base.iron_ore ?? 0) + 500);
+    expect(boltState.storageCaps.bolt).toBe((base.bolt ?? 0) + 100);
+  });
+
+  it('floors the storage base at 5 so zero-base ai_core stays storable', () => {
+    // ai_core has base cap 0 (whole-unit-only). max(5, 0) = 5 keeps it storable:
+    // a Vault (mult 1000) grants 1000 × 5 = 5000. The fresh-island BASELINE cap
+    // stays literal at 0 (no storage building → cannot hold ai_core).
+    expect(makeState(makeSpec()).storageCaps.ai_core).toBe(0);
+    const vaultState = makeState(
+      makeSpec({ buildings: [{ id: 'v', defId: 'vault', x: 0, y: 0 }] }),
+    );
+    expect(vaultState.storageCaps.ai_core).toBe(5000);
+  });
+
+  it('Crate demolish reverses the per-resource percentage contribution', () => {
+    // Reverse of the credit: a Crate labeled bolt added +100, demolish strips it.
+    const spec = makeSpec({
+      buildings: [{ id: 'p-crate', defId: 'crate', x: 0, y: 0, cargoLabel: 'bolt' }],
+    });
+    const state = makeState(spec);
+    const before = { ...makeState(makeSpec()).storageCaps };
+    expect(state.storageCaps.bolt).toBe((before.bolt ?? 0) + 100);
+    expect(demolishBuilding(spec, state, 'p-crate').ok).toBe(true);
+    for (const r of ALL_RESOURCES as ReadonlyArray<ResourceId>) {
+      expect(state.storageCaps[r]).toBe(before[r]);
+    }
+  });
+
+  it('relabel moves the percentage contribution between resources of different base', () => {
+    // Relabel iron_ore → bolt: iron_ore loses 5×100=500, bolt gains 5×20=100.
+    const spec = makeSpec({
+      buildings: [{ id: 'p-crate', defId: 'crate', x: 0, y: 0, cargoLabel: 'iron_ore' }],
+    });
+    const state = makeState(spec);
+    const before = { ...makeState(makeSpec()).storageCaps };
+    expect(state.storageCaps.iron_ore).toBe((before.iron_ore ?? 0) + 500);
+    const b = spec.buildings[0]!;
+    const res = applyRelabelStorageCap(state, b, BUILDING_DEFS.crate, 'iron_ore', 'bolt');
+    expect(res).toBe('moved');
+    expect(state.storageCaps.iron_ore).toBe(before.iron_ore ?? 0);
+    expect(state.storageCaps.bolt).toBe((before.bolt ?? 0) + 100);
   });
 
   it('leaves storage caps untouched when a non-storage def is demolished', () => {
@@ -2264,7 +2321,9 @@ describe('cancelConstruction full refund', () => {
 // ---------------------------------------------------------------------------
 describe('applyRelabelStorageCap — construction guard', () => {
   const CRATE_DEF = BUILDING_DEFS['crate']!;
-  const BASE_CAP = 500; // Crate L0 floorScaledCapacity(500) = 500
+  const CRATE_MULT = CRATE_DEF.storage!.capacity; // 5 (percentage multiplier)
+  // §4.6 percentage model: copper_ore base 100 → contribution = mult × 100 = 500.
+  const BASE_CAP = 500;
 
   // Helper: minimal IslandState for relabel tests.
   function relabelState(
@@ -2311,8 +2370,8 @@ describe('applyRelabelStorageCap — construction guard', () => {
     building.cargoLabel = 'copper_ore';
 
     // Simulate construction completion crediting (mirrors economy.ts logic exactly).
-    // floorLevel(building) = 0 → fresh placement → credit floorScaledCapacity.
-    creditStorageCaps(state, building, CRATE_DEF, BASE_CAP);
+    // floorLevel(building) = 0 → fresh placement → credit the multiplier.
+    creditStorageCaps(state, building, CRATE_DEF, CRATE_MULT);
 
     // copper_ore cap must be exactly BASE_CAP (500), NOT doubled (1000).
     expect(state.storageCaps.copper_ore).toBe(BASE_CAP);
