@@ -39,7 +39,7 @@ import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import { effectiveSkillMultipliers, hasBiomeBypass, effectiveTierShift, tierForLevel, DEFAULT_GRAPH } from './skilltree.js';
 import { hasStructuralEffect } from './structural.js';
 import type { Graph } from './skilltree-graph.js';
-import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
+import { RESOURCE_STORAGE_CATEGORY, storageBaseFor } from './storage-categories.js';
 import { candidateAnchors } from './anchor-picker.js';
 import { isOceanTile, type IslandSpec, type WorldState } from './world.js';
 import { CELL_SIZE_TILES } from './constants.js';
@@ -409,31 +409,35 @@ export type PlaceBuildingResult =
    *  of letting two buildings share an id silently. */
   | { readonly ok: false; readonly reason: 'overlap' };
 
-/** Credit `amount` to `state.storageCaps` for a storage building, using the
+/** Credit a storage building's contribution to `state.storageCaps`, using the
  *  §4.6 categorized routing: a generic-category building bumps ONLY the
  *  resource named on its `cargoLabel`; a specialized-category building bumps
  *  every resource whose `RESOURCE_STORAGE_CATEGORY` matches `def.storage.category`.
- *  No-op when the def carries no `storage` block. Shared by the
- *  construction-completion hook in economy.ts so the place/upgrade-completion
- *  credit and the demolish/cancel strip can't drift on which resources a
- *  storage building affects. Pure mutation on `state.storageCaps`. */
+ *
+ *  `mult` is the percentage MULTIPLIER (`def.storage.capacity`, floor-scaled by
+ *  the caller), NOT an absolute unit count: the per-resource credit is
+ *  `mult × storageBaseFor(r)`. No-op when the def carries no `storage` block.
+ *  Shared by the construction-completion hook in economy.ts so the
+ *  place/upgrade-completion credit and the demolish/cancel strip can't drift on
+ *  which resources a storage building affects. Pure mutation on
+ *  `state.storageCaps`. */
 export function creditStorageCaps(
   state: IslandState,
   building: PlacedBuilding,
   def: BuildingDef,
-  amount: number,
+  mult: number,
 ): void {
   const storage = def.storage;
   if (!storage) return;
   if (storage.category === 'generic') {
-    if (building.cargoLabel !== undefined) {
-      state.storageCaps[building.cargoLabel] =
-        (state.storageCaps[building.cargoLabel] ?? 0) + amount;
+    const label = building.cargoLabel;
+    if (label !== undefined) {
+      state.storageCaps[label] = (state.storageCaps[label] ?? 0) + mult * storageBaseFor(label);
     }
   } else {
     for (const r of ALL_RESOURCES as ReadonlyArray<ResourceId>) {
       if (RESOURCE_STORAGE_CATEGORY[r] === storage.category) {
-        state.storageCaps[r] = (state.storageCaps[r] ?? 0) + amount;
+        state.storageCaps[r] = (state.storageCaps[r] ?? 0) + mult * storageBaseFor(r);
       }
     }
   }
@@ -478,15 +482,17 @@ export function applyRelabelStorageCap(
     // Skip cap arithmetic; completion will credit the (new) cargoLabel.
     return 'label-only';
   }
-  const cap = floorScaledCapacity(building, def.storage.capacity);
+  // §4.6 percentage model: the cap moved differs per resource — subtract the
+  // old label's contribution (mult × its base) and add the new label's.
+  const mult = floorScaledCapacity(building, def.storage.capacity);
   if (oldLabel !== undefined) {
-    const next = (state.storageCaps[oldLabel] ?? 0) - cap;
+    const next = (state.storageCaps[oldLabel] ?? 0) - mult * storageBaseFor(oldLabel);
     state.storageCaps[oldLabel] = next < 0 ? 0 : next;
     const have = state.inventory[oldLabel] ?? 0;
     const newCap = state.storageCaps[oldLabel] ?? 0;
     if (have > newCap) state.inventory[oldLabel] = newCap;
   }
-  state.storageCaps[newLabel] = (state.storageCaps[newLabel] ?? 0) + cap;
+  state.storageCaps[newLabel] = (state.storageCaps[newLabel] ?? 0) + mult * storageBaseFor(newLabel);
   return 'moved';
 }
 
@@ -1004,8 +1010,9 @@ export function demolishBuilding(
   // the cargoLabel resource.
   const storage = def.storage;
   if (storage) {
+    const mult = floorScaledCapacity(b, storage.capacity);
     const stripResource = (r: ResourceId): void => {
-      const next = (state.storageCaps[r] ?? 0) - floorScaledCapacity(b, storage.capacity);
+      const next = (state.storageCaps[r] ?? 0) - mult * storageBaseFor(r);
       state.storageCaps[r] = next < 0 ? 0 : next;
       const have = state.inventory[r] ?? 0;
       const newCap = state.storageCaps[r] ?? 0;

@@ -36,7 +36,7 @@ import type { OceanCellSpec } from './ocean-cell.js';
 import { generateOceanTerrain } from './ocean-gen.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import type { Route } from './routes.js';
-import { RESOURCE_BASE_CAP, RESOURCE_STORAGE_CATEGORY, defaultCapForCategory } from './storage-categories.js';
+import { RESOURCE_STORAGE_CATEGORY, baselineCap, storageBaseFor } from './storage-categories.js';
 import { pointInVision, type VisionSource } from './vision-source.js';
 import { generateCellIslands, generateWorld } from './world-gen.js';
 
@@ -953,24 +953,24 @@ export function aggregateStorageCaps(
 ): Record<ResourceId, number> {
   const caps = {} as Record<ResourceId, number>;
   for (const r of ALL_RESOURCES) {
-    const override = RESOURCE_BASE_CAP[r];
-    caps[r] = override !== undefined
-      ? override
-      : defaultCapForCategory(RESOURCE_STORAGE_CATEGORY[r]);
+    caps[r] = baselineCap(r);
   }
   for (const b of buildings) {
     const def = BUILDING_DEFS[b.defId];
     const storage = def.storage;
     if (!storage) continue;
+    // `storage.capacity` is a percentage multiplier; the per-resource
+    // contribution is `multiplier × storageBaseFor(r)` (§4.6).
+    const mult = floorScaledCapacity(b, storage.capacity);
     if (storage.category === 'generic') {
       const label = b.cargoLabel;
       if (label !== undefined) {
-        caps[label] = (caps[label] ?? 0) + floorScaledCapacity(b, storage.capacity);
+        caps[label] = (caps[label] ?? 0) + mult * storageBaseFor(label);
       }
     } else {
       for (const r of ALL_RESOURCES) {
         if (RESOURCE_STORAGE_CATEGORY[r] === storage.category) {
-          caps[r] = (caps[r] ?? 0) + floorScaledCapacity(b, storage.capacity);
+          caps[r] = (caps[r] ?? 0) + mult * storageBaseFor(r);
         }
       }
     }

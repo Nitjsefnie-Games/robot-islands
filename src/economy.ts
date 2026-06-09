@@ -1954,10 +1954,12 @@ export function advanceIsland(
           // crosses to operational, credit its cap, discriminating by the
           // building's floorLevel at that moment:
           //   - floorLevel 0 → a FRESH placement → credit the base
-          //     floorScaledCapacity (== base capacity at L0).
+          //     floorScaledCapacity (== base multiplier at L0).
           //   - floorLevel >= 1 → an UPGRADE → credit the flat per-level
           //     delta storage.capacity (= floorScaledCapacity(L) −
           //     floorScaledCapacity(L−1)).
+          // The value is a percentage MULTIPLIER; creditStorageCaps expands it
+          // to `mult × storageBaseFor(r)` per affected resource (§4.6).
           // The same loop runs each segment, so offline-catchup builds that
           // complete mid-advance are credited correctly. Mirrors the amounts
           // placeBuilding/applyUpgrade used to grant at commit, just deferred.
@@ -1965,11 +1967,11 @@ export function advanceIsland(
             const cdef = BUILDING_DEFS[b.defId];
             const storage = cdef.storage;
             if (storage) {
-              const amount =
+              const mult =
                 floorLevel(b) === 0
                   ? floorScaledCapacity(b, storage.capacity)
                   : storage.capacity;
-              creditStorageCaps(state, b, cdef, amount);
+              creditStorageCaps(state, b, cdef, mult);
             }
           }
           continue;

@@ -46,7 +46,7 @@ import {
 import { checkGates } from './adjacency.js';
 import { applyUpgrade, placeBuilding, validatePlacement } from './placement.js';
 import { ALL_RESOURCES, resolveRotatingOutput, XP_WEIGHT, type ResourceId } from './recipes.js';
-import { RESOURCE_BASE_CAP, RESOURCE_STORAGE_CATEGORY, defaultCapForCategory } from './storage-categories.js';
+import { RESOURCE_BASE_CAP, RESOURCE_STORAGE_CATEGORY, defaultCapForCategory, storageBaseFor } from './storage-categories.js';
 import { aggregateStorageCaps } from './world.js';
 import type { TerrainKind } from './island.js';
 import type { Graph } from './skilltree-graph.js';
@@ -1671,16 +1671,19 @@ describe('step-9 chain — Smelter T1 + storage aggregation', () => {
     expect(state.inventory.wire).toBeCloseTo(49.99981395199999, 6);
   });
 
-  it('aggregateStorageCaps: Silo on an island raises only dry_goods caps by 200000', () => {
+  it('aggregateStorageCaps: Silo on an island raises only dry_goods caps by 2000× base', () => {
     // §4.6 categorized storage: Silo bumps dry_goods only.
-    // SI-units rev-16 §13.3: silo capacity = 200000.
+    // Percentage model: silo capacity = 2000 (multiplier); contribution =
+    // 2000 × storageBaseFor(r) (= +200000 to a base-100 dry good).
     const buildings: PlacedBuilding[] = [
       { id: 't-silo', defId: 'silo', x: 0, y: 0 },
     ];
     const caps = aggregateStorageCaps(buildings);
     for (const r of ALL_RESOURCES) {
       const base = RESOURCE_BASE_CAP[r] ?? defaultCapForCategory(RESOURCE_STORAGE_CATEGORY[r]);
-      const expected = RESOURCE_STORAGE_CATEGORY[r] === 'dry_goods' ? base + 200000 : base;
+      const expected = RESOURCE_STORAGE_CATEGORY[r] === 'dry_goods'
+        ? base + 2000 * storageBaseFor(r)
+        : base;
       expect(caps[r]).toBe(expected);
     }
   });
@@ -1731,9 +1734,9 @@ describe('step-9 chain — Smelter T1 + storage aggregation', () => {
   });
 
   it('aggregateStorageCaps: mixed-category buildings — each category bumps independently', () => {
-    // §4.6: a Silo (dry_goods +200000), Tank (liquid_gas +100000), Vault
-    // (rare +5000), Crate labeled iron_ore (+500). Each resource picks up
-    // its category bump plus the label-specific bump iff named.
+    // §4.6 percentage model: a Silo (dry_goods ×2000), Tank (liquid_gas ×1000),
+    // Vault (rare ×1000), Crate labeled iron_ore (×5). Each resource picks up
+    // its category multiplier × its base, plus the label-specific bump iff named.
     const buildings: PlacedBuilding[] = [
       { id: 't-silo', defId: 'silo', x: 0, y: 0 },
       { id: 't-tank', defId: 'tank', x: 2, y: 0 },
@@ -1744,10 +1747,10 @@ describe('step-9 chain — Smelter T1 + storage aggregation', () => {
     for (const r of ALL_RESOURCES) {
       let expected = RESOURCE_BASE_CAP[r] ?? defaultCapForCategory(RESOURCE_STORAGE_CATEGORY[r]);
       const cat = RESOURCE_STORAGE_CATEGORY[r];
-      if (cat === 'dry_goods') expected += 200000;
-      if (cat === 'liquid_gas') expected += 100000;
-      if (cat === 'rare') expected += 5000;
-      if (r === 'iron_ore') expected += 500;
+      if (cat === 'dry_goods') expected += 2000 * storageBaseFor(r);
+      if (cat === 'liquid_gas') expected += 1000 * storageBaseFor(r);
+      if (cat === 'rare') expected += 1000 * storageBaseFor(r);
+      if (r === 'iron_ore') expected += 5 * storageBaseFor(r);
       expect(caps[r]).toBe(expected);
     }
   });
@@ -1794,9 +1797,10 @@ describe('storage rescale (rev-16 §13.3)', () => {
     const withCw = aggregateStorageCaps([fakeComponentWarehouseAt(0, 0)]);
     expect(withCw.gear - base.gear).toBe(20000);
   });
-  it('vault bumps rare caps by 5000', () => {
+  it('vault bumps rare caps by 1000× base (floored: rare base 1 → 5 → +5000)', () => {
     const base = aggregateStorageCaps([]);
     const withVault = aggregateStorageCaps([fakeVaultAt(0, 0)]);
+    expect(withVault.helium_3 - base.helium_3).toBe(1000 * storageBaseFor('helium_3'));
     expect(withVault.helium_3 - base.helium_3).toBe(5000);
   });
   it('crate bumps the labeled-resource cap by 500', () => {
@@ -1807,7 +1811,10 @@ describe('storage rescale (rev-16 §13.3)', () => {
 });
 
 describe('sub-calibrated baseCap (rev-16 §13.4)', () => {
-  it('helium_3 = 1 (1 g) on fresh island; vault adds 5000 (5 kg)', () => {
+  it('helium_3 = 1 (1 g) baseline; vault adds 1000× the floored base (5) = 5000', () => {
+    // Baseline cap stays literal (helium_3 = 1). The vault CONTRIBUTION uses the
+    // floored storage base max(5, 1) = 5, so it adds 1000 × 5 = 5000 (matching
+    // the pre-rescale flat value).
     const base = aggregateStorageCaps([]);
     expect(base.helium_3).toBe(1);
     const withVault = aggregateStorageCaps([fakeVaultAt(0, 0)]);
