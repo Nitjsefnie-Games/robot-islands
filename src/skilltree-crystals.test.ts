@@ -44,3 +44,24 @@ describe('effectiveGraph', () => {
     expect(effectiveGraph(state)).toBe(DEFAULT_GRAPH);
   });
 });
+
+describe('crystal node descriptions (§9.3 grafts)', () => {
+  it('no description leaks literal code — every percentage is interpolated', () => {
+    for (const c of CRYSTAL_CATALOG) {
+      for (const n of c.nodes) {
+        expect(n.description, `${c.id}.${n.idSuffix}`).not.toContain('Math.round');
+        expect(n.description, `${c.id}.${n.idSuffix}`).not.toContain('scale');
+        expect(n.description, `${c.id}.${n.idSuffix}`).not.toContain('${');
+      }
+    }
+  });
+
+  it('descriptions that advertise a percentage carry a numeric one', () => {
+    for (const c of CRYSTAL_CATALOG) {
+      for (const n of c.nodes) {
+        if (!n.description.includes('%')) continue;
+        expect(n.description, `${c.id}.${n.idSuffix}`).toMatch(/[+-]?\d+%/);
+      }
+    }
+  });
+});
