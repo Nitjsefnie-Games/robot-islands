@@ -872,9 +872,16 @@ export const RULE_BREAKER_KEYSTONES: RawSkillNode[] = [
   },
   {
     id: 'oceanography.keystone.sonarPair' as NodeId,
-    // TODO(balance): economically inert — dock has no RECIPES entry, so the pairBoost multiplies a rate that never exists.
-    subPath: 'oceanography', depth: 7, cost: 8, effect: { kind: 'exoticAdjacency', description: 'Dock+Tidal pair boost', effect: { kind: 'pairBoost', pair: ['dock', 'tidal_array'], recipeRateBonus: 0.2 } },
-    description: 'Tidal Pairing — Adjacent Dock + Tidal Array boost each other'
+    // pairBoost is directional: pair[0] gets the recipe-rate bonus when a
+    // pair[1] building is adjacent (computeBuffStack, adjacency.ts). Both
+    // members must therefore be meaningful: pair[0] needs a RECIPES entry
+    // (the rate being multiplied), pair[1] is the adjacency trigger. The
+    // intake → distillation brine chain satisfies that (the original
+    // dock + tidal_array pair was recipe-less on both sides and bought
+    // nothing); both rigs share 'shallows' terrain so the adjacency is
+    // actually placeable. Guarded in skilltree-catalog.test.ts.
+    subPath: 'oceanography', depth: 7, cost: 8, effect: { kind: 'exoticAdjacency', description: 'Intake→Distillation pair boost', effect: { kind: 'pairBoost', pair: ['brine_distillation_rig', 'seawater_intake_rig'], recipeRateBonus: 0.2 } },
+    description: 'Brine Pairing — Brine Distillation Rig adjacent to a Seawater Intake Rig runs +20% faster'
   },
   {
     id: 'network.keystone.sharedRoutes' as NodeId,
