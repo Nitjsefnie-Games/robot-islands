@@ -701,7 +701,9 @@ export function placeBuilding(
     placedAt: nowMs,
     operatingMs: 0,
     maintainedAt: nowMs,
-    ...(construction > 0 && def.instantBuild !== true ? { constructionRemainingMs: construction } : {}),
+    ...(construction > 0 && def.instantBuild !== true
+      ? { constructionRemainingMs: construction, constructionTotalMs: construction }
+      : {}),
     ...(mustQueue ? { queued: true as const, queueSeq: state.nextQueueSeq ?? 0 } : {}),
   };
   spec.buildings.push(placed);
@@ -930,7 +932,9 @@ export function applyUpgrade(
   }
   const newL = L + 1;
   b.floorLevel = newL;
-  (b as { constructionRemainingMs?: number }).constructionRemainingMs = upgradeConstructionMs(def, newL);
+  const upgradeMs = upgradeConstructionMs(def, newL);
+  (b as { constructionRemainingMs?: number }).constructionRemainingMs = upgradeMs;
+  (b as { constructionTotalMs?: number }).constructionTotalMs = upgradeMs;
   // §storage-timing: the +storage.capacity cap delta is NO LONGER credited
   // here. An upgrade IS a construction job; the cap delta is granted by the
   // construction-completion hook in `advanceIsland` the tick the upgrade

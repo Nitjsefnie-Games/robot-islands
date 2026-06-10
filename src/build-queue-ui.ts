@@ -223,7 +223,7 @@ export function mountBuildQueuePanel(
       for (const b of runningBuildings) {
         const def = BUILDING_DEFS[b.defId];
         const remaining = b.constructionRemainingMs ?? 0;
-        const pct = Math.round(constructionProgress(remaining, def, floorLevel(b)) * 100);
+        const pct = Math.round(constructionProgress(remaining, def, floorLevel(b), b.constructionTotalMs) * 100);
         const row = makeRow(def.displayName, `${pct}%`, 'accent', b.id);
         body.appendChild(row);
       }

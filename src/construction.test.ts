@@ -132,4 +132,21 @@ describe('constructionProgress', () => {
     expect(constructionProgress(BASE * 5, mine, 0)).toBe(0);
     expect(constructionProgress(-100, mine, 0)).toBe(1);
   });
+
+  it('uses constructionTotalMs when supplied so a Robotics ×2 placement starts at 0 and reaches 1', () => {
+    // Simulates a fresh T1 placement with Robotics constructionTimeMul = 2:
+    // base 30 s becomes 15 s, and the progress arc must divide by 15 s.
+    const total = Math.round(BASE / 2);
+    expect(constructionProgress(total, mine, 0, total)).toBe(0);
+    expect(constructionProgress(total / 2, mine, 0, total)).toBeCloseTo(0.5, 10);
+    expect(constructionProgress(0, mine, 0, total)).toBe(1);
+  });
+
+  it('falls back to upgradeConstructionMs when constructionTotalMs is omitted (legacy save)', () => {
+    // Legacy buildings lack constructionTotalMs; progress must still measure
+    // against the unmultiplied base/upgrade duration.
+    expect(constructionProgress(BASE, mine, 0)).toBe(0);
+    expect(constructionProgress(BASE / 2, mine, 0)).toBe(0.5);
+    expect(constructionProgress(0, mine, 0)).toBe(1);
+  });
 });

@@ -112,7 +112,7 @@ export function mountBuildingAlertsOverlay(
           // — floorLevel(b) is already the in-progress floor, so an upgrade's
           // longer base×(L+1) timer fills from the start instead of sitting
           // empty until `remaining` drops below the placement base.
-          const completed = constructionProgress(remaining, def, floorLevel(b));
+          const completed = constructionProgress(remaining, def, floorLevel(b), b.constructionTotalMs);
           const tlPx = (spec.cx + minTx) * TILE_PX - TILE_PX / 2;
           const tlPy = (spec.cy + minTy) * TILE_PX - TILE_PX / 2;
           const radius = 5;
