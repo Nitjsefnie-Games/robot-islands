@@ -173,6 +173,23 @@ export function performMerge(
     });
   }
 
+  // 2b. Carry absorbed tileOverrides into absorber, shifted by the offset.
+  //     Per v5 no_revert lock, conversions are permanent and must survive
+  //     the merge.  Absorber's own entries win collisions — matching the
+  //     last_placed_wins convention in attachTerrainAt.
+  if (absorbed.tileOverrides) {
+    if (!absorber.tileOverrides) {
+      absorber.tileOverrides = {};
+    }
+    for (const [key, kind] of Object.entries(absorbed.tileOverrides)) {
+      const [x, y] = key.split(',').map(Number);
+      const shiftedKey = `${x + offsetX},${y + offsetY}`;
+      if (!(shiftedKey in absorber.tileOverrides)) {
+        absorber.tileOverrides[shiftedKey] = kind;
+      }
+    }
+  }
+
   // 3. Transfer inventory; absorber's cap clamps the result, dropping
   //    overflow. Skip if either state is missing (§3.6 implies both islands
   //    are populated for a merge to make sense).

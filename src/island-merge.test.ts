@@ -25,6 +25,7 @@ import {
 } from './settlement.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import {
+  attachTerrainAt,
   findPopulatedIslandAt,
   islandsOverlap,
   islandTileCount,
@@ -483,6 +484,46 @@ describe('performMerge', () => {
     const buoy = a.buildings.find((b) => b.defId === 'sonar_buoy');
     expect(buoy).toBeDefined();
     expect(buoy!.anchorIslandId).toBe('a');
+  });
+
+  it('carries absorbed tileOverrides across the merge shifted by offset', () => {
+    const a = attachTerrainAt({
+      id: 'a',
+      name: 'a',
+      biome: 'plains',
+      cx: 0,
+      cy: 0,
+      majorRadius: 14,
+      minorRadius: 14,
+      populated: true,
+      discovered: true,
+      buildings: [],
+      modifiers: [],
+    });
+    const b = attachTerrainAt({
+      id: 'b',
+      name: 'b',
+      biome: 'plains',
+      cx: 20,
+      cy: 0,
+      majorRadius: 14,
+      minorRadius: 14,
+      populated: true,
+      discovered: true,
+      buildings: [],
+      modifiers: [],
+      tileOverrides: { '1,1': 'ore' },
+    });
+    const world = makeWorld([a, b]);
+    const states = new Map<string, IslandState>([
+      ['a', makeState({ id: 'a' })],
+      ['b', makeState({ id: 'b' })],
+    ]);
+    performMerge(world, states, a, b);
+    // Shifted key should exist.
+    expect(a.tileOverrides?.['21,1']).toBe('ore');
+    // terrainAt should resolve the override.
+    expect(a.terrainAt!(21, 1)).toBe('ore');
   });
 });
 
