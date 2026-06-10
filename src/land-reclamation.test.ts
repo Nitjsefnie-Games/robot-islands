@@ -215,8 +215,9 @@ describe('expandIsland', () => {
 describe('landReclamationCost — union-aware delta for merged islands', () => {
   it('charges only genuinely-new tiles when extraEllipse overlaps the expansion ring', () => {
     // Primary r=3, extra at (4,0) r=3. Expanding major to 4 adds 4 primary
-    // tiles, but 2 of them (x=2, y=-1 and y=0) are already inside the extra.
-    // Union delta should be 2 vs primary-only delta of 4.
+    // tiles. The 2 right-edge growth tiles are absorbed by the extra ellipse,
+    // so the charged tiles are the 2 left-edge ones. Union delta should be
+    // 2 vs primary-only delta of 4.
     const extra = [{ major: 3, minor: 3, rotation: 0, offsetX: 4, offsetY: 0 }] as const;
     const primaryOnly = landReclamationCost(3, 3, 'major');
     const unionAware = landReclamationCost(3, 3, 'major', extra as unknown as IslandSpec['extraEllipses']);
