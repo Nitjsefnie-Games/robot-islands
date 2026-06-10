@@ -1103,6 +1103,30 @@ describe('power (§5.1)', () => {
     expect(wsRate).toBeCloseTo((1 / 4300) * power.factor, 9);
   });
 
+  it('solver gate does not switch off generator wattage at a capped byproduct bin', () => {
+    // §15.3 net-flow × §5.1: a building that produces grid power AND a
+    // recipe resource (casimir_tap, cryogenic_generator) must keep its full
+    // W output when its resource bin is pinned at cap with no consumer
+    // (solver gate g = 0). Power is explicitly outside the solver — only
+    // the resource side throttles (design doc §5.1 row: extremes identical
+    // to the pre-rework ia × oa probe). Minimal fixture: a Mine def that
+    // PRODUCES 100W instead of drawing 25W.
+    const base = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
+    base.mine = { ...base.mine, power: { produces: 100 } };
+    const state = makeState({
+      buildings: [MINE],
+      inventory: { ...blankInventory(), iron_ore: 100 }, // at cap, no consumer
+    });
+    const { power, byBuilding } = computeRates(state, { defs: base });
+    // Derived from the def constant: 100W × skill powerProduction (1) ×
+    // floorEffectMul (1) × solar/wind factor (1 — untagged) × clusterMul (1).
+    expect(power.produced).toBe(100);
+    expect(power.consumed).toBe(0);
+    const mine = byBuilding.find((r) => r.building === MINE)!;
+    expect(mine.effectiveRate).toBe(0); // resource side fully throttled (θ = 0, no consumer)
+    expect(mine.utilization).toBe(0);
+  });
+
   it('power_systems.notable.turbineStaging unlocked: Coal Gen produces more than 5000 kW', () => {
     const node = FULL_CATALOG.find((n) => n.id === 'power_systems.notable.turbineStaging')!;
     const state = makeState({
