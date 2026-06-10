@@ -38,7 +38,7 @@ import { upgradeConstructionMs } from './construction.js';
 import { convertToServitor, floorEffectMul, floorLevel, floorScaledCapacity, hasOperationalBuilding, isOperationalBuilding, ratedBuildingPower, type PlacedBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
 import { activeBonusMul } from './active-bonus.js';
-import { computeRates, fledglingRecipeMul } from './economy.js';
+import { computeRates, fledglingRecipeMul, type RatesContext } from './economy.js';
 import {
   type Axis,
   type ExpandResult,
@@ -210,6 +210,12 @@ export interface InspectorDeps {
    *  layers (new terrain colors), invalidates modifier-multiplier caches,
    *  and refreshes the inspector against the same selected building. */
   onIslandBiomeReassigned?(islandId: string): void;
+  /** §15.1 Full RatesContext for the given island — returns the same context
+   *  that the most-recent advanceIsland/computeRates tick used, so per-
+   *  building rate lines in the inspector agree with the HUD.  Optional:
+   *  when absent (e.g. headless tests that don't tick) falls back to the
+   *  terrain-only context, matching pre-§15.1 behaviour. */
+  getRatesContext?(islandId: string): RatesContext | undefined;
 }
 
 interface RateLine {
@@ -1299,6 +1305,13 @@ export function mountInspectorUi(
       pausedSection.wrap.style.display = 'none';
     }
 
+    // §15.1 Full RatesContext for this island — used by both the recipe
+    // computeRates pass and the heat-section pass so both see the same
+    // modifierMul / ncBuff / activeBonusMul / cableComponent / solarBoost.
+    // Falls back to terrain-only context when getRatesContext is absent
+    // (e.g. headless tests that don't tick).
+    const ratesCtx: RatesContext = deps.getRatesContext?.(spec.id) ?? { terrainAt: spec.terrainAt };
+
     // Recipe (resolveRecipe for Mine tile-aware variant — see §8.1).
     const recipe = resolveRecipe(BUILDING_DEFS[building.defId], building, spec.terrainAt);
     const skillMul: SkillMultipliers = effectiveSkillMultipliers(state);
@@ -1317,13 +1330,11 @@ export function mountInspectorUi(
       bonusesRow.style.display = 'none';
     } else {
       // Find the per-building effective rate from a fresh computeRates pass.
-      // The HUD also calls computeRates each frame, so the second call here
-      // is a minor cost; it's the simplest way to read THIS building's
-      // current effectiveRate without threading it through the inspector deps.
-      // §2.7 wall-clock anchor for solar — same domain as main.ts's
-      // per-frame computeRates so the inspector's per-building rate agrees
-      // with the HUD's island-wide rate during night-time brownouts.
-      const rates = computeRates(state, { terrainAt: spec.terrainAt }, undefined, Date.now());
+      // §15.1: use ratesCtx (built above) so this pass uses the same full
+      // context (modifierMul, ncBuff, activeBonusMul, cableComponent,
+      // solarBoost) that the engine's last tick used — displayed rates then
+      // agree with the HUD.
+      const rates = computeRates(state, ratesCtx, undefined, Date.now());
       const br = rates.byBuilding.find((r) => r.building.id === building.id);
       const effective = br?.effectiveRate ?? 0;
       // Header status line — show cycle time + base rate (= 1 / cycleSec).
@@ -1455,11 +1466,10 @@ export function mountInspectorUi(
     }
 
     // Heat section (§5.2). Shown only for heat consumers / heat sources.
-    // One additional computeRates pass per paint — cheap; matches the
-    // existing inspector pattern of re-deriving rates per refresh rather
-    // than threading the snapshot in via deps.
+    // §15.1: use the same ratesCtx (built above) so heat resolution reflects
+    // the same context the engine used last tick.
     if (def.requiresHeat || def.heatSource) {
-      const heat = computeRates(state, { terrainAt: spec.terrainAt }, undefined, Date.now()).heat;
+      const heat = computeRates(state, ratesCtx, undefined, Date.now()).heat;
       if (def.requiresHeat) {
         const has = heat.hasHeat.get(building.id) === true;
         if (has) {
