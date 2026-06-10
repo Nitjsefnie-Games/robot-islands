@@ -948,6 +948,16 @@ export function mountInspectorUi(
   universeEditorSection.body.appendChild(ueBiomeRow);
   universeEditorSection.wrap.style.display = 'none';
 
+  // Lazy-built biome buttons — created once on first paint of a
+  // universe_editor selection, then updated in-place each frame so click
+  // targets stay stable.
+  const biomeButtons: Array<{
+    btn: HTMLButtonElement;
+    id: 'plains' | 'forest' | 'desert' | 'volcanic' | 'arctic' | 'coast';
+    label: string;
+  }> = [];
+  let biomeButtonsBuilt = false;
+
   // §3.4 Land Reclamation section — shown only when the selected building
   // is a `land_reclamation_hub`. Two buttons (+1 major / +1 minor) wired
   // to deps.onExpandIsland; each shows its current-radius cost or the
@@ -1687,50 +1697,59 @@ export function mountInspectorUi(
       );
       ueCaption.textContent =
         `Reassign biome — wipes modifiers (excl. natural-only), re-rolls terrain. Cost: ${costParts.join(', ')}`;
-      // Rebuild biome buttons each refresh (cheap).
-      while (ueBiomeRow.firstChild) ueBiomeRow.removeChild(ueBiomeRow.firstChild);
-      const biomes: ReadonlyArray<{ id: 'plains' | 'forest' | 'desert' | 'volcanic' | 'arctic' | 'coast'; label: string }> = [
-        { id: 'plains', label: 'Plains' },
-        { id: 'forest', label: 'Forest' },
-        { id: 'desert', label: 'Desert' },
-        { id: 'volcanic', label: 'Volcanic' },
-        { id: 'arctic', label: 'Arctic' },
-        { id: 'coast', label: 'Coast' },
-      ];
-      for (const b of biomes) {
-        const isCurrent = spec.biome === b.id;
-        const btn = document.createElement('button');
-        btn.textContent = b.label + (isCurrent ? ' ★' : '');
-        styled(
-          btn,
-          [
-            'background: transparent',
-            `color: ${isCurrent ? 'var(--ri-accent)' : canAfford ? 'var(--ri-fg-1)' : 'var(--ri-fg-4)'}`,
-            `border: 1px solid ${isCurrent ? 'var(--ri-accent)' : canAfford ? 'var(--ri-accent-dim)' : 'var(--ri-fg-4)'}`,
-            'padding: 4px 8px',
-            'cursor: ' + (isCurrent || !canAfford ? 'not-allowed' : 'pointer'),
-            'font-family: ui-monospace, monospace',
-            'font-size: 10.5px',
-            'border-radius: 2px',
-          ].join(';'),
-        );
-        btn.disabled = isCurrent || !canAfford;
-        btn.addEventListener('click', () => {
-          if (!target) return;
-          const proceed = window.confirm(
-            `Reassign ${spec.name ?? spec.id} to ${b.label}?\n\n` +
-              'Terrain will re-roll, modifiers will wipe (natural-only excluded). ' +
-              'Buildings on now-wrong tiles will go invalid until you demolish them.',
+
+      // Build the six biome buttons once; per-frame only update styling.
+      if (!biomeButtonsBuilt) {
+        biomeButtonsBuilt = true;
+        const biomes: ReadonlyArray<{ id: 'plains' | 'forest' | 'desert' | 'volcanic' | 'arctic' | 'coast'; label: string }> = [
+          { id: 'plains', label: 'Plains' },
+          { id: 'forest', label: 'Forest' },
+          { id: 'desert', label: 'Desert' },
+          { id: 'volcanic', label: 'Volcanic' },
+          { id: 'arctic', label: 'Arctic' },
+          { id: 'coast', label: 'Coast' },
+        ];
+        for (const b of biomes) {
+          const btn = document.createElement('button');
+          styled(
+            btn,
+            [
+              'background: transparent',
+              'padding: 4px 8px',
+              'font-family: ui-monospace, monospace',
+              'font-size: 10.5px',
+              'border-radius: 2px',
+            ].join(';'),
           );
-          if (!proceed) return;
-          const r = editIslandBiome(deps.world, spec.id, b.id);
-          if (r.ok) {
-            deps.onIslandBiomeReassigned?.(spec.id);
-            paint();
-          }
-        });
-        ueBiomeRow.appendChild(btn);
+          btn.addEventListener('click', () => {
+            if (!target) return;
+            const tspec = target.spec;
+            const proceed = window.confirm(
+              `Reassign ${tspec.name ?? tspec.id} to ${b.label}?\n\n` +
+                'Terrain will re-roll, modifiers will wipe (natural-only excluded). ' +
+                'Buildings on now-wrong tiles will go invalid until you demolish them.',
+            );
+            if (!proceed) return;
+            const r = editIslandBiome(deps.world, tspec.id, b.id);
+            if (r.ok) {
+              deps.onIslandBiomeReassigned?.(tspec.id);
+              paint();
+            }
+          });
+          ueBiomeRow.appendChild(btn);
+          biomeButtons.push({ btn, id: b.id, label: b.label });
+        }
       }
+
+      for (const { btn, id, label } of biomeButtons) {
+        const isCurrent = spec.biome === id;
+        btn.textContent = label + (isCurrent ? ' ★' : '');
+        btn.style.color = isCurrent ? 'var(--ri-accent)' : canAfford ? 'var(--ri-fg-1)' : 'var(--ri-fg-4)';
+        btn.style.borderColor = isCurrent ? 'var(--ri-accent)' : canAfford ? 'var(--ri-accent-dim)' : 'var(--ri-fg-4)';
+        btn.style.cursor = isCurrent || !canAfford ? 'not-allowed' : 'pointer';
+        btn.disabled = isCurrent || !canAfford;
+      }
+
       universeEditorSection.wrap.style.display = '';
     } else {
       universeEditorSection.wrap.style.display = 'none';
