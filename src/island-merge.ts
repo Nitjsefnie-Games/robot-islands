@@ -10,6 +10,9 @@
 // and the caller owns the at-most-once-per-tick contract.
 
 import type { IslandState } from './economy.js';
+import { BUILDING_DEFS } from './building-defs.js';
+import { floorScaledCapacity, isOperationalBuilding } from './buildings.js';
+import { creditStorageCaps } from './placement.js';
 import { nodeById } from './skilltree.js';
 import {
   islandsOverlap,
@@ -182,11 +185,27 @@ export function performMerge(
       absorber.tileOverrides = {};
     }
     for (const [key, kind] of Object.entries(absorbed.tileOverrides)) {
-      const [x, y] = key.split(',').map(Number);
+      const parts = key.split(',');
+      const x = Number(parts[0]);
+      const y = Number(parts[1]);
       const shiftedKey = `${x + offsetX},${y + offsetY}`;
       if (!(shiftedKey in absorber.tileOverrides)) {
         absorber.tileOverrides[shiftedKey] = kind;
       }
+    }
+  }
+
+  // 2c. Credit operational absorbed storage buildings to the absorber's
+  //      caps BEFORE the inventory transfer, so overflow isn't silently
+  //      dropped against a stale cap.
+  if (absorberState) {
+    const preCount = absorber.buildings.length - absorbed.buildings.length;
+    for (let i = preCount; i < absorber.buildings.length; i++) {
+      const b = absorber.buildings[i]!;
+      const def = BUILDING_DEFS[b.defId];
+      if (!def || !def.storage || !isOperationalBuilding(b)) continue;
+      const mult = floorScaledCapacity(b, def.storage.capacity);
+      creditStorageCaps(absorberState, b, def, mult);
     }
   }
 
