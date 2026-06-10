@@ -15,6 +15,16 @@ import type { BuildingDef } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
 import type { Tier } from './skilltree.js';
 
+declare module './buildings.js' {
+  interface PlacedBuilding {
+    /** §9.3 total ms of the in-progress construction job at the moment it was
+     *  started (placement or upgrade). Used so the progress arc divides by the
+     *  actual initial duration, which may differ from the unmultiplied base
+     *  when Robotics `constructionTimeMul` is > 1. Optional for legacy saves. */
+    constructionTotalMs?: number;
+  }
+}
+
 /** Base construction times in ms, per tier. Placeholders — tune in Appendix A.
  *  Scale with tier so a T6 spaceport is a much bigger commitment than a T1
  *  Mine, but small enough T1 builders don't notice the wait in normal play. */
@@ -46,13 +56,19 @@ export function upgradeConstructionMs(def: BuildingDef, level: number): number {
 
 /** Completed fraction [0,1] of a building's in-progress construction job —
  *  fresh placement OR floor upgrade — for the progress arc. The job's total
- *  duration is `upgradeConstructionMs(def, floorLevel)` (floor 0 ⇒ base ⇒ a
- *  placement), so the arc must divide `remainingMs` by THAT, not the fixed
- *  placement base. Dividing by base left an upgrade (a longer base×(L+1) job)
- *  reading 0 until its remaining dropped below base — the corner badge sat
- *  empty for the first stretch of the timer. */
-export function constructionProgress(remainingMs: number, def: BuildingDef, floorLevel: number): number {
-  const total = upgradeConstructionMs(def, floorLevel);
+ *  duration is normally `upgradeConstructionMs(def, floorLevel)`, but when
+ *  `constructionTotalMs` is supplied (e.g. a Robotics-sped placement stored it
+ *  on the building) the arc divides by THAT so a ×2 speed-up doesn't start at
+ *  50 %. The optional parameter keeps the call-site backward-compatible and
+ *  lets legacy buildings without the field fall back to the base/upgrade
+ *  duration. */
+export function constructionProgress(
+  remainingMs: number,
+  def: BuildingDef,
+  floorLevel: number,
+  totalMs?: number,
+): number {
+  const total = totalMs ?? upgradeConstructionMs(def, floorLevel);
   if (total <= 0) return 1;
   return Math.max(0, Math.min(1, 1 - remainingMs / total));
 }

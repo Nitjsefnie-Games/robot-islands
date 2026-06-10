@@ -553,6 +553,16 @@ describe('placeBuilding', () => {
     expect(calls).toBe(2);
   });
 
+  it('stores constructionTotalMs equal to constructionRemainingMs on a fresh placement', () => {
+    // This is the value the progress arc divides by; with a Robotics speed-up
+    // it can differ from the unmultiplied base.
+    const spec = makeSpec();
+    const state = makeState(spec);
+    const placed = expectPlaced(placeBuilding(spec, state, 'mine', 0, 0, 0, () => 'p-total'));
+    expect(placed.constructionRemainingMs).toBeGreaterThan(0);
+    expect(placed.constructionTotalMs).toBe(placed.constructionRemainingMs);
+  });
+
   // -------------------------------------------------------------------------
   // §14 placement-cost gate
   // -------------------------------------------------------------------------
@@ -1767,6 +1777,16 @@ describe('applyUpgrade', () => {
     const r = applyUpgrade(spec, state, 'b1');
     expect(r.ok).toBe(true);
     expect(b.constructionRemainingMs).toBeGreaterThan(0);
+  });
+
+  it('stores constructionTotalMs equal to constructionRemainingMs on an upgrade', () => {
+    const spec = makeSpec();
+    const state = makeState(spec);
+    const b: PlacedBuilding = { id: 'b1', defId: 'mine', x: 0, y: 0 };
+    spec.buildings.push(b);
+    const r = applyUpgrade(spec, state, 'b1');
+    expect(r.ok).toBe(true);
+    expect(b.constructionTotalMs).toBe(b.constructionRemainingMs);
   });
 
   it('does NOT credit the storage delta at upgrade commit for a generic Crate (deferred)', () => {
