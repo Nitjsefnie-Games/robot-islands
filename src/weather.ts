@@ -179,24 +179,73 @@ export function weatherClockMs(perfTs: number, wallOffset: number): number {
   return perfTs + wallOffset;
 }
 
-export function weather(
-  seed: string,
-  cx: number,
-  cy: number,
-  nowMs: number,
-  biome?: Biome,
-  totalCo2Kg: number = 0,
-): WeatherCell {
-  const rng = makeSeededRng(`${seed}_weather_${cx}_${cy}`);
-  const baseWeights = biome ? biomeWeatherWeights(biome) : BASE_WEIGHTS;
-  let t = 0;
-  const MAX_ITERATIONS = 1_000_000;
-  for (let i = 0; i < MAX_ITERATIONS; i++) {
+// ---------------------------------------------------------------------------
+// Memoized dwell walk (perf — ZERO behavior change).
+//
+// `weather()` is a pure function of (seed, cx, cy, nowMs, biome, co2Mul)
+// where co2Mul = co2WeatherMultiplier(totalCo2Kg) is the STEPPED band value.
+// The naive implementation walked the dwell timeline from t = 0 on every
+// call; with wall-clock epoch timestamps (~1.78e12 ms) and 30 min – 4 h
+// dwells that is ~220k iterations per call — the measured ~400 ms periodic
+// main-thread freeze when the weather overlay rebuilt every 5 s.
+//
+// Instead we keep, per cell, a resumable walker: the live seeded-rng closure
+// (mulberry32 is a deterministic closure over internal state — resuming it
+// continues the exact sequence a cold walk would produce), the walk position
+// `t`, the cumulative iteration count (so the MAX_ITERATIONS cap stays
+// anchored at t = 0, exactly as before), and a small ring of the most recent
+// dwell segments so the overlay's now + forecast queries both hit without
+// re-walking. Queries before the retained window fall back to a cold walk
+// (today's exact code path) without touching the cache. A co2-band or biome
+// change discards the entry and cold-walks with the new weights — which is
+// precisely what the unmemoized code did (it re-walked the WHOLE history
+// under the CURRENT multiplier, retroactively rewriting past weather; that
+// quirk is the spec'd behavior for now and is preserved).
+// ---------------------------------------------------------------------------
+
+const MAX_ITERATIONS = 1_000_000;
+const SEGMENT_RING_SIZE = 4;
+const MAX_CACHE_ENTRIES = 4096;
+
+interface DwellSegment {
+  state: WeatherState;
+  sinceMs: number;
+  untilMs: number;
+}
+
+interface CellWalker {
+  co2Mul: number;
+  biome: Biome | undefined;
+  rng: () => number;
+  /** Start of the next not-yet-generated dwell. */
+  t: number;
+  /** Dwells generated since t = 0 — keeps the MAX_ITERATIONS cap global. */
+  iters: number;
+  /** Most recent dwells, oldest first; contiguous, ending exactly at `t`. */
+  segments: DwellSegment[];
+}
+
+const weatherCache = new Map<string, CellWalker>();
+
+/** Test hook: reset the memo so a test can observe cold-walk behavior. */
+export function clearWeatherCacheForTests(): void {
+  weatherCache.clear();
+}
+
+/** Generate dwells forward from `walker.t` until one covers `nowMs`.
+ *  Each iteration is bit-identical to one iteration of the original
+ *  unmemoized loop — resumption changes WHERE the loop starts, never what
+ *  an iteration does. */
+function advanceWalker(walker: CellWalker, nowMs: number): WeatherCell {
+  const baseWeights = walker.biome ? biomeWeatherWeights(walker.biome) : BASE_WEIGHTS;
+  const co2Mul = walker.co2Mul;
+  while (walker.iters < MAX_ITERATIONS) {
+    walker.iters++;
     // §2.7: severe-storm formation rate increases ~25% during Night and Dawn.
     // Determine the phase at the START of this interval so boosted weights
     // only apply to intervals that actually fall in night/dawn, preserving
     // historical determinism.
-    const phase = dayPhaseName(t);
+    const phase = dayPhaseName(walker.t);
     let weights: ReadonlyArray<WeightEntry> = baseWeights;
     if (phase === 'night' || phase === 'dawn') {
       const mutable: WeightEntry[] = baseWeights.map((e) => ({ state: e.state, weight: e.weight }));
@@ -207,7 +256,6 @@ export function weather(
       }
       weights = mutable;
     }
-    const co2Mul = co2WeatherMultiplier(totalCo2Kg);
     if (co2Mul !== 1.0) {
       const mutable: WeightEntry[] = weights.map((e) => ({ state: e.state, weight: e.weight }));
       for (const e of mutable) {
@@ -217,15 +265,78 @@ export function weather(
       }
       weights = mutable;
     }
-    const dwell = MIN_DWELL_MS + Math.floor(rng() * (MAX_DWELL_MS - MIN_DWELL_MS + 1));
-    const state = sampleState(weights, rng);
-    const until = t + dwell;
-    if (nowMs < until) {
-      return { state, sinceMs: t, untilMs: until };
+    const dwell = MIN_DWELL_MS + Math.floor(walker.rng() * (MAX_DWELL_MS - MIN_DWELL_MS + 1));
+    const state = sampleState(weights, walker.rng);
+    const sinceMs = walker.t;
+    const untilMs = sinceMs + dwell;
+    walker.segments.push({ state, sinceMs, untilMs });
+    if (walker.segments.length > SEGMENT_RING_SIZE) walker.segments.shift();
+    walker.t = untilMs;
+    if (nowMs < untilMs) {
+      return { state, sinceMs, untilMs };
     }
-    t = until;
   }
   return { state: 'clear', sinceMs: nowMs, untilMs: nowMs + MIN_DWELL_MS };
+}
+
+function makeWalker(
+  seed: string,
+  cx: number,
+  cy: number,
+  biome: Biome | undefined,
+  co2Mul: number,
+): CellWalker {
+  return {
+    co2Mul,
+    biome,
+    rng: makeSeededRng(`${seed}_weather_${cx}_${cy}`),
+    t: 0,
+    iters: 0,
+    segments: [],
+  };
+}
+
+export function weather(
+  seed: string,
+  cx: number,
+  cy: number,
+  nowMs: number,
+  biome?: Biome,
+  totalCo2Kg: number = 0,
+): WeatherCell {
+  const co2Mul = co2WeatherMultiplier(totalCo2Kg);
+  const key = `${seed}|${cx}|${cy}`;
+  let walker = weatherCache.get(key);
+  if (walker && (walker.co2Mul !== co2Mul || walker.biome !== biome)) {
+    // Re-anchoring input changed: today's semantics re-walk the whole
+    // history under the new weights. Discard and cold-walk-and-recache.
+    weatherCache.delete(key);
+    walker = undefined;
+  }
+  if (walker) {
+    const earliest = walker.segments[0];
+    if (earliest && nowMs < earliest.sinceMs) {
+      // Backward query (before the retained window) — cold walk, exactly
+      // the original code path, WITHOUT touching the cached walker.
+      return advanceWalker(makeWalker(seed, cx, cy, biome, co2Mul), nowMs);
+    }
+    // Retained segments are contiguous and end at walker.t, so any nowMs in
+    // [earliest.sinceMs, walker.t) is inside one of them.
+    for (const seg of walker.segments) {
+      if (nowMs >= seg.sinceMs && nowMs < seg.untilMs) {
+        return { state: seg.state, sinceMs: seg.sinceMs, untilMs: seg.untilMs };
+      }
+    }
+    // nowMs >= walker.t — resume the walk with the SAME rng instance; the
+    // sequence continues deterministically, bit-identical to a cold walk.
+    return advanceWalker(walker, nowMs);
+  }
+  if (weatherCache.size >= MAX_CACHE_ENTRIES) {
+    weatherCache.clear(); // cells in play are a few hundred; wholesale reset is fine
+  }
+  const fresh = makeWalker(seed, cx, cy, biome, co2Mul);
+  weatherCache.set(key, fresh);
+  return advanceWalker(fresh, nowMs);
 }
 
 /** Baseline weather visibility radius around any populated island, in tile

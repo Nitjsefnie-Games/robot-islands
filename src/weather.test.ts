@@ -20,6 +20,7 @@ import {
   rollHeatwave,
   weatherClockMs,
   routeCapacityMultiplierForWeather,
+  clearWeatherCacheForTests,
 } from './weather.js';
 import type { IslandSpec, WorldState } from './world.js';
 
@@ -739,6 +740,75 @@ describe('§15.1 wall-anchored destruction + capacity sampling', () => {
       const b = routeCapacityMultiplierForWeather(seed, 0, 0, 100, 100, W, 16, 0);
       expect(a).toBe(b);
     }
+  });
+});
+
+describe('weather memoization — resumable walker preserves determinism', () => {
+  it('repeated query with identical inputs returns an identical result', () => {
+    clearWeatherCacheForTests();
+    const nowMs = 1_780_000_000_000; // wall-clock-epoch scale, like production
+    const a = weather('memo-seed', 3, 4, nowMs, 'coast', 5_000);
+    const b = weather('memo-seed', 3, 4, nowMs, 'coast', 5_000);
+    expect(b).toEqual(a);
+  });
+
+  it('forward progression then backward query all agree with fresh cold walks', () => {
+    const seed = 'memo-fwd';
+    const cx = 1;
+    const cy = 2;
+    const t1 = 10 * 3_600_000;
+    // Expected values: each from a FRESH (cold-walk) state.
+    clearWeatherCacheForTests();
+    const e1 = weather(seed, cx, cy, t1);
+    // t2 lands 30 h past the end of t1's dwell — guaranteed to be in a later
+    // dwell AND far enough that t1 falls before the 4-segment retained ring.
+    const t2 = e1.untilMs + 30 * 3_600_000;
+    clearWeatherCacheForTests();
+    const e2 = weather(seed, cx, cy, t2);
+    // Now the memoized sequence: t1 (cold+cache), t2 (forward resume),
+    // t1 again (backward — cold path without touching the cache).
+    clearWeatherCacheForTests();
+    const r1 = weather(seed, cx, cy, t1);
+    const r2 = weather(seed, cx, cy, t2);
+    const r1again = weather(seed, cx, cy, t1);
+    expect(r1).toEqual(e1);
+    expect(r2).toEqual(e2);
+    expect(r1again).toEqual(e1);
+    // And the walker still serves forward queries correctly after the
+    // backward detour.
+    expect(weather(seed, cx, cy, t2)).toEqual(e2);
+  });
+
+  it('co2 band crossing invalidates: cached cell re-anchors to the cold-walk answer', () => {
+    const seed = 'memo-co2';
+    const cx = 7;
+    const cy = 7;
+    const t = 1_000 * 3_600_000;
+    // Expected: a cold walk in the 1.1 band (100 kg ≤ co2 < 10 t).
+    clearWeatherCacheForTests();
+    const expected = weather(seed, cx, cy, t, undefined, 5_000);
+    // Query under 1.0 band first (caches a 1.0-band walker), then cross
+    // into the 1.1 band — must give exactly the re-anchored cold answer.
+    clearWeatherCacheForTests();
+    weather(seed, cx, cy, t, undefined, 0);
+    const after = weather(seed, cx, cy, t, undefined, 5_000);
+    expect(after).toEqual(expected);
+    // Raw kg differing WITHIN the band must not re-anchor (key is the
+    // stepped multiplier, not the kg figure).
+    const sameBand = weather(seed, cx, cy, t, undefined, 9_999);
+    expect(sameBand).toEqual(expected);
+  });
+
+  it('biome change invalidates: cached cell re-anchors to the cold-walk answer', () => {
+    const seed = 'memo-biome';
+    const cx = 5;
+    const cy = 6;
+    const t = 500 * 3_600_000;
+    clearWeatherCacheForTests();
+    const expected = weather(seed, cx, cy, t, 'volcanic');
+    clearWeatherCacheForTests();
+    weather(seed, cx, cy, t, 'plains');
+    expect(weather(seed, cx, cy, t, 'volcanic')).toEqual(expected);
   });
 });
 
