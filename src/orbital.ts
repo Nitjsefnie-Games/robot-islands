@@ -269,6 +269,14 @@ export function launchSatellite(
     return { ok: false, reason: 'target-out-of-range' };
   }
 
+  // §14.7: "Fuel and the launch payload are lost." Deduct resources BEFORE the
+  // success roll so both success and failure consume them. Validation failures
+  // (invalid target, insufficient resources) return early above and do NOT reach
+  // this point, so the "no deduction on bad input" invariant is preserved.
+  for (const [res, qty] of Object.entries(needed)) {
+    state.inventory[res as ResourceId] -= qty ?? 0;
+  }
+
   const spaceportTier = spaceport.tier ?? 1;
   const baseSuccess =
     spaceportTier === 1 ? 0.30 : spaceportTier === 2 ? 0.50 : 0.70;
@@ -300,10 +308,6 @@ export function launchSatellite(
       addDebrisFragments(world, cellX, cellY, ORBIT_EXPLOSION_FRAGMENTS);
     }
     return { ok: false, reason: 'launch-failure' };
-  }
-
-  for (const [res, qty] of Object.entries(needed)) {
-    state.inventory[res as ResourceId] -= qty ?? 0;
   }
 
   // Trip math — mirrors `requestSatMove`: fuel proportional to distance,
