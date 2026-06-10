@@ -162,6 +162,12 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   // maxLaunchFuel = min(MAX_FUEL_PER_DRONE, on-hand fuel of the selected tier).
   let maxLaunchFuel = 0;
   let currentEfficiency = DRONE_TIER_EFFICIENCY[selectedTier];
+  // §Fix 6.6: the Transport-skill droneFuelEfficiency multiplier for the
+  // current origin island. Cached here so wouldExceedRange / fuelForPath
+  // calls outside `refresh` (e.g. paintLaunchPreview, addWaypoint,
+  // finalizePath) see the up-to-date multiplier without re-calling
+  // effectiveSkillMultipliers on every frame.
+  let currentFuelEffMul = 1;
   // Last known cursor tile from setReticleScreenPos. Null when hovering
   // off-canvas (matches reticle visibility). Drives the launch-preview line.
   let cursorTile: { x: number; y: number } | null = null;
@@ -722,7 +728,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
       }
       // Dashed segment from last anchor to cursor.
       if (cursorTile) {
-        const wouldExceed = wouldExceedRange(originTile, waypointBuffer, cursorTile);
+        const wouldExceed = wouldExceedRange(originTile, waypointBuffer, cursorTile, currentFuelEffMul);
         const color = wouldExceed ? PREVIEW_COLOR_BAD : PREVIEW_COLOR_OK;
         const cursorPx = tileToWorldPx(cursorTile.x, cursorTile.y);
         drawDashedSegment(launchPreviewGfx, prevPx, cursorPx, color);
@@ -1056,7 +1062,8 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     const eff = selectedTier === '5-path'
       ? DRONE_T5_EFFICIENCY
       : DRONE_TIER_EFFICIENCY[selectedTier];
-    currentEfficiency = eff * effectiveSkillMultipliers(origin).droneFuelEfficiency;
+    currentFuelEffMul = effectiveSkillMultipliers(origin).droneFuelEfficiency;
+    currentEfficiency = eff * currentFuelEffMul;
     maxLaunchFuel = Math.floor(Math.min(MAX_FUEL_PER_DRONE, onhand));
     const maxOutbound = (maxLaunchFuel * currentEfficiency) / 2;
     fuelStat.valueEl.style.color = maxLaunchFuel > 0 ? 'var(--ri-fg-1)' : 'var(--ri-warn)';
@@ -1072,7 +1079,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
       const pc = selectedPadCentre(s, origin, selectedPadId);
       const originPt = { x: pc?.x ?? s.cx, y: pc?.y ?? s.cy };
       const pathLen = totalPathTiles(originPt, waypointBuffer);
-      const fuel = fuelForPath(originPt, waypointBuffer);
+      const fuel = fuelForPath(originPt, waypointBuffer, currentFuelEffMul);
       distStat.labelEl.textContent = 'PATH';
       distStat.valueEl.textContent = `${pathLen.toFixed(0)} tiles`;
       fuelStat.valueEl.textContent = `${fuel} / ${MAX_FUEL_PER_DRONE} plasma_charge`;
@@ -1191,7 +1198,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
       const pc = selectedPadCentre(spec, deps.getOrigin(), selectedPadId);
       const origin = { x: pc?.x ?? spec.cx, y: pc?.y ?? spec.cy };
       const next = { x: targetWorldTileX, y: targetWorldTileY };
-      if (wouldExceedRange(origin, waypointBuffer, next)) {
+      if (wouldExceedRange(origin, waypointBuffer, next, currentFuelEffMul)) {
         return { ok: false, reason: 'over-range' };
       }
       waypointBuffer.push(next);
@@ -1257,7 +1264,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     const ox = pc?.x ?? spec.cx;
     const oy = pc?.y ?? spec.cy;
     const originTile = { x: ox, y: oy };
-    const fuel = fuelForPath(originTile, deduped);
+    const fuel = fuelForPath(originTile, deduped, currentFuelEffMul);
     // Engine signature (drones.ts:330-346): dispatchDrone(world, origin,
     // originX, originY, dirX, dirY, fuelLoaded, nowMs, waypoints?, selectedTier?).
     // Direction must have magnitude > 0 (line 350 validation); the path-drawn
