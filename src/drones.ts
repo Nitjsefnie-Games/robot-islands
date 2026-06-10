@@ -762,9 +762,10 @@ export function tickDrones(
       discoverRareIslands(world.islands, expandedCorridor, newlyDiscoveredIslandIds);
 
       // Island discoveries in this tick's corridor join darkModeDiscoveries
-      // (the flush helper drains them along with cells). Use expandedCorridor
-      // so Probability Engine bias is honoured.
-      const tickIslandDiscoveries = islandsInCells(world.islands, expandedCorridor);
+      // (the flush helper drains them along with cells). Use plain corridor
+      // for ordinary discovery — SPEC §13.3 grants rare-island bias only;
+      // the expanded corridor is for rare islands only (discoverRareIslands above).
+      const tickIslandDiscoveries = islandsInCells(world.islands, corridor);
       const seenIslands = new Set<string>(d.darkModeDiscoveries.map((x) => x.islandId));
       for (const disc of tickIslandDiscoveries) {
         if (!seenIslands.has(disc.islandId)) {
