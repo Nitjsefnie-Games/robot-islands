@@ -507,6 +507,42 @@ export function mountHud(
   body.classList.add('ri-panel__body');
   panel.appendChild(body);
 
+  // Persistent interactive elements — created once so their click targets
+  // survive the 60Hz body rebuild. Marked with a data attribute so the
+  // clear loop skips them.
+  const tierResetRow = document.createElement('div');
+  tierResetRow.classList.add('ri-kv');
+  tierResetRow.dataset.hudPersistent = 'true';
+  const trK = document.createElement('span');
+  trK.classList.add('ri-kv__k');
+  trK.textContent = '↺ TIER RESET';
+  const trV = document.createElement('button');
+  trV.classList.add('ri-kv__v');
+  trV.textContent = 'available → K';
+  trV.style.cssText = 'background: transparent; border: 1px solid var(--ri-accent); color: var(--ri-accent); cursor: pointer; padding: 1px 8px; font: inherit; border-radius: 3px;';
+  trV.addEventListener('click', () => dispatchAction(reg, 'toggle-skill-tree'));
+  tierResetRow.appendChild(trK);
+  tierResetRow.appendChild(trV);
+
+  const invBtn = document.createElement('button');
+  invBtn.classList.add('ri-btn', 'ri-btn--ghost');
+  invBtn.dataset.hudPersistent = 'true';
+  invBtn.textContent = 'Inventory (I)';
+  invBtn.addEventListener('click', () => dispatchAction(reg, 'toggle-inventory'));
+
+  function clearDynamicChildren(): void {
+    let child = body.firstChild;
+    while (child) {
+      const next = child.nextSibling;
+      if (child instanceof HTMLElement && child.dataset.hudPersistent === 'true') {
+        // skip persistent elements
+      } else {
+        body.removeChild(child);
+      }
+      child = next;
+    }
+  }
+
   function update(
     state: IslandState,
     net: Record<ResourceId, number>,
@@ -523,7 +559,7 @@ export function mountHud(
     const biomeName = BIOME_DEFS[spec.biome].displayName;
     subEl.textContent = `T${tier} · ${biomeName}`;
 
-    while (body.firstChild) body.removeChild(body.firstChild);
+    clearDynamicChildren();
 
     // ---- XP block ---------------------------------------------------------
     const need = xpForLevel(state.level + 1);
@@ -545,23 +581,12 @@ export function mountHud(
     xpKv.appendChild(xpV);
     body.appendChild(xpKv);
 
-    // §9.7 tier reset surface — when the active island can fire a reset right
-    // now (T3+, off cooldown, materials available) flash a clickable hint
-    // that opens the Skill Tree where the reset row lives. Silent otherwise.
+    // §9.7 tier reset surface — persistent button, show/hide only.
     if (canTierReset(state, Date.now()).ok) {
-      const trKv = document.createElement('div');
-      trKv.classList.add('ri-kv');
-      const trK = document.createElement('span');
-      trK.classList.add('ri-kv__k');
-      trK.textContent = '↺ TIER RESET';
-      const trV = document.createElement('button');
-      trV.classList.add('ri-kv__v');
-      trV.textContent = 'available → K';
-      trV.style.cssText = 'background: transparent; border: 1px solid var(--ri-accent); color: var(--ri-accent); cursor: pointer; padding: 1px 8px; font: inherit; border-radius: 3px;';
-      trV.addEventListener('click', () => dispatchAction(reg, 'toggle-skill-tree'));
-      trKv.appendChild(trK);
-      trKv.appendChild(trV);
-      body.appendChild(trKv);
+      tierResetRow.style.display = '';
+      body.appendChild(tierResetRow);
+    } else {
+      tierResetRow.style.display = 'none';
     }
 
     const xpMeter = document.createElement('div');
@@ -766,10 +791,6 @@ export function mountHud(
     }
 
     // ---- Inventory hint ---------------------------------------------------
-    const invBtn = document.createElement('button');
-    invBtn.classList.add('ri-btn', 'ri-btn--ghost');
-    invBtn.textContent = 'Inventory (I)';
-    invBtn.addEventListener('click', () => dispatchAction(reg, 'toggle-inventory'));
     body.appendChild(invBtn);
 
     // Objective display lives in the bottom-center tutorial banner
