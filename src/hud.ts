@@ -586,12 +586,13 @@ export function mountHud(
     xpKv.appendChild(xpV);
     body.appendChild(xpKv);
 
-    // §9.7 tier reset surface — persistent button, show/hide only.
+    // §9.7 tier reset surface — append only when applicable; remove when not,
+    // so the element is absent from the DOM rather than hidden-and-orphaned.
+    // clearDynamicChildren skips it (hudPersistent), so we manage its presence here.
     if (canTierReset(state, Date.now()).ok) {
-      tierResetRow.style.display = '';
       body.appendChild(tierResetRow);
-    } else {
-      tierResetRow.style.display = 'none';
+    } else if (tierResetRow.parentNode) {
+      tierResetRow.parentNode.removeChild(tierResetRow);
     }
 
     const xpMeter = document.createElement('div');
