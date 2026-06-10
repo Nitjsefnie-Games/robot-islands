@@ -1736,6 +1736,33 @@ async function main(): Promise<void> {
   // per frame keeps the camera→container assignment cheap and predictable;
   // `advanceIsland`'s piecewise integration handles whatever elapsed interval
   // the frame brings (matters on tab-blur catch-up).
+
+  // §Fix 6.1 offline drone catch-up: run ONE tickDrones covering the offline
+  // window before the ticker's first frame. Without this, `lastFrameMs` starts
+  // at `performance.now()` (≈ 0 on fresh load), and the first ticker frame
+  // passes prevFrameMs ≈ nowMs so segStartMs ≈ nowMs >> drones' already-past
+  // expectedReturnTime — the entire offline flight window is silently skipped.
+  //
+  // prevMs is the save time rebased to the new perf-clock domain: every island's
+  // `lastTick` was set to `nowPerfMs - deltaMs` in deserializeWorld, so the min
+  // over populated island lastTick values is an accurate "offline window start".
+  // A fresh world (no restore) has no in-flight drones, so we skip the catch-up.
+  if (restored) {
+    let prevMs = performance.now();
+    for (const s of islandStates.values()) {
+      if (s.lastTick < prevMs) prevMs = s.lastTick;
+    }
+    const catchUp = tickDrones(worldState, performance.now(), prevMs);
+    // The initial ocean/island/fog layers were baked before this catch-up;
+    // re-bake if it revealed anything so the offline scan is visible on the
+    // very first frame (mirrors the per-frame rebuild trigger in the ticker).
+    if (
+      catchUp.newlyDiscoveredIslandIds.length > 0 ||
+      catchUp.revealedCellsAdded > 0
+    ) {
+      rebuildWorldLayers();
+    }
+  }
   let lastFrameMs = performance.now();
   app.ticker.add(() => {
     let dx = 0;
