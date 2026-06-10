@@ -1965,6 +1965,8 @@ State is read (and therefore advanced) by:
 
 There is no automatic 1Hz / 30Hz / 60Hz background process advancing islands. Truly idle islands accumulate `now - lastTick` of pending advancement; the next read catches them up in one event-driven integration. This makes offline play and active play the same code path.
 
+*Implementation note (2026-06-10):* the client ticker advances populated islands at a fixed 5 Hz cadence (`ECONOMY_TICK_MS = 200` in `economy-clock.ts`) rather than once per render frame — the §15.3 integrator is cadence-agnostic, so this is purely a wiring choice in `main.ts`, and the named constant is the seam a future authoritative server takes over.
+
 ### 15.3 Per-Island Advancement (Event-Driven Piecewise Integration)
 
 ```typescript
