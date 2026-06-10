@@ -55,6 +55,11 @@ export function solveSharedFactor(
 ): number {
   const live = entries.filter((e) => e.coeff > 0 && e.otherGate > 0);
   if (live.length === 0) return 1;
+  // A NaN target is an upstream bug (coefficients are recipe constants ×
+  // [0,1] gates, so it should be impossible) — fail open at gate 1 rather
+  // than throwing mid-tick, but make the contract explicit here instead of
+  // letting NaN fall through every range check to the defensive return.
+  if (Number.isNaN(target)) return 1;
   let full = 0;
   for (const e of live) full += e.coeff * Math.min(e.otherGate, 1);
   if (full <= target + FLOW_EPSILON) return 1; // slack — deactivated
@@ -81,7 +86,7 @@ export function solveSharedFactor(
       if (freeCoeff <= 0) break;
     }
   }
-  return 1; // unreachable given the full > target guard; defensive
+  return 1; // defensive backstop for float fuzz at segment edges
 }
 
 export function solveFlow(
