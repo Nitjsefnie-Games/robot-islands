@@ -521,7 +521,7 @@ The cap for resource `r` on an island is the sum of its baseline cap plus:
 * Specialized buildings whose category includes `r`, each contributing `capacity × storage_base(r)`
 * Generic buildings explicitly assigned to `r`, each contributing `capacity × storage_base(r)`
 
-When resource `r` hits its cap, only buildings actively producing `r` stall. Other recipes on the island continue to run. Stalled production back-propagates: a stalled building stops consuming its inputs, which accumulate against their own caps and may trigger further upstream stalls.
+When resource `r` hits its cap, only buildings producing `r` are affected — they throttle continuously to the live consumer draw on `r` (§15.3 net-flow), down to zero when nothing consumes it. Other recipes on the island continue to run. The throttle propagates upstream continuously: a throttled building consumes its inputs at the throttled rate, so supplying chains rescale proportionally rather than cascading through binary stalls.
 
 If a storage building is destroyed (by launch failure, debris damage, demolition, etc.), its capacity disappears immediately. If current inventory of any affected resource now exceeds the reduced cap, the excess is lost — inventory clamps down to the new cap.
 
@@ -1054,7 +1054,7 @@ xp\_per\_tick = sum over resources r of ( production\_rate\[r] \* xp\_weight\[r]
 
 The `production\_rate\[r]` figure already incorporates `power\_factor` (§5.1), so brownout under-supply reduces XP proportionally without a separate penalty layer.
 
-**Stalled production produces zero XP.** When a building is halted because its output bin has hit a storage cap or its inputs are unavailable, it produces no resources and earns no XP for that interval. The player must manage caps, build additional storage, or consume the bottlenecked resource downstream to keep progression moving.
+**XP follows realized production.** XP accrues on what a building actually produces, so a building throttled by a capped output bin or scarce inputs (§15.3 net-flow) earns XP at its throttled rate, not its nominal rate. A cap-pinned producer with zero consumers realizes zero production and therefore earns zero XP — there is no XP farm at a full bin. The player must manage caps, build additional storage, or consume the bottlenecked resource downstream to keep progression moving at full rate.
 
 **Funneling bonus** is the second source — see §10.1 for the formula. It applies only while the island is below Tier 3.
 
@@ -1243,7 +1243,7 @@ A player may pay to revert an island to Tier 1, primarily to redo skill-tree cho
 
 A short-cadence engagement loop layered over the hours-long tier climb. A cheap Tier-1 **Signal Exchange** building periodically surfaces a single expiring **barter offer** on the island that hosts it: dump some of your fullest stockpile for an under-stocked resource you already make. The world advances on a live per-frame ticker but its reward cadence runs on the scale of hour-long tier climbs; Trade Offers add a seconds-scale decision the player can act on minute-to-minute.
 
-The mechanic is also a **cap-stall pressure-valve**. Per §9.1 a resource sitting at its storage cap halts its producer and earns zero XP — a capped silo is dead weight. An offer biased toward dumping overflow stock relieves that stall, converting a stuck resource into one the player is short on.
+The mechanic is also a **cap-stall pressure-valve**. Per §9.1 a resource sitting at its storage cap with no consumers idles its producer at zero XP (with any live draw it earns only at the throttled rate) — a capped silo is dead weight. An offer biased toward dumping overflow stock relieves that pressure, converting a stuck resource into one the player is short on.
 
 **No XP from trades.** Accepting an offer shifts inventory and nothing else — trades grant zero XP. Progression stays strictly production-only; trading is logistics convenience, not a leveling path. This is a deliberate exclusion, not an oversight: pricing a swap to grant XP would turn the barter window into a leveling printer.
 
