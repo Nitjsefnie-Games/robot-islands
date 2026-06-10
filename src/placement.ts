@@ -933,8 +933,8 @@ export function applyUpgrade(
   const newL = L + 1;
   b.floorLevel = newL;
   const upgradeMs = upgradeConstructionMs(def, newL);
-  (b as { constructionRemainingMs?: number }).constructionRemainingMs = upgradeMs;
-  (b as { constructionTotalMs?: number }).constructionTotalMs = upgradeMs;
+  b.constructionRemainingMs = upgradeMs;
+  b.constructionTotalMs = upgradeMs;
   // §storage-timing: the +storage.capacity cap delta is NO LONGER credited
   // here. An upgrade IS a construction job; the cap delta is granted by the
   // construction-completion hook in `advanceIsland` the tick the upgrade
