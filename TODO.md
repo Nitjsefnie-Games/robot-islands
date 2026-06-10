@@ -33,6 +33,39 @@ Consolidated punch list from the 4-agent sweep (200% file coverage,
 
 ---
 
+## Next major (owner-declared 2026-06-10) — server-authoritative migration
+
+Owner intent: move the simulation off the browser to a server;
+browser becomes display + intent-sender. Decided inputs (start the
+future brainstorm from these, don't re-litigate):
+
+1. **Server-authoritative, NOT shared-sim.** Rationale: anti-cheat +
+   future player interactions. Client sends intents (place, spend,
+   trade, dispatch); server validates against the same pure-layer
+   rules and owns all state. Player-to-player interaction stays
+   entirely server-side.
+2. **The pure layer ports as-is.** Proven headless in node:
+   `scripts/profile-economy.ts` boots a real save via
+   `deserializeWorld` + ticks `advanceIsland` with zero browser. The
+   server is "that, behind persistence + a socket".
+3. **Tick model**: event-driven integrator already handles arbitrary
+   dt (24h catchup = same code path); server ticks lazily or at the
+   5 Hz cadence (see ECONOMY_TICK_MS seam from the 2026-06-10 perf
+   pass — that constant is the line the server later owns).
+4. **Persistence**: SerializedSnapshot + the v7→v22 migration chain
+   move to a server DB; SPEC §15.6 (pure client-side) is superseded
+   at that point; Appendix B "multi-device sync" flips in-scope.
+5. **Determinism as bandwidth**: seed-deterministic weather/daynight
+   render client-side from (seed, t) — no need to sync them.
+6. **Known seams to finish splitting**: island.ts / world.ts mixed
+   files, main.ts wiring, UI panels reading live state objects
+   (would read a synced replica).
+
+Supersedes nothing yet — this is a recorded design input, not a spec.
+Full brainstorm → spec → plan when the owner says go.
+
+---
+
 ## Next major after Ocean — Multi-biome §3.6 merge rework
 
 Current §3.6 merge collapses absorbed island's biome into absorber's:
