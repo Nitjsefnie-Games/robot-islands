@@ -1332,6 +1332,31 @@ describe('bindCrystal / unbindCrystal', () => {
     ).toThrow(/no mining_crystal_t1 in inventory/);
   });
 
+  it('bindCrystal rejects an ineligible socket/crystal pairing (§9.3)', () => {
+    const inv = blankInventory();
+    (inv as Record<string, number>).mining_crystal_t1 = 1;
+    const state = makeState({ inventory: inv });
+    expect(() =>
+      bindCrystal(state, 'gs.ref.smelting-1', 'mining_crystal_t1' as import('./skilltree-graph.js').CrystalId),
+    ).toThrow(/not eligible/);
+    // Nothing consumed, nothing bound, socket not owned.
+    expect((state.inventory as Record<string, number>).mining_crystal_t1).toBe(1);
+    expect(state.socketBindings.size).toBe(0);
+    expect(state.unlockedNodes.has('gs.ref.smelting-1')).toBe(false);
+  });
+
+  it('bindCrystal rejects unknown socket and unknown crystal ids', () => {
+    const inv = blankInventory();
+    (inv as Record<string, number>).mining_crystal_t1 = 1;
+    const state = makeState({ inventory: inv });
+    expect(() =>
+      bindCrystal(state, 'gs.no.such-socket', 'mining_crystal_t1' as import('./skilltree-graph.js').CrystalId),
+    ).toThrow(/unknown socket/);
+    expect(() =>
+      bindCrystal(state, 'gs.ext.mining-1', 'no_such_crystal' as import('./skilltree-graph.js').CrystalId),
+    ).toThrow(/unknown crystal/);
+  });
+
   it('bindCrystal returns previous crystal to inventory', () => {
     const inv = blankInventory();
     (inv as Record<string, number>).mining_crystal_t1 = 1;
