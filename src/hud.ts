@@ -357,7 +357,10 @@ export function mountIslandBar(
       }
     }
 
-    // Update each option's tone / level / active flag / pickable flag.
+    // Update each option's tone / level / active flag / pickable flag / name.
+    // §15.3: name is also updated per-frame so renames are reflected without
+    // requiring the id-signature to change (the trigger label reads spec.name
+    // per frame and is already correct; the dropdown options were not).
     let anyPickable = false;
     for (const spec of populated) {
       const opt = optMap.get(spec.id);
@@ -367,6 +370,8 @@ export function mountIslandBar(
       opt.dataset.tone = powerTone(factor);
       const dot = opt.querySelector('.ri-dot') as HTMLElement | null;
       if (dot) dot.dataset.tone = dotTone(factor);
+      const nameEl = opt.querySelector('.ri-island-opt__name') as HTMLElement | null;
+      if (nameEl) nameEl.textContent = spec.name ?? spec.id;
       const state = world.islandStates?.get(spec.id);
       const level = opt.querySelector('.ri-mono') as HTMLElement | null;
       if (state && level) level.textContent = `L${state.level}`;
