@@ -825,6 +825,7 @@ export function unbindCrystal(state: IslandState, socketId: string): void {
   // Mirror of bindCrystal: the synthetic socket node (cost 0, owned at bind
   // time) is no longer ownable once the socket is empty.
   state.unlockedNodes.delete(socketId);
+  state.auraAmpVersion++;
 }
 
 /**
