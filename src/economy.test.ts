@@ -25,7 +25,7 @@ import {
   type BuildingDefId,
 } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
-import { MAINTENANCE_DEGRADE_DURATION_MS, MAINTENANCE_THRESHOLD_MS_BY_TIER } from './maintenance.js';
+import { MAINTENANCE_DEGRADE_DURATION_MS, MAINTENANCE_THRESHOLD_MS_BY_TIER, maintenanceFactor } from './maintenance.js';
 import {
   accrueXp,
   advanceIsland,
@@ -1348,18 +1348,15 @@ describe('§5.1 power scales with effective throughput (rebalance)', () => {
     expect(power.consumed).toBeCloseTo(expectedMine + expectedWorkshop, 6);
   });
 
-  it('maintenance bills are NOT affected by throughput (regression sentinel)', () => {
-    // Per the §5.1 rebalance carve-out: power scales with throughput, but
-    // maintenance.ts is intentionally UNTOUCHED. A building output-cap
-    // stalled (zero power draw, zero production) must STILL accrue
-    // operatingMs at the full wall-clock rate — the player can't escape
-    // maintenance pressure by deliberately capping outputs.
+  it('maintenance wear scales with utilization (§4.7 net-flow)', () => {
+    // §4.7 net-flow: wear accrues in utilization-scaled operating time.
+    // A running building (u=1) accrues at full wall-clock speed; an idle
+    // building at cap with no consumer (u=0) accrues zero wear.
     //
     // Two Mines on separate states, identical placedAt/maintainedAt/etc.
-    // One has iron_ore stock = 99 (Mine runs at full rate). The other has
-    // iron_ore = 100 = cap (Mine is output-cap stalled, draws 0W now). Both
-    // states are advanced by the same dt. operatingMs MUST accrue
-    // identically on both.
+    // One has iron_ore stock = 0 (Mine runs at full rate, u=1). The other
+    // has iron_ore = 100 = cap (Mine is output-stalled, u=0). Both states
+    // are advanced by the same dt.
     const dt = 5_000;
     const runningState = makeState({
       buildings: [{ ...MINE, operatingMs: 0, placedAt: 0, maintainedAt: 0 }],
@@ -1372,7 +1369,7 @@ describe('§5.1 power scales with effective throughput (rebalance)', () => {
     advanceIsland(runningState, dt, { defs: POWER_FREE });
     advanceIsland(stalledState, dt, { defs: POWER_FREE });
     expect(runningState.buildings[0]!.operatingMs).toBe(dt);
-    expect(stalledState.buildings[0]!.operatingMs).toBe(dt); // SAME — carve-out
+    expect(stalledState.buildings[0]!.operatingMs).toBe(0); // u=0 → zero wear
   });
 });
 
@@ -2704,10 +2701,9 @@ describe('§4.7 maintenance — integration with advanceIsland', () => {
   const HOUR_MS = 60 * 60 * 1000;
   const T1_THRESHOLD = 12 * HOUR_MS;
 
-  it('operatingMs accrues across advanceIsland segments regardless of production', () => {
-    // A Mine that can't produce (iron_ore at cap) should still accrue
-    // operating time — §4.7 literal: "Idle buildings ... accrue maintenance
-    // time the same as actively-producing ones".
+  it('fully idle building at cap with no consumer accrues zero wear', () => {
+    // §4.7 net-flow: a Mine with iron_ore at cap and no downstream consumer
+    // has utilization 0 and accrues zero operating time.
     const state = makeState({
       buildings: [{ ...MINE, operatingMs: 0, placedAt: 0, maintainedAt: 0 }],
       // Cap iron_ore at 0 so the Mine output-stalls immediately.
@@ -2715,7 +2711,7 @@ describe('§4.7 maintenance — integration with advanceIsland', () => {
       inventory: { ...blankInventory(), iron_ore: 0 },
     });
     advanceIsland(state, 5_000, { defs: POWER_FREE });
-    expect(state.buildings[0]!.operatingMs).toBe(5_000);
+    expect(state.buildings[0]!.operatingMs).toBe(0);
   });
 
   it('operatingMs accrues over a 24h offline catchup gap', () => {
@@ -5298,5 +5294,94 @@ describe('net-flow at storage cap (§15.3 rework)', () => {
     }
     expect(bulk.xp).toBeCloseTo(incremental.xp, 6);
     expect(bulk.lastTick).toBe(incremental.lastTick);
+  });
+});
+
+
+describe('utilization-scaled maintenance wear (§4.7 net-flow)', () => {
+  const HOUR_MS = 60 * 60 * 1000;
+  const T1_THRESHOLD = 12 * HOUR_MS;
+
+  it('building at utilization θ accrues operatingMs at θ-scaled speed', () => {
+    // Mine nominal = 1/20 iron_ore/s; Workshop draw = 1/4300 iron_ore/s.
+    // At a pinned cap with one consumer, mine utilization
+    // θ = (1/4300) / (1/20) = 20/4300 = 1/215.
+    const state = makeState({
+      buildings: [
+        { ...MINE, operatingMs: 0, placedAt: 0, maintainedAt: 0 },
+        { ...WORKSHOP, operatingMs: 0, placedAt: 0, maintainedAt: 0 },
+      ],
+      inventory: { ...blankInventory(), iron_ore: 100, coal: 50 },
+    });
+    const WALL_MS = 4300 * 1000; // 4300 s
+    advanceIsland(state, WALL_MS, { defs: POWER_FREE });
+    const mine = state.buildings.find((b) => b.id === MINE.id)!;
+    const workshop = state.buildings.find((b) => b.id === WORKSHOP.id)!;
+    // Mine wear = wall × θ = 4300s / 215 = 20s.
+    expect(mine.operatingMs).toBeCloseTo(20_000, 0);
+    // Workshop runs unthrottled (u=1) → full wall-clock wear.
+    expect(workshop.operatingMs).toBe(WALL_MS);
+  });
+
+  it('fully idle building (cap, no consumer) accrues zero wear', () => {
+    const state = makeState({
+      buildings: [{ ...MINE, operatingMs: 0, placedAt: 0, maintainedAt: 0 }],
+      inventory: { ...blankInventory(), iron_ore: 100 },
+    });
+    const WALL_MS = 2 * HOUR_MS;
+    advanceIsland(state, WALL_MS, { defs: POWER_FREE });
+    expect(state.buildings[0]!.operatingMs).toBe(0);
+  });
+
+  it('maintenance boundary event lands at the utilization-stretched time', () => {
+    // Mine at cap with workshop: θ = 1/215.
+    // Mine operatingMs = threshold − 1000 ms.
+    // Stretched boundary = 1000 ms / (1/215) = 215_000 ms wall time.
+    const state = makeState({
+      buildings: [
+        {
+          ...MINE,
+          operatingMs: T1_THRESHOLD - 1000,
+          placedAt: 0,
+          maintainedAt: 0,
+        },
+        { ...WORKSHOP, operatingMs: 0, placedAt: 0, maintainedAt: 0 },
+      ],
+      inventory: { ...blankInventory(), iron_ore: 100, coal: 50 },
+    });
+    // Advance to exactly the stretched boundary.
+    advanceIsland(state, 215_000, { defs: POWER_FREE });
+    const mine = state.buildings.find((b) => b.id === MINE.id)!;
+    // operatingMs should have reached the threshold exactly.
+    expect(mine.operatingMs).toBeCloseTo(T1_THRESHOLD, 0);
+    // maintenanceFactor exactly at threshold → 1.0.
+    expect(maintenanceFactor(mine, BUILDING_DEFS.mine)).toBe(1.0);
+
+    // Advance 1 ms past the boundary.
+    advanceIsland(state, 215_001, { defs: POWER_FREE });
+    // Now past threshold → factor < 1.0.
+    expect(maintenanceFactor(mine, BUILDING_DEFS.mine)).toBeLessThan(1.0);
+  });
+
+  it('degraded building wears at duty-cycle speed, not × maintenanceFactor', () => {
+    // Mine past threshold (mf = 0.75) but running unthrottled (u=1).
+    // Wear must accrue at FULL wall speed — utilization excludes the
+    // maintenance factor itself.
+    const state = makeState({
+      buildings: [
+        {
+          ...MINE,
+          operatingMs: T1_THRESHOLD + 2 * HOUR_MS, // 75% factor
+          placedAt: 0,
+          maintainedAt: 0,
+        },
+      ],
+      storageCaps: blankCaps(1_000_000),
+      inventory: { ...blankInventory(), iron_ore: 0, coal: 50 },
+    });
+    advanceIsland(state, HOUR_MS, { defs: POWER_FREE });
+    const mine = state.buildings[0]!;
+    // Full wall-clock accrual because u=1 despite mf=0.75.
+    expect(mine.operatingMs).toBe(T1_THRESHOLD + 3 * HOUR_MS);
   });
 });
