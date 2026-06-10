@@ -1162,8 +1162,8 @@ export async function loadWorld(): Promise<
     // Fallback: walk supported older versions, highest first.
     if (stored === undefined) {
       for (const v of [...SUPPORTED_LOAD_VERSIONS].sort((a, b) => b - a)) {
-        if (v === SCHEMA_VERSION) continue;
         const oldKey = `robot-islands:save:v${v}`;
+        if (oldKey === STORAGE_KEY) continue;
         const old = await get(oldKey);
         if (old !== undefined) {
           stored = old as SaveSnapshot;

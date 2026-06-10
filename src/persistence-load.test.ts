@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { loadWorld, STORAGE_KEY } from './persistence.js';
+import { loadWorld, STORAGE_KEY, SCHEMA_VERSION, serializeWorld } from './persistence.js';
 import { makeInitialWorld, makeInitialIslandState } from './world.js';
 
 const store = new Map<string, unknown>();
@@ -90,5 +90,34 @@ describe('loadWorld IDB walker', () => {
   it('returns null when no save exists in any version', async () => {
     const result = await loadWorld();
     expect(result).toBeNull();
+  });
+
+  it('loads a current-version snapshot stored at the v=SCHEMA_VERSION key and re-homes it to STORAGE_KEY', async () => {
+    const nowMs = Date.now();
+    const world = makeInitialWorld(nowMs);
+    const islandState = makeInitialIslandState(world.islands[0]!, nowMs);
+    const snapshot = serializeWorld(
+      world,
+      new Map([[islandState.id, islandState]]),
+      nowMs,
+      performance.now(),
+    );
+    const schemaVersionKey = `robot-islands:save:v${SCHEMA_VERSION}`;
+    store.set(schemaVersionKey, snapshot);
+    // Ensure the primary key is empty so the fallback walker is exercised.
+    expect(store.has(STORAGE_KEY)).toBe(false);
+
+    const result = await loadWorld();
+    expect(result).not.toBeNull();
+    expect(result!.world).toBeDefined();
+    expect(result!.islandStates.has(islandState.id)).toBe(true);
+
+    // Migrate-write-back: the snapshot should now live at STORAGE_KEY.
+    expect(store.has(STORAGE_KEY)).toBe(true);
+    const migrated = store.get(STORAGE_KEY) as { v: number };
+    expect(migrated.v).toBe(SCHEMA_VERSION);
+
+    // The old key should have been deleted.
+    expect(store.has(schemaVersionKey)).toBe(false);
   });
 });
