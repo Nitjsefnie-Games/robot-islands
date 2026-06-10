@@ -208,29 +208,23 @@ describe('advanceIsland — event-driven piecewise integration', () => {
   it('back-propagates input depletion: Workshop stops eating iron_ore when coal hits 0', () => {
     // Mine: +0.05 iron_ore/s. Workshop: -1/4300 iron_ore/s, -1/4300 coal/s, +1/4300 bolt/s.
     // Net iron_ore: +0.04977/s. Net coal: -1/4300/s. Coal starts at 50, hits 0 at t=215000s.
-    // From t=2009s, Mine caps iron_ore at 100 and stalls. Workshop keeps running.
     // (generator: mine 20s, workshop 4300s)
     //
-    // Golden value refreshed for fix 3.6 (sub-1 cap events now LAND instead
-    // of being skipped). Exact trajectory over the 6000s window, with solar
-    // sub-segment boundaries at 2700s/5400s:
-    //   [0, 2009.35]      both run; iron_ore pinned to 100 (cap event)
-    //   [2009.35, 2700]   Mine stalled; Workshop drains → 99.83938
-    //   [2700, 2703.23]   Mine refills the 0.16 deficit in 3.23s → pinned 100
-    //                     (pre-fix: this cap event was skipped — headroom < 1
-    //                      — so the Mine "produced" at full rate + full XP for
-    //                      the whole [2700, 5400] segment into a clamped store)
-    //   [2703.23, 5400]   drain → 99.37301
-    //   [5400, 5412.60]   refill → pinned 100
-    //   [5412.60, 6000]   drain 587.4s × 1/4300 → 99.86340
-    // Workshop is never throttled, so coal/bolt are unchanged from the
-    // pre-fix expectation: bolt = 6000/4300, coal = 50 − 6000/4300.
+    // §15.3 net-flow rework (spec rule 1, cap throttle): from the cap event
+    // at t=2009.35s the Mine no longer stalls binary — it throttles to
+    // exactly the Workshop's draw (θ = (1/4300)/(1/20) = 1/215), so the
+    // iron_ore bin is PINNED at 100 with net exactly 0 for the rest of the
+    // window. The old stall→drain→refill oscillation across the 2700s/5400s
+    // solar boundaries (final value 99.86340) is gone — that flicker is the
+    // very behavior this rework removes. Workshop is never throttled, so
+    // coal/bolt keep the original expectation: bolt = 6000/4300,
+    // coal = 50 − 6000/4300.
     const state = makeState({
       buildings: [MINE, WORKSHOP],
       inventory: { ...blankInventory(), coal: 50 },
     });
     advanceIsland(state, 6_000_000, { defs: POWER_FREE });
-    expect(state.inventory.iron_ore).toBeCloseTo(99.8633957537969, 6);
+    expect(state.inventory.iron_ore).toBeCloseTo(100, 9);
     expect(state.inventory.coal).toBeCloseTo(48.6046511627907, 6);
     expect(state.inventory.bolt).toBeCloseTo(1.3953488372093024, 6);
   });
@@ -1077,35 +1071,36 @@ describe('power (§5.1)', () => {
     expect(wsRate).toBeCloseTo((1 / 4300) * (50 / 85), 2); // workshop 4300s
   });
 
-  it('output-stalled consumer draws ZERO power (§5.1 throughput-scaled rebalance)', () => {
-    // §5.1 throughput-scaled-power rebalance: a Mine with iron_ore at cap
-    // (output-stalled, outputAvail = 0) now contributes 0W to P_consumed
-    // instead of its nominal 40W. Workshop's inputAvail is unaffected
-    // (it has stockpiled iron_ore from the Mine's cap-pile + coal), so
-    // it still draws full 60W. With Solar 50W vs 60W demand, factor =
-    // min(1, 50/60) ≈ 0.833. Workshop runs at 1/33 × 0.833 /s.
+  it('cap-pinned consumer draws throttled power (§5.1 × §15.3 net-flow)', () => {
+    // §15.3 net-flow rework (spec rule 1, cap throttle): a Mine with
+    // iron_ore at cap and a live Workshop drawing 1/4300/s no longer stalls
+    // binary — it throttles to exactly the consumer draw,
+    // θ = (1/4300)/(1/20) = 1/215, and its 25W draw scales by the same
+    // fraction (§5.1 throughput-scaled draw): 25/215 ≈ 0.116W. Workshop
+    // has stockpiled inputs, so it draws its full 60W.
     //
-    // (Previously this test asserted full 100W draw + factor 0.5 — that
-    // was the pre-rebalance "lights on at full bin" behaviour, which the
-    // user explicitly called out as wasteful.)
+    // (Previous incarnations: full 100W draw + factor 0.5 pre-rebalance,
+    // then binary-zero mine draw under the binary outputAvail stall.)
     const state = makeState({
       buildings: [SOLAR, MINE_PWR, WORKSHOP_PWR],
       inventory: {
         ...blankInventory(),
-        iron_ore: 100, // mine at cap → output-stalled → no power draw
+        iron_ore: 100, // mine at cap → throttled to the workshop's draw
         coal: 50,
       },
       lastTick: EQUINOX_NOON,
     });
     const { power, byBuilding } = computeRates(state, { world: dayWorld() });
+    const thetaIron = (1 / 4300) / (1 / 20); // consumer draw / producer nominal rate = 1/215
     expect(power.produced).toBeCloseTo(50, 0);
-    expect(power.consumed).toBe(60); // mine 40W zeroed; workshop 60W remains
-    expect(power.factor).toBeCloseTo(50 / 60, 2);
+    expect(power.consumed).toBeCloseTo(60 + 25 * thetaIron, 9); // mine 25W × θ; workshop full 60W
+    expect(power.factor).toBeCloseTo(50 / (60 + 25 * thetaIron), 2);
     const mineRate = byBuilding.find((r) => r.building === MINE_PWR)?.effectiveRate;
     const wsRate = byBuilding.find((r) => r.building === WORKSHOP_PWR)?.effectiveRate;
-    expect(mineRate).toBe(0); // still output-stalled at the recipe level
-    // Workshop nominal 1/4300 × powerFactor (50/60).
-    expect(wsRate).toBeCloseTo((1 / 4300) * (50 / 60), 2);
+    // Mine runs at θ × powerFactor; both sides scale by the same powerFactor,
+    // so the bin stays pinned (net iron_ore exactly 0).
+    expect(mineRate).toBeCloseTo((1 / 20) * thetaIron * power.factor, 9);
+    expect(wsRate).toBeCloseTo((1 / 4300) * power.factor, 9);
   });
 
   it('power_systems.notable.turbineStaging unlocked: Coal Gen produces more than 5000 kW', () => {

@@ -41,6 +41,7 @@ import { advanceToxicityRolls, toxicityMultiplier } from './reactor-toxicity.js'
 import { makeSeededRng } from './rng.js';
 import { nextRotateOutputBoundaryMs, resolveRecipe, resolveRotatingOutput, XP_WEIGHT, type Recipe, type ResourceId } from './recipes.js';
 import { effectiveSkillMultipliers, skillPointsForLevelUp, type NodeId, effectiveTierShift, tierForLevel, skillUnlockedAdjacencyRules, type SkillMultipliers, DEFAULT_GRAPH, type ConditionalEffectCondition } from './skilltree.js';
+import { solveFlow, type FlowBuildingSpec } from './flow-solver.js';
 import type { CrystalId, EdgeId, Graph } from './skilltree-graph.js';
 import { networkedIslandIds } from './network-consciousness.js';
 
@@ -510,11 +511,17 @@ export function clearGraceIfRedundant(
  * `computeRates` documents how the inputAvail/powerFactor circular
  * dependency is broken (nominal-rate inputAvail, post-applied powerFactor).
  */
-interface BuildingRate {
+export interface BuildingRate {
   readonly building: PlacedBuilding;
   readonly recipe: Recipe;
   /** Cycles per second this building is currently running at. */
   readonly effectiveRate: number;
+  /** Duty-cycle fraction [0,1] — dynamic gates only (§4.7 net-flow):
+   *  adjacency soft-gate × heat throttle × flow-solver gate × powerFactor
+   *  (consumers). EXCLUDES maintenanceFactor (no degradation-slows-
+   *  degradation feedback), time-acceleration, variance, and static yield
+   *  multipliers. Drives operatingMs accrual. */
+  readonly utilization: number;
 }
 
 /** Per-kind catalog lookup. Production callers pass `BUILDING_DEFS` (the
@@ -523,11 +530,13 @@ interface BuildingRate {
 export type DefCatalog = Readonly<Record<BuildingDefId, BuildingDef>>;
 
 /**
- * Compute the binary output-availability factor for a recipe.
+ * Compute the binary output-availability factor for a recipe: 0 if any of
+ * the recipe's outputs is at or above cap, else 1.
  *
- * Per §15.3: "binary; 0 = some output bin at cap; back-propagates upstream".
- * If any of the recipe's outputs is at or above cap, the building stalls
- * entirely (no inputs consumed, no outputs produced, no XP).
+ * §15.3 net-flow rework: NARROWED ROLE. Running buildings (baseRate > 0)
+ * are throttled continuously by the pass-2.5 flow-solver gate instead of
+ * this binary stall; this helper survives solely for the pass-3 power
+ * probe on baseRate-0 buildings (stalled for non-storage reasons).
  */
 function outputAvail(
   state: IslandState,
@@ -550,6 +559,11 @@ function outputAvail(
  * in the same tick.
  *
  * Per §15.3: continuous [0,1]; 0 = stalled.
+ *
+ * §15.3 net-flow rework: NARROWED ROLE. Running buildings (baseRate > 0)
+ * get their input throttle from the pass-2.5 flow-solver gate (shared φ
+ * per zero-pinned resource); this helper survives solely as the pass-3
+ * power probe for baseRate-0 buildings.
  *
  * Two cases for each input resource `r`:
  *
@@ -725,10 +739,12 @@ export interface PowerBalance {
   /** Total W produced by active producers. */
   readonly produced: number;
   /** Total W demanded by active consumers, scaled per-building by NOMINAL
-   *  throughput fraction (gateMul × inputAvail × (outputAvail > 0 ? 1 : 0))
-   *  per the §5.1 throughput-scaled-power rebalance. Output-cap stalled and
-   *  soft-gate degraded buildings contribute proportionally less (or zero);
-   *  heat-failed / hard-gate / tier-gated consumers contribute zero. */
+   *  throughput fraction (gateMul × flow-solver gate g for running
+   *  buildings; gateMul × inputAvail × outputAvail probe for baseRate-0
+   *  buildings) per the §5.1 throughput-scaled-power rebalance. Storage-
+   *  throttled and soft-gate degraded buildings contribute proportionally
+   *  less (or zero); heat-failed / hard-gate / tier-gated consumers
+   *  contribute zero. */
   readonly consumed: number;
   /** `consumed === 0 ? 1 : min(1, produced / consumed)`. */
   readonly factor: number;
@@ -885,11 +901,14 @@ export function computeRates(
   // rate. As long as all consumers scale by the same factor, the relative
   // supply/demand ratios — and therefore inputAvail — stay correct.
   //
-  // Four passes:
-  //   1. Tentative baseRate considering only outputAvail (per-recipe cap stall).
-  //   2. inputAvail per recipe, using the supply pool from pass 1.
-  //   3. P_produced / P_consumed sums over `active` buildings; powerFactor.
-  //   4. Final effectiveRate = baseRate × inputAvail × (consumes-power ? powerFactor : 1).
+  // Four passes (+ the 2.5 net-flow solve):
+  //   1.   Tentative baseRate from the non-storage gates (heat, tiles, tier,
+  //        adjacency). Storage state no longer bails here — §15.3 net-flow.
+  //   2.   inputAvail per recipe, using the supply pool from pass 1 (kept as
+  //        the pass-3 power probe for baseRate-0 buildings).
+  //   2.5. Exact net-flow solve → per-building gate g (flow-solver.ts).
+  //   3.   P_produced / P_consumed sums over `active` buildings; powerFactor.
+  //   4.   Final effectiveRate = baseRate × g × (consumes-power ? powerFactor : 1).
   //
   // Skill multipliers (§9.3) are read once at the top so every pass uses
   // consistent values. Recipe-rate buffs apply to baseRate AND to pass-2's
@@ -1074,11 +1093,6 @@ export function computeRates(
         tentative.push({ building: b, recipe: syntheticRecipe, baseRate: 0, buffStack: 1, effectiveMul: 0, perBuildingMul: 1 });
         continue;
       }
-      const oa = outputAvail(state, syntheticRecipe, t, ctx?.caps, ctx?.baseMult);
-      if (oa === 0) {
-        tentative.push({ building: b, recipe: syntheticRecipe, baseRate: 0, buffStack: 1, effectiveMul: gateResult.effectiveMul, perBuildingMul: 1 });
-        continue;
-      }
       const baseRate = (1 / GENESIS_CYCLE_SEC) * gateResult.effectiveMul * floorEffectMul(floorLevel(b));
       // Fix 3.7: same per-building throughput factors pass 4 applies.
       const genesisPbm =
@@ -1172,11 +1186,6 @@ export function computeRates(
       tentative.push({ building: b, recipe, baseRate: 0, buffStack, effectiveMul: 0, perBuildingMul });
       continue;
     }
-    const oa = outputAvail(state, recipe, t, ctx?.caps, ctx?.baseMult);
-    if (oa === 0) {
-      tentative.push({ building: b, recipe, baseRate: 0, buffStack, effectiveMul: gateResult.effectiveMul, perBuildingMul });
-      continue;
-    }
     // Recipe-rate multipliers compose: skill-tree (per-category) × modifier
     // (per-category) × modifier (global) × NC global buff × §9.9 active-play
     // bonus. Identity bundles in any of the new factors contribute 1× so
@@ -1249,31 +1258,104 @@ export function computeRates(
     inputAvailByIdx[i] = inputAvail(state, te.recipe, externalSupply, nominalRate, recipeInputDiv, ctx?.inventory);
   }
 
+  // §5.2 coal-furnace fuel-burn cycle length — fixed 30s per §5.2 / §8.5
+  // catalog convention. Shared by the pass-2.5 synthetic coal consumers
+  // below and the post-pass-4 burn fold further down; declared once here.
+  const COAL_CYCLE_SEC = 30;
+
+  // Pass 2.5 — exact net-flow solve (§15.3 net-flow rework, see
+  // docs/superpowers/specs/2026-06-10-net-flow-economy-design.md).
+  // Replaces the binary outputAvail stall: producers at a pinned bin rescale
+  // to exactly the consumers' draw (shared θ per resource, min rule per
+  // building); consumers at an empty bin rescale to supply (shared φ —
+  // supersedes per-consumer inputAvail for RUNNING buildings; inputAvailByIdx
+  // above remains solely the pass-3 power probe for baseRate-0 buildings).
+  // Coefficients mirror pass-4's realized flows at gate 1: baseRate ×
+  // perBuildingMul, inputs ÷ recipeInputDiv. Island-uniform factors (accel,
+  // variance) cancel in the ratios; powerFactor stays post-applied (pass 4)
+  // with the documented one-segment lag.
+  const flowBuildings: FlowBuildingSpec[] = tentative.map((te) => {
+    if (te.baseRate <= 0) return { produces: {}, consumes: {} };
+    const produces: Record<string, number> = {};
+    const outs = resolveRotatingOutput(te.recipe, t);
+    for (const [r, yld] of Object.entries(outs)) {
+      const flow = (yld ?? 0) * te.baseRate * te.perBuildingMul;
+      if (flow > 0) produces[r] = flow;
+    }
+    const consumes: Record<string, number> = {};
+    for (const [r, need] of Object.entries(te.recipe.inputs)) {
+      if (te.recipe.exogenousFlow === 'atmosphere' && r === 'air') continue;
+      const flow = ((need ?? 0) / recipeInputDiv) * te.baseRate * te.perBuildingMul;
+      if (flow > 0) consumes[r] = flow;
+    }
+    return { produces, consumes };
+  });
+  const capConstrained = new Set<string>();
+  const zeroConstrained = new Set<string>();
+  for (const fb of flowBuildings) {
+    for (const r of [...Object.keys(fb.produces), ...Object.keys(fb.consumes)]) {
+      const id = r as ResourceId;
+      const stock = ctx?.inventory?.[id] ?? state.inventory[id] ?? 0;
+      if (stock <= 0) zeroConstrained.add(r);
+      if (stock >= cap(state, id, ctx?.caps, undefined, ctx?.baseMult)) capConstrained.add(r);
+    }
+  }
+  // §5.2 furnace coal burn — cap-side demand (owner decision 2026-06-10, see
+  // design doc § flow-solver contract): each billing furnace appends a
+  // synthetic consumer entry so a coal producer at a pinned coal bin
+  // throttles to recipe-draw + burn. SKIPPED when coal is zero-constrained —
+  // the binary fuel-starvation recompute (Fix 4.1 below) owns that regime,
+  // and a synthetic entry would let the solver share fuel proportionally,
+  // contradicting §5.2's all-or-none heat gate. The synthetic entries sit at
+  // indices ≥ tentative.length; passes 3–4 index flowGates only by tentative
+  // index, so they are never read back — they exist purely to shape θ_coal.
+  // (capConstrained/zeroConstrained were scanned from the RECIPE entries
+  // above: if no recipe touches coal, θ_coal has no producers to throttle
+  // and the synthetic entries are inert, which is correct.)
+  if (!zeroConstrained.has('coal')) {
+    for (const [furnaceId, servedCount] of heat.coalConsumersByFurnace) {
+      if (servedCount <= 0) continue;
+      const furnace = validBuildings.find((b) => b.id === furnaceId);
+      if (!furnace) continue;
+      const coalPerCycle = defs[furnace.defId].heatSource?.coalPerCycle ?? 0;
+      if (coalPerCycle <= 0) continue;
+      flowBuildings.push({
+        produces: {},
+        consumes: { coal: (coalPerCycle * servedCount) / COAL_CYCLE_SEC },
+      });
+    }
+  }
+  const flowGates = solveFlow(flowBuildings, { capConstrained, zeroConstrained }).gates;
+
   // Pass 3: power balance. A building is `active` for §5.1 iff:
   //   - it has no recipe (Solar / Dock / Crate / Silo — passively active), OR
-  //   - its recipe has inputAvail > 0 AND its heat gate (if any) passes.
+  //   - its flow-solver gate g > 0 (running buildings) / its probe
+  //     inputAvail > 0 (baseRate-0 buildings), AND its heat gate (if any)
+  //     passes.
   //
   // Per the §5.1 throughput-scaled-power rebalance: a consumer's draw scales
   // by its NOMINAL throughput fraction:
   //
   //   nominalThroughputFrac = gateResult.effectiveMul   // §4.5 soft-gate (0..1)
-  //                         × inputAvail                 // partial sibling supply (0..1)
-  //                         × (outputAvail > 0 ? 1 : 0)  // hard 0 on cap-full
+  //                         × g                          // pass-2.5 net-flow gate (0..1)
+  //   (or, for baseRate-0 buildings stalled for non-storage reasons,
+  //    gateResult.effectiveMul × inputAvail × outputAvail — the probe shape)
   //
   //   powerConsumed += (def.power.consumes / skillMul.powerConsumption)
   //                  × nominalThroughputFrac
   //
-  // All three factors are NOMINAL (pre-powerFactor) — they're already in
-  // scope from earlier passes or cheap to recompute via `outputAvail()`.
-  // Composing here preserves the existing circular-dep break: the chain is
+  // All factors are NOMINAL (pre-powerFactor) — already in scope from
+  // earlier passes or cheap to recompute via `outputAvail()`. Composing
+  // here preserves the existing circular-dep break: the chain is
   // `powerConsumed_nominal → powerFactor → effectiveRate`, never the reverse.
-  // Output-cap stalled and soft-gate-degraded buildings no longer waste
+  // Storage-throttled and soft-gate-degraded buildings no longer waste
   // full wattage producing nothing / less. Maintenance bills in
-  // `maintenance.ts` are intentionally NOT scaled by throughput — a
-  // stalled building still wears down at full rate; the player can't
-  // escape maintenance pressure by capping output. Heat-failed consumers
-  // remain fully inactive (no power, no production, no consumption) per
-  // §5.1 "active iff all gates pass".
+  // `maintenance.ts` are intentionally NOT scaled by throughput. (Wear
+  // accrual scales by `BuildingRate.utilization` per §4.7 net-flow — the
+  // old "stalled buildings wear at full rate" rule is superseded by the
+  // spec; see the wear-accrual loop in `advanceIsland`.) Heat-failed
+  // consumers remain fully inactive (no power, no production, no
+  // consumption) per §5.1 "active iff all gates pass".
   let powerProduced = 0;
   let powerConsumed = 0;
   for (const b of validBuildings) {
@@ -1309,22 +1391,32 @@ export function computeRates(
     // pipe it through `resolveRecipe` for symmetry with pass 1 (no caller
     // confusion about which lookup is "the" lookup).
     const recipe = resolveRecipe(def, b, terrainAt, ctx?.inventory ?? state.inventory);
-    // §5.1 throughput-scaled draw: compose the three NOMINAL gates that
-    // determine how much work the building actually does this tick. We
-    // recompute outputAvail here (cheap, same helper Pass 1 used) rather
-    // than threading it through `Tentative`, keeping the diff localised
-    // to Pass 3 per the rebalance brief.
+    // §5.1 throughput-scaled draw: compose the NOMINAL gates that determine
+    // how much work the building actually does this tick. Running buildings
+    // (baseRate > 0) use the pass-2.5 flow-solver gate g, which subsumes the
+    // old inputAvail × outputAvail pair (§15.3 net-flow rework). Buildings
+    // stalled for non-storage reasons (tile gate, tier gate, …) keep the
+    // probe draw shape: inputAvail × outputAvail.
     let active: boolean;
     let nominalThroughputFrac: number;
     if (!recipe) {
       active = true;
       nominalThroughputFrac = 1; // Solar / Dock / Crate / Silo — full passive draw if any.
     } else {
-      const idx = tentative.findIndex((t) => t.building === b);
-      const ia = idx >= 0 ? (inputAvailByIdx[idx] ?? 0) : 0;
-      active = ia > 0;
-      const oa = outputAvail(state, recipe, t, ctx?.caps, ctx?.baseMult);
-      nominalThroughputFrac = gateResult.effectiveMul * ia * oa;
+      const idx = tentative.findIndex((tt) => tt.building === b);
+      const te = idx >= 0 ? tentative[idx] : undefined;
+      if (te && te.baseRate > 0) {
+        const g = flowGates[idx] ?? 0;
+        active = g > 0;
+        nominalThroughputFrac = gateResult.effectiveMul * g;
+      } else {
+        // Probe path — buildings stalled for non-storage reasons (tile gate,
+        // tier gate, …) keep today's draw shape: inputAvail × outputAvail.
+        const ia = idx >= 0 ? (inputAvailByIdx[idx] ?? 0) : 0;
+        active = ia > 0;
+        const oa = outputAvail(state, recipe, t, ctx?.caps, ctx?.baseMult);
+        nominalThroughputFrac = gateResult.effectiveMul * ia * oa;
+      }
     }
     nominalThroughputFrac *= heatFactorPass3;
     if (!active) continue;
@@ -1401,7 +1493,8 @@ export function computeRates(
 
   // Pass 4: final effective rate. Apply powerFactor only to consumers
   // (buildings declaring `power.consumes > 0`); producers and neutral
-  // buildings ignore it. Output-stalled buildings still finish at 0.
+  // buildings ignore it. Storage throttling arrives via the pass-2.5
+  // flow-solver gate g (g=0 ⇒ rate 0, e.g. at cap with no consumer).
   const byBuilding: BuildingRate[] = [];
   const production: Record<ResourceId, number> = {} as Record<ResourceId, number>;
   const consumption: Record<ResourceId, number> = {} as Record<ResourceId, number>;
@@ -1409,10 +1502,10 @@ export function computeRates(
   for (let i = 0; i < tentative.length; i++) {
     const te = tentative[i]!;
     if (te.baseRate === 0) {
-      byBuilding.push({ building: te.building, recipe: te.recipe, effectiveRate: 0 });
+      byBuilding.push({ building: te.building, recipe: te.recipe, effectiveRate: 0, utilization: 0 });
       continue;
     }
-    const ia = inputAvailByIdx[i] ?? 0;
+    const g = flowGates[i] ?? 0;
     const consumesPower = (defs[te.building.defId].power?.consumes ?? 0) > 0;
     const pf = consumesPower ? powerFactor : 1;
     // Fix 3.7: `te.perBuildingMul` carries the §4.7 maintenance factor ×
@@ -1424,8 +1517,13 @@ export function computeRates(
     // buildings, and applying maintenance to power would cascade into the
     // brownout factor and double-dip on consumers. Resource recipes only.
     const accelMul = ctx?.accelerationMul ?? 1;
-    const effectiveRate = te.baseRate * ia * pf * accelMul * varianceFactor * te.perBuildingMul;
-    byBuilding.push({ building: te.building, recipe: te.recipe, effectiveRate });
+    const effectiveRate = te.baseRate * g * pf * accelMul * varianceFactor * te.perBuildingMul;
+    // §4.7 net-flow: duty-cycle fraction — adjacency soft-gate × heat
+    // throttle (te.effectiveMul) × flow-solver gate × powerFactor for
+    // consumers. Excludes maintenance/accel/variance/static-yield per the
+    // BuildingRate doc.
+    const utilization = Math.min(1, Math.max(0, te.effectiveMul * g * pf));
+    byBuilding.push({ building: te.building, recipe: te.recipe, effectiveRate, utilization });
 
     if (effectiveRate === 0) continue;
     const pass4Outputs = resolveRotatingOutput(te.recipe, t);
@@ -1491,10 +1589,9 @@ export function computeRates(
   // (no implicit "+1 for the furnace's own burn"). Folded into
   // `consumption.coal` / `net.coal` as a post-recipe deduction so
   // `findNextCapEvent` accounts for it when computing the next event.
-  // Fixed 30s cycle per §5.2 / §8.5 catalog convention; tied to the def's
-  // declared `coalPerCycle` for forward-compat with a future per-furnace
-  // efficiency variation.
-  const COAL_CYCLE_SEC = 30;
+  // Fixed 30s cycle (COAL_CYCLE_SEC, declared above pass 2.5); tied to the
+  // def's declared `coalPerCycle` for forward-compat with a future
+  // per-furnace efficiency variation.
   for (const [furnaceId, servedCount] of heat.coalConsumersByFurnace) {
     if (servedCount <= 0) continue;
     const furnace = validBuildings.find((b) => b.id === furnaceId);
