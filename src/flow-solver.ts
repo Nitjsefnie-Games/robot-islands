@@ -89,13 +89,189 @@ export function solveSharedFactor(
   return 1; // defensive backstop for float fuzz at segment edges
 }
 
+/** Internal multiplier key: one shared factor per constrained resource side. */
+type MulKey = string; // `cap:${resource}` | `zero:${resource}`
+
 export function solveFlow(
   buildings: ReadonlyArray<FlowBuildingSpec>,
   constraints: FlowConstraints,
 ): FlowSolution {
-  if (constraints.capConstrained.size === 0 && constraints.zeroConstrained.size === 0) {
+  const n = buildings.length;
+  const keys: MulKey[] = [];
+  for (const r of constraints.capConstrained) keys.push(`cap:${r}`);
+  for (const r of constraints.zeroConstrained) keys.push(`zero:${r}`);
+  if (keys.length === 0 || n === 0) {
     return { gates: buildings.map(() => 1), converged: true };
   }
-  // Real solve lands in Tasks 2–3.
-  return { gates: buildings.map(() => 1), converged: true };
+
+  // Per building: the multiplier keys that gate it. Cap constrains PRODUCERS
+  // of r; zero constrains CONSUMERS of r.
+  const keysByBuilding: MulKey[][] = buildings.map((b) => {
+    const ks: MulKey[] = [];
+    for (const r of Object.keys(b.produces)) {
+      if ((b.produces[r] ?? 0) > 0 && constraints.capConstrained.has(r)) ks.push(`cap:${r}`);
+    }
+    for (const r of Object.keys(b.consumes)) {
+      if ((b.consumes[r] ?? 0) > 0 && constraints.zeroConstrained.has(r)) ks.push(`zero:${r}`);
+    }
+    return ks;
+  });
+
+  const mul = new Map<MulKey, number>();
+  for (const k of keys) mul.set(k, 1);
+
+  /** Gate of building i, optionally ignoring one multiplier key (g^{¬r}). */
+  const gate = (i: number, exclude?: MulKey): number => {
+    let g = 1;
+    for (const k of keysByBuilding[i]!) {
+      if (k === exclude) continue;
+      const m = mul.get(k) ?? 1;
+      if (m < g) g = m;
+    }
+    return g;
+  };
+
+  /** Recompute one multiplier from current state. Returns the new value. */
+  const update = (key: MulKey): number => {
+    const isCap = key.startsWith('cap:');
+    const res = key.slice(isCap ? 4 : 5);
+    if (isCap) {
+      // target = realized consumer draw of res from buildings that do NOT
+      // produce r (their draw is not already accounted for on the left side).
+      // entries = net producers of r: (production − self-consumption) scaled
+      // by the building's gate.
+      let target = 0;
+      const entries: SharedFactorEntry[] = [];
+      for (let i = 0; i < buildings.length; i++) {
+        const p = buildings[i]!.produces[res] ?? 0;
+        const c = buildings[i]!.consumes[res] ?? 0;
+        if (p > 0) {
+          const net = p - c;
+          if (net > 0) {
+            entries.push({ coeff: net, otherGate: gate(i, key) });
+          }
+        } else if (c > 0) {
+          target += c * gate(i, key);
+        }
+      }
+      return solveSharedFactor(entries, target);
+    }
+    // zero side: target = realized production of res from buildings that do
+    // NOT consume r. entries = net consumers: (consumption − self-production).
+    let target = 0;
+    const entries: SharedFactorEntry[] = [];
+    for (let i = 0; i < buildings.length; i++) {
+      const p = buildings[i]!.produces[res] ?? 0;
+      const c = buildings[i]!.consumes[res] ?? 0;
+      if (c > 0) {
+        const net = c - p;
+        if (net > 0) {
+          entries.push({ coeff: net, otherGate: gate(i, key) });
+        }
+      } else if (p > 0) {
+        target += p * gate(i, key);
+      }
+    }
+    return solveSharedFactor(entries, target);
+  };
+
+  // ---- dependency graph between multiplier keys -------------------------
+  // updating key u reads key v when some building participating in u's
+  // update (either side) is gated by v. Conservative superset is fine.
+  const keyIndex = new Map<MulKey, number>(keys.map((k, i) => [k, i]));
+  const edges: number[][] = keys.map(() => []);
+  for (let ki = 0; ki < keys.length; ki++) {
+    const key = keys[ki]!;
+    const isCap = key.startsWith('cap:');
+    const res = key.slice(isCap ? 4 : 5);
+    const deps = new Set<number>();
+    for (let i = 0; i < buildings.length; i++) {
+      const touches =
+        (buildings[i]!.produces[res] ?? 0) > 0 || (buildings[i]!.consumes[res] ?? 0) > 0;
+      if (!touches) continue;
+      for (const k2 of keysByBuilding[i]!) {
+        if (k2 === key) continue;
+        deps.add(keyIndex.get(k2)!);
+      }
+    }
+    edges[ki] = [...deps]; // ki depends on each of deps
+  }
+
+  // ---- Tarjan SCC over keys, then process in dependency order -----------
+  const sccOf = new Array<number>(keys.length).fill(-1);
+  const order: number[][] = []; // SCCs in reverse-topological completion order
+  {
+    let index = 0;
+    const idx = new Array<number>(keys.length).fill(-1);
+    const low = new Array<number>(keys.length).fill(0);
+    const onStack = new Array<boolean>(keys.length).fill(false);
+    const stack: number[] = [];
+    const visit = (v: number): void => {
+      idx[v] = low[v] = index++;
+      stack.push(v);
+      onStack[v] = true;
+      for (const w of edges[v]!) {
+        if (idx[w] === -1) {
+          visit(w);
+          low[v] = Math.min(low[v]!, low[w]!);
+        } else if (onStack[w]) {
+          low[v] = Math.min(low[v]!, idx[w]!);
+        }
+      }
+      if (low[v] === idx[v]) {
+        const comp: number[] = [];
+        for (;;) {
+          const w = stack.pop()!;
+          onStack[w] = false;
+          sccOf[w] = order.length;
+          comp.push(w);
+          if (w === v) break;
+        }
+        order.push(comp);
+      }
+    };
+    for (let v = 0; v < keys.length; v++) if (idx[v] === -1) visit(v);
+  }
+  // Tarjan emits SCCs in reverse topological order of the condensation —
+  // with edges meaning "depends on", dependencies complete FIRST, which is
+  // exactly the processing order we need (no re-sort required).
+
+  let converged = true;
+  for (const comp of order) {
+    if (comp.length === 1 && !edges[comp[0]!]!.includes(comp[0]!)) {
+      // DAG node: a single exact update suffices (dependencies are final).
+      const k = keys[comp[0]!]!;
+      mul.set(k, update(k));
+      continue;
+    }
+    // True cycle: pessimistic start (mul = 0 within the component), then
+    // Gauss-Seidel sweeps upward; damp after 100 to break oscillators.
+    // Starting at 1 would accept causally ungrounded fixed points — an
+    // A↔B flow loop at zero stocks self-certifies at g=(1,1) even though
+    // nothing seeds it (mutual bootstrap deadlock). From 0, a cycle only
+    // rises on real external supply; pure bootstrap loops stay at 0.
+    for (const ki of comp) mul.set(keys[ki]!, 0);
+    let sweeps = 0;
+    for (;;) {
+      let maxDelta = 0;
+      for (const ki of comp) {
+        const k = keys[ki]!;
+        const prev = mul.get(k) ?? 1;
+        let next = update(k);
+        if (sweeps > 100) next = (next + prev) / 2; // damping
+        mul.set(k, next);
+        maxDelta = Math.max(maxDelta, Math.abs(next - prev));
+      }
+      sweeps++;
+      if (maxDelta < FLOW_EPSILON) break;
+      if (sweeps >= FLOW_MAX_SWEEPS) {
+        converged = false;
+        break;
+      }
+    }
+  }
+
+  const gates: number[] = [];
+  for (let i = 0; i < n; i++) gates.push(gate(i));
+  return { gates, converged };
 }
