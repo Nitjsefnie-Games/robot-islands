@@ -1357,11 +1357,10 @@ export function computeRates(
   // here preserves the existing circular-dep break: the chain is
   // `powerConsumed_nominal → powerFactor → effectiveRate`, never the reverse.
   // Storage-throttled and soft-gate-degraded buildings no longer waste
-  // full wattage producing nothing / less. Maintenance bills in
-  // `maintenance.ts` are intentionally NOT scaled by throughput. (§4.7
-  // net-flow WILL scale wear by `BuildingRate.utilization` in a follow-up
-  // task; today the `advanceIsland` wear loop still accrues full
-  // wall-clock dtMs.) Heat-failed consumers remain fully inactive (no
+  // full wattage producing nothing / less. §4.7 net-flow NOW scales wear
+  // by `BuildingRate.utilization` — duty-cycled operating time, not wall
+  // clock (see docs/superpowers/specs/2026-06-10-net-flow-economy-design.md
+  // § "Wear, XP, events"). Heat-failed consumers remain fully inactive (no
   // power, no production, no consumption) per §5.1 "active iff all gates
   // pass".
   let powerProduced = 0;
@@ -1702,6 +1701,7 @@ export function findNextCapEvent(
   tMs: number,
   nowMs: number,
   ctx?: RatesContext,
+  utilById?: ReadonlyMap<string, number>,
 ): number {
   let best = nowMs;
   for (const r of Object.keys(net) as ResourceId[]) {
@@ -1755,7 +1755,9 @@ export function findNextCapEvent(
     const boundary = nextMaintenanceBoundaryMs(b, def, thresholdMul);
     if (boundary === null) continue;
     const operating = b.operatingMs ?? 0;
-    const eventMs = tMs + (boundary - operating);
+    const u = utilById?.get(b.id) ?? 1;
+    if (u <= 0) continue; // not wearing — no future boundary this segment
+    const eventMs = tMs + (boundary - operating) / u;
     if (eventMs > tMs && eventMs < best) best = eventMs;
   }
   // §9.3 Robotics: under-construction completion events. The integrator
@@ -2071,7 +2073,9 @@ export function advanceIsland(
       const depletionTimeSec = state.batteryStoredWs / deficit;
       nextBatteryMs = t + depletionTimeSec * 1000;
     }
-    const nextEventMs = findNextCapEvent(state, net, t, nowMs, effectiveCtx);
+    const utilById = new Map<string, number>();
+    for (const br of byBuilding) utilById.set(br.building.id, br.utilization);
+    const nextEventMs = findNextCapEvent(state, net, t, nowMs, effectiveCtx, utilById);
     // terrain_modifier v5 — segment-end clamp by the soonest pending shot.
     // Without this, a 30s segment containing a 4s shot would integrate past
     // fire-time and ResolveShot would land at the wrong simulated moment.
@@ -2221,13 +2225,14 @@ export function advanceIsland(
         }
         for (const id of toFire) ctx.onTerrainShotFire(id);
       }
-      // §4.7 operating-time accrual: every building accrues regardless of
-      // whether it produced this segment (§4.7 literal: "Idle buildings,
-      // stalled buildings, and inactive buildings ... accrue maintenance
-      // time the same as actively-producing ones"). Done AFTER applyRates
-      // so the maintenance factor used inside computeRates was computed
-      // at the start-of-segment operatingMs, matching §15.3's piecewise-
-      // constant-rate invariant.
+      // §4.7 net-flow: wear accrues in utilization-scaled operating time —
+      // duty cycle, not wall clock. A building idling against a full bin
+      // (u=0) no longer wears; this deliberately inverts the old "can't
+      // escape maintenance pressure by capping output" stance (owner
+      // decision, see docs/superpowers/specs/2026-06-10-net-flow-economy-design.md).
+      // Done AFTER applyRates so the maintenance factor used inside
+      // computeRates was computed at the start-of-segment operatingMs,
+      // matching §15.3's piecewise-constant-rate invariant.
       for (const b of state.buildings) {
         // §9.3 construction: tick down remaining time; operating-time
         // only accrues once the build is complete (the spec's "Idle
@@ -2285,7 +2290,7 @@ export function advanceIsland(
         const recipe = resolveRecipe(BUILDING_DEFS[b.defId], b, ctx?.terrainAt);
         if (!recipe) continue;
         if (Object.keys(recipe.outputs).length === 0) continue;
-        accrueOperatingTime(b, dtMs);
+        accrueOperatingTime(b, dtMs * (utilById.get(b.id) ?? 0));
       }
       // §queue: after construction ticks, a running slot may have just
       // freed up (build completed). Promote the FIFO queue head so it
