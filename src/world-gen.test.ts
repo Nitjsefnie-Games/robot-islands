@@ -3,7 +3,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { BIOME_DEFS } from './biomes.js';
-import { generateWorld } from './world-gen.js';
+import { generateWorld, overlapsAny } from './world-gen.js';
 import { DEMO_ISLANDS_TEST_FIXTURE, makeInitialWorld, type Biome } from './world.js';
 
 const ALL_BIOMES: ReadonlyArray<Biome> = [
@@ -240,6 +240,45 @@ describe('generateWorld', () => {
         expect(dist).toBeGreaterThanOrEqual(minGap);
       }
     }
+  });
+});
+
+describe('overlapsAny — constituent-aware spacing', () => {
+  it('rejects candidate overlapping ONLY an extraEllipse', () => {
+    const existing = {
+      id: 'merged',
+      name: 'merged',
+      biome: 'plains' as const,
+      cx: 0,
+      cy: 0,
+      majorRadius: 5,
+      minorRadius: 5,
+      populated: true,
+      discovered: true,
+      buildings: [],
+      modifiers: [],
+      extraEllipses: [{ major: 5, minor: 5, rotation: 0, offsetX: 30, offsetY: 0 }],
+    };
+    // Candidate at (40, 0) r=5 overlaps the extra at (30,0) r=5 (distance 10 = 5+5).
+    expect(overlapsAny(40, 0, 5, 5, [existing])).toBe(true);
+  });
+
+  it('accepts same candidate when the island has no extraEllipses', () => {
+    const existing = {
+      id: 'merged',
+      name: 'merged',
+      biome: 'plains' as const,
+      cx: 0,
+      cy: 0,
+      majorRadius: 5,
+      minorRadius: 5,
+      populated: true,
+      discovered: true,
+      buildings: [],
+      modifiers: [],
+    };
+    // Candidate at (40, 0) r=5 is far from the primary (distance 40 >> 5+5).
+    expect(overlapsAny(40, 0, 5, 5, [existing])).toBe(false);
   });
 });
 

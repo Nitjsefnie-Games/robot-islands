@@ -22,7 +22,7 @@
 
 import { BIOME_DEFS, rollModifiers } from './biomes.js';
 import { makeSeededRng } from './rng.js';
-import { attachTerrainAt, type Biome, type IslandSpec } from './world.js';
+import { attachTerrainAt, islandConstituents, type Biome, type IslandSpec } from './world.js';
 
 // Ocean-layer §2: re-exported so the procedural world pipeline (island
 // placement + ocean terrain seeding) is discoverable at one import path.
@@ -226,7 +226,7 @@ function rollBiome(rng: () => number): Biome {
  *  stranded; lower to bias toward dense. */
 export const OVERLAP_BUFFER_TILES = 16;
 
-function overlapsAny(
+export function overlapsAny(
   cx: number,
   cy: number,
   major: number,
@@ -235,11 +235,13 @@ function overlapsAny(
 ): boolean {
   const myMax = Math.max(major, minor);
   for (const o of others) {
-    const otherMax = Math.max(o.majorRadius, o.minorRadius);
-    const dx = cx - o.cx;
-    const dy = cy - o.cy;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist < myMax + otherMax + OVERLAP_BUFFER_TILES) return true;
+    for (const c of islandConstituents(o)) {
+      const otherMax = Math.max(c.major, c.minor);
+      const dx = cx - (o.cx + c.offsetX);
+      const dy = cy - (o.cy + c.offsetY);
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < myMax + otherMax + OVERLAP_BUFFER_TILES) return true;
+    }
   }
   return false;
 }
