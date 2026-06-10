@@ -108,12 +108,15 @@ export function mountBuildQueuePanel(
 
   // ── Helpers ─────────────────────────────────────────────────────────────
 
-  function makeRow(
-    nameText: string,
-    rightText: string,
-    rightTone: 'accent' | 'muted' | 'warn',
-    buildingId: string,
-  ): HTMLDivElement {
+  interface QueueRowEntry {
+    row: HTMLDivElement;
+    rightSpan: HTMLSpanElement;
+  }
+
+  const rowCache = new Map<string, QueueRowEntry>();
+  let lastQueueSig = '';
+
+  function makeCachedRow(nameText: string, buildingId: string): QueueRowEntry {
     const row = document.createElement('div');
     row.classList.add('ri-kv');
     row.style.cssText = 'align-items: center; gap: 4px; flex-wrap: wrap;';
@@ -125,12 +128,6 @@ export function mountBuildQueuePanel(
 
     const rightSpan = document.createElement('span');
     rightSpan.classList.add('ri-kv__v', 'ri-mono');
-    rightSpan.textContent = rightText;
-    if (rightTone === 'accent') {
-      rightSpan.dataset.tone = 'success';
-    } else if (rightTone === 'warn') {
-      rightSpan.dataset.tone = 'warn';
-    }
 
     const cancelBtn = document.createElement('button');
     cancelBtn.textContent = '✕';
@@ -164,14 +161,24 @@ export function mountBuildQueuePanel(
     row.appendChild(nameSpan);
     row.appendChild(rightSpan);
     row.appendChild(cancelBtn);
-    return row;
+    return { row, rightSpan };
   }
+
+  // Persistent status row (no interactive elements — safe to update text).
+  const statusRow = document.createElement('div');
+  statusRow.classList.add('ri-kv');
+  const statusK = document.createElement('span');
+  statusK.classList.add('ri-kv__k');
+  statusK.textContent = 'SLOTS';
+  const statusV = document.createElement('span');
+  statusV.classList.add('ri-kv__v', 'ri-mono');
+  statusRow.appendChild(statusK);
+  statusRow.appendChild(statusV);
+  body.appendChild(statusRow);
 
   // ── Refresh ──────────────────────────────────────────────────────────────
 
   function refresh(): void {
-    while (body.firstChild) body.removeChild(body.firstChild);
-
     const spec = deps.getSpec();
     const state = deps.getState();
 
@@ -179,19 +186,6 @@ export function mountBuildQueuePanel(
     const runSlots = parallelBuildSlots(state);
     const queued = queuedBuildCount(state);
     const queueSlots = queuedBuildSlots(state);
-
-    // Status summary line.
-    const statusRow = document.createElement('div');
-    statusRow.classList.add('ri-kv');
-    const statusK = document.createElement('span');
-    statusK.classList.add('ri-kv__k');
-    statusK.textContent = 'SLOTS';
-    const statusV = document.createElement('span');
-    statusV.classList.add('ri-kv__v', 'ri-mono');
-    statusV.textContent = `${running}/${runSlots} run · ${queued}/${queueSlots} queue`;
-    statusRow.appendChild(statusK);
-    statusRow.appendChild(statusV);
-    body.appendChild(statusRow);
 
     // Collect in-progress and queued buildings.
     const runningBuildings = spec.buildings.filter(
@@ -202,45 +196,95 @@ export function mountBuildQueuePanel(
       .slice()
       .sort((a, b) => (a.queueSeq ?? 0) - (b.queueSeq ?? 0));
 
-    const hasAny = runningBuildings.length > 0 || queuedBuildings.length > 0;
+    // Structural signature: which buildings exist and in which section.
+    const sig = `r:${runningBuildings.map((b) => b.id).join(',')}|q:${queuedBuildings.map((b) => b.id).join(',')}`;
 
-    if (!hasAny) {
-      const empty = document.createElement('div');
-      empty.classList.add('ri-kv__k');
-      empty.style.cssText = 'padding: 4px 0; color: var(--ri-fg-4, #3e4c5e); font-size: 11px;';
-      empty.textContent = '— no active builds —';
-      body.appendChild(empty);
-      return;
-    }
+    // Update status text every frame (no interactive elements — safe).
+    statusV.textContent = `${running}/${runSlots} run · ${queued}/${queueSlots} queue`;
 
-    // Running section.
-    if (runningBuildings.length > 0) {
-      const sectionHead = document.createElement('div');
-      sectionHead.classList.add('ri-sectionhead');
-      sectionHead.textContent = 'Running';
-      body.appendChild(sectionHead);
+    if (sig !== lastQueueSig) {
+      lastQueueSig = sig;
+      // Remove all children except the persistent status row.
+      let child = body.firstChild;
+      while (child) {
+        const next = child.nextSibling;
+        if (child !== statusRow) {
+          body.removeChild(child);
+        }
+        child = next;
+      }
 
-      for (const b of runningBuildings) {
-        const def = BUILDING_DEFS[b.defId];
-        const remaining = b.constructionRemainingMs ?? 0;
-        const pct = Math.round(constructionProgress(remaining, def, floorLevel(b), b.constructionTotalMs) * 100);
-        const row = makeRow(def.displayName, `${pct}%`, 'accent', b.id);
-        body.appendChild(row);
+      const hasAny = runningBuildings.length > 0 || queuedBuildings.length > 0;
+
+      if (!hasAny) {
+        const empty = document.createElement('div');
+        empty.classList.add('ri-kv__k');
+        empty.style.cssText = 'padding: 4px 0; color: var(--ri-fg-4, #3e4c5e); font-size: 11px;';
+        empty.textContent = '— no active builds —';
+        body.appendChild(empty);
+        rowCache.clear();
+        return;
+      }
+
+      const seen = new Set<string>();
+
+      // Running section.
+      if (runningBuildings.length > 0) {
+        const sectionHead = document.createElement('div');
+        sectionHead.classList.add('ri-sectionhead');
+        sectionHead.textContent = 'Running';
+        body.appendChild(sectionHead);
+
+        for (const b of runningBuildings) {
+          let entry = rowCache.get(b.id);
+          if (!entry) {
+            entry = makeCachedRow(BUILDING_DEFS[b.defId].displayName, b.id);
+            rowCache.set(b.id, entry);
+          }
+          body.appendChild(entry.row);
+          seen.add(b.id);
+        }
+      }
+
+      // Queued section.
+      if (queuedBuildings.length > 0) {
+        const sectionHead = document.createElement('div');
+        sectionHead.classList.add('ri-sectionhead');
+        sectionHead.textContent = 'Queued';
+        body.appendChild(sectionHead);
+
+        for (const b of queuedBuildings) {
+          let entry = rowCache.get(b.id);
+          if (!entry) {
+            entry = makeCachedRow(BUILDING_DEFS[b.defId].displayName, b.id);
+            rowCache.set(b.id, entry);
+          }
+          body.appendChild(entry.row);
+          seen.add(b.id);
+        }
+      }
+
+      for (const id of [...rowCache.keys()]) {
+        if (!seen.has(id)) rowCache.delete(id);
       }
     }
 
-    // Queued section.
-    if (queuedBuildings.length > 0) {
-      const sectionHead = document.createElement('div');
-      sectionHead.classList.add('ri-sectionhead');
-      sectionHead.textContent = 'Queued';
-      body.appendChild(sectionHead);
+    // Update progress text every frame in place (row elements stay in the DOM).
+    for (const b of runningBuildings) {
+      const entry = rowCache.get(b.id);
+      if (!entry) continue;
+      const def = BUILDING_DEFS[b.defId];
+      const remaining = b.constructionRemainingMs ?? 0;
+      const pct = Math.round(constructionProgress(remaining, def, floorLevel(b), b.constructionTotalMs) * 100);
+      entry.rightSpan.textContent = `${pct}%`;
+      entry.rightSpan.dataset.tone = 'success';
+    }
 
-      for (const b of queuedBuildings) {
-        const def = BUILDING_DEFS[b.defId];
-        const row = makeRow(def.displayName, 'queued', 'muted', b.id);
-        body.appendChild(row);
-      }
+    for (const b of queuedBuildings) {
+      const entry = rowCache.get(b.id);
+      if (!entry) continue;
+      entry.rightSpan.textContent = 'queued';
+      delete entry.rightSpan.dataset.tone;
     }
   }
 
