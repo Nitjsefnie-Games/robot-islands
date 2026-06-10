@@ -258,6 +258,14 @@ export function pickMostDegradedTarget(
   let pick: PlacedBuilding | null = null;
   let lowest = 1.0;
   for (const b of buildings) {
+    // Fix 4.4: disabled / invalid buildings produce nothing (computeRates
+    // filters them via isOperationalBuilding), so maintaining them soaks
+    // materials for zero gameplay change — and, worse, targeting one whose
+    // tier recipe isn't stocked blocks ALL auto-maintenance on the island
+    // (the caller services exactly one target per check, no fall-through).
+    // Disabled buildings also freeze operatingMs accrual, so they can sit
+    // degraded indefinitely. Skip both.
+    if (b.disabled === true || b.invalid === true) continue;
     const def = defs[b.defId];
     if (!def) continue;
     const f = maintenanceFactor(b, def, thresholdMul);
