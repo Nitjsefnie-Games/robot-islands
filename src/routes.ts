@@ -27,6 +27,7 @@ import { makeSeededRng } from './rng.js';
 import { XP_WEIGHT, type ResourceId } from './recipes.js';
 import { effectiveSkillMultipliers } from './skilltree.js';
 import {
+  biomeForCell,
   routeCapacityMultiplierForWeather,
   rasterizeRouteCells,
   sumIslandCo2,
@@ -613,12 +614,14 @@ export function deliverArrivals(
       if (b.crossedCells && b.crossedCells.length > 0 && b.id !== undefined) {
         const transitTimeMs = b.arrivalTime - b.dispatchTime;
         for (const cell of b.crossedCells) {
+          // §7.3 coherent field: same biome + CO₂ args as the overlay /
+          // tooltip / capacity / destruction consumers for this cell.
           const w = weather(
             world.seed,
             cell.cx,
             cell.cy,
             weatherClockMs(b.dispatchTime + cell.transitFraction * transitTimeMs, wallOffsetMs),
-            undefined,
+            biomeForCell(world, cell.cx, cell.cy),
             sumIslandCo2(world),
           );
           const lossRate = WEATHER_ROUTE_LOSS_RATE[w.state] ?? 0;
@@ -758,6 +761,10 @@ function dispatchPhase(
             nowMs,
             CELL_SIZE_TILES,
             wallOffsetMs,
+            // §7.3 coherent field: biome + CO₂ so capacity sees the SAME
+            // storm the arrival-loss / destruction consumers see.
+            (cx, cy) => biomeForCell(world, cx, cy),
+            sumIslandCo2(world),
           )
         : 1;
 

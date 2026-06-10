@@ -1510,3 +1510,50 @@ describe('§15.1 wall-anchored vehicle weather', () => {
     expect(runVoyage(seed, W).lostToWeather).toBe(true);
   });
 });
+
+// §7.3 coherent weather field for vehicle fate rolls
+
+describe('§7.3 coherent weather field for vehicle fate rolls', () => {
+  const CRISIS_CO2 = 200_000;
+
+  function runVoyageWithCo2(seed: string, co2Kg: number): { lostToWeather: boolean } {
+    _resetVehicleIdCounter();
+    const home = makeIslandSpec({
+      id: 'home',
+      cx: 0,
+      cy: 0,
+      populated: true,
+      discovered: true,
+      buildings: [{ id: 'sy', defId: 'shipyard', x: 0, y: 0 }],
+    });
+    const target = makeIslandSpec({
+      id: 'target',
+      cx: 30,
+      cy: 0,
+      populated: false,
+      discovered: true,
+    });
+    const world: WorldState = { ...freshWorld([home, target]), seed };
+    const homeState = makeIslandState({ id: 'home', co2Kg });
+    homeState.inventory.biofuel = 100;
+    homeState.inventory.foundation_kit = 1;
+    const islandStates = new Map<string, IslandState>([['home', homeState]]);
+    world.islandStates = islandStates; // sumIslandCo2 reads world.islandStates
+    const r = dispatchVehicle(world, home, homeState, target, 'ship', 1, 60, 1, 0);
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error('dispatch failed');
+    const result = tickVehicles(world, islandStates, r.vehicle.expectedArrivalTime + 1);
+    return { lostToWeather: result.lost.length > 0 };
+  }
+
+  it('crisis CO₂ reaches the vehicle destruction roll (some fate flips)', () => {
+    let flipped = false;
+    for (let i = 0; i < 400 && !flipped; i++) {
+      const seed = `v-co2-${i}`;
+      flipped =
+        runVoyageWithCo2(seed, 0).lostToWeather !==
+        runVoyageWithCo2(seed, CRISIS_CO2).lostToWeather;
+    }
+    expect(flipped).toBe(true);
+  });
+});

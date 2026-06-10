@@ -741,3 +741,108 @@ describe('§15.1 wall-anchored destruction + capacity sampling', () => {
     }
   });
 });
+
+describe('§7.3 coherent biome+CO₂ weather field across consumers', () => {
+  const CRISIS_CO2 = 200_000; // ≥ 100 t ⇒ ×1.6 storm-weight amplification
+
+  function isStormClass(s: string): boolean {
+    return s === 'storm' || s === 'severe_storm' || s === 'catastrophic';
+  }
+
+  /** Cell whose weather at t is benign baseline (clear / light_fog — no
+   *  capacity cut, no loss, no destruction chance) but storm-class once
+   *  the §7.3 CO₂ amplification is applied. NOTE a clear→storm flip is
+   *  arithmetically impossible: amplifying storm weights shrinks the
+   *  clear band into light_fog only, so the boundary the amplification
+   *  can push across is light_fog→storm. */
+  function findCo2FlipCell(seed: string, t: number): { cx: number; cy: number } {
+    for (let cx = -25; cx <= 25; cx++) {
+      for (let cy = -25; cy <= 25; cy++) {
+        if (isStormClass(weather(seed, cx, cy, t).state)) continue;
+        if (isStormClass(weather(seed, cx, cy, t, undefined, CRISIS_CO2).state)) {
+          return { cx, cy };
+        }
+      }
+    }
+    throw new Error('no CO₂ flip cell found');
+  }
+
+  /** Cell whose weather at t is benign baseline but storm-class under the
+   *  volcanic biome weighting (same band-shift logic as the CO₂ finder). */
+  function findBiomeFlipCell(seed: string, t: number): { cx: number; cy: number } {
+    for (let cx = -25; cx <= 25; cx++) {
+      for (let cy = -25; cy <= 25; cy++) {
+        if (isStormClass(weather(seed, cx, cy, t).state)) continue;
+        if (isStormClass(weather(seed, cx, cy, t, 'volcanic').state)) {
+          return { cx, cy };
+        }
+      }
+    }
+    throw new Error('no biome flip cell found');
+  }
+
+  it('CO₂ threads into routeCapacityMultiplierForWeather', () => {
+    const seed = 'co2-cap-seed';
+    const { cx, cy } = findCo2FlipCell(seed, 0);
+    // Route fully inside the flip cell.
+    const x0 = cx * 16 + 2;
+    const y0 = cy * 16 + 2;
+    const x1 = cx * 16 + 14;
+    const y1 = cy * 16 + 14;
+    const base = routeCapacityMultiplierForWeather(seed, x0, y0, x1, y1, 0, 16);
+    const amped = routeCapacityMultiplierForWeather(seed, x0, y0, x1, y1, 0, 16, 0, undefined, CRISIS_CO2);
+    expect(base).toBe(1);
+    expect(amped).toBeLessThan(1);
+  });
+
+  it('biome threads into routeCapacityMultiplierForWeather', () => {
+    const seed = 'biome-cap-seed';
+    const { cx, cy } = findBiomeFlipCell(seed, 0);
+    const x0 = cx * 16 + 2;
+    const y0 = cy * 16 + 2;
+    const x1 = cx * 16 + 14;
+    const y1 = cy * 16 + 14;
+    const base = routeCapacityMultiplierForWeather(seed, x0, y0, x1, y1, 0, 16);
+    const volcanic = routeCapacityMultiplierForWeather(
+      seed, x0, y0, x1, y1, 0, 16, 0, () => 'volcanic', 0,
+    );
+    expect(base).toBe(1);
+    expect(volcanic).toBeLessThan(1);
+  });
+
+  it('CO₂ threads into rollVehicleDestruction weather samples', () => {
+    const seed = 'co2-roll-seed';
+    const { cx, cy } = findCo2FlipCell(seed, 0);
+    const path = [{ cx, cy, entryMs: 0 }];
+    // Baseline clear ⇒ destruction chance 0 ⇒ NO vehicle id ever destroys.
+    // Amped storm-class ⇒ chance > 0 ⇒ some vehicle id destroys.
+    let ampedDestroyedId: string | null = null;
+    for (let i = 0; i < 2000 && ampedDestroyedId === null; i++) {
+      const id = `v-${i}`;
+      if (rollVehicleDestruction(seed, path, 1.5, id, 0, undefined, CRISIS_CO2).destroyed) {
+        ampedDestroyedId = id;
+      }
+    }
+    expect(ampedDestroyedId).not.toBeNull();
+    expect(
+      rollVehicleDestruction(seed, path, 1.5, ampedDestroyedId!, 0, undefined, 0).destroyed,
+    ).toBe(false);
+  });
+
+  it('biome threads into rollVehicleDestruction weather samples', () => {
+    const seed = 'biome-roll-seed';
+    const { cx, cy } = findBiomeFlipCell(seed, 0);
+    const path = [{ cx, cy, entryMs: 0 }];
+    let volcanicDestroyedId: string | null = null;
+    for (let i = 0; i < 2000 && volcanicDestroyedId === null; i++) {
+      const id = `v-${i}`;
+      if (rollVehicleDestruction(seed, path, 1.5, id, 0, () => 'volcanic', 0).destroyed) {
+        volcanicDestroyedId = id;
+      }
+    }
+    expect(volcanicDestroyedId).not.toBeNull();
+    expect(
+      rollVehicleDestruction(seed, path, 1.5, volcanicDestroyedId!).destroyed,
+    ).toBe(false);
+  });
+});
