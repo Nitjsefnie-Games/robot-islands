@@ -96,8 +96,7 @@ function syntheticTint(nowMs: number): PhaseTint {
     if (wrapDist <= phaseWidth / 2) {
       // Within the cross-fade window. Compute t in [0, 1] across the window.
       const start = b.phase - phaseWidth / 2;
-      let pp = p - start;
-      if (pp < 0) pp += 1;
+      const pp = ((p - start) % 1 + 1) % 1;
       const t = Math.min(1, Math.max(0, pp / phaseWidth));
       return blendTints(PHASE_TINT[b.from], PHASE_TINT[b.to], t);
     }
