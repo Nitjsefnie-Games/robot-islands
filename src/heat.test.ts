@@ -39,6 +39,20 @@ vi.mock('./building-defs.js', async (importOriginal) => {
         requiresHeat: true,
         glyph: 'C',
       },
+      __test_pricey_coal_source: {
+        id: '__test_pricey_coal_source',
+        displayName: 'Test Pricey Coal Source',
+        category: 'power',
+        tier: 1,
+        footprint: { tiles: [{ dx: 0, dy: 0 }] },
+        fill: 0,
+        stroke: 0,
+        // Same thermal output as coal_furnace (830 kW) but 5× the per-consumer
+        // fuel cost — exercises the §5.2 "lowest cost-per-cycle bills" rule
+        // without touching building-defs.ts.
+        heatSource: { freeOrCoal: 'coal', coalPerCycle: 5, thermalKW: 830 },
+        glyph: 'P',
+      },
       __test_large_coal_source: {
         id: '__test_large_coal_source',
         displayName: 'Test Large Coal Source',
@@ -187,6 +201,24 @@ describe('resolveHeatAssignments — §5.2', () => {
     expect(res.assignedSource.get('bf')).toBe('cf-a');
     expect(res.coalConsumersByFurnace.get('cf-a')).toBe(1);
     expect(res.coalConsumersByFurnace.has('cf-z')).toBe(false);
+  });
+
+  it('coal pick prefers the lowest cost-per-cycle over the lowest id (§5.2)', () => {
+    // §5.2: "the source with the lowest cost-per-cycle bills (deterministic
+    // tie-break: lowest source building ID)". The pricey source (coalPerCycle
+    // 5) has the lexicographically LOWER id, so an id-only sort would pick it;
+    // the cost-first sort must pick the cheaper coal_furnace (coalPerCycle 1).
+    // Blast Furnace at (0,0)..(2,2): east border column 3 rows 0..2. Pricey
+    // source at (3,0); coal furnace at (3,2) — both adjacent.
+    const buildings: PlacedBuilding[] = [
+      { id: 'bf', defId: 'blast_furnace', x: 0, y: 0 },
+      { id: 'aa-pricey', defId: '__test_pricey_coal_source' as any, x: 3, y: 0 },
+      { id: 'zz-cheap', defId: 'coal_furnace', x: 3, y: 2 },
+    ];
+    const res = resolveHeatAssignments(buildings);
+    expect(res.assignedSource.get('bf')).toBe('zz-cheap');
+    expect(res.coalConsumersByFurnace.get('zz-cheap')).toBe(1);
+    expect(res.coalConsumersByFurnace.has('aa-pricey')).toBe(false);
   });
 
   it('Pyroforge requires heat (composes with biome gate — placement-side)', () => {
