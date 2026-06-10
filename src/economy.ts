@@ -1280,7 +1280,16 @@ export function computeRates(
   const batteryCap = batteryCapacityWs(state, skillMul);
   const rawProduced = powerProduced;
   const rawConsumed = powerConsumed;
-  if (batteryCap > 0 && powerProduced < powerConsumed && state.batteryStoredWs >= BATTERY_EMPTY_THRESHOLD_WS) {
+  // Bypassed when the island's cable component is unified (fix 3.5): a
+  // unified component balances at the network level, not per-island — see
+  // the §5.3 comment below. Without the gate, stored energy "covers" a
+  // deficit the component already covers (and drains with zero effect).
+  if (
+    !(ctx?.cableComponent?.unified) &&
+    batteryCap > 0 &&
+    powerProduced < powerConsumed &&
+    state.batteryStoredWs >= BATTERY_EMPTY_THRESHOLD_WS
+  ) {
     powerProduced = powerConsumed; // cover full deficit
   }
 
@@ -1828,8 +1837,17 @@ export function advanceIsland(
     layerConditionalBonuses(skillMul, state, ctx?.world, DEFAULT_GRAPH, t + wallOffset);
     const maxCap = batteryCapacityWs(state, skillMul);
     const rawBalance = power.rawProduced - power.rawConsumed;
+    // §5.3 (fix 3.5): under a unified cable component the battery is inert —
+    // the component balances produced/consumed at the network level, so a
+    // local surplus is already exported (charging off it would double-count)
+    // and a local deficit is already covered (discharging into it drains
+    // stored energy with zero effect). Gates the boundary computation here
+    // AND the charge/discharge application below.
+    const batteryIsLocal = !(ctx?.cableComponent?.unified);
     let nextBatteryMs = Infinity;
-    if (rawBalance > 0 && maxCap > 0 && state.batteryStoredWs < maxCap) {
+    if (!batteryIsLocal) {
+      // unified — no battery boundary, no charge/discharge this segment
+    } else if (rawBalance > 0 && maxCap > 0 && state.batteryStoredWs < maxCap) {
       const surplus = rawBalance;
       const fillTimeSec = (maxCap - state.batteryStoredWs) / surplus;
       nextBatteryMs = t + fillTimeSec * 1000;
@@ -1948,7 +1966,11 @@ export function advanceIsland(
       }
       accrueXp(state, production, consumption, dtSec, 1, skillMul.xpGain);
       // §13.3 Battery buffer — apply charge/discharge over the segment.
-      if (rawBalance > 0 && maxCap > 0) {
+      // Skipped entirely under a unified cable component (fix 3.5, see
+      // `batteryIsLocal` above).
+      if (!batteryIsLocal) {
+        // unified — battery inert this segment
+      } else if (rawBalance > 0 && maxCap > 0) {
         const chargeWs = rawBalance * dtSec;
         const charge = Math.min(chargeWs, maxCap - state.batteryStoredWs);
         state.batteryStoredWs += charge;
