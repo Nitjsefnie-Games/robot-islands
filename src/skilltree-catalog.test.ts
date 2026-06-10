@@ -3,7 +3,7 @@ import {
   NOTABLES, KEYSTONES, FULL_CATALOG, KEYSTONE_PREREQS,
   BRIDGE_CATALOG, GRAFT_SOCKET_CATALOG,
 } from './skilltree-catalog.js';
-import { SUBPATH_LABEL, BRANCH_LABEL, costToUnlock, type SkillNode, type NodeId } from './skilltree.js';
+import { SUBPATH_LABEL, BRANCH_LABEL, BRANCH_SUBPATHS, SUBPATH_BRANCH, costToUnlock, type SkillNode, type NodeId } from './skilltree.js';
 import type { Graph, BridgeEdge, Edge } from './skilltree-graph.js';
 
 describe('NOTABLES catalog', () => {
@@ -313,5 +313,71 @@ describe('bridge integration with costToUnlock', () => {
     );
     expect(result).not.toBeNull();
     expect(result!.totalCost).toBe(5);
+  });
+});
+
+describe('§9.3 branch composition — Patronage under Logistics', () => {
+  it('SUBPATH_BRANCH places patronage in logistics', () => {
+    expect(SUBPATH_BRANCH.patronage).toBe('logistics');
+  });
+
+  it('every branch has exactly 4 sub-paths (20 total)', () => {
+    const all = Object.values(BRANCH_SUBPATHS).flat();
+    expect(all.length).toBe(20);
+    for (const [branch, subPaths] of Object.entries(BRANCH_SUBPATHS)) {
+      expect(subPaths.length, `branch ${branch}`).toBe(4);
+    }
+  });
+
+  it('BRANCH_SUBPATHS lists are §9.3 verbatim for logistics and ocean', () => {
+    expect([...BRANCH_SUBPATHS.logistics].sort()).toEqual(
+      ['network', 'patronage', 'storage', 'transport'],
+    );
+    expect([...BRANCH_SUBPATHS.ocean].sort()).toEqual(
+      ['aquaculture', 'hydroprocessing', 'oceanography', 'submarine'],
+    );
+  });
+
+  it('BRANCH_SUBPATHS and SUBPATH_BRANCH agree', () => {
+    for (const [branch, subPaths] of Object.entries(BRANCH_SUBPATHS)) {
+      for (const sp of subPaths) {
+        expect(SUBPATH_BRANCH[sp], `sub-path ${sp}`).toBe(branch);
+      }
+    }
+  });
+
+  it('every bridge threshold is keyed to an endpoint branch', () => {
+    const byId = new Map(FULL_CATALOG.map((n) => [String(n.id), n]));
+    for (const b of BRIDGE_CATALOG) {
+      const from = byId.get(String(b.from));
+      const to = byId.get(String(b.to));
+      expect(from, `bridge ${b.id} from`).toBeDefined();
+      expect(to, `bridge ${b.id} to`).toBeDefined();
+      const endpointBranches = new Set([
+        SUBPATH_BRANCH[from!.subPath],
+        SUBPATH_BRANCH[to!.subPath],
+      ]);
+      for (const t of b.threshold) {
+        expect(
+          endpointBranches.has(t.branch),
+          `bridge ${b.id} threshold branch ${t.branch} not an endpoint branch`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  it('patronage bridges re-keyed after the §9.3 branch move', () => {
+    const patronageAqua = BRIDGE_CATALOG.find((b) => String(b.id) === 'br.ocean.patronage-aqua');
+    expect(patronageAqua).toBeDefined();
+    // logistics (patronage) ↔ ocean (aquaculture) — cross-branch now, so both
+    // branches gate it, matching the catalog's cross-branch convention.
+    expect([...patronageAqua!.threshold].map((t) => t.branch).sort()).toEqual(
+      ['logistics', 'ocean'],
+    );
+
+    const storagePatronage = BRIDGE_CATALOG.find((b) => String(b.id) === 'br.cross.storage-patronage');
+    expect(storagePatronage).toBeDefined();
+    // storage and patronage are BOTH logistics now — within-branch bridge.
+    expect(storagePatronage!.threshold.map((t) => t.branch)).toEqual(['logistics']);
   });
 });

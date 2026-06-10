@@ -1088,7 +1088,11 @@ export const BRIDGE_CATALOG: BridgeEdge[] = [
   ]),
 
   // ── Within-branch: Ocean ──────────────────────────────────────────────────
+  // §9.3 moved Patronage to Logistics, so patronage↔aquaculture is now a
+  // cross-branch bridge; both endpoint branches gate it per the cross-branch
+  // convention below. Id kept stable — bridge ids persist in unlockedEdges.
   be('br.ocean.patronage-aqua', 'patronage.notable.sponsorContracts', 'aquaculture.notable.kelpTowers', 5, [
+    { branch: 'logistics', minSpent: 8 },
     { branch: 'ocean', minSpent: 8 },
   ]),
   be('br.ocean.aqua-hydro', 'aquaculture.notable.maricultureGrid', 'hydroprocessing.notable.desalinationCascade', 5, [
@@ -1119,9 +1123,11 @@ export const BRIDGE_CATALOG: BridgeEdge[] = [
     { branch: 'refinement', minSpent: 18 },
     { branch: 'orbital', minSpent: 18 },
   ]),
+  // §9.3 moved Patronage to Logistics — storage↔patronage is now WITHIN
+  // logistics, so the stale ocean threshold (keyed off patronage-as-ocean) is
+  // dropped. Id kept stable — bridge ids persist in unlockedEdges.
   be('br.cross.storage-patronage', 'storage.keystone.masterCache', 'patronage.keystone.diplomaticImmunity', 12, [
     { branch: 'logistics', minSpent: 18 },
-    { branch: 'ocean', minSpent: 18 },
   ]),
   be('br.cross.chemistry-hydro', 'chemistry.keystone.refineryMastery', 'hydroprocessing.keystone.desalMastery', 12, [
     { branch: 'refinement', minSpent: 20 },

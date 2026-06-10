@@ -230,7 +230,9 @@ export const SUBPATH_BRANCH: Readonly<Record<SubPathId, BranchId>> = {
   communication: 'orbital',
   discovery: 'orbital',
   resilience: 'orbital',
-  patronage: 'ocean',
+  // §9.3 lists Patronage under Logistics ("Storage, Transport, Network,
+  // Patronage"); Ocean holds Aquaculture/Hydroprocessing/Submarine/Oceanography.
+  patronage: 'logistics',
   aquaculture: 'ocean',
   hydroprocessing: 'ocean',
   submarine: 'ocean',
@@ -241,9 +243,9 @@ export const SUBPATH_BRANCH: Readonly<Record<SubPathId, BranchId>> = {
 export const BRANCH_SUBPATHS: Readonly<Record<BranchId, ReadonlyArray<SubPathId>>> = {
   extraction: ['mining', 'forestry', 'drilling', 'robotics'],
   refinement: ['smelting', 'chemistry', 'electronics', 'power_systems'],
-  logistics: ['storage', 'transport', 'network'],
+  logistics: ['storage', 'transport', 'network', 'patronage'],
   orbital: ['launch', 'communication', 'discovery', 'resilience'],
-  ocean: ['aquaculture', 'hydroprocessing', 'submarine', 'oceanography', 'patronage'],
+  ocean: ['aquaculture', 'hydroprocessing', 'submarine', 'oceanography'],
 };
 
 /** Display labels for sub-paths. Pure data; UI imports these to render. */
