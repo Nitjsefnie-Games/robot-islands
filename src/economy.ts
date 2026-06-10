@@ -289,8 +289,9 @@ export interface IslandState {
    *  (closing the infinite-trade-via-refresh exploit). Seeds to 0 — the first
    *  offer is prompt. */
   tradeCooldownMs: number;
-  /** Trade Offers: count of accepted trades on this island. Drives the
-   *  compounding 1%-per-accept speedup (see `effectiveCadenceMs`). Persisted. */
+  /** Trade Offers: count of timely reactions (accept or manual reject) on this
+   *  island. Drives the compounding 1%-per-reaction speedup (see
+   *  `effectiveCadenceMs`). Persisted. */
   tradeAcceptCount: number;
   /** §perf-2026-05-27 adjacency-cache Layer 2: bumped on every mutation
    *  of `unlockedNodes` / `unlockedEdges`. Cache key for
