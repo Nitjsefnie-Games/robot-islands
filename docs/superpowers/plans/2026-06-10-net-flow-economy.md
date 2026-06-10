@@ -640,11 +640,27 @@ git commit -m "feat(flow-solver): exact net-flow solve — SCC/topo, complementa
 
 ---
 
+> **Task 3 shipped with two sanctioned corrections to the prescribed code**
+> (commit c117a19, both spec-review-verified; design doc § flow-solver
+> contract updated): (1) self-loop buildings enter a resource's equation
+> with NET coefficient (p−c / c−p), self-draw not added to target;
+> (2) multipliers start pessimistic (0) inside true-cycle SCCs — only DAG
+> nodes start at 1. The plan's Task 3 code blocks above are otherwise
+> as-shipped; read `src/flow-solver.ts` as the source of truth.
+
 ### Task 4: wire the solver into `computeRates`
 
 **Files:**
+- Modify: `src/flow-solver.ts` + `src/flow-solver.test.ts` (Step 0 cleanup only)
 - Modify: `src/economy.ts` (passes 1–4, `BuildingRate`)
 - Test: `src/economy.test.ts` (existing suite is the harness for this task; new behavioral tests land in Task 5)
+
+- [ ] **Step 0: flow-solver cleanup (deferred from the Task 3 quality review)**
+
+Three small items, in one commit (`refactor(flow-solver): drop dead sccOf, simplify singleton check, exercise damping guard`):
+1. Delete the write-only `sccOf` array (declaration + the `sccOf[w] = order.length` write) — nothing reads it.
+2. The edge builder skips `k2 === key`, so self-edges cannot exist; simplify the DAG-path condition to `comp.length === 1` with a one-line comment noting self-edges are impossible by construction.
+3. Add one adversarial test that exercises the sweep loop beyond the trivial ≤3-sweep regime (e.g. a longer cycle chain of zero-constrained resources with partial external seeds) and asserts `converged === true` plus the constraint invariants — so the damping/guard region isn't entirely untested. Do NOT manufacture a `converged: false` case if one doesn't arise; assert what the solver actually guarantees.
 
 - [ ] **Step 1: Read before editing**
 
