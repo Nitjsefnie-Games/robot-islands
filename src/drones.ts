@@ -615,12 +615,56 @@ export function tickDrones(
       const apexMs = d.launchTime + (d.outboundTiles / speed) * 1000;
       const segWaypoints: Array<{ x: number; y: number }> = [];
       segWaypoints.push(droneCurrentPosition(d, segStartMs));
-      // Include the outbound-endpoint waypoint if the apex falls strictly
-      // inside (segStartMs, segEndMs). On the boundary the linear segment
-      // to the next endpoint subsumes it.
-      if (apexMs > segStartMs && apexMs < segEndMs) {
-        segWaypoints.push(droneCurrentPosition(d, apexMs));
+
+      if (d.waypoints.length >= 2) {
+        // Fix 6.2: T5 path-drawn — insert every waypoint-crossing time that
+        // falls strictly inside (segStartMs, segEndMs). The waypoints are
+        // visited outbound in order, then inbound in reverse.
+        // Compute cumulative timing for each waypoint crossing.
+        const wps = d.waypoints;
+        // Outbound crossings: waypoint[i] is reached at launchTime + dist(0..i)/speed*1000
+        let cumOutMs = 0;
+        for (let i = 0; i < wps.length - 1; i++) {
+          const a = wps[i]!;
+          const b = wps[i + 1]!;
+          const segLen = Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
+          cumOutMs += (segLen / speed) * 1000;
+          const crossingMs = d.launchTime + cumOutMs;
+          if (crossingMs > segStartMs && crossingMs < segEndMs) {
+            segWaypoints.push({ x: b.x, y: b.y });
+          }
+        }
+        // Apex (turn point) is already at launchTime + outboundTiles/speed*1000.
+        // Insert it if inside window (same as the straight-line apex below).
+        if (apexMs > segStartMs && apexMs < segEndMs) {
+          // The apex position is the last waypoint; only add if not just added
+          // (avoid duplicating the final outbound waypoint).
+          const lastAdded = segWaypoints[segWaypoints.length - 1]!;
+          const apexPos = droneCurrentPosition(d, apexMs);
+          if (Math.abs(lastAdded.x - apexPos.x) > 1e-9 || Math.abs(lastAdded.y - apexPos.y) > 1e-9) {
+            segWaypoints.push(apexPos);
+          }
+        }
+        // Inbound crossings: drone retraces the path in reverse.
+        // waypoints[n-1-i] is reached at apexMs + dist_for_inbound_leg_i/speed*1000.
+        let cumRetMs = 0;
+        for (let i = wps.length - 1; i > 0; i--) {
+          const a = wps[i]!;
+          const b = wps[i - 1]!;
+          const segLen = Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
+          cumRetMs += (segLen / speed) * 1000;
+          const crossingMs = apexMs + cumRetMs;
+          if (crossingMs > segStartMs && crossingMs < segEndMs) {
+            segWaypoints.push({ x: b.x, y: b.y });
+          }
+        }
+      } else {
+        // Straight-line behavior (T1-T4): include the apex if it falls inside.
+        if (apexMs > segStartMs && apexMs < segEndMs) {
+          segWaypoints.push(droneCurrentPosition(d, apexMs));
+        }
       }
+
       segWaypoints.push(droneCurrentPosition(d, segEndMs));
 
       // Collect all corridor cells for this tick.

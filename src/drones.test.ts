@@ -19,6 +19,7 @@ import {
   probabilityBiasForIsland,
   tickDrones,
   type Drone,
+  DRONE_T5_EFFICIENCY,
 } from './drones.js';
 import { dronePadCentre } from './drones-ui.js';
 import { rasterizePath, rollVehicleDestruction, weather } from './weather.js';
@@ -1569,5 +1570,95 @@ describe('Fix 6.1: offline drone catch-up', () => {
 
     // Verify drone is still active or returned
     expect(d.status === 'active' || d.status === 'returned' || d.status === 'lost').toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fix 6.2 — T5 path waypoint crossing times
+// ---------------------------------------------------------------------------
+
+describe('Fix 6.2: T5 L-shaped path scans true polyline not chord', () => {
+  function worldNoAntenna(): WorldState {
+    const home: IslandSpec = {
+      id: 'home',
+      name: 'home',
+      biome: 'plains',
+      cx: 0,
+      cy: 0,
+      majorRadius: 5,
+      minorRadius: 5,
+      populated: true,
+      discovered: true,
+      buildings: [],
+      modifiers: [],
+    };
+    return {
+      islands: [home],
+      drones: [],
+      routes: [],
+      vehicles: [],
+      revealedCells: new Set(),
+      satellites: [],
+      repairDrones: [],
+      debrisFields: [],
+      endgameState: { achieved: new Set(), firstAchievedMs: null },
+      latticeActive: false,
+      latticeNodeIslands: [],
+      commPackets: [],
+      totalCo2Kg: 0,
+      playerLat: null,
+      playerLon: null,
+      oceanCells: new Map(),
+      depthRevealedCells: new Set(),
+      seed: 'test-seed',
+      recentBuildAttempts: new Set(),
+      recentBuildAttemptTs: new Map(),
+    };
+  }
+
+  it('L-shaped path (0,0)→(30,0)→(30,30): elbow cell is scanned but chord-only cell is not', () => {
+    // Path is outbound (0,0)→(30,0)→(30,30), inbound reversed.
+    // Total outbound = 30 + 30 = 60 tiles. Round-trip = 120 tiles.
+    // At DRONE_T5_EFFICIENCY=8, need 120/8 = 15 fuel.
+    // Elbow at approx (30,0) — tile cell covering (30,0) should be in scanBuffer.
+    // A chord-only cell at roughly (21, 12) (diagonal from origin to apex) should NOT be in scanBuffer.
+    const w = worldNoAntenna();
+    const home = makeIslandState({ level: 50, aiCoreCrafted: true });
+    home.inventory.plasma_charge = 50;
+    const waypoints = [{ x: 0, y: 0 }, { x: 30, y: 0 }, { x: 30, y: 30 }] as const;
+    const fuel = Math.ceil(120 / DRONE_T5_EFFICIENCY); // 15
+    const r = dispatchDrone(w, home, 0, 0, 1, 0, fuel, 0, waypoints);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const d = r.drone;
+
+    // Single tick spanning the whole outbound flight.
+    // Speed=0.8 t/s, outbound=60 tiles → outbound time=75000ms
+    const outboundMs = (60 / DRONE_T5_SPEED_TILES_PER_SEC) * 1000; // 75000
+    tickDrones(w, outboundMs + 1, 0);
+
+    // Elbow cell: (30,0) → cell coords = floor(30/16), floor(0/16) = (1,0)
+    // The drone passes through the elbow, so cell (1,0) must be in the scanBuffer.
+    const elbowCellKey = '1,0';
+    expect(d.scanBuffer.has(elbowCellKey)).toBe(true);
+
+    // Chord-only cell: the straight line from (0,0) to (30,30) passes through
+    // roughly (15,15), cell (0,0). But the actual path goes east then north —
+    // a diagonal-only cell like (1,1) (center ~(24,24)) would only be on the
+    // chord, not the actual L-path. Let's check cell at center (16,16) → cell (1,1).
+    // The actual path goes: along y=0 to x=30, then along x=30 to y=30.
+    // The chord from (0,0) to (30,30) passes through (16,16) → cell (1,1).
+    // The actual path does NOT pass through x=16, y=16 — it goes x=0..30 at y=0,
+    // then x=30 from y=0..30. So cell (1,1) should NOT be scanned.
+    // (1,1) center = (24,24). Path segment 1: y=0 so min dist from (24,24) to
+    // segment [(0,0),(30,0)] = 24 tiles. Segment 2: x=30 so min dist from (24,24)
+    // to segment [(30,0),(30,30)] = 6 tiles. Scan radius T5 = 12.
+    // Segment 2 distance = 6 < 12 → cell (1,1) IS within range of segment 2!
+    // Let's pick a true chord-only cell: (0,1) center = (8, 24).
+    // Segment 1 (y=0): dist = 24, > 12 → not scanned.
+    // Segment 2 (x=30): dist = 22, > 12 → not scanned.
+    // So cell (0,1) should NOT be in scanBuffer.
+    const chordOnlyCellKey = '0,1';
+    expect(d.scanBuffer.has(chordOnlyCellKey)).toBe(false);
   });
 });
