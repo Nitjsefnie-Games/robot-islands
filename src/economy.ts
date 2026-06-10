@@ -738,6 +738,34 @@ export interface PowerBalance {
   readonly rawConsumed: number;
 }
 
+/** Per-building-type yield bonus (Mining "vein depth", Forestry "regrowth",
+ *  …) — stacks multiplicatively on top of the global recipeRate category
+ *  mul for the matching building defId. Mine, deep_mine, heavy_mine etc all
+ *  share the 'mine' family. Extracted from pass 4 so pass 1 can fold the
+ *  same factor into the tentative supply pool (fix 3.7). */
+function buildingYieldBonus(defId: BuildingDefId, skillMul: SkillMultipliers): number {
+  if (defId === 'mine' || defId === 'deep_mine' || defId === 'copper_mine'
+      || defId === 'tin_mine' || defId === 'lead_mine' || defId === 'bauxite_mine'
+      || defId === 'quartz_mine' || defId === 'sulfur_mine' || defId === 'phosphate_mine'
+      || defId === 'graphite_mine' || defId === 'limestone_quarry'
+      || defId === 'quarry' || defId === 'uranium_mine') {
+    return skillMul.mineYieldBonus;
+  } else if (defId === 'logger' || defId === 'heavy_logger') {
+    return skillMul.loggerYieldBonus;
+  } else if (defId === 'pump_jack' || defId === 'drilling_rig' || defId === 'trench_drill') {
+    return skillMul.drillYieldBonus;
+  } else if (defId === 'patron_hub') {
+    return skillMul.patronageYieldBonus;
+  } else if (defId === 'aetheric_conduit' || defId === 'spacetime_resonator'
+      || defId === 'eldritch_sieve' || defId === 'casimir_tap'
+      || defId === 'zero_point_extractor' || defId === 'neutronium_extractor') {
+    return skillMul.t5ExtractorYieldBonus;
+  }
+  // Note: aquacultureYieldBonus has no consumer in building-defs.ts today.
+  // The multiplier folds but is dormant until aquaculture buildings land.
+  return 1;
+}
+
 /**
  * §9 Fledgling Island Boost — a level-scaled multiplier on every production
  * recipe's throughput so a freshly-settled island isn't an hours-long slog. It
@@ -928,6 +956,18 @@ export function computeRates(
      *  zero, and between 0 and 1 for soft gates. Carried into pass-2 so
      *  nominalRate reflects the gated demand for inputAvail. */
     readonly effectiveMul: number;
+    /** Fix 3.7 — per-building throughput factors that scale BOTH the
+     *  building's actual production and its actual drawdown:
+     *  `maintenanceFactor × toxicityMultiplier × buildingYieldBonus`.
+     *  Folded into pass-1's tentSupply contribution and pass-2's
+     *  nominalRate demand so the supply pool only contains units that are
+     *  really produced (a maintenance-degraded producer at mf 0.5 must not
+     *  "supply" its nominal rate — the consumer would conjure the missing
+     *  half via applyRates' clamp). Island-uniform factors (accelMul,
+     *  varianceFactor) cancel in the supply/demand ratio and stay
+     *  post-applied in pass 4; the powerFactor asymmetry is deliberate —
+     *  see the four-pass doc above. */
+    readonly perBuildingMul: number;
   }
   const tentative: Tentative[] = [];
   /** Gross production by resource from all tentatively-running buildings. */
@@ -955,6 +995,7 @@ export function computeRates(
           baseRate: 0,
           buffStack: 1,
           effectiveMul: 1,
+          perBuildingMul: 1,
         });
         continue;
       }
@@ -970,6 +1011,7 @@ export function computeRates(
           baseRate: 0,
           buffStack: 1,
           effectiveMul: 1,
+          perBuildingMul: 1,
         });
         continue;
       }
@@ -981,6 +1023,7 @@ export function computeRates(
           baseRate: 0,
           buffStack: 1,
           effectiveMul: 1,
+          perBuildingMul: 1,
         });
         continue;
       }
@@ -992,6 +1035,7 @@ export function computeRates(
           baseRate: 0,
           buffStack: 1,
           effectiveMul: 1,
+          perBuildingMul: 1,
         });
         continue;
       }
@@ -1003,17 +1047,22 @@ export function computeRates(
       };
       const gateResult = checkGates(b, validBuildings, defs, ctx?.geothermalActive ?? false, ctx?.crossIsland);
       if (gateResult.effectiveMul === 0) {
-        tentative.push({ building: b, recipe: syntheticRecipe, baseRate: 0, buffStack: 1, effectiveMul: 0 });
+        tentative.push({ building: b, recipe: syntheticRecipe, baseRate: 0, buffStack: 1, effectiveMul: 0, perBuildingMul: 1 });
         continue;
       }
       const oa = outputAvail(state, syntheticRecipe, t, ctx?.caps, ctx?.baseMult);
       if (oa === 0) {
-        tentative.push({ building: b, recipe: syntheticRecipe, baseRate: 0, buffStack: 1, effectiveMul: gateResult.effectiveMul });
+        tentative.push({ building: b, recipe: syntheticRecipe, baseRate: 0, buffStack: 1, effectiveMul: gateResult.effectiveMul, perBuildingMul: 1 });
         continue;
       }
       const baseRate = (1 / GENESIS_CYCLE_SEC) * gateResult.effectiveMul * floorEffectMul(floorLevel(b));
-      tentative.push({ building: b, recipe: syntheticRecipe, baseRate, buffStack: 1, effectiveMul: gateResult.effectiveMul });
-      tentSupply[target] = (tentSupply[target] ?? 0) + baseRate;
+      // Fix 3.7: same per-building throughput factors pass 4 applies.
+      const genesisPbm =
+        maintenanceFactor(b, defs[b.defId], skillMul.maintenanceThreshold) *
+        toxicityMultiplier(b, t) *
+        buildingYieldBonus(b.defId, skillMul);
+      tentative.push({ building: b, recipe: syntheticRecipe, baseRate, buffStack: 1, effectiveMul: gateResult.effectiveMul, perBuildingMul: genesisPbm });
+      tentSupply[target] = (tentSupply[target] ?? 0) + baseRate * genesisPbm;
       continue;
     }
 
@@ -1031,11 +1080,19 @@ export function computeRates(
     // Returns 1.0 when no same-category neighbour and no exotic rule applies.
     const exoticRules = skillUnlockedAdjacencyRules(state);
     const buffStack = computeBuffStack(b, validBuildings, defs, undefined, exoticRules, clusterMuls.get(b.id) ?? 1);
+    // Fix 3.7 — per-building throughput factors (maintenance × toxicity ×
+    // per-type yield bonus), computed ONCE here and reused by pass-1's
+    // tentSupply, pass-2's nominalRate, and pass-4's effectiveRate so the
+    // supply pool, the demand, and the realized rate all agree.
+    const perBuildingMul =
+      maintenanceFactor(b, def, skillMul.maintenanceThreshold) *
+      toxicityMultiplier(b, t) *
+      buildingYieldBonus(b.defId, skillMul);
     // §9.7 Tier Reset runtime gate: a building above the island's current
     // tier band is fully inactive — same shape as the heat / output stall,
     // baseRate=0 + skipped in the pass-3 power balance.
     if (!isBuildingActive(b)) {
-      tentative.push({ building: b, recipe, baseRate: 0, buffStack, effectiveMul: 1 });
+      tentative.push({ building: b, recipe, baseRate: 0, buffStack, effectiveMul: 1, perBuildingMul });
       continue;
     }
     // §5.2 heat gate: a `requiresHeat` building with no adjacent source
@@ -1047,7 +1104,7 @@ export function computeRates(
       const factor = heat.heatThrottleFactor.get(b.id) ?? 0;
       if (factor < MIN_HEAT_FACTOR) {
         // Brownout: full stall. Same shape as the pre-Phase-3 boolean gate.
-        tentative.push({ building: b, recipe, baseRate: 0, buffStack, effectiveMul: 1 });
+        tentative.push({ building: b, recipe, baseRate: 0, buffStack, effectiveMul: 1, perBuildingMul });
         continue;
       }
       // Partial throttle: multiplied into baseRate and effectiveMul so
@@ -1067,7 +1124,7 @@ export function computeRates(
         }
       }
       if (!tileOk) {
-        tentative.push({ building: b, recipe, baseRate: 0, buffStack, effectiveMul: 1 });
+        tentative.push({ building: b, recipe, baseRate: 0, buffStack, effectiveMul: 1, perBuildingMul });
         continue;
       }
     }
@@ -1081,19 +1138,19 @@ export function computeRates(
         }
       }
       if (!hasWater) {
-        tentative.push({ building: b, recipe, baseRate: 0, buffStack, effectiveMul: 1 });
+        tentative.push({ building: b, recipe, baseRate: 0, buffStack, effectiveMul: 1, perBuildingMul });
         continue;
       }
     }
     // §4.5 gating adjacency: hard gates zero output; soft gates degrade.
     const gateResult = checkGates(b, validBuildings, defs, ctx?.geothermalActive ?? false, ctx?.crossIsland);
     if (gateResult.effectiveMul === 0) {
-      tentative.push({ building: b, recipe, baseRate: 0, buffStack, effectiveMul: 0 });
+      tentative.push({ building: b, recipe, baseRate: 0, buffStack, effectiveMul: 0, perBuildingMul });
       continue;
     }
     const oa = outputAvail(state, recipe, t, ctx?.caps, ctx?.baseMult);
     if (oa === 0) {
-      tentative.push({ building: b, recipe, baseRate: 0, buffStack, effectiveMul: gateResult.effectiveMul });
+      tentative.push({ building: b, recipe, baseRate: 0, buffStack, effectiveMul: gateResult.effectiveMul, perBuildingMul });
       continue;
     }
     // Recipe-rate multipliers compose: skill-tree (per-category) × modifier
@@ -1118,11 +1175,14 @@ export function computeRates(
       ? modifierMul.cryoRecipeRateMul
       : 1;
     const baseRate = (1 / recipe.cycleSec) * buffStack * rateMul * gateResult.effectiveMul * t5Mul * cryoMul * heatFactor * floorEffectMul(floorLevel(b)) * fledglingRecipeMul(state.level);
-    tentative.push({ building: b, recipe, baseRate, buffStack, effectiveMul: gateResult.effectiveMul * heatFactor });
+    tentative.push({ building: b, recipe, baseRate, buffStack, effectiveMul: gateResult.effectiveMul * heatFactor, perBuildingMul });
     const pass1Outputs = resolveRotatingOutput(recipe, t);
     for (const [r, yld] of Object.entries(pass1Outputs)) {
       const id = r as ResourceId;
-      tentSupply[id] = (tentSupply[id] ?? 0) + (yld ?? 0) * baseRate;
+      // Fix 3.7: supply only what pass 4 will actually realize — the
+      // per-building maintenance/toxicity/yield factors scale the real
+      // output, so they must scale the flow-through pool too.
+      tentSupply[id] = (tentSupply[id] ?? 0) + (yld ?? 0) * baseRate * perBuildingMul;
     }
   }
 
@@ -1145,18 +1205,21 @@ export function computeRates(
     // §4.5: soft-gate effectiveMul scales nominalRate so inputAvail's
     // demand calculation matches actual consumption under the gate.
     // Without this, a halved consumer over-claims inputs and starves
-    // siblings.
-    const nominalRate = (1 / te.recipe.cycleSec) * te.buffStack * rateMul * te.effectiveMul * floorEffectMul(floorLevel(te.building)) * fledglingRecipeMul(state.level);
+    // siblings. Fix 3.7: the per-building factors (maintenance/toxicity/
+    // yield) scale the demand for the same reason — pass-4's actual
+    // drawdown includes them.
+    const nominalRate = (1 / te.recipe.cycleSec) * te.buffStack * rateMul * te.effectiveMul * floorEffectMul(floorLevel(te.building)) * fledglingRecipeMul(state.level) * te.perBuildingMul;
     const externalSupply: Record<ResourceId, number> = {} as Record<ResourceId, number>;
     for (const r of Object.keys(tentSupply) as ResourceId[]) {
       externalSupply[r] = tentSupply[r] ?? 0;
     }
     // Self-exclude only if pass 1 actually contributed (baseRate > 0).
+    // Mirrors the pass-1 fold: the contribution was baseRate × perBuildingMul.
     if (te.baseRate > 0) {
       const pass2Outputs = resolveRotatingOutput(te.recipe, t);
       for (const [r, yld] of Object.entries(pass2Outputs)) {
         const id = r as ResourceId;
-        externalSupply[id] = (externalSupply[id] ?? 0) - (yld ?? 0) * te.baseRate;
+        externalSupply[id] = (externalSupply[id] ?? 0) - (yld ?? 0) * te.baseRate * te.perBuildingMul;
       }
     }
     inputAvailByIdx[i] = inputAvail(state, te.recipe, externalSupply, nominalRate, recipeInputDiv, ctx?.inventory);
@@ -1328,41 +1391,16 @@ export function computeRates(
     const ia = inputAvailByIdx[i] ?? 0;
     const consumesPower = (defs[te.building.defId].power?.consumes ?? 0) > 0;
     const pf = consumesPower ? powerFactor : 1;
-    // §4.7 maintenance factor on the production-side recipe rate. Power
-    // producers' W output stays full — `power.produces` is summed before
-    // this loop in Pass 3 — which is a deliberate gap: the spec phrases
-    // degradation as "output efficiency", ambiguous for power buildings,
-    // and applying maintenance to power would cascade into the brownout
-    // factor and double-dip on consumers. Resource recipes only.
-    const mf = maintenanceFactor(te.building, defs[te.building.defId], skillMul.maintenanceThreshold);
+    // Fix 3.7: `te.perBuildingMul` carries the §4.7 maintenance factor ×
+    // toxicity × per-building-type yield bonus, captured ONCE in pass 1 so
+    // the supply pool (pass 1), the demand (pass 2), and the realized rate
+    // here all use identical values. Power producers' W output stays full —
+    // `power.produces` is summed in Pass 3 — a deliberate gap: the spec
+    // phrases degradation as "output efficiency", ambiguous for power
+    // buildings, and applying maintenance to power would cascade into the
+    // brownout factor and double-dip on consumers. Resource recipes only.
     const accelMul = ctx?.accelerationMul ?? 1;
-    const toxMul = toxicityMultiplier(te.building, t);
-    // Per-building-type yield bonus (Mining "vein depth", Forestry "regrowth")
-    // stacks multiplicatively on top of the global recipeRate.extraction mul
-    // for the matching building defId. Mine, deep_mine, heavy_mine etc all
-    // share the 'mine' family — match by id prefix to cover variants.
-    const defId = te.building.defId;
-    let buildingBonus = 1;
-    if (defId === 'mine' || defId === 'deep_mine' || defId === 'copper_mine'
-        || defId === 'tin_mine' || defId === 'lead_mine' || defId === 'bauxite_mine'
-        || defId === 'quartz_mine' || defId === 'sulfur_mine' || defId === 'phosphate_mine'
-        || defId === 'graphite_mine' || defId === 'limestone_quarry'
-        || defId === 'quarry' || defId === 'uranium_mine') {
-      buildingBonus = skillMul.mineYieldBonus;
-    } else if (defId === 'logger' || defId === 'heavy_logger') {
-      buildingBonus = skillMul.loggerYieldBonus;
-    } else if (defId === 'pump_jack' || defId === 'drilling_rig' || defId === 'trench_drill') {
-      buildingBonus = skillMul.drillYieldBonus;
-    } else if (defId === 'patron_hub') {
-      buildingBonus = skillMul.patronageYieldBonus;
-    } else if (defId === 'aetheric_conduit' || defId === 'spacetime_resonator'
-        || defId === 'eldritch_sieve' || defId === 'casimir_tap'
-        || defId === 'zero_point_extractor' || defId === 'neutronium_extractor') {
-      buildingBonus = skillMul.t5ExtractorYieldBonus;
-    }
-    // Note: aquacultureYieldBonus has no consumer in building-defs.ts today.
-    // The multiplier folds but is dormant until aquaculture buildings land.
-    const effectiveRate = te.baseRate * ia * pf * mf * accelMul * varianceFactor * toxMul * buildingBonus;
+    const effectiveRate = te.baseRate * ia * pf * accelMul * varianceFactor * te.perBuildingMul;
     byBuilding.push({ building: te.building, recipe: te.recipe, effectiveRate });
 
     if (effectiveRate === 0) continue;

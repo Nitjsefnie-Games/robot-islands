@@ -2058,6 +2058,50 @@ describe('§9.9 active-play bonus integration', () => {
   });
 });
 
+describe('§15.3 pass-2 supply pool — per-building factors (fix 3.7)', () => {
+  // Smelter: 6 iron_ingot / 2981.3s ⇒ nominal 2.0125e-3/s; at the §4.7
+  // maintenance plateau (mf = 0.5) it actually produces 1.0063e-3/s.
+  // Assembler: 1 iron_ingot / 573.3s ⇒ demand 1.7443e-3/s — ABOVE the
+  // degraded supply but BELOW the nominal one. Pre-fix, pass-2's supply
+  // pool used the un-degraded rate, so the zero-stock assembler was fed
+  // iron_ingot that was never produced (conjured by applyRates' clamp).
+  const FIX37_CATALOG: DefCatalog = ((): DefCatalog => {
+    const base = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
+    for (const id of ['smelter', 'assembler'] as BuildingDefId[]) {
+      const { power: _p, ...rest } = base[id];
+      base[id] = rest as BuildingDef;
+    }
+    return base;
+  })();
+  const fix37State = (): IslandState =>
+    makeState({
+      buildings: [
+        // 17h operating time: past the 12h T1 threshold + 4h ramp ⇒ mf 0.5.
+        { id: 'sm1', defId: 'smelter', x: 0, y: 0, operatingMs: 17 * 3600 * 1000 },
+        { id: 'as1', defId: 'assembler', x: 20, y: 0 },
+      ],
+      // iron_ingot stock 0 ⇒ the assembler runs purely on flow-through.
+      inventory: { ...blankInventory(), iron_ore: 50, coal: 50, bolt: 50 },
+      level: 15, // assembler is T2
+    });
+
+  it('consumer consumption never exceeds the degraded producer output', () => {
+    const { production, consumption } = computeRates(fix37State(), { defs: FIX37_CATALOG });
+    expect(production.iron_ingot ?? 0).toBeCloseTo((6 / 2981.3) * 0.5, 9);
+    expect(consumption.iron_ingot ?? 0).toBeGreaterThan(0);
+    expect(consumption.iron_ingot ?? 0).toBeLessThanOrEqual((production.iron_ingot ?? 0) + 1e-12);
+  });
+
+  it('advanceIsland: gears produced are bounded by ingots actually made', () => {
+    const state = fix37State();
+    advanceIsland(state, 1_000_000, { defs: FIX37_CATALOG }); // 1000s
+    // Smelter makes 1.0063 ingots over the window; the assembler converts
+    // 1 ingot → 1 gear, so gears cannot exceed that (pre-fix: ≈ 1.744).
+    expect(state.inventory.gear).toBeGreaterThan(0);
+    expect(state.inventory.gear).toBeLessThanOrEqual((6 / 2981.3) * 0.5 * 1000 + 1e-9);
+  });
+});
+
 describe('§12.4 starter inventory grace — cap()', () => {
   it('grace applies even when the nominal cap is 0 (fix 3.3)', () => {
     // A starter-kit resource with NO storage built yet (nominal cap 0) must
