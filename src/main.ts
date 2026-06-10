@@ -1708,8 +1708,8 @@ async function main(): Promise<void> {
   });
 
   // Trade offer runtime — ephemeral, not persisted. Spawn cadence is gated by
-  // each island's persisted tradeCooldownMs, burned down on focused online-dt
-  // in the ticker (visible && hasFocus); offers themselves never persist.
+  // each island's persisted tradeCooldownMs, burned down on visible online-dt
+  // in the ticker (visibilityState === 'visible'); offers themselves never persist.
   const tradeRuntime: TradeRuntime = { offers: [] };
 
   // Trade offer overlay — card shown on the active island when a signal_exchange
@@ -1932,13 +1932,12 @@ async function main(): Promise<void> {
       islandPower.set(s.id, power);
     }
     if (needRebuild) rebuildWorldLayers();
-    // Trade offer lifecycle. Online = tab visible AND focused (hasFocus covers
-    // another window on top / focus loss; visibility covers minimize/other-tab;
-    // "covered but focused" isn't JS-detectable — accepted limit). onlineDtMs is
-    // the capped online time elapsed this frame and is 0 when not online, so the
-    // persisted cooldown only burns down on focused time. Called every frame so
-    // expiry pruning stays current.
-    const tradeOnline = document.visibilityState === 'visible' && document.hasFocus();
+    // Trade offer lifecycle. Online = tab visible (visibilityState === 'visible').
+    // hasFocus() was previously also required but dropped on owner request 2026-06-10
+    // — visibility alone is the activity signal. onlineDtMs is the capped online
+    // time elapsed this frame and is 0 when not online, so the persisted cooldown
+    // only burns down on visible time. Called every frame so expiry pruning stays current.
+    const tradeOnline = document.visibilityState === 'visible';
     const onlineDtMs = tradeOnline ? Math.min(elapsedSec * 1000, ONLINE_DT_CAP_MS) : 0;
     // §9.9 active-play bonus: same online condition as trades; the module
     // internally clamps accrual and decays the unfocused remainder, so the
