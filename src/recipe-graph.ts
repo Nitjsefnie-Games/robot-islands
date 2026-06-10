@@ -79,8 +79,8 @@ export function buildRecipeTableRows(): ReadonlyArray<RecipeTableRow> {
           gates.push({ kind: 't6', label: 'ascendant_core · spaceport' });
         }
       } else if (def.tier > 1) {
-        // L≥6 / L≥11 / L≥16 / etc. — tierForLevel band edges (spec §9.2).
-        const lvl = (def.tier - 1) * 5 + 1;
+        // tierForLevel thresholds: T2=5, T3=15, T4=30 (skilltree.ts).
+        const lvl = [0, 1, 5, 15, 30][def.tier] ?? 1;
         gates.push({ kind: 'tier', label: `L≥${lvl}` });
       }
       if (def.requiredBiomes && def.requiredBiomes.length > 0) {
