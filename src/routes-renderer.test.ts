@@ -148,6 +148,48 @@ describe('Route field whitelist', () => {
 });
 
 
+describe('RouteRenderer — Fix 7.4: cacheKey includes endpoint world coords', () => {
+  // When an island's centre changes (merge §3.6 / land reclamation), the per-route
+  // cacheKey must change so the rendered route geometry is rebuilt.  Before the fix,
+  // the key was only `${type}|${from}|${to}|${inFlightLen}` — endpoint positions were
+  // not included, so moves left the drawn route stale until inFlight changed.
+
+  it('cacheKey differs after one endpoint position changes', () => {
+    // Use a mutable position map so we can simulate an island move.
+    const positions: Record<string, { x: number; y: number }> = {
+      'island-a': tileToWorldPx(0, 0),
+      'island-b': tileToWorldPx(10, 5),
+    };
+    const resolver = (id: string) => positions[id] ?? null;
+    const renderer = new RouteRenderer(resolver);
+    const routes = [makeRoute('r1')];
+
+    // Initial build.
+    renderer.update(routes, 0, '', false);
+    const keyBefore = renderer._entriesForTest().get('r1')!.cacheKey;
+
+    // Move island-b to a different position (simulate merge / reclamation).
+    positions['island-b'] = tileToWorldPx(20, 15);
+    renderer.update(routes, 16, '', false);
+    const keyAfter = renderer._entriesForTest().get('r1')!.cacheKey;
+
+    expect(keyBefore).not.toBe(keyAfter);
+  });
+
+  it('cacheKey is stable when positions are unchanged', () => {
+    const renderer = new RouteRenderer(makeResolver());
+    const routes = [makeRoute('r1')];
+
+    renderer.update(routes, 0, '', false);
+    const keyBefore = renderer._entriesForTest().get('r1')!.cacheKey;
+
+    renderer.update(routes, 16, '', false);
+    const keyAfter = renderer._entriesForTest().get('r1')!.cacheKey;
+
+    expect(keyBefore).toBe(keyAfter);
+  });
+});
+
 describe('RouteRenderer — lifecycle', () => {
   it('dispose() is idempotent', () => {
     const r = new RouteRenderer(makeResolver());
