@@ -78,6 +78,19 @@ export const BATTERY_CAPACITY_WS: Readonly<Partial<Record<BuildingDefId, number>
   singularity_battery: 50_000_000 * 3600,
 };
 
+/** Anti-freeze threshold (fix 3.4): a `batteryStoredWs` below 1 Ws is
+ *  treated as EMPTY by the deficit-cover decision, the depletion-boundary
+ *  computation, and the per-segment discharge — and is flushed to 0 when a
+ *  discharge leaves less than this. Rationale: a depletion-bounded segment
+ *  with ms-rounded dtSec leaves an ~1e-16-relative residue; the next
+ *  iteration then "covers" the deficit again and computes a boundary
+ *  `t + ~1e-12 ms`, which rounds back to exactly `t` at realistic
+ *  perf-clock magnitudes — a zero-length segment whose force-jump skips
+ *  ALL remaining integration for the call, every frame. Mirrors the 1-unit
+ *  inventory threshold documented in `findNextCapEvent`. 1 Ws = 1 kW for
+ *  one millisecond — far below gameplay-visible scale. */
+export const BATTERY_EMPTY_THRESHOLD_WS = 1;
+
 /** Total per-island battery capacity in W-seconds, summed across operational
  *  batteries × the skill-tree batteryCapacity multiplier. */
 export function batteryCapacityWs(state: IslandState, mul: SkillMultipliers): number {
@@ -1267,7 +1280,7 @@ export function computeRates(
   const batteryCap = batteryCapacityWs(state, skillMul);
   const rawProduced = powerProduced;
   const rawConsumed = powerConsumed;
-  if (batteryCap > 0 && powerProduced < powerConsumed && state.batteryStoredWs > 0) {
+  if (batteryCap > 0 && powerProduced < powerConsumed && state.batteryStoredWs >= BATTERY_EMPTY_THRESHOLD_WS) {
     powerProduced = powerConsumed; // cover full deficit
   }
 
@@ -1820,7 +1833,7 @@ export function advanceIsland(
       const surplus = rawBalance;
       const fillTimeSec = (maxCap - state.batteryStoredWs) / surplus;
       nextBatteryMs = t + fillTimeSec * 1000;
-    } else if (rawBalance < 0 && state.batteryStoredWs > 0 && maxCap > 0) {
+    } else if (rawBalance < 0 && state.batteryStoredWs >= BATTERY_EMPTY_THRESHOLD_WS && maxCap > 0) {
       const deficit = -rawBalance;
       const depletionTimeSec = state.batteryStoredWs / deficit;
       nextBatteryMs = t + depletionTimeSec * 1000;
@@ -1940,9 +1953,17 @@ export function advanceIsland(
         const charge = Math.min(chargeWs, maxCap - state.batteryStoredWs);
         state.batteryStoredWs += charge;
       } else if (rawBalance < 0 && state.batteryStoredWs > 0) {
-        const deficitWs = -rawBalance * dtSec;
-        const discharge = Math.min(deficitWs, state.batteryStoredWs);
-        state.batteryStoredWs -= discharge;
+        if (state.batteryStoredWs < BATTERY_EMPTY_THRESHOLD_WS) {
+          // Sub-1-Ws float residue: treated as empty everywhere else this
+          // call (no cover, no depletion boundary) — flush it so it can't
+          // re-trigger the freeze path on a later call (fix 3.4).
+          state.batteryStoredWs = 0;
+        } else {
+          const deficitWs = -rawBalance * dtSec;
+          const discharge = Math.min(deficitWs, state.batteryStoredWs);
+          state.batteryStoredWs -= discharge;
+          if (state.batteryStoredWs < BATTERY_EMPTY_THRESHOLD_WS) state.batteryStoredWs = 0;
+        }
       }
       levelUpIfReady(state);
       // terrain_modifier v5 — decrement and fire. After the segment integrates,
