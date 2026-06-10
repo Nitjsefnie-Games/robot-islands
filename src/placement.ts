@@ -33,7 +33,7 @@ export { rotateShape, type ShapeMask };
 import { floorLevel, floorScaledCapacity, hasOperationalBuilding, type PlacedBuilding } from './buildings.js';
 import { constructionTimeFor, upgradeConstructionMs } from './construction.js';
 import type { IslandState } from './economy.js';
-import { tileInscribedInEllipse } from './island.js';
+import { islandInscribedAny, tileInscribedInEllipse } from './island.js';
 import { footprintMatches } from './ocean-cell.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import { effectiveSkillMultipliers, hasBiomeBypass, effectiveTierShift, tierForLevel, DEFAULT_GRAPH } from './skilltree.js';
@@ -275,7 +275,7 @@ export function validatePlacement(
   }
   const tiles = footprintTiles(def.footprint, anchorX, anchorY, rotation);
   for (const t of tiles) {
-    if (!tileInscribedInEllipse(t.x, t.y, spec.majorRadius, spec.minorRadius)) {
+    if (!islandInscribedAny(spec, t.x, t.y)) {
       return { ok: false, reason: 'out-of-bounds' };
     }
   }
