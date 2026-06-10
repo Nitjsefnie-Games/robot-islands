@@ -772,6 +772,24 @@ export function bindCrystal(
   socketId: string,
   crystalId: CrystalId,
 ): void {
+  // §9.3 eligibility gate — engine-level mirror of the graphview picker's
+  // filter (`crystal.eligibleSubPaths.includes(socket.subPathId)`), so a
+  // non-UI caller can't graft a crystal onto a sub-path it doesn't fit.
+  // Validated before any mutation: a rejected bind consumes nothing.
+  const socket = DEFAULT_GRAPH.graftSockets.find((s) => s.id === socketId);
+  if (!socket) {
+    throw new Error(`bindCrystal: unknown socket ${socketId}`);
+  }
+  const crystal = CRYSTAL_CATALOG.find((c) => c.id === crystalId);
+  if (!crystal) {
+    throw new Error(`bindCrystal: unknown crystal ${crystalId}`);
+  }
+  if (!crystal.eligibleSubPaths.includes(socket.subPathId)) {
+    throw new Error(
+      `bindCrystal: ${crystalId} is not eligible for socket ${socketId} ` +
+        `(sub-path ${socket.subPathId})`,
+    );
+  }
   const rid = crystalId as string as ResourceId;
   const have = state.inventory[rid] ?? 0;
   if (have <= 0) {
