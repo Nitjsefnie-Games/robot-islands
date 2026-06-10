@@ -140,6 +140,11 @@ export function resolveHeatAssignments(
   const hasHeat = new Map<string, boolean>();
   const coalConsumersByFurnace = new Map<string, number>();
   const assignedSource = new Map<string, string>();
+  // Which coal furnace each consumer was billed to in the counting pass —
+  // lets the throttle pass below UN-bill a consumer it flips to brownout
+  // (§5.2: fuel consumption multiplies by the number of consumers SERVED;
+  // a browned-out consumer is not served).
+  const coalBilledTo = new Map<string, string>();
 
   // Partition: a building is a consumer if its def has `requiresHeat`; a
   // building is a source if its def has `heatSource`. A def could in theory
@@ -217,6 +222,7 @@ export function resolveHeatAssignments(
       assignedSource.set(consumer.id, coalMatch.id);
       const prev = coalConsumersByFurnace.get(coalMatch.id) ?? 0;
       coalConsumersByFurnace.set(coalMatch.id, prev + 1);
+      coalBilledTo.set(consumer.id, coalMatch.id);
       continue;
     }
 
@@ -263,7 +269,21 @@ export function resolveHeatAssignments(
       const prev = heatThrottleFactor.get(c.id) ?? 0;
       const next = Math.max(prev, ratio);
       heatThrottleFactor.set(c.id, next);
-      if (next < MIN_HEAT_FACTOR) hasHeat.set(c.id, false);
+      if (next < MIN_HEAT_FACTOR) {
+        hasHeat.set(c.id, false);
+        // Fix 4.2 (§5.2): a browned-out consumer is not SERVED — un-bill
+        // the coal furnace it was counted against in the counting pass, so
+        // the per-furnace fuel burn reflects served consumers only. (All
+        // consumers of a given source share one ratio, so a starved
+        // furnace's billing always drains to zero, never partially.)
+        const furnaceId = coalBilledTo.get(c.id);
+        if (furnaceId !== undefined) {
+          coalBilledTo.delete(c.id);
+          const cnt = (coalConsumersByFurnace.get(furnaceId) ?? 0) - 1;
+          if (cnt > 0) coalConsumersByFurnace.set(furnaceId, cnt);
+          else coalConsumersByFurnace.delete(furnaceId);
+        }
+      }
     }
   }
 
