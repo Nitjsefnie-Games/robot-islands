@@ -1795,22 +1795,6 @@ export function advanceIsland(
       t,
       t + wallOffset,
     );
-    // §13 auto-flip: first local production of ai_core / ascendant_core
-    if (!state.aiCoreCrafted && (production.ai_core ?? 0) > 0) {
-      state.aiCoreCrafted = true;
-    }
-    if (!state.ascendantCoreCrafted && (production.ascendant_core ?? 0) > 0) {
-      state.ascendantCoreCrafted = true;
-    }
-    // Tutorial-objective flip: first local production of lubricant / bolts.
-    // Tracked as "ever produced" because §4.7 maintenance auto-consumes
-    // both, making an inventory-stockpile objective unwinnable.
-    if (!state.lubricantProduced && (production.lubricant ?? 0) > 0) {
-      state.lubricantProduced = true;
-    }
-    if (!state.boltProduced && (production.bolt ?? 0) > 0) {
-      state.boltProduced = true;
-    }
     // §13.3 Battery buffer — bound segment to battery depletion/fill so the
     // piecewise integrator stays exact (rates are constant within a segment).
     const validBuildings = state.buildings.filter((b) => !b.invalid);
@@ -1890,6 +1874,25 @@ export function advanceIsland(
     const dtSec = (segEndMs - t) / 1000;
     if (dtSec > 0) {
       applyRates(state, net, dtSec, ctx?.caps, baseMult);
+      // §13 auto-flip: first local production of ai_core / ascendant_core.
+      // Inside the dtSec > 0 branch deliberately — a zero-length forced
+      // segment integrates nothing, and a positive rate over zero seconds
+      // must not grant T5/T6 access (fix 3.2).
+      if (!state.aiCoreCrafted && (production.ai_core ?? 0) > 0) {
+        state.aiCoreCrafted = true;
+      }
+      if (!state.ascendantCoreCrafted && (production.ascendant_core ?? 0) > 0) {
+        state.ascendantCoreCrafted = true;
+      }
+      // Tutorial-objective flip: first local production of lubricant / bolts.
+      // Tracked as "ever produced" because §4.7 maintenance auto-consumes
+      // both, making an inventory-stockpile objective unwinnable.
+      if (!state.lubricantProduced && (production.lubricant ?? 0) > 0) {
+        state.lubricantProduced = true;
+      }
+      if (!state.boltProduced && (production.bolt ?? 0) > 0) {
+        state.boltProduced = true;
+      }
       // §10 CO₂ accrual — Phase 2 hook
       // Path 1: co2 produced as a regular recipe output
       state.co2Kg += (production.co2 ?? 0) * dtSec;
