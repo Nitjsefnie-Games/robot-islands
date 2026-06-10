@@ -17,7 +17,7 @@
 
 set -euo pipefail
 
-DAEDALUS="${DAEDALUS:-$HOME/Daedalus/daedalus.py}"
+DAEDALUS="${DAEDALUS:-$HOME/.claude/scripts/daedalus.py}"
 OUTPUT_PATH="${1:-/tmp/robot-islands-save.json}"
 
 if [[ -z "${TOKEN:-}" ]]; then
