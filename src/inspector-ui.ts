@@ -439,6 +439,7 @@ export function mountInspectorUi(
       nameInput.blur();
     } else if (e.key === 'Escape') {
       e.preventDefault();
+      e.stopPropagation();
       if (target) nameInput.value = target.spec.name;
       nameInput.blur();
     }
