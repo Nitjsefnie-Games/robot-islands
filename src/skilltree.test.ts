@@ -31,6 +31,7 @@ import {
   t6Unlocked,
   tierForLevel,
   type SkillNode,
+  type NodeId,
   unbindCrystal,
 } from './skilltree.js';
 import { KEYSTONE_PREREQS } from './skilltree-catalog.js';
