@@ -154,8 +154,12 @@ describe('rare-target cost = 30 days of base extraction', () => {
   it('uranium_vein → 30d of uranium_mine (cycleSec 3440) = 754 uranium_ore', () => {
     expect(conversionCostForTarget('uranium_vein')).toEqual({ uranium_ore: 754 });
   });
-  it('helium_vent → 30d of drilling_rig (cycleSec 1.5) = 1,728,000 helium_3', () => {
-    expect(conversionCostForTarget('helium_vent')).toEqual({ helium_3: 1728000 });
+  // Old expectation was 1,728,000 — that encoded the pre-fix 1.5s cycle
+  // (a near-zero-mass recipe had collapsed the density-derived cycle into a
+  // ~1.5s XP/output fountain).  Commit 0e737e3 re-pinned cycleSec to 800s
+  // (the design value); 30d = 2,592,000s ÷ 800s = 3,240 cycles × 1 helium_3.
+  it('helium_vent → 30d of drilling_rig (cycleSec 800s) = 3,240 helium_3', () => {
+    expect(conversionCostForTarget('helium_vent')).toEqual({ helium_3: 3240 });
   });
   it('diamond_vein → 30d of diamond_quarry (cycleSec 40) = 64,800 diamond_ore', () => {
     expect(conversionCostForTarget('diamond_vein')).toEqual({ diamond_ore: 64800 });
