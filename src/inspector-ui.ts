@@ -37,6 +37,7 @@ import { affordabilityShortfall, applyRelabelStorageCap, formatShortfall, inProg
 import { upgradeConstructionMs } from './construction.js';
 import { convertToServitor, floorEffectMul, floorLevel, floorScaledCapacity, hasOperationalBuilding, isOperationalBuilding, ratedBuildingPower, type PlacedBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
+import { activeBonusMul } from './active-bonus.js';
 import { computeRates, fledglingRecipeMul } from './economy.js';
 import {
   type Axis,
@@ -1352,13 +1353,16 @@ export function mountInspectorUi(
       // §9 fledgling boost: a fresh island (<L10) runs every recipe faster; show
       // it here so the player sees why the rate is high and that it tapers.
       const fledgMul = fledglingRecipeMul(state.level);
-      const compositeMul = catMul * mineLogBonus * fledgMul * clusterMul;
+      // §9.9 active-play bonus — world-level, applies to every recipe.
+      const activeMul = activeBonusMul(deps.world);
+      const compositeMul = catMul * mineLogBonus * fledgMul * clusterMul * activeMul;
       if (compositeMul > 1.0001) {
         const parts: string[] = [];
         if (fledgMul > 1.0001) parts.push(`fledgling ×${fledgMul.toFixed(2)}`);
         if (catMul > 1.0001) parts.push(`${recipe.category} ×${catMul.toFixed(2)}`);
         if (mineLogBonus > 1.0001) parts.push(`yield ×${mineLogBonus.toFixed(2)}`);
         if (clusterMul > 1.0001) parts.push(`cluster ×${clusterMul.toFixed(2)}`);
+        if (activeMul > 1.0001) parts.push(`active ×${activeMul.toFixed(2)}`);
         bonusesValue.textContent = parts.join(' · ') + ` = ×${compositeMul.toFixed(2)}`;
         bonusesRow.style.display = '';
       } else {
