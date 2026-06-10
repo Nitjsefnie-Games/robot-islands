@@ -308,6 +308,37 @@ describe('dispatchAttempt — multi-route source contention', () => {
     expect(r2Out?.amount).toBeCloseTo(3.0, 9);
   });
 
+  it('fix 7.2 — multi-entry waterfall attaches each unclamped desired to the RIGHT resource', () => {
+    // Structural divergence between the clamped and unclamped planCargo runs:
+    //   R1 (waterfall [wood, stone], capacity 10/s, 1s → budget 10), source wood=3, stone=4.
+    //   Clamped run:   wood = min(10,hr,3) = 3, rem 7; stone = min(7,hr,4) = 4 → TWO entries.
+    //   Unclamped run: wood = min(10,hr) = 10, rem 0 → break → ONE entry.
+    // So the unclamped run is shorter than the clamped run.  Correct attribution:
+    //   wood.unclampedDesired = 10 (from the unclamped run, keyed by resource)
+    //   stone.unclampedDesired = 4 (fallback to clamped amount — absent from unclamped run)
+    // We observe attribution through Phase-2 contention on WOOD:
+    //   R2 (priority [wood], capacity 2/s → desired 2) contends with R1's wood desire.
+    //   srcAvail wood = 3, total desired = 10 + 2 = 12 → scale 3/12:
+    //     R1 wood = 10 × 3/12 = 2.5,  R2 wood = 2 × 3/12 = 0.5.
+    //   Stone group: only R1, desired 4 ≤ srcAvail 4 → ships 4.
+    // If wood/stone desireds were swapped (misattribution), the wood group would
+    // be 3 + 2 = 5 → scale 3/5 → R1 wood = 1.8, R2 wood = 1.2 — different output.
+    const src = makeState('a', { inventory: { ...blankInventory(), wood: 3, stone: 4 } });
+    const dst1 = makeState('b');
+    const dst2 = makeState('c');
+    const r1 = cargoRoute('a', 'b', null, ['wood', 'stone'], 10, 10, 'waterfall');
+    const r2 = cargoRoute('a', 'c', 'wood', [], 2);
+    const world = makeWorld([r1, r2]);
+    const states = new Map([['a', src], ['b', dst1], ['c', dst2]]);
+    const out = dispatchAttempt(world, states, 0, 1);
+    const r1Wood = out.find((d) => d.routeId === r1.id && d.resourceId === 'wood');
+    const r1Stone = out.find((d) => d.routeId === r1.id && d.resourceId === 'stone');
+    const r2Wood = out.find((d) => d.routeId === r2.id && d.resourceId === 'wood');
+    expect(r1Wood?.amount).toBeCloseTo(2.5, 9);
+    expect(r2Wood?.amount).toBeCloseTo(0.5, 9);
+    expect(r1Stone?.amount).toBeCloseTo(4, 9);
+  });
+
   it('fix 7.2 — waterfall routes split proportionally to capacity (§15.4)', () => {
     // Source has 5 iron_ore.  Route A capacity 1/s, route B capacity 10/s, both waterfall.
     // Before fix: desired clamped to sourceAvail=5, giving A=0.83, B=4.17.
