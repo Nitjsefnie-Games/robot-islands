@@ -1878,7 +1878,10 @@ async function main(): Promise<void> {
         solarBoost: solarBoostByIsland.get(id),
       };
     };
-    const cableBalances = computeCableNetworkBalance(worldState, islandStates, cableLocalCtxFor);
+    // §2.7 / §15.1: thread (now, nowWall) so the gate's local-power probe
+    // samples the same wall-anchored solar / conditional field as the
+    // advance loop, instead of falling back to perf-domain lastTick.
+    const cableBalances = computeCableNetworkBalance(worldState, islandStates, cableLocalCtxFor, now, nowWall);
     const sharedNetwork = computeSharedNetworkState(worldState);
 
     const islandPower = new Map<string, PowerBalance>();

@@ -1923,3 +1923,24 @@ describe('§7.3 coherent weather field across route consumers', () => {
     expect(volcanic.delivered).toBeLessThan(volcanic.dispatched);
   });
 });
+
+describe('§2.7 / §15.1 cable-balance local power threads the wall clock', () => {
+  const solarB = (i: number): { id: string; defId: 'solar'; x: number; y: number } =>
+    ({ id: `sol-${i}`, defId: 'solar', x: i * 2, y: 0 });
+
+  it('solarClockMs overrides the lastTick fallback inside computeIslandLocalPower', () => {
+    const a = makeState('a', { buildings: [solarB(0), solarB(1)], lastTick: NOON });
+    const world = makeWorld([]);
+    const states = new Map<string, IslandState>([['a', a]]);
+    // Default (no clocks): falls back to lastTick = NOON → full solar output.
+    const noon = computeCableNetworkBalance(world, states, () => ({ world })).get('a')!;
+    expect(noon.producedTotal).toBeCloseTo(100, 0);
+    // Threaded midnight wall clock: solar gated down — proves the clock
+    // params reach computeRates inside computeIslandLocalPower, so the
+    // cable gate sees the same §2.7 solar (and §9.x during-storm
+    // conditional) field the advance loop sees.
+    const MIDNIGHT = NOON + 12 * 60 * 60 * 1000;
+    const night = computeCableNetworkBalance(world, states, () => ({ world }), NOON, MIDNIGHT).get('a')!;
+    expect(night.producedTotal).toBeLessThan(10);
+  });
+});

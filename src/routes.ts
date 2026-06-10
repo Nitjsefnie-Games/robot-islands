@@ -269,10 +269,18 @@ export function isPowerLink(t: RouteType): boolean {
 export function computeIslandLocalPower(
   state: IslandState,
   ctx?: RatesContext,
+  /** Perf-domain tick time (matches `state.lastTick`); falls back to
+   *  `state.lastTick` inside computeRates when omitted (test back-compat). */
+  nowMs?: number,
+  /** §2.7 / §15.1 wall-clock sample time threaded into computeRates so the
+   *  solar multiplier AND the during-storm conditional bonuses inside the
+   *  cable gate's local-power probe read the SAME wall-anchored field the
+   *  advance loop uses — not a perf-domain replay of session start. */
+  solarClockMs?: number,
 ): { producedW: number; consumedW: number } {
   // Explicitly clear cableComponent so we measure pure local power.
   const localCtx: RatesContext = { ...ctx, cableComponent: undefined };
-  const { power } = computeRates(state, localCtx);
+  const { power } = computeRates(state, localCtx, nowMs, solarClockMs);
   return { producedW: power.rawProduced, consumedW: power.rawConsumed };
 }
 
@@ -300,6 +308,12 @@ export function computeCableNetworkBalance(
   world: WorldState,
   islandStates: ReadonlyMap<string, IslandState>,
   localPowerCtxFor?: (islandId: string) => RatesContext | undefined,
+  /** Perf-domain tick time + §2.7/§15.1 wall-clock sample time, threaded
+   *  into every member's `computeIslandLocalPower` so the gate decision is
+   *  taken against the same solar / conditional-bonus field the advance
+   *  loop will see this frame. Omitted in tests → lastTick fallback. */
+  nowMs?: number,
+  solarClockMs?: number,
 ): Map<string, CableComponentBalance> {
   // 1) Build adjacency from power-link routes. Edges over island ids; both
   //    endpoints must have a state in islandStates (otherwise the route is
@@ -367,7 +381,7 @@ export function computeCableNetworkBalance(
         const st = islandStates.get(m);
         if (!st) continue;
         const ctx = localPowerCtxFor?.(m);
-        const local = computeIslandLocalPower(st, ctx);
+        const local = computeIslandLocalPower(st, ctx, nowMs, solarClockMs);
         produced += local.producedW;
         consumed += local.consumedW;
         const net = local.producedW - local.consumedW;
@@ -417,7 +431,7 @@ export function computeCableNetworkBalance(
   //    raw power is the only relevant balance.
   for (const [id, st] of islandStates) {
     if (balanceFor.has(id)) continue;
-    const local = computeIslandLocalPower(st, localPowerCtxFor?.(id));
+    const local = computeIslandLocalPower(st, localPowerCtxFor?.(id), nowMs, solarClockMs);
     balanceFor.set(id, {
       unified: false,
       producedTotal: local.producedW,
