@@ -901,7 +901,7 @@ async function main(): Promise<void> {
   mountUi(reg, [
     { icon: 'building',  action: 'toggle-buildings',    label: 'Buildings',   kbd: 'B' },
     { icon: 'inventory', action: 'toggle-inventory',    label: 'Inventory',   kbd: 'I' },
-    { icon: 'drone',     action: 'toggle-drones',       label: 'Drones',      kbd: 'N' },
+    { icon: 'drone',     action: 'toggle-drones',       label: 'Drones',      kbd: 'J' },
     { icon: 'route',     action: 'toggle-routes',       label: 'Routes',      kbd: 'R' },
     { icon: 'settle',    action: 'toggle-settlement',   label: 'Settlement',  kbd: 'V' },
     { icon: 'construct', action: 'toggle-construction', label: 'Construct',   kbd: 'C' },
