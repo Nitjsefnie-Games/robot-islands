@@ -20,10 +20,10 @@ import {
   nodePurchaseStatus,
   tierForLevel,
   tierRequiredForDepth,
+  KEYSTONE_TARGET_NODE_IDS,
   type BranchId,
 } from './skilltree.js';
 import { CRYSTAL_CATALOG } from './skilltree-crystals.js';
-import { KEYSTONE_PREREQS } from './skilltree-catalog.js';
 import { computeSkillGraphLayout, type SkillGraphLayout } from './skilltree-layout.js';
 import type { IslandState } from './economy.js';
 import type { NodeId as GNodeId } from './skilltree-graph.js';
@@ -46,9 +46,6 @@ export interface SkillGraphViewDeps {
 
 type NodeKind = 'filler' | 'notable' | 'keystone';
 
-const KEYSTONE_TARGETS: ReadonlySet<string> = new Set(
-  KEYSTONE_PREREQS.map((k) => String(k.targetNode)),
-);
 
 function buildEffectivePosMap(layout: SkillGraphLayout, state: IslandState): Map<string, { x: number; y: number }> {
   const map = new Map<string, { x: number; y: number }>();
@@ -72,7 +69,7 @@ function buildEffectivePosMap(layout: SkillGraphLayout, state: IslandState): Map
 }
 
 function classifyNode(id: string): NodeKind {
-  if (KEYSTONE_TARGETS.has(id)) return 'keystone';
+  if (KEYSTONE_TARGET_NODE_IDS.has(id)) return 'keystone';
   const lastDot = id.lastIndexOf('.');
   if (lastDot < 0) return 'filler';
   return /^\d+$/.test(id.slice(lastDot + 1)) ? 'filler' : 'notable';

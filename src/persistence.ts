@@ -1118,9 +1118,9 @@ export async function clearSave(): Promise<void> {
 /**
  * Validate a deserialized JSON blob as a save snapshot. Used by the
  * Settings panel's "Import save" flow before writing it back to IDB.
- * The check is intentionally shallow — `v === SCHEMA_VERSION` plus the
- * presence of the top-level fields. The full deserializer enforces the
- * deeper shape on next load; a malformed inner shape will surface there
+ * The check is intentionally shallow — `SUPPORTED_LOAD_VERSIONS.has(v)`
+ * plus the presence of the top-level fields. The full deserializer enforces
+ * the deeper shape on next load; a malformed inner shape will surface there
  * as a thrown error caught by `loadWorld`, falling back to fresh world.
  */
 export function isValidSaveSnapshot(value: unknown): value is SaveSnapshot {

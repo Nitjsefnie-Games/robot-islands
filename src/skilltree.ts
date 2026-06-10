@@ -595,8 +595,10 @@ function buildStandardEdges(nodes: ReadonlyArray<SkillNode>): Edge[] {
 export const STANDARD_EDGES: Edge[] = buildStandardEdges(NODE_CATALOG);
 
 /** Node ids of AND-gated keystones. These are excluded from pathing
- *  adjacency (`costToUnlock`) — keystones are bought only via `buyKeystone`. */
-const KEYSTONE_TARGET_NODE_IDS: ReadonlySet<string> = new Set(
+ *  adjacency (`costToUnlock`) — keystones are bought only via `buyKeystone`.
+ *  Exported so skilltree-graphview.ts can derive its rendering check from the
+ *  same source rather than maintaining a byte-identical duplicate. */
+export const KEYSTONE_TARGET_NODE_IDS: ReadonlySet<string> = new Set(
   KEYSTONE_PREREQS.map((ks) => String(ks.targetNode)),
 );
 
