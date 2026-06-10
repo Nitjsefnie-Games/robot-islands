@@ -546,7 +546,7 @@ export function renderIsland(spec: IslandSpec, state: IslandRenderState = 'visib
  * through this one path so the §3.7 contract has a single source of truth.
  */
 function makeHomeIslandSpec(): IslandSpec {
-  return {
+  return attachTerrainAt({
     id: 'home',
     name: 'home',
     biome: 'plains',
@@ -558,15 +558,9 @@ function makeHomeIslandSpec(): IslandSpec {
     discovered: true,
     // §3.7: empty buildings — the player places their first via the UI.
     buildings: [],
-    // Home preserves its hand-placed terrain map exactly — terrainAtForBiome
-    // delegates to defaultTerrainAtHome for islandId === 'home' (so the
-    // ore/coal/water tiles the player will Mine on still exist). The
-    // `inscribed` predicate is unused on this branch — `() => true` satisfies
-    // the signature.
-    terrainAt: (x, y) => terrainAtForBiome('plains', 'home', x, y, () => true),
     // §3.7: Stable trait by default, no other modifiers.
     modifiers: ['stable'],
-  };
+  });
 }
 
 /**

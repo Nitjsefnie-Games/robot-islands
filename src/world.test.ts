@@ -288,6 +288,16 @@ describe('makeInitialWorld — §3.7 fresh-game contract', () => {
     expect(w.vehicles).toEqual([]);
   });
 
+  it('home island terrain honours tileOverrides (SPEC §03 precedence)', () => {
+    const w = makeInitialWorld(0);
+    const home = w.islands.find((s) => s.id === 'home')!;
+    // Fresh home has no overrides yet; terrainAt returns the biome closure.
+    expect(home.terrainAt?.(0, 0)).toBeDefined();
+    // Apply an override and assert it takes precedence.
+    home.tileOverrides = { '0,0': 'ore' };
+    expect(home.terrainAt?.(0, 0)).toBe('ore');
+  });
+
   it("home's initial IslandState carries a §14 starter bootstrap kit (not empty — see startingInventory)", () => {
     // §3.7's literal "empty inventory" rule predates §14 placement costs:
     // every T1 building needs stone + wood, so an all-zero starter can't
