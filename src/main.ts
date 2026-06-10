@@ -26,6 +26,7 @@ import { effectiveModifierMultipliers, type ModifierMultipliers } from './biomes
 import { advanceIsland, computeRates, xpForLevel, type IslandState, type PowerBalance, type RatesContext } from './economy.js';
 import type { ResourceId } from './recipes.js';
 import { computeNcState } from './network-consciousness.js';
+import { shouldTick } from './economy-clock.js';
 import { computeSharedNetworkState } from './network.js';
 
 import { tierForLevel, effectiveSkillMultipliers } from './skilltree.js';
@@ -1799,45 +1800,34 @@ async function main(): Promise<void> {
     }
   }
   let lastFrameMs = performance.now();
-  app.ticker.add(() => {
-    let dx = 0;
-    let dy = 0;
-    if (held.up) dy += PAN_PX_PER_TICK;
-    if (held.down) dy -= PAN_PX_PER_TICK;
-    if (held.left) dx += PAN_PX_PER_TICK;
-    if (held.right) dx -= PAN_PX_PER_TICK;
-    if (dx !== 0 || dy !== 0) panCam(cam, dx, dy);
-    world.position.set(cam.tx, cam.ty);
-    world.scale.set(cam.zoom);
-    // §6 keep feature-glyph sprites at fixed pixel size as the camera zooms
-    // by counter-scaling each sprite's width/height by 1/zoom. Cheap when
-    // zoom is unchanged (early-returns inside `setZoom`).
-    featureGlyphs.setZoom(cam.zoom);
-    // Per-frame dirty-check for camera / active-island / open-panel prefs.
-    // Arms the 500ms debounce timer if anything changed; the timer batches
-    // bursts of pan/zoom frames into a single IDB write.
-    maybeSchedulePrefsSave();
-
-    const now = performance.now();
-    // §2.7 wall-clock anchor for the day-night cycle. Captured once per
-    // frame and threaded to advanceIsland + computeRates so the solar
-    // multiplier samples Date.now() instead of `performance.now()` (which
-    // resets to ~0 on every page refresh, snapping the cycle back to
-    // mid-Day and breaking the spec's "purely time-driven, does not
-    // depend on the player's session" guarantee).
-    const nowWall = Date.now();
-    // Capture the previous frame's timestamp BEFORE we overwrite
-    // `lastFrameMs` — §11 telemetry's `tickDrones` needs the prev-tick
-    // time to compute the per-tick capsule corridor (drone position at
-    // prev → drone position at now).
-    const prevFrameMs = lastFrameMs;
-    const elapsedSec = Math.max(0, (now - lastFrameMs) / 1000);
-    lastFrameMs = now;
-    // Compute Network Consciousness state once per frame from the current
+  // §15.2 economy cadence — the ECONOMY_TICK_MS seam (economy-clock.ts;
+  // TODO.md "Current TODO" item 3). The economy advances at 5 Hz, not per
+  // render frame: `shouldTick` gates the advance block below, and these
+  // retained outputs (last advance's nets / power balances / NC state) keep
+  // every per-frame consumer (HUD, island bar, inspector via lastIslandCtx)
+  // rendering between ticks with data at most ECONOMY_TICK_MS (~200 ms)
+  // stale. `forceEconomyTick` lets structural events that mint or re-mint
+  // islands (merge, settlement arrival) pull the next tick forward so the
+  // retained maps never miss an island a consumer can select.
+  let lastEconomyTickMs: number | null = null;
+  let forceEconomyTick = false;
+  let lastNcState = computeNcState(worldState);
+  const islandPower = new Map<string, PowerBalance>();
+  const islandNets = new Map<string, Record<ResourceId, number>>();
+  /** The economy advance (5 Hz, gated by `shouldTick` in the ticker below).
+   *  Everything in here runs at ECONOMY_TICK_MS cadence: NC/lattice/cable/
+   *  solar precomputes, the per-island advanceIsland + computeRates loop,
+   *  the retained islandNets/islandPower/lastIslandCtx outputs, and the
+   *  active-island rate refresh the HUD reads. `now`/`nowWall` are the
+   *  gating frame's clocks; advanceIsland integrates the full interval
+   *  since each island's lastTick, so a long gap is one big-dt advance. */
+  const advanceEconomy = (now: number, nowWall: number): void => {
+    // Compute Network Consciousness state once per economy tick from the current
     // island set. §9.6 buff applies only to T3+ islands; per-island gating
     // happens at the call site below (not inside advanceIsland) so the
     // pure economy doesn't take a dependency on `tierForLevel`.
     const ncState = computeNcState(worldState);
+    lastNcState = ncState;
     const ncBuffFor = (s: IslandState): number =>
       tierForLevel(s.level) >= 3 ? ncState.globalProductionBuff : 1;
     // Advance every populated island in turn. Routes are dispatched AFTER
@@ -1905,8 +1895,6 @@ async function main(): Promise<void> {
     const cableBalances = computeCableNetworkBalance(worldState, islandStates, cableLocalCtxFor, now, nowWall);
     const sharedNetwork = computeSharedNetworkState(worldState);
 
-    const islandPower = new Map<string, PowerBalance>();
-    const islandNets = new Map<string, Record<ResourceId, number>>();
     let needRebuild = false;
     for (const s of islandStates.values()) {
       // Thread the spec's `terrainAt` closure so `resolveRecipe` (recipes.ts)
@@ -1964,6 +1952,107 @@ async function main(): Promise<void> {
       islandPower.set(s.id, power);
     }
     if (needRebuild) rebuildWorldLayers();
+    // Recompute the active island's rates so the HUD and multi-island bar
+    // show post-advance data. (Before the 5 Hz gate this ran after the
+    // per-frame route/vehicle ticks; their inventory effects now surface at
+    // the next economy tick, <= ECONOMY_TICK_MS later.) Cable balance is
+    // re-used from the per-tick computation above — the route/vehicle ticks
+    // don't add or remove power routes, so the connectivity is unchanged.
+    const postTickActiveS = activeState();
+    const postTickActiveP = activeSpec();
+    const postTickLattice = unifiedInv !== undefined && worldState.latticeNodeIslands.includes(postTickActiveS.id);
+    const postTickCableComponent = cableBalances.get(postTickActiveS.id);
+    const postTickGeothermal = postTickActiveP?.modifiers.includes('geothermal_active') === true;
+    const { net: postNet, power: postPower } = computeRates(postTickActiveS, {
+      modifierMul: modifierMulFor(postTickActiveS.id),
+      ncBuff: ncBuffFor(postTickActiveS),
+      activeBonusMul: activeBonusMul(worldState),
+      terrainAt: postTickActiveP?.terrainAt,
+      inventory: postTickLattice ? unifiedInv : undefined,
+      crossIsland: crossIslandById.get(postTickActiveS.id),
+      caps: postTickLattice ? unifiedCaps : undefined,
+      cableComponent: postTickCableComponent,
+      geothermalActive: postTickGeothermal,
+      accelerationMul: postTickActiveS.accelerationRemainingMin > 0 ? 3 : 1,
+      solarBoost: solarBoostByIsland.get(postTickActiveS.id),
+    }, undefined, nowWall);
+    islandNets.set(activeIslandId, postNet);
+    islandPower.set(activeIslandId, postPower);
+
+    // Recompute rates AFTER the tick so the HUD shows the current
+    // post-advance state (e.g., a freshly-stalled building reads as
+    // 0 rate, not the rate it was running at one event ago).
+    // Read through the active getters so a click-to-switch updates the
+    // HUD on the next frame.
+    const activeS = activeState();
+    const activeP = activeSpec();
+    const activeLattice = unifiedInv !== undefined && worldState.latticeNodeIslands.includes(activeS.id);
+    const activeGeothermal = activeP?.modifiers.includes('geothermal_active') === true;
+    if (activeLattice) {
+      // Refresh the active island's net/power with unified inventory so the HUD
+      // reads the same cross-island state that advanceIsland used.
+      const activeCableComponent = cableBalances.get(activeS.id);
+      const { net: activeNet, power: activePower } = computeRates(activeS, {
+        modifierMul: modifierMulFor(activeS.id),
+        ncBuff: ncBuffFor(activeS),
+        activeBonusMul: activeBonusMul(worldState),
+        terrainAt: activeP?.terrainAt,
+        inventory: unifiedInv,
+        crossIsland: crossIslandById.get(activeS.id),
+        caps: unifiedCaps,
+        cableComponent: activeCableComponent,
+        geothermalActive: activeGeothermal,
+        accelerationMul: activeS.accelerationRemainingMin > 0 ? 3 : 1,
+        solarBoost: solarBoostByIsland.get(activeS.id),
+      }, undefined, nowWall);
+      islandNets.set(activeS.id, activeNet);
+      islandPower.set(activeS.id, activePower);
+    }
+  };
+  app.ticker.add(() => {
+    let dx = 0;
+    let dy = 0;
+    if (held.up) dy += PAN_PX_PER_TICK;
+    if (held.down) dy -= PAN_PX_PER_TICK;
+    if (held.left) dx += PAN_PX_PER_TICK;
+    if (held.right) dx -= PAN_PX_PER_TICK;
+    if (dx !== 0 || dy !== 0) panCam(cam, dx, dy);
+    world.position.set(cam.tx, cam.ty);
+    world.scale.set(cam.zoom);
+    // §6 keep feature-glyph sprites at fixed pixel size as the camera zooms
+    // by counter-scaling each sprite's width/height by 1/zoom. Cheap when
+    // zoom is unchanged (early-returns inside `setZoom`).
+    featureGlyphs.setZoom(cam.zoom);
+    // Per-frame dirty-check for camera / active-island / open-panel prefs.
+    // Arms the 500ms debounce timer if anything changed; the timer batches
+    // bursts of pan/zoom frames into a single IDB write.
+    maybeSchedulePrefsSave();
+
+    const now = performance.now();
+    // §2.7 wall-clock anchor for the day-night cycle. Captured once per
+    // frame and threaded to advanceIsland + computeRates so the solar
+    // multiplier samples Date.now() instead of `performance.now()` (which
+    // resets to ~0 on every page refresh, snapping the cycle back to
+    // mid-Day and breaking the spec's "purely time-driven, does not
+    // depend on the player's session" guarantee).
+    const nowWall = Date.now();
+    // Capture the previous frame's timestamp BEFORE we overwrite
+    // `lastFrameMs` — §11 telemetry's `tickDrones` needs the prev-tick
+    // time to compute the per-tick capsule corridor (drone position at
+    // prev → drone position at now).
+    const prevFrameMs = lastFrameMs;
+    const elapsedSec = Math.max(0, (now - lastFrameMs) / 1000);
+    lastFrameMs = now;
+    // §15.2 economy cadence: gate the advance block to 5 Hz. Camera/input/
+    // UI/overlay code in this ticker stays per-frame; the economy advance
+    // and the precomputes that exist solely to feed it run only when the
+    // cadence elapses (or a structural event forces a tick). See
+    // economy-clock.ts (ECONOMY_TICK_MS — the server-migration seam).
+    if (forceEconomyTick || shouldTick(now, lastEconomyTickMs)) {
+      lastEconomyTickMs = now;
+      forceEconomyTick = false;
+      advanceEconomy(now, nowWall);
+    }
     // Trade offer lifecycle. Online = tab visible (visibilityState === 'visible').
     // hasFocus() was previously also required but dropped on owner request 2026-06-10
     // — visibility alone is the activity signal. onlineDtMs is the capped online
@@ -2002,6 +2091,11 @@ async function main(): Promise<void> {
       islandSpecsById.delete(absorbedId);
       modifierMulsById.delete(absorbedId);
       lastIslandCtx.delete(absorbedId);
+      islandNets.delete(absorbedId);
+      islandPower.delete(absorbedId);
+      // Re-minted buildings change the absorber's rates — pull the next
+      // economy tick forward so the retained HUD data doesn't lag the merge.
+      forceEconomyTick = true;
       if (activeIslandId === absorbedId) {
         activeIslandId = merge.absorber.id;
       }
@@ -2095,6 +2189,10 @@ async function main(): Promise<void> {
           );
         }
       }
+      // The freshly-populated island isn't in the retained islandNets /
+      // islandPower maps yet — force the next economy tick so it's selectable
+      // with live data immediately instead of up to ECONOMY_TICK_MS later.
+      forceEconomyTick = true;
       rebuildWorldLayers();
     }
     if (vehicleResult.lost.length > 0) {
@@ -2109,79 +2207,33 @@ async function main(): Promise<void> {
       }
     }
 
-    // Recompute active island rates post-routes/vehicles so both the main HUD
-    // and the multi-island bar show current data. Cable network balance is
-    // re-used from the per-tick computation above — the route/vehicle ticks
-    // don't add or remove power routes, so the connectivity is unchanged.
-    const postTickActiveS = activeState();
-    const postTickActiveP = activeSpec();
-    const postTickLattice = unifiedInv !== undefined && worldState.latticeNodeIslands.includes(postTickActiveS.id);
-    const postTickCableComponent = cableBalances.get(postTickActiveS.id);
-    const postTickGeothermal = postTickActiveP?.modifiers.includes('geothermal_active') === true;
-    const { net: postNet, power: postPower } = computeRates(postTickActiveS, {
-      modifierMul: modifierMulFor(postTickActiveS.id),
-      ncBuff: ncBuffFor(postTickActiveS),
-      activeBonusMul: activeBonusMul(worldState),
-      terrainAt: postTickActiveP?.terrainAt,
-      inventory: postTickLattice ? unifiedInv : undefined,
-      crossIsland: crossIslandById.get(postTickActiveS.id),
-      caps: postTickLattice ? unifiedCaps : undefined,
-      cableComponent: postTickCableComponent,
-      geothermalActive: postTickGeothermal,
-      accelerationMul: postTickActiveS.accelerationRemainingMin > 0 ? 3 : 1,
-      solarBoost: solarBoostByIsland.get(postTickActiveS.id),
-    }, undefined, nowWall);
-    islandNets.set(activeIslandId, postNet);
-    islandPower.set(activeIslandId, postPower);
-
-    // Recompute rates AFTER the tick so the HUD shows the current
-    // post-advance state (e.g., a freshly-stalled building reads as
-    // 0 rate, not the rate it was running at one event ago).
-    // Read through the active getters so a click-to-switch updates the
-    // HUD on the next frame.
     const activeS = activeState();
     const activeP = activeSpec();
-    const activeLattice = unifiedInv !== undefined && worldState.latticeNodeIslands.includes(activeS.id);
-    const activeGeothermal = activeP?.modifiers.includes('geothermal_active') === true;
-    if (activeLattice) {
-      // Refresh the active island's net/power with unified inventory so the HUD
-      // reads the same cross-island state that advanceIsland used.
-      const activeCableComponent = cableBalances.get(activeS.id);
-      const { net: activeNet, power: activePower } = computeRates(activeS, {
-        modifierMul: modifierMulFor(activeS.id),
-        ncBuff: ncBuffFor(activeS),
-        activeBonusMul: activeBonusMul(worldState),
-        terrainAt: activeP?.terrainAt,
-        inventory: unifiedInv,
-        crossIsland: crossIslandById.get(activeS.id),
-        caps: unifiedCaps,
-        cableComponent: activeCableComponent,
-        geothermalActive: activeGeothermal,
-        accelerationMul: activeS.accelerationRemainingMin > 0 ? 3 : 1,
-        solarBoost: solarBoostByIsland.get(activeS.id),
-      }, undefined, nowWall);
-      islandNets.set(activeS.id, activeNet);
-      islandPower.set(activeS.id, activePower);
-    }
-    const net = islandNets.get(activeS.id)!;
-    const power = islandPower.get(activeS.id)!;
+    // Last-tick rates/power for the active island (retained across frames —
+    // up to ECONOMY_TICK_MS stale by design). Undefined only in the sliver
+    // between a structural event minting a new island and the forced tick
+    // that follows it; skip the HUD repaint for that frame rather than crash.
+    const net = islandNets.get(activeS.id);
+    const power = islandPower.get(activeS.id);
     const saveAgeSec =
       lastSaveAt === null ? null : Math.max(0, Math.floor((now - lastSaveAt) / 1000));
     // Objective display lives in the bottom-center tutorial banner only
     // (`tutorial-ui.ts`). The HUD's previous "Next objective" line + the
     // separate objectives.ts system were removed in the consolidation.
-    hud.update(
-      activeS,
-      net,
-      power,
-      activeP,
-      ncState,
-      saveAgeSec,
-      worldState.vehicles.length,
-      activeIslandId,
-      islandPower,
-    );
-    islandBar.update(activeIslandId, islandPower, saveAgeSec);
+    if (net && power) {
+      hud.update(
+        activeS,
+        net,
+        power,
+        activeP,
+        lastNcState,
+        saveAgeSec,
+        worldState.vehicles.length,
+        activeIslandId,
+        islandPower,
+      );
+      islandBar.update(activeIslandId, islandPower, saveAgeSec);
+    }
     tradeUi.update(tradeRuntime, activeIslandId, now);
     // §13.3 Omniscient Lattice banner visibility.
     latticeBanner.style.display = worldState.latticeActive ? 'block' : 'none';

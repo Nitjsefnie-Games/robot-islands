@@ -70,6 +70,8 @@ Rendered as layered radial-gradient sprites with a 24px AA-band edge fade, order
 
 Same loop handles 1 frame and a 24-hour offline catchup. XP weights are tier-based per §9.1 (T0=1, T1=3, T2=10) and live in `recipes.ts`.
 
+The client advances the economy at 5 Hz, not per render frame: `main.ts`'s ticker gates the advance block on `shouldTick` from `economy-clock.ts` (`ECONOMY_TICK_MS = 200` — the named server-migration seam, see TODO.md), which is safe because the integrator is cadence-agnostic; the HUD/inspector render every frame from the last tick's retained outputs.
+
 ### Input — every key goes through the registry
 
 `input.ts` keeps two tables: `actions` (name → handler) and `bindings` (`KeyboardEvent.code` → action name). Use `KeyboardEvent.code` for layout-independence. **No hardcoded `e.code === 'KeyW'` checks anywhere outside `input.ts`** — define an action, bind a key, dispatch via `dispatchKey`. UI buttons reuse the same dispatcher (`dispatchAction`), so keyboard and mouse paths can never drift.
