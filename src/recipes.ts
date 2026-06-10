@@ -1891,6 +1891,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     inputs: { hydrogen: 10, exotic_alloy: 1, microchip: 5 },
     outputs: { antimatter_capsule: 1 },
     category: 'electronics',
+    cycleSecPinned: true,
   },
 
   // Phase 11 — T4 endgame (Task 11.2): Quantum Chip Fabricator replaces
@@ -2575,7 +2576,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'chemistry',
   },
   bulk_concrete_plant: {
-    cycleSec: 60, // hand-authored: 100 concrete / 60 s = 6 t/hr per def comment
+    cycleSec: 60, // hand-authored: 100 concrete / 60 s ≈ 6 t/hr at 1 kg/unit
     inputs: { cement: 50 / 3, sand: 100 / 3, stone: 50, fresh_water: 25 / 3 },
     outputs: { concrete: 100 },
     exogenousFlow: 'evaporation-water-vapor',
@@ -3020,6 +3021,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     outputs: { helium_3: 1 },
     exogenousFlow: 'terrain',
     category: 'extraction',
+    cycleSecPinned: true,
     // §8.1: Drilling Rig requires `helium_vent` tile. Tile gating is
     // implemented — `validatePlacement` enforces this via `requiredTile`.
     // Closes the helium_3 producer gap: previously seeded as 50 on
@@ -3123,6 +3125,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     inputs: { antimatter_capsule: 1, plasma_containment_vessel: 1, cryogenic_hydrogen: 5 },
     outputs: { antimatter_propellant: 1 },
     category: 'manufacturing',
+    cycleSecPinned: true,
   },
 
   // §14.3 / §14.10: Scanner Sat Assembly. ~110.6-day density-derived cycle.

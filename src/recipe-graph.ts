@@ -42,8 +42,6 @@ export interface RecipeTableRow {
   readonly gates: ReadonlyArray<GateEntry>;
 }
 
-
-
 export function buildRecipeTableRows(): ReadonlyArray<RecipeTableRow> {
   const rows: RecipeTableRow[] = [];
 
