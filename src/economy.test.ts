@@ -211,15 +211,26 @@ describe('advanceIsland — event-driven piecewise integration', () => {
     // From t=2009s, Mine caps iron_ore at 100 and stalls. Workshop keeps running.
     // (generator: mine 20s, workshop 4300s)
     //
-    // Over 6000s total:
-    //   t=0..2009s: Mine + Workshop, iron_ore → 100 (capped), bolt += 6000/4300 ≈ 1.395
-    //   final: iron_ore = 99.86, coal = 48.60, bolt = 1.395.
+    // Golden value refreshed for fix 3.6 (sub-1 cap events now LAND instead
+    // of being skipped). Exact trajectory over the 6000s window, with solar
+    // sub-segment boundaries at 2700s/5400s:
+    //   [0, 2009.35]      both run; iron_ore pinned to 100 (cap event)
+    //   [2009.35, 2700]   Mine stalled; Workshop drains → 99.83938
+    //   [2700, 2703.23]   Mine refills the 0.16 deficit in 3.23s → pinned 100
+    //                     (pre-fix: this cap event was skipped — headroom < 1
+    //                      — so the Mine "produced" at full rate + full XP for
+    //                      the whole [2700, 5400] segment into a clamped store)
+    //   [2703.23, 5400]   drain → 99.37301
+    //   [5400, 5412.60]   refill → pinned 100
+    //   [5412.60, 6000]   drain 587.4s × 1/4300 → 99.86340
+    // Workshop is never throttled, so coal/bolt are unchanged from the
+    // pre-fix expectation: bolt = 6000/4300, coal = 50 − 6000/4300.
     const state = makeState({
       buildings: [MINE, WORKSHOP],
       inventory: { ...blankInventory(), coal: 50 },
     });
     advanceIsland(state, 6_000_000, { defs: POWER_FREE });
-    expect(state.inventory.iron_ore).toBeCloseTo(99.86046511627907, 6);
+    expect(state.inventory.iron_ore).toBeCloseTo(99.8633957537969, 6);
     expect(state.inventory.coal).toBeCloseTo(48.6046511627907, 6);
     expect(state.inventory.bolt).toBeCloseTo(1.3953488372093024, 6);
   });
@@ -1918,14 +1929,24 @@ describe('step-12 — T4 endgame production integration (§6.5)', () => {
     expect(state.inventory.helium_3).toBeCloseTo(10.581340589189473, 6);
   });
 
-  it.skip('Cryogenic Compute Center on synthetic arctic spec produces ai_core at 1/5400s — TODO: findNextCapEvent sub-1 threshold overproduces when cycleSec < segment width (1800s)', () => {
-    // Cryogenic Compute Center: 5400s cycle (rebalanced step #19: was 90s ×60), inputs { steel: 3, quantum_chip: 1, argon: 1 }.
-    // Over 54000s = 10 cycles.
+  // Re-enabled for fix 3.6 (was: "TODO: findNextCapEvent sub-1 threshold
+  // overproduces"). The body is rewritten against the CURRENT catalog — the
+  // original expectations (1/5400s cycle, 20 cores over 54000s) predate the
+  // gen-cyclesec rebalance (cycleSec is now 7166609.3s) and were unreachable
+  // regardless of the integrator bug. The test's point is preserved exactly:
+  // a quantum_chip stock in the (0,1) band must deplete at the true
+  // depletion moment — the consumer must NOT keep producing ai_core for the
+  // rest of the segment off inputs that were never there (mass balance:
+  // cores produced == chips consumed).
+  it('Cryogenic Compute Center: sub-1 quantum_chip stock depletes exactly — no conjured ai_core', () => {
     const CRYO: PlacedBuilding = {
       id: 'b-cryo',
       defId: 'cryogenic_compute_center',
       x: 0,
       y: 0,
+      // Pin the §4.7 maintenance factor at 1.0 across the multi-day window so
+      // the depletion moment is exactly chipStock × cycleSec.
+      eternalServitor: true,
     };
     const powerFreeCryo = ((): DefCatalog => {
       const base = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
@@ -1935,18 +1956,60 @@ describe('step-12 — T4 endgame production integration (§6.5)', () => {
     })();
     const state = makeState({
       buildings: [CRYO],
-      inventory: { ...blankInventory(), steel: 100, quantum_chip: 20, argon: 20 },
+      inventory: { ...blankInventory(), steel: 100, quantum_chip: 0.4, argon: 20 },
       storageCaps: blankCaps(10000),
-      // T5 (cryogenic_compute_center) requires level ≥ 50 + aiCoreCrafted
-      // per §13.1 — satisfy both gates so the §9.7 tier-band runtime check
-      // doesn't zero the building.
       level: 50,
       aiCoreCrafted: true,
     });
-    advanceIsland(state, 54_000_000, { defs: powerFreeCryo });
-    expect(state.inventory.ai_core).toBeCloseTo(20, 6);
-    expect(state.inventory.steel).toBeCloseTo(40, 6);
-    expect(state.inventory.quantum_chip).toBeCloseTo(+0, 6);
+    // cycleSec = 7166609.3 ⇒ 0.4 chips deplete at t ≈ 2.867e9 ms. Advance
+    // 4e9 ms (~46 days) so the depletion lands mid-window.
+    advanceIsland(state, 4_000_000_000, { defs: powerFreeCryo });
+    expect(state.lastTick).toBe(4_000_000_000);
+    expect(state.inventory.quantum_chip).toBeCloseTo(0, 9);
+    // Mass balance: 1 chip per cycle, 1 core per cycle.
+    expect(state.inventory.ai_core).toBeCloseTo(0.4, 5);
+    expect(state.inventory.argon).toBeCloseTo(19.6, 5);
+    expect(state.inventory.steel).toBeCloseTo(100 - 3 * 0.4, 5);
+  });
+
+  it('sub-1 headroom caps exactly at the cap moment over a 24h offline advance (fix 3.6)', () => {
+    // Stock in (cap-1, cap): pre-fix, findNextCapEvent skipped the cap event
+    // entirely (headroom < 1), so the Mine produced at full rate — and
+    // earned full XP — for the ENTIRE offline window while applyRates
+    // silently clamped the inventory. The 24h advance also doubles as the
+    // segment-count sanity check: the call must complete (lastTick lands).
+    // Local building object (NOT the shared MINE fixture): a 24h advance
+    // accrues operatingMs past the §4.7 threshold, which would poison every
+    // later test that reuses the shared object.
+    const state = makeState({
+      buildings: [{ id: 'b-mine-36', defId: 'mine', x: 0, y: 0 }],
+      inventory: { ...blankInventory(), iron_ore: 99.5 },
+    });
+    advanceIsland(state, 24 * 3600 * 1000, { defs: POWER_FREE });
+    expect(state.lastTick).toBe(24 * 3600 * 1000);
+    expect(state.inventory.iron_ore).toBeCloseTo(100, 9);
+    expect(state.inventory.iron_ore).toBeLessThanOrEqual(100);
+    // Cap reached at t = 0.5 / 0.05 = 10s; XP accrues ONLY up to that
+    // moment (0.5 units × weight 1), not for 24 hours.
+    expect(state.xp).toBeCloseTo(0.5 * XP_WEIGHT.iron_ore, 3);
+  });
+
+  it('sub-1 input stock stops the consumer at the true depletion moment (fix 3.6)', () => {
+    // Stock in (0,1): pre-fix, the depletion event was skipped (current < 1),
+    // so the Workshop kept "consuming" iron_ore — and producing bolts — for
+    // the rest of the segment after the stock ran dry.
+    // Local building object (not the shared WORKSHOP) — keeps this test's
+    // operatingMs accrual out of the shared fixture.
+    const state = makeState({
+      buildings: [{ id: 'b-ws-36', defId: 'workshop', x: 0, y: 0 }],
+      inventory: { ...blankInventory(), iron_ore: 0.5, coal: 50 },
+    });
+    advanceIsland(state, 4_300_000, { defs: POWER_FREE });
+    // Workshop: 1/4300 cycles/s, 1 iron_ore + 1 coal per cycle ⇒ 0.5 ore
+    // depletes at t = 2150s. Bolts produced == ore consumed == 0.5.
+    expect(state.inventory.iron_ore).toBeCloseTo(0, 9);
+    expect(state.inventory.bolt).toBeCloseTo(0.5, 6);
+    expect(state.inventory.coal).toBeCloseTo(49.5, 6);
   });
 });
 
