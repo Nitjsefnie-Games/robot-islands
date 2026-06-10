@@ -148,11 +148,26 @@ export function performMerge(
 
   // 2. Shift absorbed's buildings into absorber's local frame. Build fresh
   //    PlacedBuilding objects because `x` / `y` are `readonly` on the type.
+  //    Re-mint ids from shifted coords so two islands that each owned
+  //    `placed-0,0` don't collide (§3.6: "All buildings on both islands remain
+  //    in place").  Guard the geometrically-impossible collision by suffixing
+  //    the absorbed island id.
+  const absorberIdSet = new Set(absorber.buildings.map((b) => b.id));
+  const idMap = new Map<string, string>();
   for (const b of absorbed.buildings) {
+    const newX = b.x + offsetX;
+    const newY = b.y + offsetY;
+    let newId = `placed-${newX},${newY}`;
+    if (absorberIdSet.has(newId)) {
+      newId = `${newId}-${absorbed.id}`;
+    }
+    absorberIdSet.add(newId);
+    if (b.id !== newId) idMap.set(b.id, newId);
     absorber.buildings.push({
       ...b,
-      x: b.x + offsetX,
-      y: b.y + offsetY,
+      id: newId,
+      x: newX,
+      y: newY,
     });
   }
 
@@ -177,7 +192,8 @@ export function performMerge(
   }
 
   // 5. Routes: A↔B routes become intra-island (deleted); third-party
-  //    routes to/from B redirect to A.
+  //    routes to/from B redirect to A.  Also rewrite any `sourceBuildingId`
+  //    that referenced an absorbed building whose id was re-minted in step 2.
   const newRoutes = [];
   for (const r of world.routes) {
     if (
@@ -188,13 +204,16 @@ export function performMerge(
     }
     // Endpoint redirect. `from`/`to` are readonly on Route, so build a fresh
     // record per affected entry.
+    let updated: typeof r | undefined;
     if (r.from === absorbed.id) {
-      newRoutes.push({ ...r, from: absorber.id });
+      updated = { ...(updated ?? r), from: absorber.id };
     } else if (r.to === absorbed.id) {
-      newRoutes.push({ ...r, to: absorber.id });
-    } else {
-      newRoutes.push(r);
+      updated = { ...(updated ?? r), to: absorber.id };
     }
+    if (r.sourceBuildingId !== undefined && idMap.has(r.sourceBuildingId)) {
+      updated = { ...(updated ?? r), sourceBuildingId: idMap.get(r.sourceBuildingId)! };
+    }
+    newRoutes.push(updated ?? r);
   }
   world.routes.length = 0;
   for (const r of newRoutes) world.routes.push(r);
