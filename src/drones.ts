@@ -23,7 +23,7 @@ import { inv } from './economy.js';
 import { fuelForTier, type ResourceId } from './recipes.js';
 
 import { effectiveSkillMultipliers, tierForLevel } from './skilltree.js';
-import { rasterizePath, rollVehicleDestruction } from './weather.js';
+import { biomeForCell, rasterizePath, rollVehicleDestruction, sumIslandCo2 } from './weather.js';
 import { CELL_SIZE_TILES, ensureCellGenerated } from './world.js';
 import type { WorldState } from './world.js';
 
@@ -512,8 +512,12 @@ export function dispatchDrone(
     const dispatchPath = buildWeatherPath(originX, originY, ux, uy, outboundTiles, speed, nowMs, waypoints);
     // §15.1: weather samples are wall-anchored via the module anchor; the
     // path's entryMs stay perf-domain so doomedAtMs remains comparable to
-    // the tick loop's perf-domain segEndMs clamp.
-    const roll = rollVehicleDestruction(world.seed, dispatchPath, multiplier, droneId, droneWeatherWallOffsetMs);
+    // the tick loop's perf-domain segEndMs clamp. §7.3: biome + CO₂ make
+    // the sampled field coherent with every other weather consumer.
+    const roll = rollVehicleDestruction(
+      world.seed, dispatchPath, multiplier, droneId, droneWeatherWallOffsetMs,
+      (cx, cy) => biomeForCell(world, cx, cy), sumIslandCo2(world),
+    );
     if (roll.destroyed && roll.atCellIndex !== null) {
       doomedAtMs = dispatchPath[roll.atCellIndex]!.entryMs;
     }
@@ -855,9 +859,13 @@ export function tickDrones(
         d.originX, d.originY, d.dirX, d.dirY, d.outboundTiles, droneSpeed(d), d.launchTime, d.waypoints,
       );
       const multiplier = DRONE_TIER_MULTIPLIERS[d.tier];
-      // §15.1: same module wall anchor as the dispatch-time roll — the two
-      // sites MUST stay in lockstep (see `setDroneWeatherWallOffsetMs`).
-      const roll = rollVehicleDestruction(world.seed, path, multiplier, d.id, droneWeatherWallOffsetMs);
+      // §15.1 + §7.3: same module wall anchor AND same biome/CO₂ field as
+      // the dispatch-time roll — the two sites MUST stay in lockstep (see
+      // `setDroneWeatherWallOffsetMs`).
+      const roll = rollVehicleDestruction(
+        world.seed, path, multiplier, d.id, droneWeatherWallOffsetMs,
+        (cx, cy) => biomeForCell(world, cx, cy), sumIslandCo2(world),
+      );
       willBeDestroyed = roll.destroyed;
     }
 

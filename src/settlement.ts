@@ -23,7 +23,7 @@ import { computeNcState } from './network-consciousness.js';
 import { makeSeededRng } from './rng.js';
 import { nextRouteId, T1_CARGO_CAPACITY_UNITS_PER_SEC, transitTimeForDistance } from './routes.js';
 import { tierForLevel } from './skilltree.js';
-import { rasterizePath, rollVehicleDestruction } from './weather.js';
+import { biomeForCell, rasterizePath, rollVehicleDestruction, sumIslandCo2 } from './weather.js';
 import { islandInscribedAny } from './island.js';
 import { CELL_SIZE_TILES, makeInitialIslandState } from './world.js';
 import type { IslandSpec, WorldState } from './world.js';
@@ -703,7 +703,12 @@ export function tickVehicles(
           v.launchTime,
           CELL_SIZE_TILES,
         );
-        const roll = rollVehicleDestruction(world.seed, path, v.weatherMultiplier, v.id, wallOffsetMs);
+        // §7.3 coherent field: biome + CO₂ so the vehicle fate sees the
+        // SAME weather every other consumer samples for these cells.
+        const roll = rollVehicleDestruction(
+          world.seed, path, v.weatherMultiplier, v.id, wallOffsetMs,
+          (cx, cy) => biomeForCell(world, cx, cy), sumIslandCo2(world),
+        );
         if (roll.destroyed) {
           v.status = 'lost';
           lost.push({ targetIslandId: target.id, fromIslandId: v.from, kind: v.kind });
