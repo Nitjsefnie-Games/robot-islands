@@ -1494,34 +1494,33 @@ export function findNextCapEvent(
     const current = inv(state, r);
     let timeToEventSec: number;
     if (rate > 0) {
-      // Heading toward cap. If already at/over cap (shouldn't normally
-      // happen because outputAvail would have zeroed the rate), skip.
-      // Treat headroom < 1 unit as "effectively full" — a sub-1 residue
-      // (e.g. cap - 1e-15 from float-subtraction precision loss) yields
-      // `timeToEventSec ≈ 0`, and `tMs + tiny*1000` rounds back to `tMs`
-      // at realistic perf.now() scales (~1e6 ms ULP ≈ 2e-10), which then
-      // makes segEndMs == t, dtSec == 0, and the entire integrator block
-      // (applyRates, accrueXp, tickConstruction) is skipped every frame —
-      // a production-freeze bug. The 1-unit threshold is for next-event
-      // purposes only; applyRates retains float storage so slow producers
-      // still accumulate fractional units across segments.
+      // Heading toward cap. At/over cap already (headroom <= 0): no FUTURE
+      // boundary exists — skip. This covers (a) producers outputAvail will
+      // stall next pass, and (b) unconditional flows (rare-find trickles,
+      // furnace coal burn) pinned at the boundary by applyRates' clamp,
+      // which would otherwise emit a `tMs + 1` event every segment forever.
       const capVal = cap(state, r, ctx?.caps, undefined, ctx?.baseMult);
       const headroom = capVal - current;
-      if (headroom < 1) continue;
+      if (headroom <= 0) continue;
       timeToEventSec = headroom / rate;
     } else {
-      // rate < 0, heading toward zero. If already at zero, skip — that
-      // input would have set inputAvail=0 and we wouldn't be here.
-      // Treat sub-1 inventory as "effectively empty" for the same
-      // precision-residue reason as the cap branch above: a 2.6e-21 stock
-      // with a finite consumption rate computes `timeToEventSec ≈ 5e-19`,
-      // which after `tMs + that*1000` rounds back to `tMs` and freezes
-      // the integrator. The threshold matches the cap-side branch for
-      // symmetry; the same applyRates float-storage caveat applies.
-      if (current < 1) continue;
+      // rate < 0, heading toward zero. Already at zero: skip — that input
+      // sets inputAvail=0 (or, for unconditional flows, applyRates pins 0).
+      if (current <= 0) continue;
       timeToEventSec = current / -rate;
     }
-    const eventMs = tMs + timeToEventSec * 1000;
+    // Fix 3.6: a stock within 1 unit of its boundary used to be skipped
+    // outright (anti-freeze workaround), which let a (cap-1, cap) stock
+    // produce at full rate — and full XP — for an entire offline segment,
+    // and a (0,1) stock feed its consumer all segment (conjured inputs).
+    // Instead, land the boundary but clamp it to ≥ 1ms ahead so it can't
+    // round back to `tMs` at realistic perf.now() magnitudes (the original
+    // freeze: segEndMs == t ⇒ dtSec == 0 ⇒ force-jump skips the call).
+    // applyRates' exact clamps (`Math.min(cap…)`, `Math.max(0…)`) pin the
+    // inventory to exactly cap/0 at the landed boundary, so the NEXT
+    // computeRates sees exact-full/exact-empty and stalls the producer/
+    // consumer — no recurring-event loop (see the `<= 0` skips above).
+    const eventMs = Math.max(tMs + timeToEventSec * 1000, tMs + 1);
     if (eventMs < best) best = eventMs;
   }
   // §4.7 maintenance-boundary events. For each building with a pending
