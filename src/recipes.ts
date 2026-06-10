@@ -768,12 +768,12 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   zinc_ingot: 3,
   galvanized_steel: 10,
   chromium_ore: 1,
-  chromium_ingot: 30,
+  chromium_ingot: 10,
   nickel_ore: 1,
-  nickel_ingot: 30,
+  nickel_ingot: 10,
   stainless_steel: 30,
   tungsten_ore: 1,
-  tungsten_ingot: 30,
+  tungsten_ingot: 10,
   tool_steel: 30,
   // Phase 2 — T1 refined chains (§6.2 / §7.5)
   quicklime: 3,
@@ -1668,7 +1668,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     exogenousFlow: 'terrain',
     category: 'extraction',
   },
-  // §8.1 T2 Heavy Logger: 3× wood throughput vs T1 Logger.
+  // §8.1 T2 Heavy Logger: ~4.0× wood throughput vs T1 Logger (logger cycleSec=1404.1).
   heavy_logger: {
     cycleSec: 351, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
@@ -1676,7 +1676,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     exogenousFlow: 'terrain',
     category: 'extraction',
   },
-  // §8.1 T2 Deep Mine: 3× ore throughput vs T1 Mine. Output is iron_ore
+  // §8.1 T2 Deep Mine: ~1.5× ore throughput vs T1 Mine (mine cycleSec=20). Output is iron_ore
   // (the only ore vein the live game currently surfaces; deeper-vein
   // variants like copper / nickel land alongside their resource catalog
   // additions).
@@ -1703,7 +1703,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     outputs: { bolt: 1 },
     category: 'manufacturing',
   },
-  // §15.6 saltwater-cell bootstrap — T1 manufacturing recipe. 40s cycle,
+  // §15.6 saltwater-cell bootstrap — T1 manufacturing recipe. 537495.7s (~6.2-day) cycle,
   // home-Plains-only inputs so battery_bank no longer chains through the
   // T3 lithium gate. Wire is the T2-chokepoint bottleneck per spec §05.
   cell_press: {
@@ -1739,7 +1739,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'power',
   },
   // §8.5 T3 power: Nuclear Reactor burns nuclear_fuel_rod (T4 endgame
-  // fuel, §6.5). Cycle bumped to 600s to reflect slow fuel-rod burn.
+  // fuel, §6.5). Cycle is 200s to reflect fuel-rod burn.
   nuclear_reactor: {
     cycleSec: 200,
     inputs: { nuclear_fuel_rod: 1 },
@@ -3125,8 +3125,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'manufacturing',
   },
 
-  // §14.3 / §14.10: Scanner Sat Assembly. 30-min cycle.
-  // 2026-05-18 ÷3 for display visibility → now 10-min cycle.
+  // §14.3 / §14.10: Scanner Sat Assembly. ~110.6-day density-derived cycle.
   scanner_sat_assembly: {
     cycleSec: 9555479.1, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { exotic_alloy: 4, ai_core: 2, spacetime_fragment: 1, aluminum: 50, orbital_insertion_package: 1 },
@@ -3134,8 +3133,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'manufacturing',
   },
 
-  // §14.3 / §14.10: Relay Sat Assembly. 30-min cycle.
-  // 2026-05-18 ÷3 for display visibility → now 10-min cycle.
+  // §14.3 / §14.10: Relay Sat Assembly. ~110.6-day density-derived cycle.
   relay_sat_assembly: {
     cycleSec: 9555479.1, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { exotic_alloy: 6, ai_core: 1, optical_fiber: 200, orbital_insertion_package: 1 },
@@ -3143,8 +3141,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'manufacturing',
   },
 
-  // §14.3 / §14.10: Sweeper Sat Assembly. 30-min cycle.
-  // 2026-05-18 ÷3 for display visibility → now 10-min cycle.
+  // §14.3 / §14.10: Sweeper Sat Assembly. ~110.6-day density-derived cycle.
   sweeper_sat_assembly: {
     cycleSec: 9555479.1, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { exotic_alloy: 4, ai_core: 1, carbon_steel: 100, magnet: 20, orbital_insertion_package: 1 },
@@ -3155,7 +3152,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // §14.3 / §14.10: Mirror Sat Assembly. 30-min cycle. The 150 Aluminum is
   // bulk reflective surface; the 10 Optical Glass is sun-tracking precision
   // optics. Per-sat fields locked at peakBoost=0.7, rHalf=200 tiles.
-  // 2026-05-18 ÷3 for display visibility → now 10-min cycle.
+  // ~110.6-day density-derived cycle.
   mirror_sat_assembly: {
     cycleSec: 9555479.1, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { exotic_alloy: 4, ai_core: 1, aluminum: 150, optical_glass: 10, orbital_insertion_package: 1 },
@@ -3164,8 +3161,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
 
   // §14.7 / §14.10: OIP Assembly produces the T6 Foundation-Kit-equivalent
-  // payload required by every §14.7 launch. 30-min cycle.
-  // 2026-05-18 ÷3 for display visibility → now 10-min cycle.
+  // payload required by every §14.7 launch. ~110.6-day density-derived cycle.
   oip_assembly: {
     cycleSec: 9555479.1, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { iron_ingot: 100, brick: 30, glass: 20, carbon_fiber: 10, ai_core: 5 },
@@ -3453,7 +3449,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // index. Mirrors the existing T5 extractor pattern (aetheric_conduit,
   // spacetime_resonator, eldritch_sieve). Cycle times match the post-÷3
   // rebalance scale: extractors typically run 20-60s per cycle (cf. mine=17s,
-  // logger=13s) — ocean extractors run slower (60-120s) to reflect the
+  // logger=13s) — ocean extractors run at 4.1s (density-derived) to reflect the
   // logistic complexity of ocean platforms vs. a simple land mine.
   //
   // No inputs — all five are terrain-tapped raw extractors. Outputs are the
