@@ -1263,6 +1263,14 @@ export function computeRates(
   // below and the post-pass-4 burn fold further down; declared once here.
   const COAL_CYCLE_SEC = 30;
 
+  // Lookup maps to replace O(V²) linear scans in passes 3–4 with O(1)
+  // lookups. `tentIdxById` maps building id → index in `tentative`
+  // (recipe-less buildings are absent, so the lookup returns undefined).
+  const buildingById = new Map<string, PlacedBuilding>();
+  for (const b of validBuildings) buildingById.set(b.id, b);
+  const tentIdxById = new Map<string, number>();
+  for (let i = 0; i < tentative.length; i++) tentIdxById.set(tentative[i]!.building.id, i);
+
   // Pass 2.5 — exact net-flow solve (§15.3 net-flow rework, see
   // docs/superpowers/specs/2026-06-10-net-flow-economy-design.md).
   // Replaces the binary outputAvail stall: producers at a pinned bin rescale
@@ -1315,7 +1323,7 @@ export function computeRates(
   if (!zeroConstrained.has('coal')) {
     for (const [furnaceId, servedCount] of heat.coalConsumersByFurnace) {
       if (servedCount <= 0) continue;
-      const furnace = validBuildings.find((b) => b.id === furnaceId);
+      const furnace = buildingById.get(furnaceId);
       if (!furnace) continue;
       const coalPerCycle = defs[furnace.defId].heatSource?.coalPerCycle ?? 0;
       if (coalPerCycle <= 0) continue;
@@ -1403,7 +1411,7 @@ export function computeRates(
       active = true;
       nominalThroughputFrac = 1; // Solar / Dock / Crate / Silo — full passive draw if any.
     } else {
-      const idx = tentative.findIndex((tt) => tt.building === b);
+      const idx = tentIdxById.get(b.id) ?? -1;
       const te = idx >= 0 ? tentative[idx] : undefined;
       if (te && te.baseRate > 0) {
         const g = flowGates[idx] ?? 0;
@@ -1605,7 +1613,7 @@ export function computeRates(
   // per-furnace efficiency variation.
   for (const [furnaceId, servedCount] of heat.coalConsumersByFurnace) {
     if (servedCount <= 0) continue;
-    const furnace = validBuildings.find((b) => b.id === furnaceId);
+    const furnace = buildingById.get(furnaceId);
     if (!furnace) continue;
     const def = defs[furnace.defId];
     const coalPerCycle = def.heatSource?.coalPerCycle ?? 0;
@@ -1641,7 +1649,7 @@ export function computeRates(
       const starved = new Set<string>();
       for (const [furnaceId, servedCount] of heat.coalConsumersByFurnace) {
         if (servedCount <= 0) continue;
-        const furnace = validBuildings.find((b) => b.id === furnaceId);
+        const furnace = buildingById.get(furnaceId);
         if (!furnace) continue;
         if ((defs[furnace.defId].heatSource?.coalPerCycle ?? 0) > 0) {
           starved.add(furnaceId);
