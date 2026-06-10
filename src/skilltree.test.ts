@@ -12,6 +12,7 @@ import {
   buyNode,
   canBuyKeystone,
   canSpend,
+  computeMiniTreeRefund,
   costForDepth,
   costToUnlock,
   cumulativeSkillPointsForLevel,
@@ -1235,7 +1236,7 @@ describe('bindCrystal / unbindCrystal', () => {
     expect(state.socketBindings.has('gs.ext.mining-1')).toBe(false);
   });
 
-  it('unbindCrystal refunds SP for owned mini-tree nodes and edges', () => {
+  it('unbindCrystal refunds exactly what was charged (edge costs; node cost only for direct adds)', () => {
     const inv = blankInventory();
     (inv as Record<string, number>).mining_crystal_t1 = 1;
     const state = makeState({ inventory: inv, unspentSkillPoints: 0 });
@@ -1244,12 +1245,47 @@ describe('bindCrystal / unbindCrystal', () => {
     state.unlockedNodes.add('gs.ext.mining-1.mining_crystal_t1.left1');
     state.unlockedEdges.add('gs.ext.mining-1.mining_crystal_t1.edge.socket.core.0' as EdgeId);
     unbindCrystal(state, 'gs.ext.mining-1');
-    expect(state.unspentSkillPoints).toBe(3 + 1 + 0); // core=3, left1=1, edge=0
+    // Charged-amount accounting: core was acquired through the owned
+    // socket→core edge (cost 0 — what buyNode charged); left1 has no owned
+    // incoming edge, so it counts as a direct add at its node cost (1).
+    // The old refund (node costs + edge costs = 3+1+0) minted SP the player
+    // never spent.
+    expect(state.unspentSkillPoints).toBe(0 + 1);
     expect(state.unlockedNodes.has('gs.ext.mining-1.mining_crystal_t1.core')).toBe(false);
     expect(state.unlockedNodes.has('gs.ext.mining-1.mining_crystal_t1.left1')).toBe(false);
     expect(state.unlockedEdges.has('gs.ext.mining-1.mining_crystal_t1.edge.socket.core.0' as EdgeId)).toBe(false);
     expect((state.inventory as Record<string, number>).mining_crystal_t1).toBe(2);
     expect(state.socketBindings.has('gs.ext.mining-1')).toBe(false);
+  });
+
+  it('bind → buy entire mini-tree → unbind is exactly SP-neutral and returns the crystal', () => {
+    const inv = blankInventory();
+    (inv as Record<string, number>).mining_crystal_t1 = 1;
+    const state = makeState({ inventory: inv, level: 5, unspentSkillPoints: 20 });
+    bindCrystal(state, 'gs.ext.mining-1', 'mining_crystal_t1' as import('./skilltree-graph.js').CrystalId);
+    const g = effectiveGraph(state);
+    const prefix = 'gs.ext.mining-1.mining_crystal_t1.';
+    // Buying the leaves auto-owns the arms; core's socket edge costs 0.
+    buyNode(g, state, `${prefix}core`);
+    buyNode(g, state, `${prefix}left2`);
+    buyNode(g, state, `${prefix}right2`);
+    for (const suffix of ['core', 'left1', 'left2', 'right1', 'right2']) {
+      expect(state.unlockedNodes.has(`${prefix}${suffix}`)).toBe(true);
+    }
+    // buyNode charged Σ edge costs: 0 (socket→core) + 1+1 (left arm) + 1+1 (right arm).
+    expect(state.unspentSkillPoints).toBe(20 - 4);
+    // The UI confirm number must match what the unbind will actually refund.
+    const preview = computeMiniTreeRefund(
+      state, 'gs.ext.mining-1', 'mining_crystal_t1' as import('./skilltree-graph.js').CrystalId,
+    );
+    expect(preview.nodeCount).toBe(5);
+    expect(preview.spRefund).toBe(4);
+    unbindCrystal(state, 'gs.ext.mining-1');
+    expect(state.unspentSkillPoints).toBe(20); // exactly SP-neutral — no minting
+    expect((state.inventory as Record<string, number>).mining_crystal_t1).toBe(1);
+    for (const id of [...state.unlockedNodes, ...state.unlockedEdges]) {
+      expect(String(id).startsWith(prefix)).toBe(false);
+    }
   });
 
   it('unbindCrystal leaves unrelated nodes and edges untouched', () => {
