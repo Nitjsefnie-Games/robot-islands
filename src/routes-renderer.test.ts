@@ -121,13 +121,16 @@ describe('RouteRenderer — Phase 3 animation contract', () => {
 });
 
 describe('Route field whitelist', () => {
-  it('every Route field is either in routesCacheKey or on the not-visual whitelist', () => {
+  it('every Route field is either in perRouteKey (RouteRenderer.diffRebuild) or on the not-visual whitelist', () => {
     const r = makeRoute('r1', {
       sourceBuildingId: 'b1',
       draining: false,
     });
 
-    const cacheKeyFields = new Set(['id', 'type', 'from', 'to', 'inFlight']);
+    // Fields currently encoded in `perRouteKey` inside RouteRenderer.diffRebuild()
+    // (routes-renderer.ts). Adding a new Route field that affects rendered output?
+    // Add it there AND to this set. See VISUAL-FIELD-MARKER in routes.ts.
+    const perRouteKeyFields = new Set(['id', 'type', 'from', 'to', 'inFlight']);
     const notVisualWhitelist = new Set([
       'capacityPerSec',     // not rendered (stat panel only)
       'mode',               // priority / weighted; not rendered
@@ -137,11 +140,11 @@ describe('Route field whitelist', () => {
       'draining',           // soft-delete flag; not visually distinguished today
     ]);
 
-    const known = new Set([...cacheKeyFields, ...notVisualWhitelist]);
+    const known = new Set([...perRouteKeyFields, ...notVisualWhitelist]);
     for (const k of Object.keys(r)) {
       expect(
         known.has(k),
-        `Route field "${k}" is neither in cacheKeyFields nor on the not-visual whitelist. If it affects rendered output, add it to routesCacheKey() in src/routes.ts. Otherwise, add it to the whitelist in this test file.`,
+        `Route field "${k}" is neither in perRouteKeyFields nor on the not-visual whitelist. If it affects rendered output, add it to \`perRouteKey\` in RouteRenderer.diffRebuild() (routes-renderer.ts). Otherwise, add it to the whitelist in this test file.`,
       ).toBe(true);
     }
   });
