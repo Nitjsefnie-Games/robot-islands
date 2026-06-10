@@ -205,6 +205,49 @@ describe('solveFlow — spec worked examples', () => {
   });
 });
 
+describe('solveFlow — sweep-loop convergence (beyond the trivial regime)', () => {
+  it('long zero-constrained cycle, attenuating demand, partial external seed', () => {
+    // 5-building conversion cycle: B_i consumes 2/s of x_i and produces
+    // 1/s of x_{(i+1)%5}; every x_i zero-constrained; an external seed
+    // produces 0.5/s of x0. Closed form (each constraint tight):
+    //   g_{i+1} = g_i / 2 around the chain, g_0 = (0.5 + g_4) / 2
+    //   → g_0 = 8/31, 4/31, 2/31, 1/31, g_4 = 1/62.
+    // The key graph is one 5-cycle SCC; Gauss-Seidel contracts geometrically
+    // (ratio 1/32 per sweep) to ε = 1e-9 — exercises the sweep loop well
+    // past the trivial ≤3-sweep regime.
+    const N = 5;
+    const buildings: FlowBuildingSpec[] = [];
+    for (let i = 0; i < N; i++) {
+      buildings.push(B({ [`x${(i + 1) % N}`]: 1 }, { [`x${i}`]: 2 }));
+    }
+    buildings.push(B({ x0: 0.5 })); // external seed — unconstrained producer
+    const zeroConstrained = new Set<string>();
+    for (let i = 0; i < N; i++) zeroConstrained.add(`x${i}`);
+    const { gates, converged } = solveFlow(buildings, {
+      capConstrained: new Set(),
+      zeroConstrained,
+    });
+    expect(converged).toBe(true);
+    expect(gates[0]!).toBeCloseTo(8 / 31, 6);
+    expect(gates[1]!).toBeCloseTo(4 / 31, 6);
+    expect(gates[2]!).toBeCloseTo(2 / 31, 6);
+    expect(gates[3]!).toBeCloseTo(1 / 31, 6);
+    expect(gates[4]!).toBeCloseTo(1 / 62, 6);
+    expect(gates[5]).toBe(1); // seed has no constrained input — never gated
+    // Constraint invariants: realized consumption ≤ realized production.
+    const prod: Record<string, number> = {};
+    const cons: Record<string, number> = {};
+    buildings.forEach((b, i) => {
+      const g = gates[i]!;
+      for (const [r, p] of Object.entries(b.produces)) prod[r] = (prod[r] ?? 0) + p * g;
+      for (const [r, c] of Object.entries(b.consumes)) cons[r] = (cons[r] ?? 0) + c * g;
+    });
+    for (const r of zeroConstrained) {
+      expect(cons[r] ?? 0).toBeLessThanOrEqual((prod[r] ?? 0) + 1e-6);
+    }
+  });
+});
+
 describe('solveFlow — property test', () => {
   it('random problems satisfy constraints and maximality', () => {
     // Deterministic LCG so the test is reproducible.

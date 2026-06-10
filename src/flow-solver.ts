@@ -198,7 +198,6 @@ export function solveFlow(
   }
 
   // ---- Tarjan SCC over keys, then process in dependency order -----------
-  const sccOf = new Array<number>(keys.length).fill(-1);
   const order: number[][] = []; // SCCs in reverse-topological completion order
   {
     let index = 0;
@@ -223,7 +222,6 @@ export function solveFlow(
         for (;;) {
           const w = stack.pop()!;
           onStack[w] = false;
-          sccOf[w] = order.length;
           comp.push(w);
           if (w === v) break;
         }
@@ -238,7 +236,9 @@ export function solveFlow(
 
   let converged = true;
   for (const comp of order) {
-    if (comp.length === 1 && !edges[comp[0]!]!.includes(comp[0]!)) {
+    // Self-edges are impossible by construction (the edge builder skips
+    // k2 === key), so a singleton component is always a DAG node.
+    if (comp.length === 1) {
       // DAG node: a single exact update suffices (dependencies are final).
       const k = keys[comp[0]!]!;
       mul.set(k, update(k));
