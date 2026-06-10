@@ -135,7 +135,7 @@ export function mountWeatherOverlay(world: WorldState): WeatherOverlayHandle {
   };
 
   const rebuild = (nowMs: number, sources: WeatherVisionSources, wallOffsetMs: number): void => {
-    layer.removeChildren();
+    for (const c of layer.removeChildren()) c.destroy(true);
     const totalCo2Kg = sumIslandCo2(world);
     // §15.1: weather samples are wall-anchored; the throttle bookkeeping
     // below stays in the perf domain (`nowMs`).
