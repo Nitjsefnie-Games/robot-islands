@@ -1814,3 +1814,112 @@ describe('§15.1 wall-anchored route weather (wallOffsetMs threading)', () => {
     expect(sessionA.dispatched).toBeLessThan(10);
   });
 });
+
+describe('§7.3 coherent weather field across route consumers', () => {
+  const CRISIS_CO2 = 200_000; // ≥ 100 t ⇒ ×1.6 storm-weight amplification
+
+  /** Lossy storm states that still dispatch a nonzero batch (catastrophic
+   *  has capacity ×0 — nothing would fly, so nothing could take losses). */
+  function isStormClass(s: WeatherState): boolean {
+    return s === 'storm' || s === 'severe_storm';
+  }
+
+  /** Cell that is benign (clear / light_fog — full capacity, no loss) at
+   *  t=0 baseline but storm-class under crisis CO₂. A clear→storm flip is
+   *  arithmetically impossible (amplification shifts the clear band into
+   *  light_fog only), so benign-but-foggy baselines are the flip surface. */
+  function findCo2FlipCell(seed: string): { cx: number; cy: number } {
+    for (let cx = -25; cx <= 25; cx++) {
+      for (let cy = -25; cy <= 25; cy++) {
+        const base = weather(seed, cx, cy, 0).state;
+        if (base !== 'clear' && base !== 'light_fog') continue;
+        if (isStormClass(weather(seed, cx, cy, 0, undefined, CRISIS_CO2).state)) {
+          return { cx, cy };
+        }
+      }
+    }
+    throw new Error('no CO₂ flip cell found');
+  }
+
+  function runWithCo2(co2Kg: number): { dispatched: number; delivered: number } {
+    _resetRouteIdCounter();
+    const cell = findCo2FlipCell('test-seed');
+    const fromX = cell.cx * CELL_SIZE_TILES;
+    const fromY = cell.cy * CELL_SIZE_TILES + 2;
+    const toX = cell.cx * CELL_SIZE_TILES;
+    const toY = cell.cy * CELL_SIZE_TILES + 14;
+    const src = makeState('a', { inventory: { ...blankInventory(), iron_ore: 100 }, co2Kg });
+    const dst = makeState('b');
+    const world = makeWorld([], [
+      makeIslandSpec('a', fromX, fromY),
+      makeIslandSpec('b', toX, toY),
+    ]);
+    const states = new Map([['a', src], ['b', dst]]);
+    world.islandStates = states; // sumIslandCo2 reads world.islandStates
+    const r = cargoRoute('a', 'b', 'iron_ore', [], 10, 1);
+    world.routes.push(r);
+    const out = tickRoutes(world, states, 0, 1);
+    const dispatched = out.dispatches.reduce((s, d) => s + d.amount, 0);
+    const arr = tickRoutes(world, states, 2000, 0);
+    const delivered = arr.arrivals.reduce((s, a) => s + a.amount, 0);
+    return { dispatched, delivered };
+  }
+
+  it('crisis CO₂: dispatch capacity AND arrival losses both see the storm', () => {
+    const amped = runWithCo2(CRISIS_CO2);
+    expect(amped.dispatched).toBeLessThan(10);
+    expect(amped.delivered).toBeLessThan(amped.dispatched);
+  });
+
+  it('zero CO₂: every consumer sees the same clear baseline', () => {
+    const base = runWithCo2(0);
+    expect(base.dispatched).toBeCloseTo(10, 9);
+    expect(base.delivered).toBeCloseTo(10, 9);
+  });
+
+  it('biome threads into dispatch capacity and arrival losses', () => {
+    // Cell clear at t=0 for the default field but storm-class under the
+    // volcanic biome weighting; an island centred in that cell makes
+    // biomeForCell return 'volcanic' for every consumer.
+    let flip: { cx: number; cy: number } | null = null;
+    for (let cx = -25; cx <= 25 && !flip; cx++) {
+      for (let cy = -25; cy <= 25 && !flip; cy++) {
+        const base = weather('test-seed', cx, cy, 0).state;
+        if (base !== 'clear' && base !== 'light_fog') continue;
+        if (isStormClass(weather('test-seed', cx, cy, 0, 'volcanic').state)) flip = { cx, cy };
+      }
+    }
+    expect(flip).not.toBeNull();
+    if (!flip) return;
+
+    const run = (biome: IslandSpec['biome']): { dispatched: number; delivered: number } => {
+      _resetRouteIdCounter();
+      const fromX = flip!.cx * CELL_SIZE_TILES;
+      const fromY = flip!.cy * CELL_SIZE_TILES + 2;
+      const toX = flip!.cx * CELL_SIZE_TILES;
+      const toY = flip!.cy * CELL_SIZE_TILES + 14;
+      const src = makeState('a', { inventory: { ...blankInventory(), iron_ore: 100 } });
+      const dst = makeState('b');
+      const world = makeWorld([], [
+        { ...makeIslandSpec('a', fromX, fromY), biome },
+        makeIslandSpec('b', toX, toY),
+      ]);
+      const states = new Map([['a', src], ['b', dst]]);
+      const r = cargoRoute('a', 'b', 'iron_ore', [], 10, 1);
+      world.routes.push(r);
+      const out = tickRoutes(world, states, 0, 1);
+      const dispatched = out.dispatches.reduce((s, d) => s + d.amount, 0);
+      const arr = tickRoutes(world, states, 2000, 0);
+      const delivered = arr.arrivals.reduce((s, a) => s + a.amount, 0);
+      return { dispatched, delivered };
+    };
+
+    const plains = run('plains');
+    expect(plains.dispatched).toBeCloseTo(10, 9);
+    expect(plains.delivered).toBeCloseTo(10, 9);
+
+    const volcanic = run('volcanic');
+    expect(volcanic.dispatched).toBeLessThan(10);
+    expect(volcanic.delivered).toBeLessThan(volcanic.dispatched);
+  });
+});

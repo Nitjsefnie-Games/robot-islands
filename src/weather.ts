@@ -491,11 +491,17 @@ export function rollVehicleDestruction(
    *  seed + vehicleId only), so the same path sampled at the same wall
    *  times yields the same fate regardless of the perf-clock epoch. */
   wallOffsetMs: number = 0,
+  /** §7.3 coherent field: per-cell biome lookup (callers pass a
+   *  `biomeForCell` closure) so vehicle fates see the SAME weather the
+   *  overlay / tooltip / arrival losses see for that cell. */
+  biomeFor?: (cx: number, cy: number) => Biome | undefined,
+  /** §7.3 CO₂ storm amplification — `sumIslandCo2(world)` at the caller. */
+  totalCo2Kg: number = 0,
 ): { destroyed: boolean; atCellIndex: number | null } {
   const rng = makeSeededRng(`${seed}_vehicle_${vehicleId}`);
   for (let i = 0; i < path.length; i++) {
     const { cx, cy, entryMs } = path[i]!;
-    const cell = weather(seed, cx, cy, weatherClockMs(entryMs, wallOffsetMs));
+    const cell = weather(seed, cx, cy, weatherClockMs(entryMs, wallOffsetMs), biomeFor?.(cx, cy), totalCo2Kg);
     const baseChance = WEATHER_DESTRUCTION_CHANCE[cell.state];
     if (baseChance === undefined || baseChance === 0) continue;
     const finalChance = baseChance * weatherMultiplier;
@@ -638,11 +644,15 @@ export function routeCapacityMultiplierForWeather(
   cellSizeTiles: number,
   /** §15.1 wall anchor: weather is sampled at `nowMs + wallOffsetMs`. */
   wallOffsetMs: number = 0,
+  /** §7.3 coherent field: per-cell biome lookup, see rollVehicleDestruction. */
+  biomeFor?: (cx: number, cy: number) => Biome | undefined,
+  /** §7.3 CO₂ storm amplification — `sumIslandCo2(world)` at the caller. */
+  totalCo2Kg: number = 0,
 ): number {
   const cells = rasterizeLineSegment(fromX, fromY, toX, toY, cellSizeTiles);
   let minMul = 1;
   for (const { cx, cy } of cells) {
-    const w = weather(seed, cx, cy, weatherClockMs(nowMs, wallOffsetMs));
+    const w = weather(seed, cx, cy, weatherClockMs(nowMs, wallOffsetMs), biomeFor?.(cx, cy), totalCo2Kg);
     const mul = WEATHER_ROUTE_CAPACITY_MULTIPLIER[w.state];
     if (mul !== undefined) minMul = Math.min(minMul, mul);
   }

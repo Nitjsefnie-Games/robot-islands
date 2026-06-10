@@ -2076,3 +2076,102 @@ describe('§15.1 wall-anchored drone weather', () => {
     }
   });
 });
+
+describe('§7.3 coherent weather field for drone fate rolls', () => {
+  const CRISIS_CO2 = 200_000;
+
+  function worldWithCo2(seed: string, co2Kg: number): WorldState {
+    const homeState = makeIslandState({ id: 'home', co2Kg });
+    const w: WorldState = {
+      islands: [],
+      drones: [],
+      routes: [],
+      vehicles: [],
+      revealedCells: new Set(),
+      satellites: [],
+      repairDrones: [],
+      debrisFields: [],
+      endgameState: { achieved: new Set(), firstAchievedMs: null },
+      latticeActive: false,
+      latticeNodeIslands: [],
+      commPackets: [],
+      totalCo2Kg: 0,
+      playerLat: null,
+      playerLon: null,
+      oceanCells: new Map(),
+      depthRevealedCells: new Set(),
+      seed,
+      recentBuildAttempts: new Set(),
+      recentBuildAttemptTs: new Map(),
+    };
+    w.islandStates = new Map<string, IslandState>([['home', homeState]]);
+    return w;
+  }
+
+  function fateWithCo2(seed: string, co2Kg: number): boolean {
+    const w = worldWithCo2(seed, co2Kg);
+    const home = makeIslandState();
+    home.inventory.biofuel = 50;
+    _resetDroneIdCounter();
+    // 50 fuel × T1 efficiency 4 = 200 tiles round trip → the path crosses
+    // ~7 distinct cells, giving the CO₂ band shift (light_fog→storm — a
+    // clear→storm flip is arithmetically impossible) a realistic surface
+    // to land a fate change on.
+    const r = dispatchDrone(w, home, 0, 0, 1, 0, 50, 0);
+    expect(r.ok).toBe(true);
+    return r.ok ? r.drone.doomedAtMs !== undefined : false;
+  }
+
+  it('crisis CO₂ reaches the dispatch fate roll (some fate flips)', () => {
+    let flipped = false;
+    for (let i = 0; i < 1500 && !flipped; i++) {
+      const seed = `drone-co2-${i}`;
+      flipped = fateWithCo2(seed, 0) !== fateWithCo2(seed, CRISIS_CO2);
+    }
+    expect(flipped).toBe(true);
+  });
+
+  it("the launch cell's biome reaches the dispatch fate roll (some fate flips)", () => {
+    function fateWithBiome(seed: string, biome: IslandSpec['biome']): boolean {
+      const w = worldWithCo2(seed, 0);
+      // Island centred at (0, 0) puts its biome on cell (0, 0) — the
+      // drone's launch cell — via biomeForCell.
+      w.islands.push(makeIslandSpec({ id: 'home', biome, cx: 0, cy: 0, populated: true, discovered: true }));
+      const home = makeIslandState();
+      home.inventory.biofuel = 50;
+      _resetDroneIdCounter();
+      const r = dispatchDrone(w, home, 0, 0, 1, 0, 10, 0);
+      expect(r.ok).toBe(true);
+      return r.ok ? r.drone.doomedAtMs !== undefined : false;
+    }
+    let flipped = false;
+    for (let i = 0; i < 400 && !flipped; i++) {
+      const seed = `drone-biome-${i}`;
+      flipped = fateWithBiome(seed, 'plains') !== fateWithBiome(seed, 'volcanic');
+    }
+    expect(flipped).toBe(true);
+  });
+
+  it('CO₂-amplified fate stays in lockstep with the legacy return-time fallback', () => {
+    // The legacy re-roll must consume the SAME coherent field (biome + CO₂)
+    // as the dispatch-time roll, or old saves would flip fates.
+    let checked = 0;
+    for (let i = 0; i < 60; i++) {
+      const seed = `drone-co2-lockstep-${i}`;
+      const w = worldWithCo2(seed, CRISIS_CO2);
+      const home = makeIslandState();
+      home.inventory.biofuel = 50;
+      _resetDroneIdCounter();
+      const r = dispatchDrone(w, home, 0, 0, 1, 0, 10, 0);
+      expect(r.ok).toBe(true);
+      if (!r.ok) continue;
+      const doomed = r.drone.doomedAtMs !== undefined;
+      (r.drone as { doomedAtMs?: number }).doomedAtMs = undefined;
+      const t = tickDrones(w, 81_000, 0);
+      expect(t.lost).toHaveLength(doomed ? 1 : 0);
+      expect(t.returned).toHaveLength(doomed ? 0 : 1);
+      checked++;
+    }
+    expect(checked).toBe(60);
+  });
+});
