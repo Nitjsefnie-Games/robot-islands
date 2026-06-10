@@ -24,6 +24,12 @@ export const SCANNER_ASYMPTOTE_P_PER_TICK = 0.05;
 /** Time-constant for the exponential ramp toward asymptote.
  *  ~5 minutes in ms — "a few minutes catches most local islands". */
 export const SCANNER_DWELL_TIME_CONSTANT_MS = 5 * 60 * 1000;
+/** Reference tick duration in ms. The per-tick constants
+ *  (`SCANNER_INITIAL_P_PER_TICK`, `SCANNER_ASYMPTOTE_P_PER_TICK`,
+ *  `DEBRIS_HIT_CONSTANT`) are calibrated at this cadence — 1 roll per second.
+ *  `scannerPerCallProbability` and `debrisPerCallProbability` scale them to
+ *  any real dt via the complementary-probability hazard formula. */
+export const SCANNER_REF_TICK_MS = 1000;
 
 /** §14.2 Orbital Tracking Station detection radius. Placeholder — Appendix A.
  *  Chosen to cover a meaningful slice of the orbital arena (multi-cell)
@@ -897,6 +903,42 @@ export function scannerDiscoveryProbability(dwellMs: number): number {
   );
 }
 
+/**
+ * Scale a per-reference-tick scanner probability to the actual call dt.
+ *
+ * The per-tick constants are calibrated at a 1000 ms cadence
+ * (`SCANNER_REF_TICK_MS`). When callers run more or less frequently we must
+ * keep the same hazard rate — i.e. 60 calls at (1000/60)ms each have the
+ * same cumulative miss probability as 1 call at 1000 ms.
+ *
+ * Complementary-probability hazard formula:
+ *   pCall = 1 − (1 − pRefTick) ** (tickDeltaMs / SCANNER_REF_TICK_MS)
+ *
+ * Returns 0 when tickDeltaMs ≤ 0. Pure — no side effects.
+ */
+export function scannerPerCallProbability(
+  pRefTick: number,
+  tickDeltaMs: number,
+): number {
+  if (tickDeltaMs <= 0) return 0;
+  return 1 - Math.pow(1 - pRefTick, tickDeltaMs / SCANNER_REF_TICK_MS);
+}
+
+/**
+ * Scale a per-reference-tick debris hit probability to the actual call dt.
+ * Identical formula to `scannerPerCallProbability` — extracted as a separate
+ * export so tests and callers can name the hazard domain explicitly.
+ *
+ * Returns 0 when tickDeltaMs ≤ 0. Pure — no side effects.
+ */
+export function debrisPerCallProbability(
+  pRefTick: number,
+  tickDeltaMs: number,
+): number {
+  if (tickDeltaMs <= 0) return 0;
+  return 1 - Math.pow(1 - pRefTick, tickDeltaMs / SCANNER_REF_TICK_MS);
+}
+
 /** Cells covered by a satellite given its current position + coverage radius.
  *  Iterates every cell in the bounding box of the coverage disk and admits
  *  cells whose rectangle overlaps the disk — i.e. the closest point of the
@@ -1000,7 +1042,8 @@ export function tickScannerDiscovery(
       // asymptote sooner. Multiplier ≤ 1 (missing field) leaves base
       // behaviour identical.
       const effectiveDwell = dwell * (sat.dwellRateMul ?? 1);
-      const p = scannerDiscoveryProbability(effectiveDwell);
+      const pRefTick = scannerDiscoveryProbability(effectiveDwell);
+      const p = scannerPerCallProbability(pRefTick, tickDeltaMs);
       if (rng() < p) {
         isl.discovered = true;
         newlyDiscovered.push(isl.id);
