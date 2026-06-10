@@ -536,7 +536,10 @@ async function main(): Promise<void> {
     if (dispatchKey(reg, e.code)) e.preventDefault();
   });
   window.addEventListener('keyup', (e) => {
-    if (e.code !== 'Escape' && isTextInputFocused()) return;
+    // Release handlers are side-effect-free (they just clear held flags),
+    // so they run unconditionally even when a text input is focused.
+    // This prevents a pan key from sticking when the user presses it,
+    // moves focus into an input, and releases it there.
     const action = reg.bindings.get(e.code);
     if (action && releaseHandlers[action]) {
       releaseHandlers[action]();

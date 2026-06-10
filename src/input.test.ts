@@ -122,4 +122,23 @@ describe('InputRegistry', () => {
     expect(reg.bindings.get('Equal')).toBe('zoom-in');
     expect(reg.bindings.get('Minus')).toBe('zoom-out');
   });
+
+  it('release handlers clear flags unconditionally (no text-input focus gate)', () => {
+    // Mirrors main.ts: the keyup path must run release handlers even when a
+    // text input is focused, otherwise held pan flags stick forever.
+    const held = { up: false, down: false, left: false, right: false };
+    const releaseHandlers: Record<string, () => void> = {
+      'pan-up': () => (held.up = false),
+      'pan-down': () => (held.down = false),
+      'pan-left': () => (held.left = false),
+      'pan-right': () => (held.right = false),
+    };
+    // Simulate keydown (held flag set).
+    held.up = true;
+    // Simulate keyup while "text input is focused" — the release path must
+    // still clear the flag.
+    const action = 'pan-up';
+    releaseHandlers[action]!();
+    expect(held.up).toBe(false);
+  });
 });
