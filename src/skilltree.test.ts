@@ -884,6 +884,75 @@ describe('magic recipeInputMul chain — T3 gate + reachability (real DEFAULT_GR
   });
 });
 
+describe('depth-3 notable anchoring (§9.3) — anchored to the depth-2 chain, not a depth-6 tail', () => {
+  // These three depth-3/cost-3 notables have no chain matching their effect
+  // kind; the alphabetical fallback picked the <subPath>.inputEff chain, which
+  // starts at depth 3 — no depth-2 node — so the deepest-node fallback hung
+  // them off depth-6 T5-locked tails.
+  const FIXED: ReadonlyArray<readonly [string, string]> = [
+    ['smelting.notable.refractoryLining', 'smelting'],
+    ['chemistry.notable.greenChemistry', 'chemistry'],
+    ['electronics.notable.satBandwidth', 'electronics'],
+  ];
+
+  for (const [id, subPath] of FIXED) {
+    it(`${id}: every anchor edge comes from a depth-2 node`, () => {
+      const incoming = DEFAULT_GRAPH.edges.filter((e) => String(e.to) === id);
+      expect(incoming.length).toBeGreaterThan(0);
+      for (const e of incoming) {
+        const from = DEFAULT_GRAPH.nodes.find((n) => n.id === String(e.from));
+        expect(from, `anchor source ${String(e.from)} must exist`).toBeDefined();
+        expect(from!.depth).toBe(2);
+      }
+    });
+
+    it(`${id}: purchasable at T3 (level 15) given its depth-1/2 chain owned`, () => {
+      const state = makeState({ level: 15, unspentSkillPoints: 100 });
+      buyNode(DEFAULT_GRAPH, state, `${subPath}.recipeRate.1`);
+      buyNode(DEFAULT_GRAPH, state, `${subPath}.recipeRate.2`);
+      buyNode(DEFAULT_GRAPH, state, id);
+      expect(state.unlockedNodes.has(id)).toBe(true);
+    });
+  }
+
+  it('pyroforgeBypass no longer inherits the depth-3 prereq’s T5 anchor lock', () => {
+    // Pre-fix, owning refractoryLining forced a walk through the T5-locked
+    // inputEff tail (anchor at inputEff.6), so the keystone's depth-3 prereq
+    // carried a spurious T5/depth-6 toll. Now the depth-3 prereq is satisfied
+    // off the depth-2 chain with no inputEff detour; the keystone unlocks via
+    // buyKeystone once the (legitimately depth-5/T5) heatRecapture prereq is
+    // also owned.
+    const state = makeState({ level: 50, unspentSkillPoints: 200 });
+    buyNode(DEFAULT_GRAPH, state, 'smelting.recipeRate.1');
+    buyNode(DEFAULT_GRAPH, state, 'smelting.notable.refractoryLining');
+    // The depth-3 prereq purchase pulled in NO inputEff node.
+    expect([...state.unlockedNodes].some((n) => String(n).includes('.inputEff.'))).toBe(false);
+    // heatRecapture (depth 5) legitimately anchors off the inputEff chain,
+    // whose first node is an orphan root — buy it, then path to the notable.
+    buyNode(DEFAULT_GRAPH, state, 'smelting.inputEff.3');
+    buyNode(DEFAULT_GRAPH, state, 'smelting.notable.heatRecapture');
+    const ks = KEYSTONE_PREREQS.find(
+      (k) => String(k.targetNode) === 'smelting.keystone.pyroforgeBypass',
+    )!;
+    expect(canBuyKeystone(ks, state)).toBe(true);
+    buyKeystone(ks, state);
+    expect(state.unlockedNodes.has('smelting.keystone.pyroforgeBypass')).toBe(true);
+  });
+
+  it('catalyticMastery no longer inherits the depth-3 prereq’s T5 anchor lock', () => {
+    const state = makeState({ level: 50, unspentSkillPoints: 200 });
+    buyNode(DEFAULT_GRAPH, state, 'chemistry.recipeRate.1');
+    buyNode(DEFAULT_GRAPH, state, 'chemistry.notable.greenChemistry');
+    expect([...state.unlockedNodes].some((n) => String(n).includes('.inputEff.'))).toBe(false);
+    buyNode(DEFAULT_GRAPH, state, 'chemistry.inputEff.3');
+    buyNode(DEFAULT_GRAPH, state, 'chemistry.notable.pressurizedReactors');
+    const ks = KEYSTONE_PREREQS.find(
+      (k) => String(k.targetNode) === 'chemistry.keystone.catalyticMastery',
+    )!;
+    expect(canBuyKeystone(ks, state)).toBe(true);
+  });
+});
+
 describe('costToUnlock — tier-locked nodes excluded at low tier (§9.3)', () => {
   function mkNode(id: string, depth: number): SkillNode {
     return {
