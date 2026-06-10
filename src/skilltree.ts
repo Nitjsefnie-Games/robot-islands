@@ -1126,16 +1126,17 @@ export function effectiveSkillMultipliers(
         constructionTime *= m;
         break;
       case 'parallelBuildCapAdd':
-        // Additive — sum per-node magnitudes. Spec §03 uses ~+0.667 per node
-        // for a 6-node total of +4 (5 total concurrent build slots). The
-        // placement.ts consumer Math.floor()s, so the integer slot count is
-        // preserved.
-        parallelBuildBonus += node.magnitude;
+        // Additive — sum per-node aura-amplified magnitudes (§9.3 auras apply
+        // to every owned adjacent node's magnitude, additive included). Spec
+        // §03 uses ~+0.667 per node for a 6-node total of +4 (5 total
+        // concurrent build slots). The placement.ts consumer Math.floor()s,
+        // so the integer slot count is preserved.
+        parallelBuildBonus += node.magnitude * amp;
         break;
       case 'queueCapAdd':
         // Additive mirror of parallelBuildCapAdd. The placement.ts consumer
         // Math.floor()s, so the integer queue-slot count is preserved.
-        queueCapBonus += node.magnitude;
+        queueCapBonus += node.magnitude * amp;
         break;
       case 'teleporterEfficiencyMul':
         teleporterEfficiency *= m;
@@ -1147,12 +1148,13 @@ export function effectiveSkillMultipliers(
         tradeSizeMul *= m;
         break;
       case 'tradeReachAdd':
-        // Additive — sum per-node magnitudes (rounded at the consumer).
-        tradeReachAdd += node.magnitude;
+        // Additive — sum per-node aura-amplified magnitudes (rounded at the
+        // consumer).
+        tradeReachAdd += node.magnitude * amp;
         break;
       case 'tradeSpreadShiftAdd':
-        // Additive — sum per-node magnitudes.
-        tradeSpreadShiftAdd += node.magnitude;
+        // Additive — sum per-node aura-amplified magnitudes.
+        tradeSpreadShiftAdd += node.magnitude * amp;
         break;
       case 'mineYieldBonusMul':
         mineYieldBonus *= m;
@@ -1344,19 +1346,22 @@ function nodesWithinRadius(start: NodeId, radius: number, adj: Map<NodeId, NodeI
 }
 
 /** §14.7 sum of Orbital `launch` sub-path additive bonuses for this island.
- *  Each unlocked launch.* node contributes its magnitude additively. Other
- *  sub-paths and other branches contribute 0. */
+ *  Each unlocked launch.* node contributes its aura-amplified magnitude
+ *  additively (§9.3 auras apply to additive effects too — the launch chain is
+ *  ALL additive, so without the aura pass `padRedundancy`'s aura did nothing).
+ *  Other sub-paths and other branches contribute 0. */
 export function launchSuccessBonus(
   state: IslandState,
-  catalog: ReadonlyArray<SkillNode> = NODE_CATALOG,
+  graph: Graph = DEFAULT_GRAPH,
 ): number {
-  const cat = catalog === NODE_CATALOG ? DEFAULT_CATALOG : buildCatalog(catalog);
+  const cat = graph.nodes === NODE_CATALOG ? DEFAULT_CATALOG : buildCatalog(graph.nodes);
+  const auraAmp = computeAuraAmplifiers(state, graph);
   let bonus = 0;
   for (const nodeId of state.unlockedNodes) {
     const node = cat.byId.get(nodeId);
     if (!node) continue;
     if (node.effect.kind !== 'launchSuccessAdditive') continue;
-    bonus += node.magnitude;
+    bonus += node.magnitude * (auraAmp.get(nodeId) ?? 1);
   }
   return bonus;
 }
