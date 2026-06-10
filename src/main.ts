@@ -92,6 +92,7 @@ import {
   type TradeRuntime,
 } from './trade.js';
 import { mountTradeUi } from './trade-ui.js';
+import { activeBonusMul, tickActiveBonus } from './active-bonus.js';
 import { CELL_SIZE_TILES } from './constants.js';
 import { SONAR_BUOY_DEF_ID, SONAR_BUOY_RADIUS_TILES, tickSonarBuoys } from './sonar-buoy.js';
 import {
@@ -1827,6 +1828,7 @@ async function main(): Promise<void> {
       return {
         modifierMul: modifierMulFor(id),
         ncBuff: stForCtx ? ncBuffFor(stForCtx) : undefined,
+        activeBonusMul: activeBonusMul(worldState),
         terrainAt: spec?.terrainAt,
         inventory: isLatticeIsland ? unifiedInv : undefined,
         crossIsland: crossIslandById.get(id),
@@ -1867,6 +1869,7 @@ async function main(): Promise<void> {
       advanceIsland(s, now, {
         modifierMul: modifierMulFor(s.id),
         ncBuff: ncBuffFor(s),
+        activeBonusMul: activeBonusMul(worldState),
         terrainAt: spec?.terrainAt,
         inventory: isLatticeIsland ? unifiedInv : sharedInventory,
         crossIsland,
@@ -1886,6 +1889,7 @@ async function main(): Promise<void> {
       const { net, power } = computeRates(s, {
         modifierMul: modifierMulFor(s.id),
         ncBuff: ncBuffFor(s),
+        activeBonusMul: activeBonusMul(worldState),
         terrainAt: spec?.terrainAt,
         inventory: isLatticeIsland ? unifiedInv : sharedInventory,
         crossIsland,
@@ -1907,6 +1911,10 @@ async function main(): Promise<void> {
     // expiry pruning stays current.
     const tradeOnline = document.visibilityState === 'visible' && document.hasFocus();
     const onlineDtMs = tradeOnline ? Math.min(elapsedSec * 1000, ONLINE_DT_CAP_MS) : 0;
+    // §9.9 active-play bonus: same online condition as trades; the module
+    // internally clamps accrual and decays the unfocused remainder, so the
+    // RAW frame dt goes in (NOT onlineDtMs — decay needs the full interval).
+    tickActiveBonus(worldState, tradeOnline, elapsedSec * 1000);
     tickTradeOffers(
       tradeRuntime,
       islandStates,
@@ -2029,6 +2037,7 @@ async function main(): Promise<void> {
     const { net: postNet, power: postPower } = computeRates(postTickActiveS, {
       modifierMul: modifierMulFor(postTickActiveS.id),
       ncBuff: ncBuffFor(postTickActiveS),
+      activeBonusMul: activeBonusMul(worldState),
       terrainAt: postTickActiveP?.terrainAt,
       inventory: postTickLattice ? unifiedInv : undefined,
       crossIsland: crossIslandById.get(postTickActiveS.id),
@@ -2057,6 +2066,7 @@ async function main(): Promise<void> {
       const { net: activeNet, power: activePower } = computeRates(activeS, {
         modifierMul: modifierMulFor(activeS.id),
         ncBuff: ncBuffFor(activeS),
+        activeBonusMul: activeBonusMul(worldState),
         terrainAt: activeP?.terrainAt,
         inventory: unifiedInv,
         crossIsland: crossIslandById.get(activeS.id),
