@@ -161,6 +161,7 @@ export function mountOrbitalUi(
   let bodyEl: HTMLDivElement | null = null;
   let footerEl: HTMLDivElement | null = null;
   let lastFlash: { msg: string; until: number } | null = null;
+  let lastBodySig = '';
 
   // ----- Armed-launch state ------------------------------------------------
   // While `armed !== null` the modal is hidden and a canvas reticle follows
@@ -533,7 +534,45 @@ export function mountOrbitalUi(
     return wrap;
   };
 
+  function computeBodySig(): string {
+    const spaceportIslands: IslandState[] = [];
+    for (const s of deps.islandStates.values()) {
+      if (hasOperationalBuilding(s.buildings, 'spaceport')) {
+        spaceportIslands.push(s);
+      }
+    }
+    let sig = `sp:${spaceportIslands.length}`;
+    for (const s of spaceportIslands) {
+      const sp = findOperationalBuilding(s.buildings, 'spaceport');
+      const tier = sp?.tier ?? 1;
+      const ascendant = s.ascendantCoreCrafted === true;
+      sig += `;${s.id},t${tier},a${ascendant ? 1 : 0}`;
+      for (const r of COMMON_RESOURCES) {
+        sig += `,${r}:${inv(s, r)}`;
+      }
+      if (tier < 3) {
+        const nextTier = tier + 1;
+        const upgradeCost: Partial<Record<ResourceId, number>> = tier === 1
+          ? { phase_converter: 5, memetic_core: 2, cryogenic_hydrogen: 50 }
+          : { reality_anchor: 10, memetic_core: 5, antimatter_propellant: 100 };
+        for (const [r, amt] of Object.entries(upgradeCost)) {
+          sig += `,up${nextTier}_${r}:${inv(s, r as ResourceId)}/${amt ?? 0}`;
+        }
+      }
+      for (const v of VARIANTS) {
+        sig += `,${v.variant}:${inv(s, v.payload)}`;
+      }
+    }
+    sig += `;sats:${deps.world.satellites.length},debris:${deps.world.debrisFields.length}`;
+    for (const sat of deps.world.satellites) {
+      sig += `;${sat.variant},${sat.spaceportIslandId},${Math.round(sat.fuel)},${sat.locked ? 'L' : sat.movingTo ? 'M' : 'F'}`;
+    }
+    sig += `;flash:${lastFlash && performance.now() < lastFlash.until ? lastFlash.msg : '-'}`;
+    return sig;
+  }
+
   const render = (): void => {
+    lastBodySig = computeBodySig();
     if (!bodyEl) return;
     bodyEl.replaceChildren();
     const spaceportIslands: IslandState[] = [];
@@ -614,7 +653,10 @@ export function mountOrbitalUi(
       return modal.isVisible();
     },
     refresh(): void {
-      if (modal.isVisible()) render();
+      if (modal.isVisible()) {
+        const sig = computeBodySig();
+        if (sig !== lastBodySig) render();
+      }
       // Keep the range ring in sync — Spaceport upgrades / fuel-skill
       // changes can move the radius even while armed.
       if (armed) repaintRangeRing();
