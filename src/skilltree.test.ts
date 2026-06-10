@@ -1307,6 +1307,57 @@ describe('bindCrystal / unbindCrystal', () => {
   });
 });
 
+describe('crystal mini-tree reachability — socket ownership (§9.3 grafts)', () => {
+  const SOCKET = 'gs.ext.mining-1';
+  const CRYSTAL = 'mining_crystal_t1' as import('./skilltree-graph.js').CrystalId;
+  const CORE = `${SOCKET}.${CRYSTAL}.core`;
+
+  function stateWithCrystal(): IslandState {
+    const inv = blankInventory();
+    (inv as Record<string, number>)[CRYSTAL as string] = 1;
+    return makeState({ inventory: inv, level: 5, unspentSkillPoints: 10 });
+  }
+
+  it('bindCrystal owns the synthetic socket node (cost 0) so mini-tree nodes become purchasable', () => {
+    const state = stateWithCrystal();
+    bindCrystal(state, SOCKET, CRYSTAL);
+    expect(state.unlockedNodes.has(SOCKET)).toBe(true);
+    const g = effectiveGraph(state);
+    expect(nodePurchaseStatus(g, state, CORE)).toBe('purchasable');
+    buyNode(g, state, CORE);
+    expect(state.unlockedNodes.has(CORE)).toBe(true);
+  });
+
+  it('unbindCrystal removes the socket ownership', () => {
+    const state = stateWithCrystal();
+    bindCrystal(state, SOCKET, CRYSTAL);
+    unbindCrystal(state, SOCKET);
+    expect(state.unlockedNodes.has(SOCKET)).toBe(false);
+  });
+
+  it('rebinding a different crystal keeps the socket owned', () => {
+    const state = stateWithCrystal();
+    (state.inventory as Record<string, number>).mining_crystal_t2 = 1;
+    bindCrystal(state, SOCKET, CRYSTAL);
+    bindCrystal(state, SOCKET, 'mining_crystal_t2' as import('./skilltree-graph.js').CrystalId);
+    expect(state.unlockedNodes.has(SOCKET)).toBe(true);
+  });
+
+  it('old saves (binding present, socket id absent from unlockedNodes) still reach the mini-tree', () => {
+    // Pre-fix saves persisted socketBindings but never owned the socket node.
+    // Belt-and-braces: costToUnlock seeds bound sockets as owned sources.
+    const state = stateWithCrystal();
+    state.socketBindings.set(SOCKET, CRYSTAL);
+    expect(state.unlockedNodes.has(SOCKET)).toBe(false);
+    const g = effectiveGraph(state);
+    const r = costToUnlock(g, state.unlockedNodes, state.unlockedEdges, state, CORE);
+    expect(r).not.toBeNull();
+    expect(nodePurchaseStatus(g, state, CORE)).toBe('purchasable');
+    buyNode(g, state, CORE);
+    expect(state.unlockedNodes.has(CORE)).toBe(true);
+  });
+});
+
 describe('effectiveGraph with crystal bindings', () => {
   it('returns DEFAULT_GRAPH reference when there are no bindings', () => {
     const state = makeState();
