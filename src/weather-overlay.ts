@@ -42,6 +42,7 @@ import {
   biomeForCell,
   sumIslandCo2,
   weather,
+  weatherClockMs,
   type WeatherState,
   type WeatherVisionSources,
 } from './weather.js';
@@ -96,8 +97,13 @@ export interface WeatherOverlayHandle {
    *  Cheap when within the throttle window — single timestamp compare.
    *  `getVisionSources` is invoked at each rebuild so a freshly-placed
    *  Weather Station / Advanced Weather Station / new populated island
-   *  extends weather visibility on the next refresh. */
-  refresh(nowMs: number, getVisionSources: () => WeatherVisionSources): void;
+   *  extends weather visibility on the next refresh.
+   *
+   *  `wallOffsetMs` is the §15.1 wall anchor (`weatherClockMs`): the
+   *  throttle compares perf-domain `nowMs`, but every weather SAMPLE is
+   *  taken at `nowMs + wallOffsetMs` so the tint agrees with the
+   *  simulation's wall-anchored vehicle / route consumers. */
+  refresh(nowMs: number, getVisionSources: () => WeatherVisionSources, wallOffsetMs?: number): void;
   /** Force a rebuild on the next frame — call after a populated island
    *  flips, a Weather Station is placed/demolished, etc. */
   invalidate(): void;
@@ -128,9 +134,12 @@ export function mountWeatherOverlay(world: WorldState): WeatherOverlayHandle {
     layer.addChild(sprite);
   };
 
-  const rebuild = (nowMs: number, sources: WeatherVisionSources): void => {
+  const rebuild = (nowMs: number, sources: WeatherVisionSources, wallOffsetMs: number): void => {
     layer.removeChildren();
     const totalCo2Kg = sumIslandCo2(world);
+    // §15.1: weather samples are wall-anchored; the throttle bookkeeping
+    // below stays in the perf domain (`nowMs`).
+    const sampleMs = weatherClockMs(nowMs, wallOffsetMs);
     // 1) Current-cycle layer — every cell intersecting ocean ellipses or
     //    per-island weather circles.
     const currentCells = visibleCellsFromVision(sources.current);
@@ -139,16 +148,16 @@ export function mountWeatherOverlay(world: WorldState): WeatherOverlayHandle {
       const cellX = Number(key.slice(0, idx));
       const cellY = Number(key.slice(idx + 1));
       const biome = biomeForCell(world, cellX, cellY);
-      const w = weather(world.seed, cellX, cellY, nowMs, biome, totalCo2Kg);
+      const w = weather(world.seed, cellX, cellY, sampleMs, biome, totalCo2Kg);
       drawCell(cellX, cellY, w.state, 1);
     }
     // 2) Forecast layer — only islands carrying an Advanced Weather Station
-    //    emit sources here. Sample the weather model at `nowMs +
+    //    emit sources here. Sample the weather model at `sampleMs +
     //    LOOKAHEAD` and stamp the cell at reduced alpha so the live tint
     //    underneath stays the dominant read.
     if (sources.forecast.length > 0) {
       const forecastCells = visibleCellsFromVision(sources.forecast);
-      const forecastMs = nowMs + WEATHER_FORECAST_LOOKAHEAD_MS;
+      const forecastMs = sampleMs + WEATHER_FORECAST_LOOKAHEAD_MS;
       for (const key of forecastCells) {
         const idx = key.indexOf(',');
         const cellX = Number(key.slice(0, idx));
@@ -164,9 +173,9 @@ export function mountWeatherOverlay(world: WorldState): WeatherOverlayHandle {
 
   return {
     layer,
-    refresh(nowMs: number, getVisionSources: () => WeatherVisionSources): void {
+    refresh(nowMs: number, getVisionSources: () => WeatherVisionSources, wallOffsetMs: number = 0): void {
       if (!dirty && nowMs - lastRebuildMs < WEATHER_OVERLAY_REBUILD_MS) return;
-      rebuild(nowMs, getVisionSources());
+      rebuild(nowMs, getVisionSources(), wallOffsetMs);
     },
     invalidate(): void {
       dirty = true;
