@@ -546,7 +546,7 @@ export function mountOrbitalUi(
       const sp = findOperationalBuilding(s.buildings, 'spaceport');
       const tier = sp?.tier ?? 1;
       const ascendant = s.ascendantCoreCrafted === true;
-      sig += `;${s.id},t${tier},a${ascendant ? 1 : 0}`;
+      sig += `;${s.id},t${tier},a${ascendant ? 1 : 0},n${nameForIsland(deps.world, s.id)}`;
       for (const r of COMMON_RESOURCES) {
         sig += `,${r}:${inv(s, r)}`;
       }
@@ -565,7 +565,7 @@ export function mountOrbitalUi(
     }
     sig += `;sats:${deps.world.satellites.length},debris:${deps.world.debrisFields.length}`;
     for (const sat of deps.world.satellites) {
-      sig += `;${sat.variant},${sat.spaceportIslandId},${Math.round(sat.fuel)},${sat.locked ? 'L' : sat.movingTo ? 'M' : 'F'}`;
+      sig += `;${sat.variant},${sat.spaceportIslandId},n${nameForIsland(deps.world, sat.spaceportIslandId)},${Math.round(sat.fuel)},${sat.locked ? 'L' : sat.movingTo ? 'M' : 'F'}`;
     }
     sig += `;flash:${lastFlash && performance.now() < lastFlash.until ? lastFlash.msg : '-'}`;
     return sig;
