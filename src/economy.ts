@@ -1409,6 +1409,17 @@ export function computeRates(
         const g = flowGates[idx] ?? 0;
         active = g > 0;
         nominalThroughputFrac = gateResult.effectiveMul * g;
+        // §15.3 net-flow × §5.1: the solver gate throttles a generator's
+        // RESOURCE side only, never its W output — power is explicitly
+        // outside the solver (design doc §5.1 row: extremes identical).
+        // A power PRODUCER whose recipe output sits at a pinned bin
+        // (g = 0 — e.g. casimir_tap, cryogenic_generator) stays power-
+        // active under the old probe semantics (inputAvail) so its
+        // wattage keeps flowing; its consumer-draw scaling stays on g
+        // (frac is already 0 here, matching the old ia × oa probe at cap).
+        if (!active && (def.power?.produces ?? 0) > 0) {
+          active = (inputAvailByIdx[idx] ?? 0) > 0;
+        }
       } else {
         // Probe path — buildings stalled for non-storage reasons (tile gate,
         // tier gate, …) keep today's draw shape: inputAvail × outputAvail.
