@@ -14,8 +14,8 @@
 // load by persistence.ts from the snapshot's savedAt.
 //
 // Pure layer: no PixiJS, no DOM. The caller supplies the online boolean
-// (document.visibilityState === 'visible' && document.hasFocus() — computed
-// in main.ts's ticker, shared with the trade lifecycle).
+// (document.visibilityState === 'visible' — computed in main.ts's ticker,
+// shared with the trade lifecycle; hasFocus() dropped per owner request 2026-06-10).
 
 import { ONLINE_DT_CAP_MS } from './trade.js';
 
