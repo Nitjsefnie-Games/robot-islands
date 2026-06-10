@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { generateOceanTerrain } from './ocean-gen.js';
+import { generateOceanTerrain, seedOceanTerrainForIslands } from './ocean-gen.js';
 import { attachTerrainAt, type IslandSpec } from './world.js';
 
 // Minimal IslandSpec fixture — `attachTerrainAt` mints a fully-typed spec
@@ -306,9 +306,6 @@ describe('generateOceanTerrain', () => {
   });
 });
 
-
-import { seedOceanTerrainForIslands } from './ocean-gen.js';
-
 describe('seedOceanTerrainForIslands — lazy generation', () => {
   it('adds shallows ring around a lazily generated island', () => {
     const island = mkIsland('lazy', 'plains', 200, 200);
@@ -322,14 +319,20 @@ describe('seedOceanTerrainForIslands — lazy generation', () => {
   });
 
   it('volcanic island rolls identical vents at boot and lazily for the same seed', () => {
-    const island = mkIsland('vol', 'volcanic', 300, 300);
-    const boot = generateOceanTerrain('vent-seed', [island]);
+    // Use a large enough island (major=minor=40) and seed 'v26' — confirmed to
+    // yield 10 vent cells, making the equality assertion non-vacuous.
+    const island = mkIsland('vol', 'volcanic', 300, 300, 40, 40);
+    const boot = generateOceanTerrain('v26', [island]);
     const bootVents = Array.from(boot.entries()).filter(
       ([, c]) => c.terrain === 'hydrothermal_vent',
     );
 
+    // Guard: ensure the seed actually produces vents so the equality below
+    // cannot pass vacuously as []===[].
+    expect(bootVents.length).toBeGreaterThan(0);
+
     const lazy = new Map<string, import('./ocean-cell.js').OceanCellSpec>();
-    seedOceanTerrainForIslands(lazy, 'vent-seed', [island], [island]);
+    seedOceanTerrainForIslands(lazy, 'v26', [island], [island]);
     const lazyVents = Array.from(lazy.entries()).filter(
       ([, c]) => c.terrain === 'hydrothermal_vent',
     );

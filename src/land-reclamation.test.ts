@@ -218,9 +218,9 @@ describe('landReclamationCost — union-aware delta for merged islands', () => {
     // tiles. The 2 right-edge growth tiles are absorbed by the extra ellipse,
     // so the charged tiles are the 2 left-edge ones. Union delta should be
     // 2 vs primary-only delta of 4.
-    const extra = [{ major: 3, minor: 3, rotation: 0, offsetX: 4, offsetY: 0 }] as const;
+    const extra: IslandSpec['extraEllipses'] = [{ major: 3, minor: 3, rotation: 0, offsetX: 4, offsetY: 0 }];
     const primaryOnly = landReclamationCost(3, 3, 'major');
-    const unionAware = landReclamationCost(3, 3, 'major', extra as unknown as IslandSpec['extraEllipses']);
+    const unionAware = landReclamationCost(3, 3, 'major', extra);
 
     // Verify the union-aware cost is strictly smaller.
     expect(unionAware.steel_beam).toBeLessThan(primaryOnly.steel_beam!);
