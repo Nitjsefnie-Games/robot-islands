@@ -449,6 +449,7 @@ export function inv(state: IslandState, r: ResourceId): number {
  * still displays nominal caps; the economy uses these effective caps. That
  * UX inconsistency is left to a later step alongside the broader storage UI.
  */
+// TODO(perf): callers that don't thread ctx.baseMult recompute effectiveSkillMultipliers per call (UI paths); route through DerivationsMemo or memoize at source.
 export function cap(
   state: IslandState,
   r: ResourceId,
