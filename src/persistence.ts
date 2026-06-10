@@ -46,7 +46,7 @@ import type { Route } from './routes.js';
 import { _seedRouteIdCounter } from './routes.js';
 
 import type { SettlementVehicle } from './settlement.js';
-import { SAT_BUFFER_CAP, type Satellite } from './orbital.js';
+import { SAT_BUFFER_CAP } from './orbital.js';
 import type { ObjectiveId } from './tutorial.js';
 import { _seedVehicleIdCounter } from './settlement.js';
 
@@ -900,7 +900,8 @@ export function deserializeWorld(
     revealedCells: deserializeRevealedCells(islands, snapshot.world.revealedCells),
     satellites: snapshot.world.satellites.map((s) => ({
       ...s,
-      buffer: (s as { buffer: Satellite['buffer'] }).buffer.slice(-SAT_BUFFER_CAP),
+      buffer: (s.buffer ?? []).slice(-(s.bufferCap ?? SAT_BUFFER_CAP)),
+      ...(s.movingTo ? { movingTo: { ...s.movingTo, arrivalMs: s.movingTo.arrivalMs + perfShift } } : {}),
     })),
     repairDrones: snapshot.world.repairDrones.map((d) => ({
       ...d,
@@ -930,7 +931,7 @@ export function deserializeWorld(
       (snapshot.world.activeBonusMs ?? 0) - ACTIVE_DECAY_RATIO * deltaMs,
     ),
     latticeNodeIslands: [...(snapshot.world.latticeNodeIslands ?? [])],
-    commPackets: [...snapshot.world.commPackets],
+    commPackets: snapshot.world.commPackets.map((p) => ({ ...p, generatedMs: p.generatedMs + perfShift })),
     totalCo2Kg: snapshot.world.totalCo2Kg,
     playerLat: snapshot.world.playerLat,
     playerLon: snapshot.world.playerLon,
