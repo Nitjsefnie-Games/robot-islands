@@ -879,7 +879,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
    *  diffing logic and matches how the per-frame ticker repaints the world
    *  container in main.ts. */
   function repaintDroneLayer(nowMs: number): void {
-    droneLayer.removeChildren();
+    for (const c of droneLayer.removeChildren()) c.destroy(true);
     for (const d of deps.world.drones) {
       if (d.status === 'lost' || d.status === 'returned') continue;
       droneLayer.addChild(renderDroneDot(d, nowMs));
