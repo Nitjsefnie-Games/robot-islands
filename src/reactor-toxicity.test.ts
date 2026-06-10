@@ -147,4 +147,53 @@ describe('advanceToxicityRolls', () => {
     // a's expiry should remain untouched.
     expect(a.toxicityExpiryMs).toBe(2 * TOXICITY_HOUR_MS);
   });
+
+  it('produces identical outcomes for a 24-hour offline catch-up whether taken as one slice or 24 hourly slices', () => {
+    // §4.5 header contract: "offline catchup produces identical outcomes
+    // regardless of segment granularity". The old implementation broke one
+    // slice after the first hit per reactor; this test pins the fix.
+    const H = TOXICITY_HOUR_MS;
+    let seed = '';
+    // Brute-force a seed where r1 hits at least twice in hours 1..24 while
+    // r2 hits zero times, so the assertion is unambiguous.
+    for (let s = 0; s < 5000; s++) {
+      const ss = String(s);
+      const r1Hits: number[] = [];
+      const r2Hits: number[] = [];
+      for (let h = 1; h <= 24; h++) {
+        if (rollToxicityForHour(ss, 'r1', h)) r1Hits.push(h);
+        if (rollToxicityForHour(ss, 'r2', h)) r2Hits.push(h);
+      }
+      if (r1Hits.length >= 2 && r2Hits.length === 0) {
+        seed = ss;
+        break;
+      }
+    }
+    expect(seed).not.toBe('');
+
+    const runOneSlice = () => {
+      const a = reactor('r1', 0, 0);
+      const b = reactor('r2', 2, 0);
+      const triggered = advanceToxicityRolls([a, b], seed, 0, 24 * H);
+      return { r1: a, r2: b, triggered };
+    };
+
+    const runHourlySlices = () => {
+      const a = reactor('r1', 0, 0);
+      const b = reactor('r2', 2, 0);
+      const triggered: string[] = [];
+      for (let h = 1; h <= 24; h++) {
+        const batch = advanceToxicityRolls([a, b], seed, (h - 1) * H, h * H);
+        triggered.push(...batch);
+      }
+      return { r1: a, r2: b, triggered };
+    };
+
+    const one = runOneSlice();
+    const hourly = runHourlySlices();
+
+    expect(one.triggered).toEqual(hourly.triggered);
+    expect(one.r1.toxicityExpiryMs).toBe(hourly.r1.toxicityExpiryMs);
+    expect(one.r2.toxicityExpiryMs).toBe(hourly.r2.toxicityExpiryMs);
+  });
 });

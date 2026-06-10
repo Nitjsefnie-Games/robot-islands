@@ -79,7 +79,6 @@ export function advanceToxicityRolls(
       if (rollToxicityForHour(worldSeed, reactor.id, h)) {
         reactor.toxicityExpiryMs = hourBoundaryMs + TOXICITY_DURATION_MS;
         triggered.push(reactor.id);
-        break; // one trigger per advance call per reactor is sufficient
       }
     }
   }
