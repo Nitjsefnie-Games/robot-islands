@@ -94,3 +94,55 @@ describe('popTrailingDuplicate', () => {
     expect(popTrailingDuplicate(input)).toEqual(input);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Fix 6.6 — fuel-efficiency skill multiplier in T5 UI helpers
+// ---------------------------------------------------------------------------
+
+describe('Fix 6.6: wouldExceedRange and fuelForPath respect efficiencyMul', () => {
+  // Base: MAX_FUEL_PER_DRONE=50, DRONE_T5_EFFICIENCY=8
+  // Default mul=1: maxOneWay = 50 * 8 / 2 = 200 tiles
+
+  it('wouldExceedRange with mul=2 doubles the allowed range', () => {
+    // mul=2: maxOneWay = 50 * 8 * 2 / 2 = 400 tiles
+    // A 350-tile path should be allowed with mul=2 but rejected with mul=1.
+    const result = wouldExceedRange(
+      { x: 0, y: 0 },
+      [],
+      { x: 350, y: 0 },
+      2,
+    );
+    expect(result).toBe(false);
+
+    // Same path without mul (default 1) should be rejected.
+    const resultDefault = wouldExceedRange(
+      { x: 0, y: 0 },
+      [],
+      { x: 350, y: 0 },
+    );
+    expect(resultDefault).toBe(true);
+  });
+
+  it('fuelForPath with mul=2 halves the fuel cost', () => {
+    // path length=8, efficiency=DRONE_T5_EFFICIENCY * 2 = 16
+    // fuel = ceil(2 * 8 / 16) = ceil(1) = 1 (vs 2 without multiplier)
+    const fuelWithMul = fuelForPath({ x: 0, y: 0 }, [{ x: 8, y: 0 }], 2);
+    expect(fuelWithMul).toBe(1);
+
+    const fuelNoMul = fuelForPath({ x: 0, y: 0 }, [{ x: 8, y: 0 }]);
+    expect(fuelNoMul).toBe(2);
+  });
+
+  it('fuelForPath mul=1 (default) matches pre-fix behavior', () => {
+    // length 200 → 2*200=400 / 8 = 50 = MAX_FUEL_PER_DRONE
+    expect(fuelForPath({ x: 0, y: 0 }, [{ x: 200, y: 0 }], 1)).toBe(MAX_FUEL_PER_DRONE);
+    expect(fuelForPath({ x: 0, y: 0 }, [{ x: 200, y: 0 }])).toBe(MAX_FUEL_PER_DRONE);
+  });
+
+  it('wouldExceedRange mul=1 (default) matches pre-fix behavior', () => {
+    expect(wouldExceedRange({ x: 0, y: 0 }, [{ x: 199, y: 0 }], { x: 200, y: 0 }, 1)).toBe(false);
+    expect(wouldExceedRange({ x: 0, y: 0 }, [{ x: 199, y: 0 }], { x: 200, y: 0 })).toBe(false);
+    expect(wouldExceedRange({ x: 0, y: 0 }, [{ x: 199, y: 0 }], { x: 201, y: 0 }, 1)).toBe(true);
+    expect(wouldExceedRange({ x: 0, y: 0 }, [{ x: 199, y: 0 }], { x: 201, y: 0 })).toBe(true);
+  });
+});
