@@ -1201,8 +1201,8 @@ export const GRAFT_SOCKET_CATALOG: GraftSocket[] = [
   { id: 'gs.orb.resilience-3', branchId: 'orbital', subPathId: 'resilience', attachmentDepth: 11 },
 
   // Ocean (~10)
-  { id: 'gs.ocean.patronage-1', branchId: 'ocean', subPathId: 'patronage', attachmentDepth: 7 },
-  { id: 'gs.ocean.patronage-2', branchId: 'ocean', subPathId: 'patronage', attachmentDepth: 9 },
+  { id: 'gs.ocean.patronage-1', branchId: 'logistics', subPathId: 'patronage', attachmentDepth: 7 },
+  { id: 'gs.ocean.patronage-2', branchId: 'logistics', subPathId: 'patronage', attachmentDepth: 9 },
   { id: 'gs.ocean.aquaculture-1', branchId: 'ocean', subPathId: 'aquaculture', attachmentDepth: 7 },
   { id: 'gs.ocean.aquaculture-2', branchId: 'ocean', subPathId: 'aquaculture', attachmentDepth: 9 },
   { id: 'gs.ocean.hydro-1', branchId: 'ocean', subPathId: 'hydroprocessing', attachmentDepth: 7 },

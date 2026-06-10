@@ -523,7 +523,6 @@ describe('schema version', () => {
     const v3Shaped = { ...snap, v: 3 } as unknown as SaveSnapshot;
     expect(() => deserializeWorld(v3Shaped, 0, 0)).toThrow(/not supported/);
   });
-
   it('isValidSaveSnapshot accepts any supported migratable version', () => {
     // A minimal v7 top-level blob (the oldest supported version).
     const v7 = {

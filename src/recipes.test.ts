@@ -774,11 +774,11 @@ describe('§6.4/§7.1 stainless_steel chain (Task 3.3)', () => {
     expect(ALL_RESOURCES).toContain('nickel_ore' as ResourceId);
     expect(XP_WEIGHT.nickel_ore).toBe(1);
   });
-  it('chromium_ingot is in ALL_RESOURCES with xp_weight 10 (T2 refined)', () => {
+  it('chromium_ingot is in ALL_RESOURCES with xp_weight 10 (internal-consistency: ingot one rung below alloy)', () => {
     expect(ALL_RESOURCES).toContain('chromium_ingot' as ResourceId);
     expect(XP_WEIGHT.chromium_ingot).toBe(10);
   });
-  it('nickel_ingot is in ALL_RESOURCES with xp_weight 10 (T2 refined)', () => {
+  it('nickel_ingot is in ALL_RESOURCES with xp_weight 10 (internal-consistency: ingot one rung below alloy)', () => {
     expect(ALL_RESOURCES).toContain('nickel_ingot' as ResourceId);
     expect(XP_WEIGHT.nickel_ingot).toBe(10);
   });
@@ -823,7 +823,7 @@ describe('§6.4/§7.1 tool_steel chain (Task 3.4)', () => {
     expect(ALL_RESOURCES).toContain('tungsten_ore' as ResourceId);
     expect(XP_WEIGHT.tungsten_ore).toBe(1);
   });
-  it('tungsten_ingot is in ALL_RESOURCES with xp_weight 10 (T2 refined)', () => {
+  it('tungsten_ingot is in ALL_RESOURCES with xp_weight 10 (internal-consistency: ingot one rung below alloy)', () => {
     expect(ALL_RESOURCES).toContain('tungsten_ingot' as ResourceId);
     expect(XP_WEIGHT.tungsten_ingot).toBe(10);
   });
