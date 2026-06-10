@@ -533,24 +533,24 @@ describe('effectiveSkillMultipliers', () => {
 describe('§14.7 launchSuccessBonus', () => {
   it('returns 0 for an island with no unlocked nodes', () => {
     const s = makeState();
-    expect(launchSuccessBonus(s, LEGACY_TEST_NODES)).toBe(0);
+    expect(launchSuccessBonus(s, LG)).toBe(0);
   });
 
   it('returns 0.05 when only launch.1 is unlocked', () => {
     const s = makeState({ unlockedNodes: new Set(['launch.1']) });
-    expect(launchSuccessBonus(s, LEGACY_TEST_NODES)).toBe(0.05);
+    expect(launchSuccessBonus(s, LG)).toBe(0.05);
   });
 
   it('launch.2 contributes pad-explosion mitigation, NOT launchSuccess (spec themes split)', () => {
     const s = makeState({ unlockedNodes: new Set(['launch.1', 'launch.2']) });
-    expect(launchSuccessBonus(s, LEGACY_TEST_NODES)).toBe(0.05);
+    expect(launchSuccessBonus(s, LG)).toBe(0.05);
     const m = effectiveSkillMultipliers(s, LG);
     expect(m.padExplosionReduce).toBeCloseTo(1.10, 9);
   });
 
   it('returns 0 when only non-launch nodes are unlocked', () => {
     const s = makeState({ unlockedNodes: new Set(['mining.1']) });
-    expect(launchSuccessBonus(s, LEGACY_TEST_NODES)).toBe(0);
+    expect(launchSuccessBonus(s, LG)).toBe(0);
   });
 });
 
@@ -1051,6 +1051,60 @@ describe('effectiveSkillMultipliers — graph mode + auras', () => {
     const mul = effectiveSkillMultipliers(state, g);
     // target.magnitude=0.10 → factor 1 + 0.10 * 1.5 = 1.15
     expect(mul.recipeRate.extraction).toBeCloseTo(1.15, 3);
+  });
+
+  it('aura amplifies ADDITIVE effect contributions too (§9.3 — no additive carve-out)', () => {
+    const mk = (id: string, effect: SkillNode['effect'], magnitude: number): SkillNode => ({
+      id: id as import('./skilltree.js').NodeId,
+      subPath: 'robotics', depth: 1, cost: 1, magnitude, effect, description: '',
+    });
+    const nodes: SkillNode[] = [
+      { ...mk('auraSrc', { kind: 'recipeRateMul', category: 'extraction' }, 0), aura: { radius: 1, bonus: 0.2 } },
+      mk('pb', { kind: 'parallelBuildCapAdd' }, 0.5),
+      mk('qc', { kind: 'queueCapAdd' }, 0.5),
+      mk('tr', { kind: 'tradeReachAdd' }, 1),
+      mk('ts', { kind: 'tradeSpreadShiftAdd' }, 0.05),
+    ];
+    const edges = ['pb', 'qc', 'tr', 'ts'].map((to, i) => ({
+      id: `e${i}` as EdgeId,
+      from: 'auraSrc' as import('./skilltree-graph.js').NodeId,
+      to: to as import('./skilltree-graph.js').NodeId,
+      cost: 1,
+    }));
+    const g: Graph = { nodes, edges, bridges: [], graftSockets: [] } as Graph;
+    const state = makeState();
+    for (const n of nodes) state.unlockedNodes.add(n.id);
+    const mul = effectiveSkillMultipliers(state, g);
+    expect(mul.parallelBuildBonus).toBeCloseTo(0.5 * 1.2, 9);
+    expect(mul.queueCapBonus).toBeCloseTo(0.5 * 1.2, 9);
+    expect(mul.tradeReachAdd).toBeCloseTo(1 * 1.2, 9);
+    expect(mul.tradeSpreadShiftAdd).toBeCloseTo(0.05 * 1.2, 9);
+  });
+});
+
+describe('launchSuccessBonus — aura amplification (§9.3 / §14.7)', () => {
+  it('padRedundancy aura amplifies an adjacent owned launch-success node', () => {
+    const padId = 'launch.notable.padRedundancy';
+    const pad = DEFAULT_GRAPH.nodes.find((n) => n.id === padId)!;
+    expect(pad).toBeDefined();
+    expect(pad.aura).toBeDefined();
+    expect(pad.effect.kind).toBe('launchSuccessAdditive');
+
+    // The notable's anchor edge ties it into its sub-path chain — that chain
+    // node is its aura-adjacent neighbour.
+    const anchorEdge = DEFAULT_GRAPH.edges.find(
+      (e) => String(e.to) === padId && e.mode !== 'and',
+    )!;
+    expect(anchorEdge).toBeDefined();
+    const anchor = DEFAULT_GRAPH.nodes.find((n) => n.id === String(anchorEdge.from))!;
+    expect(anchor.effect.kind).toBe('launchSuccessAdditive');
+
+    const s = makeState({ unlockedNodes: new Set([padId, anchor.id]) });
+    const bonus = launchSuccessBonus(s);
+    const expected = pad.magnitude + anchor.magnitude * (1 + pad.aura!.bonus);
+    expect(bonus).toBeCloseTo(expected, 9);
+    // Strictly more than the raw, un-amplified sum — the aura must do something.
+    expect(bonus).toBeGreaterThan(pad.magnitude + anchor.magnitude);
   });
 });
 
