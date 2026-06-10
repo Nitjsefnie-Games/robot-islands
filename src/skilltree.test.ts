@@ -1589,6 +1589,31 @@ describe('bindCrystal / unbindCrystal', () => {
     expect(state.unlockedNodes.has('gs.ext.mining-1.mining_crystal_t1.core')).toBe(false);
     expect(state.unlockedNodes.has('gs.ext.mining-1.mining_crystal_t1.left1')).toBe(false);
   });
+
+  it('unbindCrystal bumps auraAmpVersion so the aura cache does not serve stale data', () => {
+    clearSkillMultipliersMemoForTests();
+    const inv = blankInventory();
+    (inv as Record<string, number>).mining_crystal_t1 = 1;
+    const state = makeState({ inventory: inv });
+    // Warm the cache with real catalog nodes so Layer-2 has content.
+    state.unlockedNodes.add('mining.notable.blastOptimization' as NodeId);
+    state.unlockedNodes.add('mining.recipeRate.5' as NodeId);
+
+    bindCrystal(state, 'gs.ext.mining-1', 'mining_crystal_t1' as import('./skilltree-graph.js').CrystalId);
+    const vAfterBind = state.auraAmpVersion;
+    effectiveSkillMultipliers(state); // warm cache
+
+    // Do not buy any mini-tree nodes, so refundAndClearMiniTree has nothing
+    // to delete but still bumps once by contract. The socket deletion itself
+    // must contribute a second bump.
+    unbindCrystal(state, 'gs.ext.mining-1');
+
+    // bind (+1) + refundAndClearMiniTree (+1) + socket delete (+1) = +3 total.
+    expect(state.auraAmpVersion).toBe(vAfterBind + 2);
+    // Recompute to prove the cache is not stale.
+    effectiveSkillMultipliers(state);
+    expect(state.auraAmpCacheVersion).toBe(state.auraAmpVersion);
+  });
 });
 
 describe('crystal mini-tree reachability — socket ownership (§9.3 grafts)', () => {
