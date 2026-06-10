@@ -20,7 +20,7 @@
 
 import type { IslandState } from './economy.js';
 import { inv } from './economy.js';
-import { tileInscribedInEllipse } from './island.js';
+import { islandInscribedAny, tileInscribedInEllipse } from './island.js';
 import { LAND_TILE_COST } from './building-defs.js';
 import type { ResourceId } from './recipes.js';
 import { BIOME_MAX_RADII, type IslandSpec } from './world.js';
@@ -55,17 +55,44 @@ export function inscribedTileCount(major: number, minor: number): number {
 }
 
 /** §3.4 cost of one +1 expansion on `axis`: the exact inscribed-tile delta
- *  (land gained) × the shared per-land-tile basket. */
+ *  (land gained) × the shared per-land-tile basket.
+ *
+ *  When `extraEllipses` is supplied, the delta is computed over the UNION:
+ *  only tiles that were NOT inscribed in any constituent before the expansion
+ *  but ARE inscribed after the primary radius grows by 1 are charged. This
+ *  prevents overcharging merged islands where the new primary ring overlaps
+ *  an absorbed constituent. */
 export function landReclamationCost(
   major: number,
   minor: number,
   axis: Axis,
+  extraEllipses?: IslandSpec['extraEllipses'],
 ): LandReclamationCost {
-  const before = inscribedTileCount(major, minor);
-  const after = axis === 'major'
-    ? inscribedTileCount(major + 1, minor)
-    : inscribedTileCount(major, minor + 1);
-  const delta = Math.max(0, after - before);
+  let delta: number;
+  if (extraEllipses && extraEllipses.length > 0) {
+    const oldShape = { majorRadius: major, minorRadius: minor, extraEllipses };
+    const newMajor = axis === 'major' ? major + 1 : major;
+    const newMinor = axis === 'minor' ? minor + 1 : minor;
+    const newShape = { majorRadius: newMajor, minorRadius: newMinor, extraEllipses };
+    const xMin = -Math.ceil(newMajor);
+    const xMax = Math.ceil(newMajor) - 1;
+    const yMin = -Math.ceil(newMinor);
+    const yMax = Math.ceil(newMinor) - 1;
+    delta = 0;
+    for (let y = yMin; y <= yMax; y++) {
+      for (let x = xMin; x <= xMax; x++) {
+        if (!islandInscribedAny(oldShape, x, y) && islandInscribedAny(newShape, x, y)) {
+          delta++;
+        }
+      }
+    }
+  } else {
+    const before = inscribedTileCount(major, minor);
+    const after = axis === 'major'
+      ? inscribedTileCount(major + 1, minor)
+      : inscribedTileCount(major, minor + 1);
+    delta = Math.max(0, after - before);
+  }
   const out: LandReclamationCost = {};
   for (const [r, n] of Object.entries(LAND_TILE_COST) as Array<[ResourceId, number]>) {
     out[r] = delta * n;
@@ -113,7 +140,7 @@ export function canExpandIsland(
   if (current >= max) {
     return { ok: false, reason: 'axis-at-max' };
   }
-  const cost = landReclamationCost(spec.majorRadius, spec.minorRadius, axis);
+  const cost = landReclamationCost(spec.majorRadius, spec.minorRadius, axis, spec.extraEllipses);
   for (const [r, n] of Object.entries(cost) as Array<[ResourceId, number]>) {
     if (inv(state, r as ResourceId) < n) {
       return { ok: false, reason: 'insufficient-resources' };
@@ -145,7 +172,7 @@ export function expandIsland(
   // Pre-expansion radius drives the cost (matches the cost-preview text
   // in the inspector). The post-mutation radius is `current + 1` per
   // §3.4 ("adds 1 to either the major or the minor radius").
-  const cost = landReclamationCost(spec.majorRadius, spec.minorRadius, axis);
+  const cost = landReclamationCost(spec.majorRadius, spec.minorRadius, axis, spec.extraEllipses);
   for (const [r, n] of Object.entries(cost) as Array<[ResourceId, number]>) {
     state.inventory[r] = (state.inventory[r] ?? 0) - n;
   }
