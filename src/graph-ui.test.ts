@@ -15,27 +15,14 @@ describe('graph-ui close button', () => {
     const origRO = (globalThis as Record<string, unknown>).ResizeObserver;
     const origWindow = (globalThis as Record<string, unknown>).window;
 
-    // Collect created elements so we can find the close button later.
-    const clickHandlers: Array<() => void> = [];
-    const elPool: Array<{
-      tagName?: string;
-      type?: string;
-      style: Record<string, string>;
-      dataset: Record<string, string>;
-      classList: { add: (c: string) => void; remove: (c: string) => void; contains: () => boolean };
-      children: unknown[];
-      appendChild(c: unknown): unknown;
-      addEventListener(type: string, fn: unknown): void;
-      setAttribute(): void;
-      querySelector(): null;
-      focus(): void;
-      getBoundingClientRect(): { left: number; top: number; width: number; height: number };
-      parentElement: null;
-      textContent?: string;
-    }> = [];
+    // Track elements by aria-label so the close button can be located by a
+    // stable signal rather than positional clickHandlers[length-1].
+    const closeHandlersByAriaLabel = new Map<string, () => void>();
 
     function makeEl(tag?: string) {
-      const e = {
+      let ariaLabel = '';
+      const clickListeners: Array<() => void> = [];
+      return {
         tagName: tag ?? 'DIV',
         style: {} as Record<string, string>,
         dataset: {} as Record<string, string>,
@@ -50,16 +37,24 @@ describe('graph-ui close button', () => {
           return c;
         },
         addEventListener(type: string, fn: () => void) {
-          if (type === 'click') clickHandlers.push(fn);
+          if (type === 'click') {
+            clickListeners.push(fn);
+            if (ariaLabel) closeHandlersByAriaLabel.set(ariaLabel, fn);
+          }
         },
-        setAttribute: () => {},
+        setAttribute(name: string, value: string) {
+          if (name === 'aria-label') {
+            ariaLabel = value;
+            // Bind any click already registered before setAttribute was called.
+            const last = clickListeners[clickListeners.length - 1];
+            if (last) closeHandlersByAriaLabel.set(ariaLabel, last);
+          }
+        },
         querySelector: () => null,
         focus: () => {},
         getBoundingClientRect: () => ({ left: 0, top: 0, width: 100, height: 100 }),
         parentElement: null,
       };
-      elPool.push(e);
-      return e;
     }
 
     vi.stubGlobal('ResizeObserver', class {
@@ -85,27 +80,20 @@ describe('graph-ui close button', () => {
     try {
       const parent = makeEl();
       const ui = mountGraphUi(parent as unknown as HTMLElement);
-
-      // Open the panel.
-      expect(ui.toggle()).toBe(true);
+      ui.show();
       expect(ui.isVisible()).toBe(true);
 
-      const ui2 = mountGraphUi(parent as unknown as HTMLElement);
-      ui2.show();
-      expect(ui2.isVisible()).toBe(true);
+      // Locate close button by the stable aria-label it sets.
+      const closeHandler = closeHandlersByAriaLabel.get('Close recipe graph');
+      expect(closeHandler).toBeDefined();
 
-      // The close button handler is the last click handler registered
-      // (mountGraphUi registers closeBtn after building the header).
-      expect(clickHandlers.length).toBeGreaterThan(0);
-      const closeHandler = clickHandlers[clickHandlers.length - 1]!;
+      // Simulate the close button click — must sync the `visible` flag.
+      closeHandler!();
+      expect(ui.isVisible()).toBe(false);
 
-      // Simulate the close button click.
-      closeHandler();
-      expect(ui2.isVisible()).toBe(false);
-
-      // toggle() should now reopen on the FIRST press.
-      expect(ui2.toggle()).toBe(true);
-      expect(ui2.isVisible()).toBe(true);
+      // toggle() should now reopen on the FIRST press (not require two presses).
+      expect(ui.toggle()).toBe(true);
+      expect(ui.isVisible()).toBe(true);
     } finally {
       vi.stubGlobal('document', origDoc);
       vi.stubGlobal('ResizeObserver', origRO);
