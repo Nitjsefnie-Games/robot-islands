@@ -58,6 +58,7 @@ import { cumulativeSkillPointsForLevel } from './skilltree.js';
 import type { CrystalId, EdgeId } from './skilltree-graph.js';
 import type { OceanCellSpec } from './ocean-cell.js';
 
+import { ACTIVE_DECAY_RATIO } from './active-bonus.js';
 import { attachTerrainAt, WORLD_SEED, type IslandSpec, type WorldState } from './world.js';
 
 /** IndexedDB key. Bumping the trailing version (`:v2` later) is the
@@ -72,7 +73,7 @@ export const STORAGE_KEY_DISPLAY = 'robot-islands:save';
 
 /** Current schema version. `loadWorld` rejects (returns null) any
  *  snapshot whose `v` is not strictly equal to this. */
-export const SCHEMA_VERSION = 21 as const;
+export const SCHEMA_VERSION = 22 as const;
 
 /** Versions that loadWorld accepts. The walker (loadWorld) chains
  *  migrateV<N>toV<N+1> functions from the lowest known version up to
@@ -80,7 +81,7 @@ export const SCHEMA_VERSION = 21 as const;
  *
  *  See AGENTS.md → "Persistence migrations" for the full "bump = migrate"
  *  policy from v7 onward. */
-export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21]);
+export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]);
 
 // ---------------------------------------------------------------------------
 // Serialized shapes
@@ -151,6 +152,9 @@ export interface SerializedWorld {
   };
   /** §13.3 Omniscient Lattice activation. */
   readonly latticeActive?: boolean;
+  /** §9.9 active-play bonus balance (effective focused ms). Optional:
+   *  absent on pre-v22 saves; load decays it for the closed gap. */
+  readonly activeBonusMs?: number;
   /** §13.3 Lattice Node island list. */
   readonly latticeNodeIslands?: ReadonlyArray<string>;
   /** §14.4 in-flight comm packets. */
@@ -587,7 +591,9 @@ export type SerializedSnapshotV20 = Omit<SaveSnapshot, 'v'> & { readonly v: 20 }
  *  bump-claimed (an existing player can't restart-farm the bumps they already
  *  got), while objectives not yet completed still pay out on first completion.
  *  Snapshots without a tutorialState are passed through untouched. */
-export function migrateV20toV21(s: SerializedSnapshotV20): SaveSnapshot {
+export type SerializedSnapshotV21 = Omit<SaveSnapshot, 'v'> & { readonly v: 21 };
+
+export function migrateV20toV21(s: SerializedSnapshotV20): SerializedSnapshotV21 {
   const ts = s.world.tutorialState;
   return {
     ...s,
@@ -596,6 +602,16 @@ export function migrateV20toV21(s: SerializedSnapshotV20): SaveSnapshot {
       ...s.world,
       tutorialState: ts ? { ...ts, xpBumpClaimed: ts.xpBumpClaimed ?? ts.completed } : ts,
     },
+  } as unknown as SerializedSnapshotV21;
+}
+
+/** v21 -> v22: §9.9 active-play production bonus shipped. A v21 save lacks
+ *  `world.activeBonusMs`; seed 0 (no accrued bonus). */
+export function migrateV21toV22(s: SerializedSnapshotV21): SaveSnapshot {
+  return {
+    ...s,
+    v: 22 as const,
+    world: { ...s.world, activeBonusMs: 0 },
   } as unknown as SaveSnapshot;
 }
 
@@ -700,6 +716,7 @@ export function serializeWorld(
         firstAchievedMs: world.endgameState?.firstAchievedMs ?? null,
       },
       latticeActive: world.latticeActive,
+      activeBonusMs: world.activeBonusMs ?? 0,
       latticeNodeIslands: [...world.latticeNodeIslands],
       commPackets: [...world.commPackets],
       totalCo2Kg: world.totalCo2Kg,
@@ -789,7 +806,10 @@ export function deserializeWorld(
     snapshot = migrateV19toV20(snapshot as unknown as SerializedSnapshotV19) as unknown as SaveSnapshot;
   }
   if ((snapshot as unknown as { v: number }).v === 20) {
-    snapshot = migrateV20toV21(snapshot as unknown as SerializedSnapshotV20);
+    snapshot = migrateV20toV21(snapshot as unknown as SerializedSnapshotV20) as unknown as SaveSnapshot;
+  }
+  if ((snapshot as unknown as { v: number }).v === 21) {
+    snapshot = migrateV21toV22(snapshot as unknown as SerializedSnapshotV21);
   }
 
   if (snapshot.v !== SCHEMA_VERSION) {
@@ -902,6 +922,13 @@ export function deserializeWorld(
         }
       : { achieved: new Set<VictoryCondition>(), firstAchievedMs: null },
     latticeActive: snapshot.world.latticeActive ?? false,
+    // §9.9: the closed-game gap is unfocused time — burn the balance at the
+    // decay ratio before offline catch-up runs, so catch-up production uses
+    // the post-decay multiplier.
+    activeBonusMs: Math.max(
+      0,
+      (snapshot.world.activeBonusMs ?? 0) - ACTIVE_DECAY_RATIO * deltaMs,
+    ),
     latticeNodeIslands: [...(snapshot.world.latticeNodeIslands ?? [])],
     commPackets: [...snapshot.world.commPackets],
     totalCo2Kg: snapshot.world.totalCo2Kg,
