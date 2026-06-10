@@ -213,7 +213,11 @@ export class RouteRenderer {
       const dy = entry.toY - entry.fromY;
       const angle = Math.atan2(dy, dx);
 
-      this._scrollMatrix.set(1, 0, 0, 1, 0, 0).rotate(angle).translate(-offsetPx, 0);
+      // Fix 7.1: translate BEFORE rotate so the phase advances uniformly
+      // along the line at every angle.  See §perf-2026-05-28 API note above.
+      // The correct composition: identity → translate → rotate yields
+      // M⁻¹.tx = offsetPx (uniform) instead of offsetPx·cos(angle) (old).
+      this._scrollMatrix.set(1, 0, 0, 1, 0, 0).translate(-offsetPx, 0).rotate(angle);
 
       const tex = getDashedStrokeTexture(entry.routeType);
       entry.animatedGraphics.clear();
