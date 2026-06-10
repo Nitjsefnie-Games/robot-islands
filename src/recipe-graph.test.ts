@@ -68,4 +68,19 @@ describe('buildRecipeTableRows', () => {
       expect(def, `recipe ${row.recipeKey} -> building ${row.buildingId} missing from BUILDING_DEFS`).toBeDefined();
     }
   });
+
+  it('tier-gate labels match tierForLevel thresholds (§9.2)', () => {
+    const tierRows = rows.filter((r) => {
+      const def = BUILDING_DEFS[r.buildingId];
+      return def && def.tier >= 2 && def.tier <= 4;
+    });
+    expect(tierRows.length).toBeGreaterThan(0);
+    for (const row of tierRows) {
+      const tierGate = row.gates.find((g) => g.kind === 'tier');
+      expect(tierGate).toBeDefined();
+      const def = BUILDING_DEFS[row.buildingId]!;
+      const expected = { 2: 'L≥5', 3: 'L≥15', 4: 'L≥30' }[def.tier];
+      expect(tierGate!.label).toBe(expected);
+    }
+  });
 });
