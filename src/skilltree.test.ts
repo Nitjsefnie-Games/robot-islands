@@ -30,6 +30,7 @@ import {
   type SkillNode,
   unbindCrystal,
 } from './skilltree.js';
+import { KEYSTONE_PREREQS } from './skilltree-catalog.js';
 import { CRYSTAL_CATALOG } from './skilltree-crystals.js';
 import type { EdgeId, Graph, KeystonePrereq } from './skilltree-graph.js';
 import { DEFAULT_GRAPH } from './skilltree.js';
@@ -1043,6 +1044,59 @@ describe('computeAuraAmplifiers — cache', () => {
 
     const afterReset = effectiveSkillMultipliers(s).recipeRate.extraction;
     expect(afterReset).toBe(baseline);
+  });
+});
+
+describe('keystone AND-prereqs enforced against pathing (§9.3)', () => {
+  // Real catalog keystone: mining.keystone.deepCore requires deepVein (depth 4)
+  // AND efficientDrills (depth 3); flat cost 8. §9.3: "even if a path exists,
+  // the keystone stays locked until every prereq is satisfied" — keystones are
+  // bought ONLY via buyKeystone, never via the Dijkstra path solver.
+  const KS_ID = 'mining.keystone.deepCore';
+
+  it('with 1-of-2 prereqs owned: unreachable via pathing, buyNode throws, status locked', () => {
+    const state = makeState({ level: 50, unspentSkillPoints: 1000 });
+    state.unlockedNodes.add('mining.notable.deepVein');
+    expect(
+      costToUnlock(DEFAULT_GRAPH, state.unlockedNodes, state.unlockedEdges, state, KS_ID),
+    ).toBeNull();
+    expect(() => buyNode(DEFAULT_GRAPH, state, KS_ID)).toThrow(/unreachable/);
+    expect(state.unlockedNodes.has(KS_ID)).toBe(false);
+    expect(nodePurchaseStatus(DEFAULT_GRAPH, state, KS_ID)).toBe('unreachable');
+  });
+
+  it('never auto-owned as a path intermediate: no path reaches a keystone even with every other node and edge owned (all bridges active)', () => {
+    const state = makeState({ level: 70, unspentSkillPoints: 100000 });
+    for (const n of DEFAULT_GRAPH.nodes) {
+      if (n.id !== KS_ID) state.unlockedNodes.add(n.id);
+    }
+    for (const e of DEFAULT_GRAPH.edges) state.unlockedEdges.add(e.id);
+    // Every bridge threshold is met by the owned-edge spend, so if any edge or
+    // bridge could deliver keystone ownership through pathing, this would find it.
+    expect(
+      costToUnlock(DEFAULT_GRAPH, state.unlockedNodes, state.unlockedEdges, state, KS_ID),
+    ).toBeNull();
+  });
+
+  it('with all prereqs owned: purchasable at the flat keystone cost via buyKeystone', () => {
+    const state = makeState({ level: 50, unspentSkillPoints: 10 });
+    state.unlockedNodes.add('mining.notable.deepVein');
+    state.unlockedNodes.add('mining.notable.efficientDrills');
+    expect(nodePurchaseStatus(DEFAULT_GRAPH, state, KS_ID)).toBe('purchasable');
+    const ks = KEYSTONE_PREREQS.find((k) => String(k.targetNode) === KS_ID)!;
+    expect(canBuyKeystone(ks, state)).toBe(true);
+    buyKeystone(ks, state);
+    expect(state.unlockedNodes.has(KS_ID)).toBe(true);
+    expect(state.unspentSkillPoints).toBe(10 - ks.cost);
+  });
+
+  it('with all prereqs owned but SP short: insufficient-sp, not unreachable', () => {
+    const ks = KEYSTONE_PREREQS.find((k) => String(k.targetNode) === KS_ID)!;
+    const state = makeState({ level: 50, unspentSkillPoints: ks.cost - 1 });
+    state.unlockedNodes.add('mining.notable.deepVein');
+    state.unlockedNodes.add('mining.notable.efficientDrills');
+    expect(nodePurchaseStatus(DEFAULT_GRAPH, state, KS_ID)).toBe('insufficient-sp');
+    expect(canBuyKeystone(ks, state)).toBe(false);
   });
 });
 
