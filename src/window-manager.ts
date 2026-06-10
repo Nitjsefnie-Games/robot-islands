@@ -375,6 +375,16 @@ function applySavedLayout(panel: HTMLElement, id: string, layout: PanelLayout): 
   setPanelFree(id, true);
 }
 
+// System-wide invariant: promoteToFree is the ONLY legitimate place a
+// blob.panels[id] layout entry is minted. Every other updatePanelLayout
+// caller (bringToFront's zRank patch, the drag/resize handlers) must only
+// PATCH an already-existing entry — minting elsewhere reintroduces the
+// 1×1-collapse bug (settlement-panel / routes-panel in v1 saves) where a
+// zero-size entry was created before the panel had a real size. The two
+// guard sites that enforce this: (1) bringToFront checks `if (blob.panels[id])`
+// before patching zRank; (2) applySavedLayout is called only when
+// `blob.panels[id]` already exists (the `const saved = blob.panels[id]; if (saved)`
+// block in mountPanel).
 function promoteToFree(
   panel: HTMLElement,
   id: string,
