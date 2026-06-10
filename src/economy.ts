@@ -1350,12 +1350,12 @@ export function computeRates(
   // `powerConsumed_nominal → powerFactor → effectiveRate`, never the reverse.
   // Storage-throttled and soft-gate-degraded buildings no longer waste
   // full wattage producing nothing / less. Maintenance bills in
-  // `maintenance.ts` are intentionally NOT scaled by throughput. (Wear
-  // accrual scales by `BuildingRate.utilization` per §4.7 net-flow — the
-  // old "stalled buildings wear at full rate" rule is superseded by the
-  // spec; see the wear-accrual loop in `advanceIsland`.) Heat-failed
-  // consumers remain fully inactive (no power, no production, no
-  // consumption) per §5.1 "active iff all gates pass".
+  // `maintenance.ts` are intentionally NOT scaled by throughput. (§4.7
+  // net-flow WILL scale wear by `BuildingRate.utilization` in a follow-up
+  // task; today the `advanceIsland` wear loop still accrues full
+  // wall-clock dtMs.) Heat-failed consumers remain fully inactive (no
+  // power, no production, no consumption) per §5.1 "active iff all gates
+  // pass".
   let powerProduced = 0;
   let powerConsumed = 0;
   for (const b of validBuildings) {
