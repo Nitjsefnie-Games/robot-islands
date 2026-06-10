@@ -159,6 +159,26 @@ export function sumIslandCo2(world: { islandStates?: Map<string, { co2Kg?: numbe
   return sum;
 }
 
+/** §15.1 / §2.6 — convert a `performance.now()`-domain timestamp to the
+ *  wall-clock domain the weather timeline is anchored on.
+ *
+ *  `weather()` walks a dwell timeline from t = 0; sampling it with raw
+ *  perf-domain timestamps (which reset to ~0 on every page load) replays
+ *  the same initial dwell states every session and never drifts across
+ *  offline gaps — violating §15.1 ("pure function of (seed, cell, t),
+ *  never desyncs from save") and §2.6 (dwells are 30 min – 4 h of REAL
+ *  time). Callers capture `wallOffset = Date.now() - performance.now()`
+ *  ONCE per session and lift every weather sample through this helper.
+ *
+ *  Accepted semantics for stored in-flight timestamps (dispatchTime,
+ *  launchTime, entryMs — all perf-domain, perfShift-rebased on load):
+ *  after a reload they map to POST-GAP wall times, so an in-flight
+ *  vehicle experiences the weather of the wall-clock moment it actually
+ *  flies, and the weather timeline no longer restarts each session. */
+export function weatherClockMs(perfTs: number, wallOffset: number): number {
+  return perfTs + wallOffset;
+}
+
 export function weather(
   seed: string,
   cx: number,
@@ -466,11 +486,16 @@ export function rollVehicleDestruction(
   path: Array<{ cx: number; cy: number; entryMs: number }>,
   weatherMultiplier: number,
   vehicleId: string,
+  /** §15.1 wall anchor: every weather sample is taken at
+   *  `entryMs + wallOffsetMs`. The RNG stream is unaffected (keyed off
+   *  seed + vehicleId only), so the same path sampled at the same wall
+   *  times yields the same fate regardless of the perf-clock epoch. */
+  wallOffsetMs: number = 0,
 ): { destroyed: boolean; atCellIndex: number | null } {
   const rng = makeSeededRng(`${seed}_vehicle_${vehicleId}`);
   for (let i = 0; i < path.length; i++) {
     const { cx, cy, entryMs } = path[i]!;
-    const cell = weather(seed, cx, cy, entryMs);
+    const cell = weather(seed, cx, cy, weatherClockMs(entryMs, wallOffsetMs));
     const baseChance = WEATHER_DESTRUCTION_CHANCE[cell.state];
     if (baseChance === undefined || baseChance === 0) continue;
     const finalChance = baseChance * weatherMultiplier;
@@ -611,11 +636,13 @@ export function routeCapacityMultiplierForWeather(
   toY: number,
   nowMs: number,
   cellSizeTiles: number,
+  /** §15.1 wall anchor: weather is sampled at `nowMs + wallOffsetMs`. */
+  wallOffsetMs: number = 0,
 ): number {
   const cells = rasterizeLineSegment(fromX, fromY, toX, toY, cellSizeTiles);
   let minMul = 1;
   for (const { cx, cy } of cells) {
-    const w = weather(seed, cx, cy, nowMs);
+    const w = weather(seed, cx, cy, weatherClockMs(nowMs, wallOffsetMs));
     const mul = WEATHER_ROUTE_CAPACITY_MULTIPLIER[w.state];
     if (mul !== undefined) minMul = Math.min(minMul, mul);
   }

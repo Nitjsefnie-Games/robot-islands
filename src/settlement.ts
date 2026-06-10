@@ -653,6 +653,9 @@ export function tickVehicles(
   world: WorldState,
   islandStates: Map<string, IslandState>,
   nowMs: number,
+  /** §15.1 wall anchor: the §2.6 destruction roll samples weather at each
+   *  path cell's `entryMs + wallOffsetMs` (see `weatherClockMs`). */
+  wallOffsetMs: number = 0,
 ): TickVehiclesResult {
   const arrivals: VehicleArrival[] = [];
   const failures: VehicleArrival[] = [];
@@ -700,7 +703,7 @@ export function tickVehicles(
           v.launchTime,
           CELL_SIZE_TILES,
         );
-        const roll = rollVehicleDestruction(world.seed, path, v.weatherMultiplier, v.id);
+        const roll = rollVehicleDestruction(world.seed, path, v.weatherMultiplier, v.id, wallOffsetMs);
         if (roll.destroyed) {
           v.status = 'lost';
           lost.push({ targetIslandId: target.id, fromIslandId: v.from, kind: v.kind });
