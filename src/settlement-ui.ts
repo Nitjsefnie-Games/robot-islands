@@ -694,7 +694,7 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     return c;
   }
   function repaintVehicleLayer(nowMs: number): void {
-    vehicleLayer.removeChildren();
+    for (const c of vehicleLayer.removeChildren()) c.destroy(true);
     for (const v of deps.world.vehicles) {
       if (v.status === 'lost' || v.status === 'arrived') continue;
       vehicleLayer.addChild(renderVehicleDot(v, nowMs));
