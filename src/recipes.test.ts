@@ -454,7 +454,7 @@ describe('T6 orbital recipes (§14.10)', () => {
       plasma_containment_vessel: 1,
       cryogenic_hydrogen: 5,
     });
-    expect(r.cycleSec).toBe(1);
+    expect(r.cycleSec).toBe(600);
     expect(r.category).toBe('manufacturing');
   });
 
@@ -1497,7 +1497,7 @@ describe('§6.5 antimatter_capsule via particle_accelerator (Task 11.2)', () => 
     expect(RECIPES.particle_accelerator).toBeDefined();
     expect(RECIPES.particle_accelerator!.inputs).toEqual({ hydrogen: 10, exotic_alloy: 1, microchip: 5 });
     expect(RECIPES.particle_accelerator!.outputs).toEqual({ antimatter_capsule: 1 });
-    expect(RECIPES.particle_accelerator!.cycleSec).toBe(1);
+    expect(RECIPES.particle_accelerator!.cycleSec).toBe(600);
     expect(RECIPES.particle_accelerator!.category).toBe('electronics');
   });
 });
