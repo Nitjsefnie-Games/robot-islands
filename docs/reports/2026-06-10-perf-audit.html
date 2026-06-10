@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Perf audit — measured fixes · 2026-06-10</title>
+  <style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --warn:     #E0B47F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: var(--sans); background: var(--ivory); color: var(--gray-700);
+      line-height: 1.58; padding: 56px 32px 120px; -webkit-font-smoothing: antialiased; }
+    .page { margin: 0 auto; max-width: 1080px; }
+
+    header.page-head { margin-bottom: 36px; max-width: 980px; }
+    .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--gray-500); margin-bottom: 12px; }
+    h1 { font-family: var(--serif); font-weight: 500; font-size: 38px; line-height: 1.14;
+      color: var(--slate); margin-bottom: 18px; letter-spacing: -0.01em; }
+
+    .method { background: var(--white); border: var(--border); border-radius: var(--radius);
+      padding: 18px 22px; margin-bottom: 18px; }
+    .method .label { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 10px; }
+    .method .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; font-size: 13.5px; }
+    @media (max-width: 860px) { .method .grid { grid-template-columns: repeat(2, 1fr); } }
+    .method .cell .k { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--gray-500); margin-bottom: 3px; }
+    .method .cell .v { color: var(--slate); font-weight: 600; }
+
+    .noise { background: #2E211C; border: 1.5px solid #5C3D2E; border-radius: var(--radius);
+      padding: 14px 20px; margin-bottom: 40px; font-size: 14px; color: var(--gray-700);
+      display: flex; gap: 12px; max-width: 980px; }
+    .noise .glyph { color: var(--warn); font-weight: 700; }
+    .noise b { color: var(--warn); }
+
+    section { margin-bottom: 56px; }
+    .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+    .sec-head .num { font-family: var(--mono); font-size: 12px; background: var(--oat); color: var(--slate);
+      padding: 3px 9px; border-radius: 8px; }
+    .sec-head h2 { font-family: var(--serif); font-weight: 500; font-size: 26px; color: var(--slate);
+      letter-spacing: -0.01em; }
+    .sec-intro { font-size: 14.5px; color: var(--gray-500); max-width: 840px; margin-bottom: 24px; }
+    code { font-family: var(--mono); font-size: 0.88em; background: var(--gray-150);
+      border: 1px solid var(--gray-300); border-radius: 5px; padding: 1px 5px; color: #C9B98A; }
+
+    .tbl { width: 100%; border: var(--border); border-radius: var(--radius);
+      border-collapse: separate; border-spacing: 0; overflow: hidden; font-size: 13.5px; margin-bottom: 16px; }
+    .tbl th, .tbl td { text-align: left; padding: 11px 16px; border-bottom: 1px solid var(--gray-300);
+      vertical-align: top; }
+    .tbl th { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--gray-500); background: var(--gray-150); font-weight: 600; }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl td.num { font-family: var(--mono); font-size: 13px; text-align: right;
+      font-variant-numeric: tabular-nums; }
+    .tbl tr.baseline { background: var(--gray-150); }
+    .delta { font-family: var(--mono); font-size: 12.5px; font-weight: 600; }
+    .delta.win  { color: var(--olive); }
+    .delta.lose { color: var(--rust); }
+    .delta.noise { color: var(--gray-500); }
+    .sig { display: inline-block; font-family: var(--mono); font-size: 10.5px;
+      padding: 2px 8px; border-radius: 999px; letter-spacing: 0.04em; }
+    .sig.real  { background: #2D3A24; color: var(--olive); }
+    .sig.noise { background: var(--gray-150); color: var(--gray-500); border: 1px solid var(--gray-300); }
+
+    .cand { background: var(--white); border: var(--border); border-radius: var(--radius);
+      margin-bottom: 18px; overflow: hidden; }
+    .cand-head { display: flex; align-items: center; gap: 12px; padding: 14px 20px;
+      background: var(--gray-150); border-bottom: var(--border); flex-wrap: wrap; }
+    .cand-head .cid { font-family: var(--mono); font-size: 12px; color: var(--gray-500); }
+    .cand-head .ct { font-family: var(--serif); font-size: 17px; color: var(--slate); flex: 1; min-width: 200px; }
+    .pill { display: inline-block; font-family: var(--mono); font-size: 10.5px; padding: 2px 9px;
+      border-radius: 999px; letter-spacing: 0.04em; }
+    .pill.agree    { background: #2D3A24; color: var(--olive); }
+    .pill.disagree { background: #4A2A1C; color: var(--rust); }
+    .pill.noop     { background: var(--gray-150); color: var(--gray-500); border: 1px solid var(--gray-300); }
+    .cand-body { padding: 14px 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px 28px; font-size: 13.5px; }
+    @media (max-width: 820px) { .cand-body { grid-template-columns: 1fr; } }
+    .cand-body .bk { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--gray-500); margin-bottom: 5px; }
+    .cand-body .bv strong { color: var(--slate); }
+    .decide { display: flex; gap: 10px; padding: 0 20px 16px; flex-wrap: wrap; }
+    .decide .opt { background: var(--ivory); border: var(--border); border-radius: 8px;
+      padding: 7px 14px; cursor: pointer; font-family: var(--mono); font-size: 12px;
+      color: var(--gray-700); position: relative; user-select: none; }
+    .decide .opt input { position: absolute; opacity: 0; pointer-events: none; }
+    .decide .opt:hover { border-color: var(--clay); }
+    .decide .opt[data-selected="true"] { border-color: var(--clay); color: var(--clay);
+      background: #1F1D1A; box-shadow: 0 0 0 1px var(--clay) inset; }
+
+    .selections { background: var(--white); border: var(--border); border-left: 4px solid var(--clay);
+      border-radius: var(--radius); padding: 22px 26px; margin-top: 40px;
+      position: sticky; bottom: 22px; }
+    .selections h3 { font-family: var(--serif); font-size: 20px; color: var(--slate); margin-bottom: 12px; }
+    .sel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 22px;
+      font-size: 13px; margin-bottom: 16px; }
+    @media (max-width: 720px) { .sel-grid { grid-template-columns: 1fr; } }
+    .sel-row { display: flex; justify-content: space-between; gap: 12px; }
+    .sel-row .k { color: var(--gray-500); font-family: var(--mono); font-size: 12px; }
+    .sel-row .v { color: var(--slate); font-weight: 600; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+    button.action { font-family: var(--mono); font-size: 12px; padding: 9px 16px;
+      background: var(--ivory); color: var(--clay); border: 1.5px solid var(--clay);
+      border-radius: 8px; cursor: pointer; letter-spacing: 0.04em; }
+    button.action:hover { background: #2A2521; }
+    .toast { font-family: var(--mono); font-size: 11.5px; color: var(--olive);
+      margin-left: 8px; opacity: 0; transition: opacity 200ms ease; }
+    .toast.show { opacity: 1; }
+
+    .footer { color: var(--gray-500); font-size: 13px; margin-top: 64px;
+      padding-top: 22px; border-top: 1px solid var(--gray-300); }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Perf audit · robot-islands · 2026-06-10</div>
+      <h1>Four measured fixes: the freeze is dead, the frame is 3× lighter</h1>
+    </header>
+
+    <div class="method">
+      <div class="label">Method · measured before and after every fix</div>
+      <div class="grid">
+        <div class="cell"><div class="k">Workload</div><div class="v">live save (v22, 77-building L23 home)</div></div>
+        <div class="cell"><div class="k">Real-hardware probe</div><div class="v">RAF/longtask hotfix, 53–77s soaks</div></div>
+        <div class="cell"><div class="k">CPU profiles</div><div class="v">headless CDP 25s + node --cpu-prof</div></div>
+        <div class="cell"><div class="k">Equivalence gate</div><div class="v">3077-test suite + adversarial review per fix</div></div>
+      </div>
+    </div>
+
+    <div class="noise">
+      <span class="glyph">±</span>
+      <span><b>Every fix is pure memoization or retained-DOM — zero behavior change by construction</b>,
+        verified per-fix by adversarial equivalence reviews (input-completeness audits, clone-coverage
+        proofs, DOM-section diffs) on top of the full suite. Headless profiles use the canvas renderer
+        (software <code>drawImage</code> dominates there); cross-machine speedups quoted from the
+        real-hardware RAF probe and the node bench, which are renderer-independent.</span>
+    </div>
+
+    <section>
+      <div class="sec-head"><span class="num">1</span><h2>Cumulative result — real hardware</h2></div>
+      <p class="sec-intro">User-visible symptoms: periodic ~400ms freezes every 5s (gone), heavy idle frame cost (3×).</p>
+      <table class="tbl">
+        <thead><tr><th>Metric</th><th style="text-align:right">Baseline</th><th style="text-align:right">Final</th><th style="text-align:right">Speedup</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">Long tasks &gt;50ms (the freezes)</td><td class="num">83 per 70s · 9.3s blocked · worst 410ms</td><td class="num">0</td><td class="num"><span class="delta win">eliminated</span></td></tr>
+          <tr><td class="slate">RAF frame max</td><td class="num">410 ms</td><td class="num">5.9 ms</td><td class="num"><span class="delta win">69×</span></td></tr>
+          <tr><td class="slate">RAF frame p99</td><td class="num">23.5 ms</td><td class="num">2.2 ms</td><td class="num"><span class="delta win">10.7×</span></td></tr>
+          <tr><td class="slate">RAF frame mean</td><td class="num">2.54 ms</td><td class="num">0.88 ms</td><td class="num"><span class="delta win">2.9×</span></td></tr>
+          <tr><td class="slate">Economy tick (16ms frame, mean)</td><td class="num">1.69 ms</td><td class="num">466 µs</td><td class="num"><span class="delta win">3.6×</span></td></tr>
+          <tr><td class="slate">24h offline catchup (mean)</td><td class="num">101 ms</td><td class="num">22.5 ms</td><td class="num"><span class="delta win">4.5×</span></td></tr>
+          <tr><td class="slate">JS heap drift over soak</td><td class="num">+17.8 MB / 70s</td><td class="num">+0.5 MB / 77s</td><td class="num"><span class="delta win">stable</span></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">2</span><h2>The four fixes</h2></div>
+      <p class="sec-intro">Biggest target first; each landed with implementer → adversarial spec review → quality review → measurement.</p>
+      <table class="tbl">
+        <thead><tr><th>Fix</th><th>Commit</th><th>Root cause</th><th style="text-align:right">Direct effect</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="slate">1 · weather() memo + resumable walker</td><td class="num">9bdc186</td>
+            <td>Epoch-anchored dwell walk: ~220k iterations per call, ×2 per visible cell, every 5s overlay rebuild (<code>WEATHER_OVERLAY_REBUILD_MS</code>) — the 400ms periodic freeze</td>
+            <td class="num"><span class="delta win">freezes 83→0 · frame max 31×</span></td>
+          </tr>
+          <tr>
+            <td class="slate">2 · DerivationsMemo in computeRates</td><td class="num">522372b</td>
+            <td>Adjacency/skill family (clusterBonusMuls 20.6%, gates/borders ~17%, isBuildingActive 8%, exoticRules 5%) recomputed every segment; signature-validated per-island cache, self-validating (missed mutation can't serve stale)</td>
+            <td class="num"><span class="delta win">tick 4.0× · catchup 4.4×</span></td>
+          </tr>
+          <tr>
+            <td class="slate">3 · HUD retained DOM</td><td class="num">4941552</td>
+            <td>update() tore down and recreated the whole panel every frame + per-frame SVG sparkline recreation</td>
+            <td class="num"><span class="delta win">hud CPU 2.4× · DOM churn → 0</span></td>
+          </tr>
+          <tr>
+            <td class="slate">4 · effectiveSkillMultipliers source memo</td><td class="num">11dd33a</td>
+            <td>Unthreaded callers (cap() on UI paths) re-folded the skill graph per call; WeakMap + dual validation (auraAmpVersion + contents signature), clone-on-return</td>
+            <td class="num"><span class="delta win">~0.9% self → memo hit</span></td>
+          </tr>
+        </tbody>
+      </table>
+      <p class="sec-intro">Toolchain hardening alongside: profiling scripts adopted into <code>scripts/</code> (193d6e7),
+        <code>browser-profile.py</code> save-injection key bug fixed (6044e73 — wrote a key <code>loadWorld</code> never probes),
+        <code>pull-idb-save.sh</code> daedalus path fixed.</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">3</span><h2>Post-fix profile — what's left</h2></div>
+      <p class="sec-intro">The profile is flat: nothing in src/ above 2.1% self. Remaining cost is legitimately live work.</p>
+      <table class="tbl">
+        <thead><tr><th>Function</th><th style="text-align:right">Self %</th><th>Status</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">computeRates (live passes)</td><td class="num">2.07</td><td>Time/inventory-varying by design; further cuts need cadence decoupling (R1 below)</td></tr>
+          <tr><td class="slate">cap() arithmetic</td><td class="num">0.39</td><td>Skill fold now memo-hit; residual is per-resource arithmetic on UI paths</td></tr>
+          <tr><td class="slate">derivationsSignature</td><td class="num">0.38</td><td>The cost of cache safety — 12× cheaper than what it replaced</td></tr>
+          <tr><td class="slate">averageRate / spark sampling / islandTileCount / solveFlow</td><td class="num">≤0.34 each</td><td>Healthy</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">4</span><h2>Open register — owner decisions &amp; follow-ups</h2></div>
+      <p class="sec-intro">Found during the audit, deliberately not auto-fixed. Pick a disposition per item.</p>
+
+      <article class="cand">
+        <div class="cand-head"><span class="cid">R1</span><span class="ct">Economy tick cadence decoupling</span><span class="pill noop">owner decision</span></div>
+        <div class="cand-body">
+          <div><div class="bk">Proposal</div><div class="bv">The §15.3 integrator handles any dt — ticking the economy at e.g. 10Hz instead of every frame would cut the remaining 2% live cost and scale headroom for many populated islands. <strong>Changes rate-display latency semantics</strong>, so it needs a spec call, not an autonomous fix.</div></div>
+          <div><div class="bk">Size</div><div class="bv">Small (main.ts ticker gating); benefit grows with island count.</div></div>
+        </div>
+        <div class="decide" data-picker="R1-tick-cadence"><label class="opt"><input type="radio" name="R1" value="approve">approve</label><label class="opt"><input type="radio" name="R1" value="defer">defer</label><label class="opt"><input type="radio" name="R1" value="reject">reject</label></div>
+      </article>
+
+      <article class="cand">
+        <div class="cand-head"><span class="cid">R2</span><span class="ct">unbindCrystal misses auraAmpVersion bump</span><span class="pill disagree">latent bug</span></div>
+        <div class="cand-body">
+          <div><div class="bk">Finding</div><div class="bv"><code>skilltree.ts:827</code> deletes the socket node without bumping <code>auraAmpVersion</code> — the Layer-2 aura cache can serve stale amplifiers after a crystal unbind. Pre-existing; the new memo's content signature actually masks it for multipliers, but the aura map itself stays stale until the next sanctioned bump.</div></div>
+          <div><div class="bk">Fix size</div><div class="bv">One line + a regression test.</div></div>
+        </div>
+        <div class="decide" data-picker="R2-aura-bump"><label class="opt"><input type="radio" name="R2" value="fix">fix</label><label class="opt"><input type="radio" name="R2" value="defer">defer</label></div>
+      </article>
+
+      <article class="cand">
+        <div class="cand-head"><span class="cid">R3</span><span class="ct">sonarPair exoticAdjacency node is economically inert</span><span class="pill disagree">balance bug</span></div>
+        <div class="cand-body">
+          <div><div class="bk">Finding</div><div class="bv"><code>skilltree-catalog.ts:876</code> (TODO in place): the catalog's only exoticAdjacency node pair-boosts <code>dock</code>, which has no RECIPES entry — the skill point buys nothing.</div></div>
+          <div><div class="bk">Fix size</div><div class="bv">Balance decision: retarget the pair or give dock a recipe.</div></div>
+        </div>
+        <div class="decide" data-picker="R3-sonar-pair"><label class="opt"><input type="radio" name="R3" value="fix">fix</label><label class="opt"><input type="radio" name="R3" value="defer">defer</label></div>
+      </article>
+
+      <article class="cand">
+        <div class="cand-head"><span class="cid">R4</span><span class="ct">loadWorld key-walk skips v === SCHEMA_VERSION</span><span class="pill noop">tool-facing quirk</span></div>
+        <div class="cand-body">
+          <div><div class="bk">Finding</div><div class="bv"><code>persistence.ts:1165</code> assumes the primary key is <code>v${SCHEMA_VERSION}</code>, but STORAGE_KEY is pinned at v14 — any external tool writing a version-suffixed current key is silently never loaded. Production unaffected (game always writes the pinned key). Bit us once already (fresh-world profile).</div></div>
+          <div><div class="bk">Fix size</div><div class="bv">Drop the <code>continue</code> or probe the v-suffixed current key too; one test.</div></div>
+        </div>
+        <div class="decide" data-picker="R4-loadworld-walk"><label class="opt"><input type="radio" name="R4" value="fix">fix</label><label class="opt"><input type="radio" name="R4" value="defer">defer</label></div>
+      </article>
+
+      <article class="cand">
+        <div class="cand-head"><span class="cid">R5</span><span class="ct">Test-coverage follow-ups from quality reviews</span><span class="pill noop">polish</span></div>
+        <div class="cand-body">
+          <div><div class="bk">Items</div><div class="bv">HUD zero-createElement spy doesn't cover the steady-state rate-row path; spy failure message opaque; hud test module-global buffer assumption unnoted; weather pure-layer caveat now in place (done in fix 2 round).</div></div>
+          <div><div class="bk">Fix size</div><div class="bv">Small test-only commit.</div></div>
+        </div>
+        <div class="decide" data-picker="R5-test-polish"><label class="opt"><input type="radio" name="R5" value="fix">fix</label><label class="opt"><input type="radio" name="R5" value="defer">defer</label></div>
+      </article>
+    </section>
+
+    <div class="selections">
+      <h3>Dispositions</h3>
+      <div class="sel-grid" id="selGrid"></div>
+      <div class="actions">
+        <button class="action" id="copyJson">Copy as JSON</button>
+        <button class="action" id="copyPrompt">Copy as prompt</button>
+        <span class="toast" id="toast"></span>
+      </div>
+    </div>
+
+    <div class="footer">
+      <p>Perf audit · 2026-06-10 · commits 193d6e7 · 9bdc186 · 6044e73 · 522372b · 4941552 · 11dd33a ·
+        suite 3077 passed / 0 failures throughout · every fix adversarially equivalence-reviewed ·
+        instruments: scripts/profile-economy.ts · scripts/browser-profile.py · scripts/ri-profiler-hotfix.js · scripts/analyze-cpuprofile-mapped.py</p>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const state = {};
+      const strips = document.querySelectorAll('.decide');
+      strips.forEach((strip) => {
+        const name = strip.dataset.picker;
+        if (!name) return;
+        strip.querySelectorAll('input[type=radio]').forEach((r) => {
+          if (r.checked) state[name] = r.value;
+          r.addEventListener('change', () => { if (r.checked) { state[name] = r.value; render(); } });
+          r.closest('.opt').addEventListener('click', (e) => {
+            if (e.target.tagName === 'INPUT') return;
+            r.checked = true; state[name] = r.value; render();
+          });
+        });
+      });
+      function render() {
+        strips.forEach((strip) => {
+          strip.querySelectorAll('.opt').forEach((opt) => {
+            const r = opt.querySelector('input[type=radio]');
+            opt.dataset.selected = (r && r.checked) ? 'true' : 'false';
+          });
+        });
+        const grid = document.getElementById('selGrid');
+        if (!grid) return;
+        grid.innerHTML = '';
+        Object.entries(state).forEach(([k, v]) => {
+          const row = document.createElement('div');
+          row.className = 'sel-row';
+          row.innerHTML = '<span class="k">' + k + '</span><span class="v">' + v + '</span>';
+          grid.appendChild(row);
+        });
+      }
+      const toast = document.getElementById('toast');
+      function flash(msg) {
+        if (!toast) return;
+        toast.textContent = msg; toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 1600);
+      }
+      function clip(text, label) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(() => flash(label), () => fallback(text, label));
+        } else { fallback(text, label); }
+      }
+      function fallback(text, label) {
+        const ta = document.createElement('textarea');
+        ta.value = text; document.body.appendChild(ta);
+        ta.select(); try { document.execCommand('copy'); } catch (_) {}
+        document.body.removeChild(ta); flash(label);
+      }
+      document.getElementById('copyJson').addEventListener('click', () =>
+        clip(JSON.stringify(state, null, 2), '✓ JSON copied'));
+      document.getElementById('copyPrompt').addEventListener('click', () => {
+        const lines = Object.entries(state).map(([k, v]) => '- ' + k + ': ' + v);
+        clip('Apply these perf-audit dispositions:\n' + lines.join('\n'), '✓ Prompt copied');
+      });
+      render();
+    })();
+  </script>
+</body>
+</html>
