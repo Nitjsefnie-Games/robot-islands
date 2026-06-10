@@ -35,7 +35,6 @@ import type { ObjectiveId } from './tutorial.js';
 import type { EdgeId } from './skilltree-graph.js';
 import { cumulativeSkillPointsForLevel } from './skilltree.js';
 
-import { ACTIVE_DECAY_RATIO } from './active-bonus.js';
 import {
   SCHEMA_VERSION,
   SUPPORTED_LOAD_VERSIONS,
