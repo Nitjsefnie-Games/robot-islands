@@ -331,6 +331,9 @@ describe('mountHud DOM persistence', () => {
   });
 });
 
+// NOTE: sparkHistory and rateBuffers are module-global Maps keyed by island id.
+// They are never reset between tests — every test MUST use a unique island id
+// to avoid cross-test pollution.
 describe('mountHud retained DOM (perf: change-gated writes, no per-frame rebuild)', () => {
   function makeMinimalWorld(): WorldState {
     return {
@@ -403,8 +406,37 @@ describe('mountHud retained DOM (perf: change-gated writes, no per-frame rebuild
     // Identical inputs → identical serialized DOM, with zero structural
     // mutations (no element churn at all on the steady-state path).
     expect(parent.innerHTML).toBe(htmlAfterFirst);
-    expect(createSpy).not.toHaveBeenCalled();
-    expect(createNsSpy).not.toHaveBeenCalled();
+    expect(createSpy, 'steady-state update() must not create elements — retained DOM contract').not.toHaveBeenCalled();
+    expect(createNsSpy, 'steady-state update() must not create SVG elements — retained DOM contract').not.toHaveBeenCalled();
+  });
+
+  it('steady-state update() with active rate rows creates zero elements (rows and sparklines reused)', () => {
+    const parent = document.createElement('div');
+    const hud = mountHud(parent, makeMinimalWorld(), () => {}, makeRegistry());
+    const spec = makeSpec('retained-rates-active');
+    const state = { ...makeState(), id: 'retained-rates-active' };
+    const net = zeroNet();
+
+    // Drive the shared 60s realized-delta average so rate rows exist.
+    const nowSpy = vi.spyOn(performance, 'now');
+    nowSpy.mockReturnValue(0);
+    hud.update(state, net, power, spec, ncState, null, 0, spec.id, new Map());
+    expect(parent.textContent).toContain('no production');
+
+    state.inventory.iron_ore = 100;
+    nowSpy.mockReturnValue(1000);
+    hud.update(state, net, power, spec, ncState, null, 0, spec.id, new Map());
+    expect(parent.textContent).not.toContain('no production');
+
+    // Second update with identical state — rate rows and sparklines must be
+    // reused, not recreated.
+    const createSpy = vi.spyOn(document, 'createElement');
+    const createNsSpy = vi.spyOn(document, 'createElementNS');
+    nowSpy.mockReturnValue(1000);
+    hud.update(state, net, power, spec, ncState, null, 0, spec.id, new Map());
+
+    expect(createSpy, 'steady-state update() with rate rows must not create elements — retained DOM contract').not.toHaveBeenCalled();
+    expect(createNsSpy, 'steady-state update() with rate rows must not create SVG elements — retained DOM contract').not.toHaveBeenCalled();
   });
 
   it('a new resource appearing in the rates list restructures the rates region correctly', () => {
