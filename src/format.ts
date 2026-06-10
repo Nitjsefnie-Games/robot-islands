@@ -9,7 +9,8 @@ function trim(n: number): string {
 export function fmtPower(kW: number): string {
   const a = Math.abs(kW);
   if (a === 0) return '0 W';
-  if (a < 1) return `${Math.round(kW * 1000)} W`;
+  const w = Math.round(kW * 1000);
+  if (Math.abs(w) < 1000) return `${w} W`;
   if (a < 1000) return `${trim(kW)} kW`;
   if (a < 1_000_000) return `${trim(kW / 1000)} MW`;
   return `${trim(kW / 1_000_000)} GW`;
