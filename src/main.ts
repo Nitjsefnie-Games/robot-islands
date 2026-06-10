@@ -1009,6 +1009,12 @@ async function main(): Promise<void> {
   const modifierMulFor = (id: string): ModifierMultipliers =>
     modifierMulsById.get(id) ?? effectiveModifierMultipliers([]);
 
+  // §15.1 per-island RatesContext snapshot — updated in the ticker after
+  // cableBalances / solarBoosts are computed so the inspector can call
+  // computeRates with the same context that advanceIsland/computeRates used
+  // for the most recent tick.  Keyed by island id; read via getRatesContext().
+  const lastIslandCtx = new Map<string, RatesContext>();
+
   // §4.7 maintenance badges — amber/red dot on each degrading building so
   // status reads at a glance from the world map. Cheap throttled rebuild
   // (REBUILD_MS = 2s) — degradation rates are hourly so 2s is overkill but
@@ -1281,6 +1287,7 @@ async function main(): Promise<void> {
 
   const inspector = mountInspectorUi(document.body, {
     world: worldState,
+    getRatesContext: (islandId: string) => lastIslandCtx.get(islandId),
     onDemolish: (target: InspectorTarget) => {
       const result = demolishBuilding(target.spec, target.state, target.building.id);
       if (!result.ok) return;
@@ -1933,7 +1940,11 @@ async function main(): Promise<void> {
           needRebuild = true;
         },
       }, nowWall);
-      const { net, power } = computeRates(s, {
+      // §15.1: build the RatesContext as a named variable so it can be
+      // snapshots for the inspector (getRatesContext dep) — the inspector
+      // must use the identical context to produce rates that agree with
+      // the HUD.
+      const islandCtx: RatesContext = {
         modifierMul: modifierMulFor(s.id),
         ncBuff: ncBuffFor(s),
         activeBonusMul: activeBonusMul(worldState),
@@ -1945,7 +1956,9 @@ async function main(): Promise<void> {
         geothermalActive,
         solarBoost: solarBoostByIsland.get(s.id),
         world: worldState,
-      }, undefined, nowWall);
+      };
+      lastIslandCtx.set(s.id, islandCtx);
+      const { net, power } = computeRates(s, islandCtx, undefined, nowWall);
       islandNets.set(s.id, net);
       islandPower.set(s.id, power);
     }
