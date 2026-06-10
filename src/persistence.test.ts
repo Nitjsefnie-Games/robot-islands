@@ -523,6 +523,7 @@ describe('schema version', () => {
     const v3Shaped = { ...snap, v: 3 } as unknown as SaveSnapshot;
     expect(() => deserializeWorld(v3Shaped, 0, 0)).toThrow(/not supported/);
   });
+
 });
 
 // ---------------------------------------------------------------------------
@@ -1366,6 +1367,60 @@ describe('satellite movingTo persistence', () => {
     expect(sat.movingTo).toBeUndefined();
     expect(sat.locked).toBe(true);
   });
+
+  it('shifts movingTo.arrivalMs and commPackets.generatedMs across the perf-domain reset', () => {
+    const world = makeInitialWorld(0);
+    world.satellites.push(
+      {
+        id: 'sat-moving',
+        variant: 'scanner',
+        spaceportIslandId: 'home',
+        x: 0,
+        y: 0,
+        commRange: 200,
+        coverageRadius: 400,
+        fuel: 80,
+        lodges: { scan: 0, weather: 0, comm: 0 },
+        locked: false,
+        pendingRepairDroneId: null,
+        buffer: [],
+        movingTo: { x: 100, y: 200, arrivalMs: 5_000 },
+      },
+      {
+        id: 'sat-stationary',
+        variant: 'relay',
+        spaceportIslandId: 'home',
+        x: 50,
+        y: 50,
+        commRange: 500,
+        coverageRadius: 0,
+        fuel: 100,
+        lodges: { scan: 0, weather: 0, comm: 0 },
+        locked: true,
+        pendingRepairDroneId: null,
+        buffer: [],
+      },
+    );
+    world.commPackets.push({
+      id: 'pkt-1',
+      payload: { type: 'discovery', payload: { islandId: 'remote' } },
+      currentNodeId: 'sat-moving',
+      originSatId: 'sat-moving',
+      generatedMs: 5_000,
+    });
+    const savedAtWallMs = 0;
+    const savedAtPerfMs = 0;
+    const shift = 123_456;
+    const snap = serializeWorld(world, new Map(), savedAtWallMs, savedAtPerfMs);
+    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    const { world: restored } = deserializeWorld(json, savedAtWallMs, shift);
+    const moving = restored.satellites.find((s) => s.id === 'sat-moving')!;
+    expect(moving.movingTo!.arrivalMs).toBe(5_000 + shift);
+    const stationary = restored.satellites.find((s) => s.id === 'sat-stationary')!;
+    expect(stationary.movingTo).toBeUndefined();
+    const pkt = restored.commPackets[0]!;
+    expect(pkt.generatedMs).toBe(5_000 + shift);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -1460,6 +1515,80 @@ describe('§14.4 commPackets persistence', () => {
     expect(pkt.generatedMs).toBe(1234);
   });
 
+});
+
+// ---------------------------------------------------------------------------
+// §14.x satellite buffer cap on load
+// ---------------------------------------------------------------------------
+
+describe('satellite buffer cap on load', () => {
+  it('preserves all buffered entries when bufferCap exceeds the global default', () => {
+    const world = makeInitialWorld(0);
+    const entries = Array.from({ length: 150 }, (_, i) => ({
+      type: 'discovery' as const,
+      payload: { index: i },
+    }));
+    world.satellites.push({
+      id: 'sat-big',
+      variant: 'relay',
+      spaceportIslandId: 'home',
+      x: 0,
+      y: 0,
+      commRange: 500,
+      coverageRadius: 0,
+      fuel: 100,
+      lodges: { scan: 0, weather: 0, comm: 0 },
+      locked: true,
+      pendingRepairDroneId: null,
+      buffer: entries,
+      bufferCap: 150,
+    });
+    const snap = serializeWorld(world, new Map(), 0, 0);
+    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    const { world: restored } = deserializeWorld(json, 0, 0);
+    const sat = restored.satellites[0]!;
+    expect(sat.buffer).toHaveLength(150);
+    expect(sat.buffer[sat.buffer.length - 1]!.payload).toEqual({ index: 149 });
+  });
+
+  it('defaults a missing buffer to empty array instead of crashing', () => {
+    const snap = {
+      v: SCHEMA_VERSION,
+      savedAt: 0,
+      savedAtPerf: 0,
+      world: {
+        islands: [],
+        drones: [],
+        routes: [],
+        vehicles: [],
+        satellites: [
+          {
+            id: 'sat-nobuf',
+            variant: 'scanner',
+            spaceportIslandId: 'home',
+            x: 0,
+            y: 0,
+            commRange: 200,
+            coverageRadius: 400,
+            fuel: 100,
+            lodges: { scan: 0, weather: 0, comm: 0 },
+            locked: true,
+            pendingRepairDroneId: null,
+          },
+        ],
+        repairDrones: [],
+        debrisFields: [],
+        commPackets: [],
+        totalCo2Kg: 0,
+        playerLat: null,
+        playerLon: null,
+      },
+      islandStates: [],
+    } as unknown as SaveSnapshot;
+    const { world: restored } = deserializeWorld(snap, 0, 0);
+    const sat = restored.satellites[0]!;
+    expect(sat.buffer).toEqual([]);
+  });
 });
 
 // ---------------------------------------------------------------------------
