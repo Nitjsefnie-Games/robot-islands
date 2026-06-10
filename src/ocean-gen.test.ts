@@ -318,6 +318,23 @@ describe('seedOceanTerrainForIslands — lazy generation', () => {
     expect(shallowCells.length).toBeGreaterThan(0);
   });
 
+  it('50 sequential non-volcanic lazy mints complete in under 1000ms', () => {
+    // Regression guard for the O(n) full-world-regen bug: each non-volcanic
+    // mint should skip the trench/nodule sync entirely and cost only a
+    // shallows ring. Pre-fix this measured ~19 300ms for 50 calls; post-fix
+    // it should be well under 1000ms even on slow CI hardware.
+    const cells = new Map<string, import('./ocean-cell.js').OceanCellSpec>();
+    const allIslands: IslandSpec[] = [];
+    const t0 = Date.now();
+    for (let i = 0; i < 50; i++) {
+      const isl = mkIsland(`plains-${i}`, 'plains', i * 200, i * 200);
+      allIslands.push(isl);
+      seedOceanTerrainForIslands(cells, 'perf-seed', allIslands, [isl]);
+    }
+    const elapsed = Date.now() - t0;
+    expect(elapsed).toBeLessThan(1000);
+  });
+
   it('volcanic island rolls identical vents at boot and lazily for the same seed', () => {
     // Use a large enough island (major=minor=40) and seed 'v26' — confirmed to
     // yield 10 vent cells, making the equality assertion non-vacuous.

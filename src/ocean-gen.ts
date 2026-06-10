@@ -507,12 +507,26 @@ export function seedOceanTerrainForIslands(
 ): void {
   seedShallows(cells, allIslands, newIslands);
 
+  // Vents only roll for volcanic islands, so the expensive full-world
+  // trench/nodule sync is only needed when a volcanic island is among the
+  // new mints. Non-volcanic mints need only their shallows ring — skip the
+  // sync (and the seedVents no-op that follows) entirely.
+  if (!newIslands.some((i) => i.biome === 'volcanic')) return;
+
   // Synchronize trench/nodule context so vent validity checks match boot.
-  const full = generateOceanTerrain(seed, allIslands);
-  for (const [k, v] of full) {
-    if (v.terrain === 'trench' || v.terrain === 'nodule_field') {
-      if (!cells.has(k)) cells.set(k, v);
-    }
+  // We call seedTrenches + seedNoduleFields directly on a fresh temp map
+  // rather than going through generateOceanTerrain (which also runs
+  // seedShallows over the full world bounding rect — an O(bounding_area ×
+  // n_islands) scan that becomes prohibitively expensive as the world grows
+  // to hundreds of islands spread across a large area). Trenches and nodules
+  // are determined only by the seed + island positions used for deep-zone
+  // checks; their RNG streams are identical to the boot path, so the result
+  // is the same as generateOceanTerrain minus the shallows pass.
+  const tmpCells = new Map<string, OceanCellSpec>();
+  seedTrenches(tmpCells, seed, allIslands);
+  seedNoduleFields(tmpCells, seed, allIslands);
+  for (const [k, v] of tmpCells) {
+    if (!cells.has(k)) cells.set(k, v);
   }
 
   seedVents(cells, seed, allIslands, newIslands);
