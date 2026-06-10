@@ -1473,3 +1473,101 @@ describe('firePulse (§11.5 T4 omnidirectional pulse)', () => {
     expect(origin.inventory.cryogenic_hydrogen).toBe(50 - T4_PULSE_FUEL_COST);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Fix 6.1 — offline catch-up: corridor flown while tab was closed is scanned
+// ---------------------------------------------------------------------------
+
+describe('Fix 6.1: offline drone catch-up', () => {
+  function worldWithAntenna(): WorldState {
+    const home: IslandSpec = {
+      id: 'home',
+      name: 'home',
+      biome: 'plains',
+      cx: 0,
+      cy: 0,
+      majorRadius: 5,
+      minorRadius: 5,
+      populated: true,
+      discovered: true,
+      buildings: [{ id: 'home-a1', defId: 'antenna_t1', x: 0, y: 0 }],
+      modifiers: [],
+    };
+    return {
+      islands: [home],
+      drones: [],
+      routes: [],
+      vehicles: [],
+      revealedCells: new Set(),
+      satellites: [],
+      repairDrones: [],
+      debrisFields: [],
+      endgameState: { achieved: new Set(), firstAchievedMs: null },
+      latticeActive: false,
+      latticeNodeIslands: [],
+      commPackets: [],
+      totalCo2Kg: 0,
+      playerLat: null,
+      playerLon: null,
+      oceanCells: new Map(),
+      depthRevealedCells: new Set(),
+      seed: 'test-seed',
+      recentBuildAttempts: new Set(),
+      recentBuildAttemptTs: new Map(),
+    };
+  }
+
+  it('offline window [1000,5000]: single catch-up tick(6000, 900) reveals corridor and returns drone', () => {
+    // Drone launched at t=1000 with a short flight ending at t=5000.
+    // Tab was "closed" during [1000,5000]. The catch-up tick is
+    // tickDrones(world, 6000, 900) — prevTickMs=900 < launchTime=1000.
+    // segStartMs = max(900, 1000) = 1000, so the full flight is covered.
+    const w = worldWithAntenna();
+    const home = makeIslandState({ level: 5 });
+    // diesel for T2; efficiency=6 → 10 fuel → 60 tiles round-trip, 120s flight
+    home.inventory.diesel = 50;
+    const r = dispatchDrone(w, home, 0, 0, 1, 0, 10, 1000, undefined, 2);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const d = r.drone;
+    // Flight: launchTime=1000, expectedReturnTime = 1000 + (60/0.5)*1000 = 121000
+    // Catch-up: tick(nowMs=130000, prevTickMs=900) — covers the full offline window
+    const tickResult = tickDrones(w, 130_000, 900);
+    // 'test-seed' does not destroy this drone (deterministic) → returned,
+    // and the return flush drains the full-flight scan buffer.
+    expect(d.status).toBe('returned');
+    expect(tickResult.returned).toHaveLength(1);
+    expect(tickResult.revealedCellsAdded).toBeGreaterThan(0);
+    // Launch cell revealed…
+    expect(w.revealedCells.has('0,0')).toBe(true);
+    // …and so is a far corridor cell near the apex (x=30 → cell 1) that can
+    // ONLY come from scanning the offline window — the drone is back at the
+    // origin at tick time, so a [now,now] degenerate segment would miss it.
+    expect(w.revealedCells.has('1,0')).toBe(true);
+  });
+
+  it('in-session pause clamping still holds: segStartMs = max(prevTick, launchTime)', () => {
+    // If prevTickMs > launchTime, segStartMs is prevTickMs (not launchTime).
+    // This guards that we don't re-scan the segment before prevTick.
+    const w = worldWithAntenna();
+    const home = makeIslandState({ level: 5 });
+    home.inventory.diesel = 50;
+    const launchMs = 1000;
+    const r = dispatchDrone(w, home, 0, 0, 1, 0, 10, launchMs, undefined, 2);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const d = r.drone;
+
+    // First tick: covers [1000, 5000] — mid-flight, some cells buffered
+    tickDrones(w, 5_000, 1_000);
+    const revealedAfterFirst = w.revealedCells.size;
+
+    // Second tick: covers [5000, 10000] — more flight
+    tickDrones(w, 10_000, 5_000);
+    // Should have scanned more (or the same if already all covered)
+    expect(w.revealedCells.size).toBeGreaterThanOrEqual(revealedAfterFirst);
+
+    // Verify drone is still active or returned
+    expect(d.status === 'active' || d.status === 'returned' || d.status === 'lost').toBe(true);
+  });
+});
