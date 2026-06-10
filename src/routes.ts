@@ -541,11 +541,18 @@ function planRouteCargo(
   if (route.mode === 'waterfall') {
     const viableUnlocked = viable.map((e) => ({ ...e, sourceAvail: Infinity }));
     const unclampedPlanned = planCargo('waterfall', viableUnlocked, budget);
-    // Match by position: both loops iterate the same viable array in order.
-    return planned.map((d, i) => ({
+    // Match by resourceId, not position: the unclamped run consumes the budget
+    // at least as fast per entry, so it can break early and emit FEWER entries
+    // than the clamped run.  Key-based lookup stays correct under any structural
+    // divergence between the two runs.  Entries absent from the unclamped run
+    // fall back to their clamped amount — the unclamped budget was exhausted
+    // upstream of them, so they carry no extra contention weight.
+    const unclampedByResource = new Map<ResourceId, number>();
+    for (const d of unclampedPlanned) unclampedByResource.set(d.resourceId, d.amount);
+    return planned.map((d) => ({
       resourceId: d.resourceId,
       amount: d.amount,
-      unclampedDesired: unclampedPlanned[i]?.amount ?? d.amount,
+      unclampedDesired: unclampedByResource.get(d.resourceId) ?? d.amount,
     }));
   }
 
