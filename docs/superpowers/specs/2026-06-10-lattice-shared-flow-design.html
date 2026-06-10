@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Lattice shared-flow — design spec</title>
+  <style>
+    :root { --ivory:#1B1A17; --slate:#F5F3EC; --clay:#D97757; --oat:#3A352B; --olive:#8FA56E;
+      --rust:#E08B7F; --gray-150:#2E2C27; --gray-300:#3A3833; --gray-500:#8F8D82; --gray-700:#CFCCC2;
+      --white:#252420; --serif:ui-serif,Georgia,serif; --sans:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+      --mono:ui-monospace,'SF Mono',Menlo,monospace; --radius:12px; --border:1.5px solid var(--gray-300); }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:var(--sans); background:var(--ivory); color:var(--gray-700); line-height:1.58;
+      padding:56px 32px 120px; -webkit-font-smoothing:antialiased; }
+    .page { margin:0 auto; max-width:920px; }
+    .eyebrow { font-family:var(--mono); font-size:12px; letter-spacing:.08em; text-transform:uppercase;
+      color:var(--gray-500); margin-bottom:12px; }
+    h1 { font-family:var(--serif); font-weight:500; font-size:36px; line-height:1.14; color:var(--slate);
+      margin-bottom:18px; letter-spacing:-0.01em; }
+    .context-box { background:var(--gray-150); border:var(--border); border-radius:var(--radius);
+      padding:16px 20px; font-size:14.5px; margin-bottom:40px; }
+    .context-box .label { font-family:var(--mono); font-size:11px; text-transform:uppercase;
+      letter-spacing:.06em; color:var(--gray-500); display:block; margin-bottom:6px; }
+    .decision { background:var(--white); border:var(--border); border-left:4px solid var(--clay);
+      border-radius:var(--radius); padding:22px 26px; margin-bottom:48px; }
+    .decision .d-tag { font-family:var(--mono); font-size:11px; text-transform:uppercase;
+      letter-spacing:.07em; color:var(--clay); margin-bottom:8px; }
+    .decision .d-head { font-family:var(--serif); font-size:21px; font-weight:500; color:var(--slate); margin-bottom:10px; }
+    .decision .d-body { font-size:14.5px; }
+    section { margin-bottom:48px; }
+    .sec-head { display:flex; align-items:baseline; gap:14px; margin-bottom:8px; }
+    .sec-head .num { font-family:var(--mono); font-size:12px; background:var(--oat); color:var(--slate);
+      padding:3px 9px; border-radius:8px; }
+    .sec-head h2 { font-family:var(--serif); font-weight:500; font-size:24px; color:var(--slate); }
+    p.body, li { font-size:14.5px; max-width:780px; margin-bottom:12px; }
+    ul, ol { margin:0 0 14px 22px; }
+    li { margin-bottom:8px; }
+    strong { color:var(--slate); }
+    code { font-family:var(--mono); font-size:.88em; background:var(--gray-150); border:1px solid var(--gray-300);
+      border-radius:5px; padding:1px 5px; color:#C9B98A; }
+    .footer { color:var(--gray-500); font-size:13px; margin-top:56px; padding-top:22px;
+      border-top:1px solid var(--gray-300); }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="eyebrow">Design spec · robot-islands · 2026-06-10</div>
+    <h1>Lattice shared-flow: one flow problem per component, cap-proportional distribution</h1>
+    <div class="context-box">
+      <span class="label">Context</span>
+      Closes bug-sweep deferred item <strong>D-01 — Lattice unified pool never drains
+      partner islands (matter from nothing)</strong>. With the Omniscient Lattice active,
+      eligibility reads the pooled inventory but consumption decrements only local stock
+      (clamped at 0): a member island smelts forever off a partner's ore that never
+      shrinks. Also the value-fabrication class the server-authoritative migration exists
+      to prevent. Design locked by the owner in-session.
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision (owner, 2026-06-10)</div>
+      <div class="d-head">Lattice members share the net-flow solver and a pooled inventory, redistributed per-island proportionally to caps.</div>
+      <div class="d-body">Reuses the 2026-06-10 net-flow machinery instead of patching around it:
+        the member islands' buildings form one solver problem with regimes from pooled
+        inventory vs pooled caps; after each segment the pooled stock is written back as
+        <code>local_i = pooled × cap_i / Σcaps</code>. Mass conserved by construction —
+        no drain pass, no schema bump, clean deactivation.</div>
+    </div>
+
+    <section>
+      <div class="sec-head"><span class="num">01</span><h2>Mechanics</h2></div>
+      <ol>
+        <li><strong>Union solve.</strong> Pass 2.5 feeds the solver the union of member islands'
+          flow coefficients; cap/zero regimes computed from <code>Σ</code> member inventories vs
+          <code>Σ</code> member caps per resource. Cross-island producers/consumers throttle against
+          each other with the exact same shared-θ/φ + min-rule semantics as same-island flows.
+          The solver itself needs <strong>no changes</strong> (building-set agnostic).</li>
+        <li><strong>Cap-proportional distribution.</strong> After each segment:
+          <code>local_i = pooled × cap_i / Σcaps</code> (resources with <code>Σcaps = 0</code> keep
+          local stocks untouched). Free properties: every slice fits its island's cap;
+          <strong>persistence unchanged</strong> (per-island inventories are simply the distributed
+          representation); <strong>deactivation clean</strong> (islands keep their current shares).</li>
+        <li><strong>Lockstep advance.</strong> Members integrate as a group: one segment timeline,
+          <code>findNextCapEvent</code> over pooled inventories plus each member's own
+          maintenance/construction boundaries (min across members). Non-members advance per-island
+          exactly as today. Offline catchup with Lattice active MUST use the grouped path
+          (high-risk if missed — explicit test).</li>
+        <li><strong>Per-island attribution unchanged.</strong> XP on the producing island; wear and
+          maintenance per-building; power stays on the pass-3 cable-component model — the
+          philosophical precedent this design extends to resources.</li>
+      </ol>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">02</span><h2>Touch points</h2></div>
+      <ul>
+        <li><code>economy.ts</code>: pass-2.5 union assembly + pooled regimes; pooled accounting +
+          distribution at applyRates level; pooled view in findNextCapEvent; DerivationsMemo stays
+          per-island (cross-island gates already in its signature via ctx.crossIsland).</li>
+        <li><code>main.ts advanceEconomy</code> + offline catchup: grouped advance for the lattice
+          component, gated on <code>latticeActive</code>; non-lattice path byte-identical.</li>
+        <li>SPEC.md §13.3: pooled-flow + cap-proportional-distribution semantics (conservation).</li>
+      </ul>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">03</span><h2>Tests (minimum)</h2></div>
+      <ul>
+        <li>D-01 regression: consumer on A (zero local stock) + producer stock on B → pool drains,
+          B's share shrinks, total mass conserved to 1e-9 over a long advance.</li>
+        <li>Distribution: redistribution by cap share; cap-0 island holds 0 (unless Σcaps=0 freeze).</li>
+        <li>Cross-island throttle θ equals the colocated same-island case (solver-union equivalence anchor).</li>
+        <li>Deactivation mid-state: shares freeze, per-island advance resumes; mass-balance +
+          offline≡online invariants hold.</li>
+      </ul>
+    </section>
+
+    <div class="footer">
+      Design spec · 2026-06-10 · closes bug-sweep D-01 · companion .md: same path stem ·
+      server migration inherits this unchanged (lattice component = server-side grouping key)
+    </div>
+  </div>
+</body>
+</html>
