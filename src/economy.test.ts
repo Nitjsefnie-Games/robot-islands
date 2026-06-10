@@ -2291,6 +2291,54 @@ describe('§5.2 — heat adjacency in computeRates/advanceIsland', () => {
     expect(state.inventory.coke).toBe(100);
   });
 
+  it('coal furnace stops serving heat when coal depletes — consumer stalls (fix 4.1, §5.1/§5.2)', () => {
+    // Burn = 1 served consumer × 1 coalPerCycle / 30 s = 1/30 coal per
+    // second; coal is consumed by nothing else here. 2 coal covers exactly
+    // 60 s of heat. The starved island must produce pig_iron only for that
+    // covered window, pin coal at exactly 0, and accrue NOTHING afterward.
+    // The ample-coal control keeps producing for the whole 120 s — the
+    // starved island's output is exactly half of it (identical rates while
+    // coal lasts; §15.3 boundary lands at the depletion moment).
+    const mkIsland = (coal: number): IslandState =>
+      makeState({
+        buildings: [
+          { id: 'bf', defId: 'blast_furnace', x: 0, y: 0 },
+          { id: 'cf', defId: 'coal_furnace', x: 3, y: 1 },
+        ],
+        inventory: {
+          ...blankInventory(),
+          iron_ore: 1000,
+          coke: 1000,
+          limestone: 1000,
+          coal,
+        },
+        storageCaps: blankCaps(10_000),
+        level: 10, // T2 Blast Furnace — bypass the §9.7 tier-band gate
+      });
+    const starved = mkIsland(2);
+    const ample = mkIsland(1000);
+    advanceIsland(starved, 120_000, { defs: powerFreeBfCfCatalog() });
+    advanceIsland(ample, 120_000, { defs: powerFreeBfCfCatalog() });
+
+    // Control with ample coal keeps producing the whole window.
+    expect(ample.inventory.pig_iron).toBeGreaterThan(0);
+    // Starved island produced only during the covered 60 s of the 120 s run.
+    expect(starved.inventory.pig_iron).toBeGreaterThan(0);
+    expect(starved.inventory.pig_iron / ample.inventory.pig_iron).toBeCloseTo(0.5, 6);
+    // Coal pinned at exactly 0 at the depletion boundary — not negative,
+    // not silently refilled.
+    expect(starved.inventory.coal).toBe(0);
+
+    // NO further production accrues after depletion: outputs frozen, inputs
+    // untouched, coal stays at 0 (no free heat).
+    const pigBefore = starved.inventory.pig_iron;
+    const oreBefore = starved.inventory.iron_ore;
+    advanceIsland(starved, 1_120_000, { defs: powerFreeBfCfCatalog() });
+    expect(starved.inventory.pig_iron).toBe(pigBefore);
+    expect(starved.inventory.iron_ore).toBe(oreBefore);
+    expect(starved.inventory.coal).toBe(0);
+  });
+
   it.skip('Blast Furnace with adjacent free Geothermal Vent → runs at full rate, no coal cost', () => {
     // TODO: Phase 10 recalibration — blast_furnace recipe rewritten in Phase 2 commit 3;
     // inputs changed from iron_ingot + coke to iron_ore + coke + limestone.

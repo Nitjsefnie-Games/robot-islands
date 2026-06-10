@@ -818,6 +818,12 @@ export function computeRates(
    *  (offline-catchup integrator). Tests typically omit it — the fallback to
    *  `nowMs` preserves the existing `lastTick = 12*HOUR ⇒ Night` convention. */
   solarClockMs?: number,
+  /** INTERNAL (fix 4.1 fuel gate) — coal-fired heat sources judged
+   *  fuel-starved by a prior pass of this same call. Consumers assigned to
+   *  these furnaces are forced to hasHeat=false / factor 0 and the furnaces
+   *  bill no coal. Only `computeRates` itself passes this (recursion depth
+   *  ≤ 1); external callers must omit it. */
+  coalStarvedFurnaces?: ReadonlySet<string>,
 ): {
   byBuilding: ReadonlyArray<BuildingRate>;
   production: Record<ResourceId, number>;
@@ -917,7 +923,25 @@ export function computeRates(
   // from the pass-3 power balance (per §5.1 "active iff … all gates pass").
   // Coal-source served counts drive a post-pass fuel-burn deduction folded
   // directly into `consumption.coal` / `net.coal`.
-  const heat = resolveHeatAssignments(validBuildings, ctx?.geothermalActive ?? false);
+  let heat = resolveHeatAssignments(validBuildings, ctx?.geothermalActive ?? false);
+  // Fix 4.1 (recursed pass): apply the fuel-starvation verdict from the
+  // first pass — consumers assigned to a starved coal furnace lose heat
+  // entirely (hasHeat=false, factor 0) and the furnace bills no coal. See
+  // the gate at the bottom of this function for the starvation condition.
+  if (coalStarvedFurnaces !== undefined && coalStarvedFurnaces.size > 0) {
+    const hasHeat = new Map(heat.hasHeat);
+    const coalConsumersByFurnace = new Map(heat.coalConsumersByFurnace);
+    const assignedSource = new Map(heat.assignedSource);
+    const heatThrottleFactor = new Map(heat.heatThrottleFactor);
+    for (const [consumerId, srcId] of heat.assignedSource) {
+      if (!coalStarvedFurnaces.has(srcId)) continue;
+      hasHeat.set(consumerId, false);
+      heatThrottleFactor.set(consumerId, 0);
+      assignedSource.delete(consumerId);
+    }
+    for (const furnaceId of coalStarvedFurnaces) coalConsumersByFurnace.delete(furnaceId);
+    heat = { hasHeat, coalConsumersByFurnace, assignedSource, heatThrottleFactor };
+  }
   // §9.7 Tier Reset runtime gate. A building whose tier exceeds the island's
   // current tier band (e.g. a T2 building on a post-reset L1 island) is
   // forced to baseRate = 0 in pass-1 and excluded from the pass-3 power
@@ -1481,6 +1505,44 @@ export function computeRates(
     const burnPerSec = (coalPerCycle * servedCount) / COAL_CYCLE_SEC;
     consumption.coal = (consumption.coal ?? 0) + burnPerSec;
     net.coal = (net.coal ?? 0) - burnPerSec;
+  }
+
+  // Fix 4.1 — §5.1 "active iff … direct fuel-consumption stockpile (if
+  // applicable)" / §5.2 Coal Furnace consumes coal: a coal-fired Heat Source
+  // can only serve consumers while the island can actually pay the burn.
+  // Gate: when the island's coal stock is empty AND the live net coal flow
+  // is negative (production this tick cannot cover the burn folded above),
+  // every billing coal furnace is fuel-starved — recompute this tick with
+  // those furnaces serving nothing. Without this, applyRates clamps the
+  // burn away at 0 stock and consumers keep producing on free heat forever.
+  //
+  // Design choice: BINARY full stall (not a partial fuel-coverage throttle),
+  // matching the §5.2 boolean adjacency gate and the per-source all-or-none
+  // semantics of the proportional-throttle pass; a partial split would need
+  // an iterative billing fixpoint (less fuel → fewer served → less fuel …).
+  // Integrator contract: while coal lasts, rates run full and
+  // findNextCapEvent lands the depletion boundary exactly; the recomputed
+  // rates at the boundary take this path and show the stall. Recursion depth
+  // ≤ 1 — the recursed pass bills no coal, so its net.coal cannot re-trigger
+  // the gate (and `coalStarvedFurnaces !== undefined` hard-stops re-entry).
+  if (coalStarvedFurnaces === undefined) {
+    const coalStock = (ctx?.inventory ?? state.inventory).coal ?? 0;
+    // -1e-12 guard: float residue when live coal production exactly
+    // balances the burn must not spuriously starve the furnaces.
+    if (coalStock <= 0 && (net.coal ?? 0) < -1e-12) {
+      const starved = new Set<string>();
+      for (const [furnaceId, servedCount] of heat.coalConsumersByFurnace) {
+        if (servedCount <= 0) continue;
+        const furnace = validBuildings.find((b) => b.id === furnaceId);
+        if (!furnace) continue;
+        if ((defs[furnace.defId].heatSource?.coalPerCycle ?? 0) > 0) {
+          starved.add(furnaceId);
+        }
+      }
+      if (starved.size > 0) {
+        return computeRates(state, ctx, nowMs, solarClockMs, starved);
+      }
+    }
   }
 
   return {
