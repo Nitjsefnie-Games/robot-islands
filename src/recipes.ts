@@ -1884,7 +1884,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // Antimatter Capsules from Hydrogen + Exotic Alloy + Microchip.
   // Not biome-locked. Tagged `electronics` per §7.11.
   particle_accelerator: {
-    cycleSec: 1, // auto-derived (gen-cyclesec): density × footprint × M
+    cycleSec: 600, // pinned: near-zero-mass output (antimatter_capsule 1e-12 kg) — same slow-cycle convention as antimatter_refinery
     inputs: { hydrogen: 10, exotic_alloy: 1, microchip: 5 },
     outputs: { antimatter_capsule: 1 },
     category: 'electronics',
@@ -3004,7 +3004,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'electronics',
   },
   drilling_rig: {
-    cycleSec: 1.5, // auto-derived (gen-cyclesec): density × footprint × M
+    cycleSec: 800, // pinned: near-zero-mass output (helium_3 0.001 kg) — prevents ~1s density-derived XP fountain
     inputs: {},
     outputs: { helium_3: 1 },
     exogenousFlow: 'terrain',
@@ -3108,7 +3108,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // + cryogenic_hydrogen).
   // 2026-05-18 ÷3 for display visibility → now 10-min cycle (was 30 min).
   antimatter_refinery: {
-    cycleSec: 1, // auto-derived (gen-cyclesec): density × footprint × M
+    cycleSec: 600, // pinned: near-zero-mass output (antimatter_propellant 1e-12 kg) — SPEC §14.10 10-min cycle
     inputs: { antimatter_capsule: 1, plasma_containment_vessel: 1, cryogenic_hydrogen: 5 },
     outputs: { antimatter_propellant: 1 },
     category: 'manufacturing',
