@@ -25,6 +25,7 @@ import {
   nodePurchaseStatus,
   skillPointsForLevelUp,
   spendPoint,
+  spentInBranch,
   t5Unlocked,
   t6Unlocked,
   tierForLevel,
@@ -1429,6 +1430,61 @@ describe('effectiveGraph with crystal bindings', () => {
     const g = effectiveGraph(state);
     const socketNodes = g.nodes.filter((n) => n.id === 'gs.ext.mining-1');
     expect(socketNodes.length).toBe(1);
+  });
+});
+
+describe('spentInBranch — root purchases count toward bridge thresholds (§9.3)', () => {
+  function mkNode(id: string, subPath: import('./skilltree.js').SubPathId, cost: number): SkillNode {
+    return {
+      id: id as import('./skilltree.js').NodeId,
+      subPath,
+      depth: 1,
+      cost,
+      magnitude: 0,
+      effect: { kind: 'placeholder' },
+      description: id,
+    };
+  }
+
+  function mkGraph(): Graph {
+    const bridge = {
+      id: 'br.test.root-bridge' as EdgeId,
+      from: 'R' as import('./skilltree-graph.js').NodeId,
+      to: 'T' as import('./skilltree-graph.js').NodeId,
+      cost: 2,
+      mode: 'or' as const,
+      threshold: [{ branch: 'extraction' as const, minSpent: 7 }],
+    };
+    return {
+      nodes: [mkNode('R', 'mining', 7), mkNode('T', 'smelting', 1)],
+      edges: [],
+      bridges: [bridge],
+      graftSockets: [],
+    } as Graph;
+  }
+
+  it('a root buy (no edge) counts as branch spend: bridge activates and engine pathing agrees', () => {
+    const g = mkGraph();
+    const state = makeState({ level: 5, unspentSkillPoints: 20 });
+    buyNode(g, state, 'R'); // root-fallback: charges node cost 7, owns NO edge
+    expect(state.unlockedEdges.size).toBe(0);
+    // The engine spend counter must see the 7 SP (the old edge-only counter
+    // returned 0 here, so the bridge stayed inert for pathing while the UI's
+    // node-cost counter rendered it active).
+    expect(spentInBranch(state, 'extraction', g)).toBe(7);
+    expect(spentInBranch(state, 'refinement', g)).toBe(0);
+    const r = costToUnlock(g, state.unlockedNodes, state.unlockedEdges, state, 'T');
+    expect(r).not.toBeNull();
+    expect(r!.totalCost).toBe(2); // across the now-active bridge
+  });
+
+  it('below the threshold the bridge stays inactive for both the counter and pathing', () => {
+    const g = mkGraph();
+    const state = makeState({ level: 5, unspentSkillPoints: 20 });
+    expect(spentInBranch(state, 'extraction', g)).toBe(0);
+    expect(
+      costToUnlock(g, state.unlockedNodes, state.unlockedEdges, state, 'T'),
+    ).toBeNull();
   });
 });
 
