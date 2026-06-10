@@ -122,6 +122,16 @@ export interface PlacementUiHandle {
     reason?: PlacementReason;
     oceanReason?: OceanPlacementReason;
   };
+  /** §15.2 test accessor — the current text of the status label, or '' when
+   *  the label has never been painted (placement inactive / pre-cursor).
+   *  Exposed so tests can assert the terrain-target annotation without
+   *  triggering CanvasTextMetrics (setCursorScreenPos path). */
+  getLabelText(): string;
+  /** §15.2 test accessor — the computed labelMain fragment (building name +
+   *  footprint ± terrain-target suffix) without triggering a paint.  '' when
+   *  no placement is active.  Safe to call in headless tests (no canvas
+   *  required). */
+  getLabelMain(): string;
 }
 
 export interface PlacementUiDeps {
@@ -350,11 +360,6 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
           .stroke({ width: 1, color, alpha: 0.6 })
           .fill({ color, alpha: 0.10 });
       }
-      // Annotate the label tail with the player's chosen target (when set) so
-      // the brush + label form one coherent preview.
-      if (activeTerrainTarget !== undefined) {
-        labelText.text = labelText.text + `  ·  → ${activeTerrainTarget.toUpperCase()}`;
-      }
     }
 
     previewLayer.visible = true;
@@ -364,7 +369,9 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     // glyph on most platforms).
     //
     // The label has three pieces:
-    //   1. Building name + footprint (always shown).
+    //   1. Building name + footprint (always shown). For terrain_modifier,
+    //      the chosen target terrain is folded into labelMain so it survives
+    //      the unconditional labelText.text assignment below (§15.2).
     //   2. Validation tail (only on failure). On `insufficient-resources`
     //      the tail expands to "NEED 5 STONE, 3 WOOD" via `formatMissing`
     //      so the player learns exactly what's short without consulting
@@ -374,7 +381,12 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     //      red when short and the OK colour when affordable, summarising
     //      the §14 affordability snapshot at a glance even when the
     //      cursor is over a valid tile.
-    const labelMain = `${relocating ? 'MOVE ' : ''}${def.displayName.toUpperCase()} ${shapeWidth(def.footprint)}×${shapeHeight(def.footprint)}`;
+    // §15.2: fold the chosen terrain target into labelMain so the annotation
+    // survives the unconditional labelText.text assignment below.
+    const targetSuffix = (def.terrainModifier === true && activeTerrainTarget !== undefined)
+      ? `  ·  → ${activeTerrainTarget.toUpperCase()}`
+      : '';
+    const labelMain = `${relocating ? 'MOVE ' : ''}${def.displayName.toUpperCase()} ${shapeWidth(def.footprint)}×${shapeHeight(def.footprint)}${targetSuffix}`;
     const labelTail = v.ok
       ? ''
       : v.reason === 'insufficient-resources' && v.missing
@@ -772,6 +784,15 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     return { ok: true };
   }
 
+  function getLabelMain(): string {
+    if (!active || activeDefId === null) return '';
+    const def = BUILDING_DEFS[activeDefId];
+    const targetSuffix = (def.terrainModifier === true && activeTerrainTarget !== undefined)
+      ? `  ·  → ${activeTerrainTarget.toUpperCase()}`
+      : '';
+    return `${relocating ? 'MOVE ' : ''}${def.displayName.toUpperCase()} ${shapeWidth(def.footprint)}×${shapeHeight(def.footprint)}${targetSuffix}`;
+  }
+
   return {
     previewLayer,
     statusLayer,
@@ -783,5 +804,7 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     setCursorScreenPos,
     hidePreview,
     attemptCommit,
+    getLabelText: () => labelText.text,
+    getLabelMain,
   };
 }
