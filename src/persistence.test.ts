@@ -2381,7 +2381,7 @@ describe('schema v22 — activeBonusMs (§9.9)', () => {
     expect(snap.world.activeBonusMs).toBe(600_000);
     // Reload 1 minute of wall-clock later: decay 3 × 60_000.
     const { world: loaded } = deserializeWorld(snap, 1_000_000 + 60_000, 9_999);
-    expect(loaded.activeBonusMs).toBe(600_000 - ACTIVE_DECAY_RATIO * 60_000);
+    expect(loaded.activeBonusMs).toBe(420_000); // 600_000 − 3 × 60_000
   });
 
   it('floors load-time decay at 0 (overnight gap)', () => {
