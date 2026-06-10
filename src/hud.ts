@@ -12,6 +12,7 @@ import { nextSunEvent, realPhaseName, solarMultiplier, type DayPhase } from './d
 import { cap, inv, type IslandState, type PowerBalance, xpForLevel } from './economy.js';
 import { fmtPower } from './format.js';
 import { dispatchAction, type InputRegistry } from './input.js';
+import { activeBonusMul } from './active-bonus.js';
 import type { NetworkConsciousnessState } from './network-consciousness.js';
 import {
   RATE_WINDOW_MS,
@@ -482,7 +483,7 @@ function renderSparkline(samples: ReadonlyArray<number>, tone: 'success' | 'dang
 
 export function mountHud(
   parentEl: HTMLElement,
-  _world: WorldState,
+  world: WorldState,
   _onSelect: (id: string) => void,
   reg: InputRegistry,
 ): HudHandle {
@@ -670,6 +671,23 @@ export function mountHud(
       offerKv.appendChild(offerV);
       body.appendChild(offerKv);
     }
+
+    // ---- §9.9 active-play bonus -------------------------------------------
+    // World-level: every focused minute adds +0.1% to every recipe on every
+    // island; decays at 3× while away (including closed). Always rendered so
+    // the mechanic is discoverable; "—" reads as "no bonus right now".
+    const abKv = document.createElement('div');
+    abKv.classList.add('ri-kv');
+    const abK = document.createElement('span');
+    abK.classList.add('ri-kv__k');
+    abK.textContent = 'Active bonus';
+    const abV = document.createElement('span');
+    abV.classList.add('ri-kv__v');
+    const abFrac = activeBonusMul(world) - 1;
+    abV.textContent = abFrac > 0 ? `+${(abFrac * 100).toFixed(1)}%` : '—';
+    abKv.appendChild(abK);
+    abKv.appendChild(abV);
+    body.appendChild(abKv);
 
     // ---- Output rates section ---------------------------------------------
     const ratesHead = document.createElement('div');
