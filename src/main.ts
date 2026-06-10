@@ -1233,8 +1233,15 @@ async function main(): Promise<void> {
     }
     // Suppress the selected building's hover outline — the selection outline
     // is more prominent and a duplicate at the same site reads as a flicker.
+    // §15.4: compare (islandId, buildingId) pairs so same-local-coord
+    // buildings on different islands don't incorrectly suppress each other.
     const selectedId = inspector.getSelectedBuildingId();
-    if (selectedId && selectedId === hoveredBuilding.building.id) {
+    const selectedIslandId = inspector.getSelectedIslandId();
+    if (
+      selectedId &&
+      selectedId === hoveredBuilding.building.id &&
+      selectedIslandId === hoveredBuilding.spec.id
+    ) {
       hoverLayer.visible = false;
       return;
     }
@@ -1375,18 +1382,22 @@ async function main(): Promise<void> {
   defineAction(reg, 'toggle-building-disable', () => {
     const selectedId = inspector.getSelectedBuildingId();
     if (selectedId === null) return;
-    for (const [, state] of worldState.islandStates ?? new Map()) {
-      const building = state.buildings.find((b: { id: string }) => b.id === selectedId);
-      if (building === undefined) continue;
-      if ((building.constructionRemainingMs ?? 0) > 0) return; // no-op while constructing
-      const wasDisabled = building.disabled === true;
-      building.disabled = !wasDisabled;
-      if (!wasDisabled) drainRoutesForBuilding(worldState, building.id);
-      rebuildWorldLayers();
-      buildingAlertsOverlay.invalidate();
-      inspector.refresh();
-      return;
-    }
+    // §15.4: scope to the owning island so same-local-coord buildings on
+    // different islands don't misfire (old `placed-X,Y` ids could collide).
+    const selectedIslandId = inspector.getSelectedIslandId();
+    const owningState = selectedIslandId
+      ? worldState.islandStates?.get(selectedIslandId)
+      : undefined;
+    if (!owningState) return;
+    const building = owningState.buildings.find((b: { id: string }) => b.id === selectedId);
+    if (building === undefined) return;
+    if ((building.constructionRemainingMs ?? 0) > 0) return; // no-op while constructing
+    const wasDisabled = building.disabled === true;
+    building.disabled = !wasDisabled;
+    if (!wasDisabled) drainRoutesForBuilding(worldState, building.id);
+    rebuildWorldLayers();
+    buildingAlertsOverlay.invalidate();
+    inspector.refresh();
   });
 
   // Step-11 Construction modal — sister to skill tree + buildings catalog.
@@ -2000,8 +2011,32 @@ async function main(): Promise<void> {
       // absorbed entries.
       islandSpecsById.delete(absorbedId);
       modifierMulsById.delete(absorbedId);
+      lastIslandCtx.delete(absorbedId);
       if (activeIslandId === absorbedId) {
         activeIslandId = merge.absorber.id;
+      }
+      // §15.4 / §3.6 merge: after performMerge the absorbed island's buildings
+      // are re-minted with shifted ids into the absorber. If the inspector or
+      // hover state points at a building id that no longer resolves (was
+      // re-minted during the merge), clear both so repaintSelection's
+      // stale-selection guard fires cleanly rather than leaving a ghost outline.
+      const selectedIslandIdNow = inspector.getSelectedIslandId();
+      const selectedBuildingIdNow = inspector.getSelectedBuildingId();
+      if (selectedIslandIdNow !== null && selectedBuildingIdNow !== null) {
+        const owningSpec = islandSpecsById.get(selectedIslandIdNow);
+        const stillExists = owningSpec?.buildings.some((b) => b.id === selectedBuildingIdNow) ?? false;
+        if (!stillExists) {
+          inspector.close();
+          selectedSpec = null;
+        }
+      }
+      if (hoveredBuilding) {
+        const hovSpec = islandSpecsById.get(hoveredBuilding.spec.id);
+        const stillHovered = hovSpec?.buildings.some((b) => b.id === hoveredBuilding!.building.id) ?? false;
+        if (!stillHovered) {
+          hoveredBuilding = null;
+          repaintHover();
+        }
       }
       rebuildWorldLayers();
     }

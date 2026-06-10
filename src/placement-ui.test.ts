@@ -347,6 +347,63 @@ describe('§4 placement-ui ocean branch', () => {
 });
 
 
+describe('§15.4 island-qualified building ids', () => {
+  it('new placement gets an island-qualified id (placed-{islandId}-x,y)', () => {
+    const spec = makeSpec(); // id = 'test'
+    const state = makeState(spec);
+    const ui = mountPlacementUi({
+      getTargetSpec: () => spec,
+      getTargetState: () => state,
+      screenToWorldTile: (x, y) => ({ x, y }),
+      onPlaced: () => {},
+    });
+    ui.begin('mine');
+    expect(ui.isActive()).toBe(true);
+    const r = ui.attemptCommit();
+    expect(r.ok).toBe(true);
+    expect(spec.buildings).toHaveLength(1);
+    const placedId = spec.buildings[0]!.id;
+    // Island-qualified format: placed-{islandId}-{x},{y}
+    expect(placedId).toMatch(/^placed-test-/);
+  });
+
+  it('two islands with the same-local-coord placement get distinct ids', () => {
+    // makeSpec returns IslandSpec with readonly fields; build fresh objects
+    // with distinct ids by overriding via the constructor literal form.
+    const baseSpec = makeSpec();
+    const specA: IslandSpec = { ...baseSpec, id: 'island-a', name: 'A', buildings: [] };
+    const specB: IslandSpec = { ...baseSpec, id: 'island-b', name: 'B', buildings: [] };
+    const stateA = makeState(specA);
+    const stateB = makeState(specB);
+
+    const uiA = mountPlacementUi({
+      getTargetSpec: () => specA,
+      getTargetState: () => stateA,
+      screenToWorldTile: (x, y) => ({ x, y }),
+      onPlaced: () => {},
+    });
+    const uiB = mountPlacementUi({
+      getTargetSpec: () => specB,
+      getTargetState: () => stateB,
+      screenToWorldTile: (x, y) => ({ x, y }),
+      onPlaced: () => {},
+    });
+    uiA.begin('mine');
+    uiA.attemptCommit();
+    uiB.begin('mine');
+    uiB.attemptCommit();
+
+    expect(specA.buildings).toHaveLength(1);
+    expect(specB.buildings).toHaveLength(1);
+    const idA = specA.buildings[0]!.id;
+    const idB = specB.buildings[0]!.id;
+    // Ids must be distinct even though both use local coords (0,0).
+    expect(idA).not.toBe(idB);
+    expect(idA).toMatch(/^placed-island-a-/);
+    expect(idB).toMatch(/^placed-island-b-/);
+  });
+});
+
 describe('terrain_modifier placement-ui brush commit', () => {
   it('commits a terrain_modifier with terrainShotRemainingMs = SHOT_DURATION_MS', async () => {
     const spec = makeSpec();

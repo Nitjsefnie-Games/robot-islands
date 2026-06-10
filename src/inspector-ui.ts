@@ -164,6 +164,10 @@ export interface InspectorUi {
   /** The current target building id, or null when hidden. main.ts reads
    *  this to drive the selection outline. */
   getSelectedBuildingId(): string | null;
+  /** The current target island id, or null when hidden.  Paired with
+   *  getSelectedBuildingId so main.ts can scope building-id lookups to
+   *  the owning island (§15.4 island-qualified ids). */
+  getSelectedIslandId(): string | null;
 }
 
 export interface InspectorDeps {
@@ -1826,6 +1830,9 @@ export function mountInspectorUi(
   function getSelectedBuildingId(): string | null {
     return target ? target.building.id : null;
   }
+  function getSelectedIslandId(): string | null {
+    return target ? target.spec.id : null;
+  }
 
   return {
     el: panel,
@@ -1834,5 +1841,6 @@ export function mountInspectorUi(
     isVisible,
     refresh,
     getSelectedBuildingId,
+    getSelectedIslandId,
   };
 }
