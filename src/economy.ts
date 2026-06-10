@@ -841,7 +841,11 @@ export function computeRates(
   // nominalRate (so producer/consumer supply ratios stay correct when only
   // one side is buffed). Power multipliers apply in pass 3.
   const skillMul = effectiveSkillMultipliers(state);
-  layerConditionalBonuses(skillMul, state, ctx?.world, DEFAULT_GRAPH, nowMs);
+  // Conditional bonuses are evaluated in WALL-clock domain (`solarClockMs ?? t`),
+  // not perf domain: the during-night condition calls `realPhaseName`, which is
+  // astronomically anchored to the Date.now epoch — same reasoning as the
+  // `solarMultiplier` sample above (see the `nowMs` param doc).
+  layerConditionalBonuses(skillMul, state, ctx?.world, DEFAULT_GRAPH, solarClockMs ?? t);
   // §9.3 magic `recipeInputMul` lever (resolved field: `recipeInput`, ≥1).
   // Divides per-cycle input DEMAND (pass 2) and actual DRAWDOWN (pass 4) so a
   // building with the lever consumes fewer inputs while producing identical
@@ -1811,7 +1815,12 @@ export function advanceIsland(
     // piecewise integrator stays exact (rates are constant within a segment).
     const validBuildings = state.buildings.filter((b) => !b.invalid);
     const skillMul = effectiveSkillMultipliers(state);
-    layerConditionalBonuses(skillMul, state, ctx?.world, DEFAULT_GRAPH, nowMs);
+    // Per-segment WALL-clock evaluation (`t + wallOffset`, NOT end-of-advance
+    // `nowMs`): a multi-hour offline catch-up must evaluate each segment's
+    // during-night boolean at the segment's own time. The integrator clamps
+    // segments at `nextRealPhaseBoundaryMs` precisely so this boolean is
+    // constant within a segment.
+    layerConditionalBonuses(skillMul, state, ctx?.world, DEFAULT_GRAPH, t + wallOffset);
     const maxCap = batteryCapacityWs(state, skillMul);
     const rawBalance = power.rawProduced - power.rawConsumed;
     let nextBatteryMs = Infinity;
