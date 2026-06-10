@@ -1915,6 +1915,30 @@ describe('NC buff integration', () => {
   });
 });
 
+describe('§9.9 active-play bonus integration', () => {
+  it('activeBonusMul scales recipe production multiplicatively', () => {
+    // Mirror of the NC-buff test: identical islands, one advanced with
+    // activeBonusMul 1.2 — production lands exactly 1.2×. Default (absent)
+    // must behave identically to 1.
+    const base = makeState({
+      buildings: [MINE],
+      inventory: blankInventory(),
+      level: 10,
+    });
+    const boosted = makeState({
+      buildings: [MINE],
+      inventory: blankInventory(),
+      level: 10,
+    });
+    advanceIsland(base, 100_000, { defs: POWER_FREE });
+    advanceIsland(boosted, 100_000, { defs: POWER_FREE, activeBonusMul: 1.2 });
+    expect(base.inventory.iron_ore).toBeCloseTo(5, 9);
+    expect(boosted.inventory.iron_ore).toBeCloseTo(6, 9);
+    // XP accrues on the boosted production (same as every rate buff).
+    expect(boosted.xp).toBeGreaterThan(base.xp);
+  });
+});
+
 describe('§13 core-craft auto-flip', () => {
   it('flips aiCoreCrafted on first ai_core production', () => {
     const CRYO: PlacedBuilding = {
