@@ -450,8 +450,8 @@ describe('terrain_modifier placement-ui brush commit', () => {
     await Promise.resolve();
     await Promise.resolve();
     expect(ui.isActive()).toBe(true);
-    // getLabelMain() computes the label fragment from internal state without
-    // triggering a Pixi paint (no CanvasTextMetrics, no document required).
-    expect(ui.getLabelMain()).toContain('→ ORE');
+    // getLabelText() reads the actually-painted label so this asserts
+    // the annotation survived the unconditional labelText.text assignment (§15.2).
+    expect(ui.getLabelText()).toContain('→ ORE');
   });
 });
