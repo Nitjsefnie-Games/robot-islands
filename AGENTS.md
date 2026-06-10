@@ -34,8 +34,8 @@ A systemd unit `robot-islands-dev.service` runs `vite preview --host 0.0.0.0 --p
 
 The codebase strictly separates **pure math** from **PixiJS rendering** so the simulation is testable without a renderer:
 
-- **Pure layer** (no PixiJS imports): `economy.ts`, `recipes.ts`, `camera.ts`, `input.ts`, the geometry functions in `island.ts` (`tileInscribedInEllipse`, `computeIslandTiles`), the classification function in `world.ts` (`islandRenderState`).
-- **Render layer** (imports PixiJS): `renderIslandTiles`, `renderBuildings`, `renderIsland`, `renderOcean`, `renderCellGrid`, `hud.ts`, `ui.ts`, `main.ts`.
+- **Pure layer** (no PixiJS imports): the large majority of `src/` (~80 of ~100 production files) — all game systems (`economy.ts`, `recipes.ts`, `placement.ts`, `drones.ts`, `routes.ts`, the `skilltree-*.ts` family, `vision-source.ts`, …) plus `camera.ts` and `input.ts`.
+- **Render layer** (imports `pixi.js`, ~18 files): `main.ts`, `ocean.ts`, `buildings.ts`, `grid.ts`, the `*-ui.ts` panels, the `*-overlay.ts` overlays, `routes-renderer.ts`, `routes-dash-texture.ts`, `skilltree-graphview.ts`. Note `island.ts` and `world.ts` are **mixed**: they import PixiJS for render helpers but also export the pure functions tests target (`tileInscribedInEllipse`, `computeIslandTiles`, `islandRenderState`).
 
 Tests target the pure layer only. Render code is read-only against state.
 
@@ -51,11 +51,11 @@ Tests target the pure layer only. Render code is read-only against state.
 
 ### Vision model (three-tier ocean)
 
-Locked-in visual contract — see `world.ts` and `ocean.ts`:
+Locked-in visual contract — see `world.ts`, `ocean.ts`, and `vision-source.ts`:
 
-- `'visible'` — populated, OR discovered AND inside a populated island's `VISION_RADIUS_TILES` (= 80). Cyan halo (`VISION_BLUE = 0x7dd3e8`).
+- `'visible'` — populated, OR discovered AND inside any vision source. Vision is **multi-source** (`VisionSource` in `vision-source.ts`): every populated island contributes a padded ellipse halo (`VISION_PADDING_TILES = 10` beyond the island ellipse, one per constituent), and Lighthouses contribute circles with tier-dependent radii (`LIGHTHOUSE_VISION_RADII` in `lighthouse.ts`). Cyan halo (`VISION_BLUE = 0x7dd3e8`, derived from `COLOR.accent`).
 - `'discovered'` — discovered, outside vision. Steel-blue halo (`DISCOVERED_BLUE = 0x2d5878`). The **island itself stays full-opacity**; the surrounding ocean colour tier is the sole indicator that vision isn't current. Don't reintroduce alpha/tint dimming on discovered islands — it makes the ocean bleed through and reads as "ocean overlays the island".
-- `'unknown'` — not discovered. Page background (`UNKNOWN_BLUE = 0x0a0e14`) shows through; `renderIsland` returns `null` for these.
+- `'unknown'` — not discovered. Page background (`UNKNOWN_BLUE`, derived from `COLOR.void` in `ui-tokens.ts`) shows through; `renderIsland` returns `null` for these.
 
 Rendered as layered radial-gradient sprites with a 24px AA-band edge fade, ordered: unknown rect → discovery sprites → vision sprites → islands.
 
@@ -63,7 +63,7 @@ Rendered as layered radial-gradient sprites with a 24px AA-band edge fade, order
 
 `advanceIsland(state, nowMs)` in `economy.ts` implements §15.3 exactly. The loop:
 
-1. `computeRates` — two-pass to handle producer→consumer flow-through correctly. Pass 1 computes tentative rates considering only output caps; pass 2 computes `inputAvail` per recipe using the supply pool from pass 1 (excluding self). **Don't simplify pass 2 to "binary on inventory presence"** — it breaks production chains where `inv == 0` but a sibling building supplies in real time.
+1. `computeRates` — four-pass to handle producer→consumer flow-through and power correctly. Pass 1 computes tentative base rates considering only output caps; pass 2 computes `inputAvail` per recipe using the supply pool from pass 1 (excluding self); pass 3 applies the power balance — every island in a connected network component shares one brownout factor `min(1, producedTotal / consumedTotal)`; pass 4 derives the final effective rates. **Don't simplify pass 2 to "binary on inventory presence"** — it breaks production chains where `inv == 0` but a sibling building supplies in real time.
 2. `findNextCapEvent` — next moment any inventory hits 0 or a cap.
 3. Integrate `[t, nextEvent]` with constant rates, accrue XP from **production** (not net), `levelUpIfReady`.
 4. Repeat until `t >= nowMs`.
@@ -74,7 +74,7 @@ Same loop handles 1 frame and a 24-hour offline catchup. XP weights are tier-bas
 
 `input.ts` keeps two tables: `actions` (name → handler) and `bindings` (`KeyboardEvent.code` → action name). Use `KeyboardEvent.code` for layout-independence. **No hardcoded `e.code === 'KeyW'` checks anywhere outside `input.ts`** — define an action, bind a key, dispatch via `dispatchKey`. UI buttons reuse the same dispatcher (`dispatchAction`), so keyboard and mouse paths can never drift.
 
-Default bindings: WASD/Arrows pan, +/- zoom, H center-home, G toggle-grid.
+Default bindings (~26 — the `bind()` calls in `input.ts` are the authoritative list): WASD/Arrows pan, +/- zoom, H center-home, G toggle-grid, T rotate-placement, Escape dismiss-modal, plus a toggle key per UI panel (B buildings, C construction, I inventory, J drones, K skill tree, N skill graph, O orbital, R routes, S settings, V settlement, Y graph).
 
 ### TypeScript discipline
 
@@ -95,10 +95,10 @@ The 1d8c4bd refactor that dropped legacy migrations was a **one-time pre-release
 
 ### One responsibility per file
 
-`island.ts` (geometry math) · `world.ts` (multi-island data + state factory) · `economy.ts` (tick loop) · `recipes.ts` (recipe + xp_weight tables) · `camera.ts` · `input.ts` · `ui.ts` (DOM button overlay) · `hud.ts` (DOM economy panel) · `ocean.ts` (vision/fog) · `grid.ts` (debug overlay) · `buildings.ts` (building data + rendering) · `main.ts` (PixiJS bootstrap + wiring).
+`src/` holds ~100 production files plus ~85 colocated `*.test.ts` files — one mechanic or system per file. Conventions: pure system modules are named for the mechanic (`drones.ts`, `weather.ts`, `island-merge.ts`, `tier-reset.ts`, …); DOM/Pixi panels end in `-ui.ts`; map overlays end in `-overlay.ts`; tests sit next to the module they cover. Put a new mechanic in its own file rather than growing an existing one.
 
-## Build-order deviation from SPEC §15.7
+## Build status vs SPEC §15.7
 
-The spec lists: 1 static island → 2 placement (shape masks/rotation/adjacency) → 3 resources/tick → 4 power → … Step 2 was **repurposed** to camera/map/fog/keybind foundation; placement mechanics remain to be built. Suggest naming the next placement work "step 2.5" rather than re-numbering.
+All content steps of the §15.7 build order (1–13, through T5 transcendent content) are implemented and merged on `master`: placement (`placement.ts`, `shape-mask.ts`, `adjacency.ts`), power + brownouts (economy pass 3, `heat.ts`, `battery-ladder`), skill tree, world gen + drones + discovery, inter-island routes, biomes + weather, tier breakpoints, Network Consciousness, artificial islands + land reclamation, and the T4/T5 endgame (`endgame.ts`, `orbital.ts`, `lattice.ts`) — plus systems not named in the step list (tutorial, trade, day/night, island merging, universe editor). Current work is **step 14: polish, balance, and bug sweeps** (see recent git history and `docs/` reports).
 
-Current state: steps 1, 2 (repurposed), and 3 are merged on `master`. Next likely work: step 4 (power + brownouts), step 2.5 (placement), or polish (biome palettes, click-to-inspect, persisted camera).
+Appendix B deferred features (prestige, mechanical/steam power, blueprints, multi-device sync, localization) remain unimplemented **by design** — don't add them without a spec update.
