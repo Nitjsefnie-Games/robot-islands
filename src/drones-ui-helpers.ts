@@ -29,25 +29,31 @@ export function totalPathTiles(
 }
 
 /** True if adding `next` to the path would exceed the T5 fuel cap.
- *  Cap rule: 2 × pathLength ≤ MAX_FUEL_PER_DRONE × DRONE_T5_EFFICIENCY
- *  (factor 2 = out + back; back retraces the path in reverse). */
+ *  Cap rule: 2 × pathLength ≤ MAX_FUEL_PER_DRONE × DRONE_T5_EFFICIENCY × efficiencyMul
+ *  (factor 2 = out + back; back retraces the path in reverse).
+ *  `efficiencyMul` defaults to 1 (no skill bonus). Pass the origin island's
+ *  `droneFuelEfficiency` skill multiplier to honour the Transport skill. */
 export function wouldExceedRange(
   origin: Point,
   waypoints: ReadonlyArray<Point>,
   next: Point,
+  efficiencyMul = 1,
 ): boolean {
   const lengthWithNext = totalPathTiles(origin, [...waypoints, next]);
-  const maxOneWay = MAX_FUEL_PER_DRONE * DRONE_T5_EFFICIENCY / 2;
+  const maxOneWay = MAX_FUEL_PER_DRONE * DRONE_T5_EFFICIENCY * efficiencyMul / 2;
   return lengthWithNext > maxOneWay;
 }
 
-/** Fuel units required to fly the path round-trip, rounded up. */
+/** Fuel units required to fly the path round-trip, rounded up.
+ *  `efficiencyMul` defaults to 1 (no skill bonus). Pass the origin island's
+ *  `droneFuelEfficiency` skill multiplier to honour the Transport skill. */
 export function fuelForPath(
   origin: Point,
   waypoints: ReadonlyArray<Point>,
+  efficiencyMul = 1,
 ): number {
   const length = totalPathTiles(origin, waypoints);
-  return Math.ceil(2 * length / DRONE_T5_EFFICIENCY);
+  return Math.ceil(2 * length / (DRONE_T5_EFFICIENCY * efficiencyMul));
 }
 
 /** If the last two waypoints share identical x/y, return a new array
