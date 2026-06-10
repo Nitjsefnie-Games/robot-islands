@@ -1459,6 +1459,9 @@ export interface Recipe {
    *  weather coupling reads this for a forest-regrowth net-zero offset. */
   readonly biogenic?: true;
   readonly category: RecipeCategory;
+  /** If true, the cycleSec is hand-authored and must NOT be overwritten by
+   *  the density-derived generator. */
+  readonly cycleSecPinned?: true;
   /** If set, outputs cycle through these options deterministically per §8.10. */
   readonly rotateOutputs?: ReadonlyArray<Partial<Record<ResourceId, number>>>;
 }
@@ -2570,6 +2573,14 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     outputs: { concrete: 6 },
     exogenousFlow: 'evaporation-water-vapor',
     category: 'chemistry',
+  },
+  bulk_concrete_plant: {
+    cycleSec: 60, // hand-authored: 100 concrete / 60 s = 6 t/hr per def comment
+    inputs: { cement: 50 / 3, sand: 100 / 3, stone: 50, fresh_water: 25 / 3 },
+    outputs: { concrete: 100 },
+    exogenousFlow: 'evaporation-water-vapor',
+    category: 'chemistry',
+    cycleSecPinned: true,
   },
   charcoal_kiln: {
     cycleSec: 171998.6, // auto-derived (gen-cyclesec): density × footprint × M

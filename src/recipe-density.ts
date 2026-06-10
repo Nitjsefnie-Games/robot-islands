@@ -47,7 +47,7 @@ export const BUILDING_ARCHETYPE: Partial<Record<BuildingDefId, Archetype>> = {
   aluminum_smelter: 'aluminum', coke_oven: 'coke_oven', charcoal_kiln: 'coke_oven',
   // kilns
   limekiln: 'lime_kiln', lime_slaker: 'cement_kiln', cement_mill: 'cement_kiln',
-  concrete_plant: 'cement_kiln', mortar_mixer: 'cement_kiln',
+  concrete_plant: 'cement_kiln', bulk_concrete_plant: 'cement_kiln', mortar_mixer: 'cement_kiln',
   brick_kiln: 'brick_ceramic_kiln', ceramic_kiln: 'brick_ceramic_kiln', optical_glass_kiln: 'brick_ceramic_kiln',
   glassworks: 'glass_furnace', glass_panel_press: 'glass_furnace',
   // chemistry
@@ -155,6 +155,6 @@ export function outputKg(recipe: { outputs?: Partial<Record<string, number>> }):
  *  throughput) and any recipe with no material output mass (formula is undefined → would
  *  floor to a bogus 1s). Spec companion table §10. Both the generator and the cycleSec
  *  sanity test import THIS predicate so they can never diverge. */
-export function shouldDeriveCycleSec(recipe: { outputs?: Partial<Record<string, number>>; category?: string }): boolean {
-  return recipe.category !== 'power' && outputKg(recipe) >= 0.01;
+export function shouldDeriveCycleSec(recipe: { outputs?: Partial<Record<string, number>>; category?: string; cycleSecPinned?: true }): boolean {
+  return !recipe.cycleSecPinned && recipe.category !== 'power' && outputKg(recipe) >= 0.01;
 }
