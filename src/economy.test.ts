@@ -3252,6 +3252,42 @@ describe('Singularity Battery', () => {
     expect(state.batteryStoredWs).toBe(1100);
   });
 
+  it('sub-1-Ws float residue does not freeze the integrator under deficit (fix 3.4)', () => {
+    // After a depletion-bounded segment, ms-rounded dtSec leaves an
+    // ~1e-16-relative residue in batteryStoredWs. Next iteration the residue
+    // "covers" the deficit again → nextBatteryMs = t + ~1e-12 ms, which at a
+    // realistic perf-clock magnitude rounds back to exactly t → segEndMs <= t
+    // → the force-jump skips ALL remaining integration for the call, every
+    // frame. A residue below 1 Ws must be treated as empty (and flushed).
+    const T0 = 1e8; // perf-clock magnitude where ULP ≈ 1.5e-8 ms
+    const state = makeState({
+      buildings: [
+        { id: 'bb1', defId: 'battery_bank', x: 0, y: 0 },
+        // Passive 100 kW producer (no recipe, wind kind ⇒ no solar scaling).
+        { id: 'wt1', defId: 'wind_turbine', x: 10, y: 0 },
+        // 5 × 25 kW Mines ⇒ 125 kW demand ⇒ 25 kW deficit, powerFactor 0.8.
+        // Spread out so no §4.5 adjacency buffs perturb the rates.
+        { id: 'm1', defId: 'mine', x: 20, y: 0 },
+        { id: 'm2', defId: 'mine', x: 30, y: 0 },
+        { id: 'm3', defId: 'mine', x: 40, y: 0 },
+        { id: 'm4', defId: 'mine', x: 50, y: 0 },
+        { id: 'm5', defId: 'mine', x: 60, y: 0 },
+      ],
+      batteryStoredWs: 1e-10, // float residue from a previous discharge
+      lastTick: T0,
+      // Generous caps so the mines never stall — the deficit (and therefore
+      // the residue-freeze hazard) persists across the whole window.
+      storageCaps: blankCaps(100_000),
+    });
+    advanceIsland(state, T0 + 1_000_000); // 1000s window
+    // The whole window must integrate: 5 mines × 0.05/s × 0.8 = 0.2/s net
+    // ⇒ 200 units. Under the freeze, iron_ore stays 0.
+    expect(state.lastTick).toBe(T0 + 1_000_000);
+    expect(state.inventory.iron_ore).toBeCloseTo(200, 6);
+    // The residue is flushed, not left to re-trigger the freeze next call.
+    expect(state.batteryStoredWs).toBe(0);
+  });
+
   it('disabled batteries contribute 0 capacity to batteryCapacityWs', () => {
     const state = makeState();
     state.buildings.push({ id: 'sb1', defId: 'singularity_battery', x: 0, y: 0, disabled: true });
