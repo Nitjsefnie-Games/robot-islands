@@ -318,6 +318,44 @@ function rasterizeWaypointPathForWeather(
   return result;
 }
 
+/** Build the §2.6 weather-roll path for a drone flight: the T5 waypoint
+ *  polyline when `waypoints` has ≥ 2 points, otherwise the straight-line
+ *  outbound + return legs concatenated with exact (cell, time) dedup so
+ *  both legs are evaluated by `rollVehicleDestruction`.
+ *
+ *  Shared by the dispatch-time fate roll and the return-time legacy
+ *  fallback (old saves without `doomedAtMs`): the destruction RNG stream
+ *  is keyed off this exact cell/time sequence, so the two call sites MUST
+ *  stay in lockstep — one helper, not two copies. */
+function buildWeatherPath(
+  originX: number,
+  originY: number,
+  dirX: number,
+  dirY: number,
+  outboundTiles: number,
+  speed: number,
+  launchTimeMs: number,
+  waypoints?: ReadonlyArray<{ x: number; y: number }>,
+): Array<{ cx: number; cy: number; entryMs: number }> {
+  if (waypoints !== undefined && waypoints.length >= 2) {
+    return rasterizeWaypointPathForWeather(waypoints, speed, launchTimeMs, CELL_SIZE_TILES);
+  }
+  const outPath = rasterizePath(originX, originY, dirX, dirY, outboundTiles, speed, launchTimeMs, CELL_SIZE_TILES);
+  const apexTime = launchTimeMs + (outboundTiles / speed) * 1000;
+  const apexX = originX + dirX * outboundTiles;
+  const apexY = originY + dirY * outboundTiles;
+  const retPath = rasterizePath(apexX, apexY, -dirX, -dirY, outboundTiles, speed, apexTime, CELL_SIZE_TILES);
+  const seen = new Set<string>();
+  const path: Array<{ cx: number; cy: number; entryMs: number }> = [];
+  for (const p of [...outPath, ...retPath]) {
+    const key = `${p.cx},${p.cy},${p.entryMs}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    path.push(p);
+  }
+  return path;
+}
+
 /**
  * Launch a drone from `origin`. Mutates `world.drones` and `origin.inventory`.
  *
@@ -451,24 +489,7 @@ export function dispatchDrone(
   const multiplier = DRONE_TIER_MULTIPLIERS[tier];
   let doomedAtMs: number | undefined;
   {
-    let dispatchPath: Array<{ cx: number; cy: number; entryMs: number }>;
-    if (isPathDrawn && waypoints) {
-      dispatchPath = rasterizeWaypointPathForWeather(waypoints, speed, nowMs, CELL_SIZE_TILES);
-    } else {
-      const outPath = rasterizePath(originX, originY, ux, uy, outboundTiles, speed, nowMs, CELL_SIZE_TILES);
-      const apexTime = nowMs + (outboundTiles / speed) * 1000;
-      const apexX = originX + ux * outboundTiles;
-      const apexY = originY + uy * outboundTiles;
-      const retPath = rasterizePath(apexX, apexY, -ux, -uy, outboundTiles, speed, apexTime, CELL_SIZE_TILES);
-      const seen = new Set<string>();
-      dispatchPath = [];
-      for (const p of [...outPath, ...retPath]) {
-        const key = `${p.cx},${p.cy},${p.entryMs}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        dispatchPath.push(p);
-      }
-    }
+    const dispatchPath = buildWeatherPath(originX, originY, ux, uy, outboundTiles, speed, nowMs, waypoints);
     const roll = rollVehicleDestruction(world.seed, dispatchPath, multiplier, droneId);
     if (roll.destroyed && roll.atCellIndex !== null) {
       doomedAtMs = dispatchPath[roll.atCellIndex]!.entryMs;
@@ -807,29 +828,9 @@ export function tickDrones(
       willBeDestroyed = true;
     } else {
       // Legacy path: re-run the roll (identical RNG stream = identical result).
-      const speed2 = droneSpeed(d);
-      let path: Array<{ cx: number; cy: number; entryMs: number }>;
-      if (d.waypoints.length >= 2) {
-        path = rasterizeWaypointPathForWeather(d.waypoints, speed2, d.launchTime, CELL_SIZE_TILES);
-      } else {
-        const outboundPath = rasterizePath(
-          d.originX, d.originY, d.dirX, d.dirY, d.outboundTiles, speed2, d.launchTime, CELL_SIZE_TILES,
-        );
-        const apexTime = d.launchTime + (d.outboundTiles / speed2) * 1000;
-        const apexX = d.originX + d.dirX * d.outboundTiles;
-        const apexY = d.originY + d.dirY * d.outboundTiles;
-        const returnPath = rasterizePath(
-          apexX, apexY, -d.dirX, -d.dirY, d.outboundTiles, speed2, apexTime, CELL_SIZE_TILES,
-        );
-        const seen2 = new Set<string>();
-        path = [];
-        for (const p of [...outboundPath, ...returnPath]) {
-          const key = `${p.cx},${p.cy},${p.entryMs}`;
-          if (seen2.has(key)) continue;
-          seen2.add(key);
-          path.push(p);
-        }
-      }
+      const path = buildWeatherPath(
+        d.originX, d.originY, d.dirX, d.dirY, d.outboundTiles, droneSpeed(d), d.launchTime, d.waypoints,
+      );
       const multiplier = DRONE_TIER_MULTIPLIERS[d.tier];
       const roll = rollVehicleDestruction(world.seed, path, multiplier, d.id);
       willBeDestroyed = roll.destroyed;

@@ -1745,14 +1745,16 @@ async function main(): Promise<void> {
   //
   // prevMs is the save time rebased to the new perf-clock domain: every island's
   // `lastTick` was set to `nowPerfMs - deltaMs` in deserializeWorld, so the min
-  // over populated island lastTick values is an accurate "offline window start".
+  // over ALL islandStates' lastTick values is an accurate "offline window start"
+  // (states minted fresh this session are stamped at load time and never win).
   // A fresh world (no restore) has no in-flight drones, so we skip the catch-up.
   if (restored) {
-    let prevMs = performance.now();
+    const catchUpNowMs = performance.now();
+    let prevMs = catchUpNowMs;
     for (const s of islandStates.values()) {
       if (s.lastTick < prevMs) prevMs = s.lastTick;
     }
-    const catchUp = tickDrones(worldState, performance.now(), prevMs);
+    const catchUp = tickDrones(worldState, catchUpNowMs, prevMs);
     // The initial ocean/island/fog layers were baked before this catch-up;
     // re-bake if it revealed anything so the offline scan is visible on the
     // very first frame (mirrors the per-frame rebuild trigger in the ticker).
