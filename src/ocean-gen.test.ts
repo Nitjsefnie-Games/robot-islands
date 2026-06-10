@@ -305,3 +305,35 @@ describe('generateOceanTerrain', () => {
     expect(observedMultiCluster).toBe(true);
   });
 });
+
+
+import { seedOceanTerrainForIslands } from './ocean-gen.js';
+
+describe('seedOceanTerrainForIslands — lazy generation', () => {
+  it('adds shallows ring around a lazily generated island', () => {
+    const island = mkIsland('lazy', 'plains', 200, 200);
+    // Lazy path: start from empty and seed only the new island.
+    const lazy = new Map<string, import('./ocean-cell.js').OceanCellSpec>();
+    seedOceanTerrainForIslands(lazy, 'lazy-seed', [island], [island]);
+    const shallowCells = Array.from(lazy.entries()).filter(
+      ([, c]) => c.terrain === 'shallows',
+    );
+    expect(shallowCells.length).toBeGreaterThan(0);
+  });
+
+  it('volcanic island rolls identical vents at boot and lazily for the same seed', () => {
+    const island = mkIsland('vol', 'volcanic', 300, 300);
+    const boot = generateOceanTerrain('vent-seed', [island]);
+    const bootVents = Array.from(boot.entries()).filter(
+      ([, c]) => c.terrain === 'hydrothermal_vent',
+    );
+
+    const lazy = new Map<string, import('./ocean-cell.js').OceanCellSpec>();
+    seedOceanTerrainForIslands(lazy, 'vent-seed', [island], [island]);
+    const lazyVents = Array.from(lazy.entries()).filter(
+      ([, c]) => c.terrain === 'hydrothermal_vent',
+    );
+
+    expect(lazyVents.sort()).toEqual(bootVents.sort());
+  });
+});

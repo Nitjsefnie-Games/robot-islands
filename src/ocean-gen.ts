@@ -479,3 +479,114 @@ function seedVents(
     }
   }
 }
+
+// ---------------------------------------------------------------------------
+// Lazy-generation helpers — §2.1 infinite map
+// ---------------------------------------------------------------------------
+
+/** Add shallows around a subset of islands. Iterates only the bounding rect
+ * of `targetIslands` padded by `SHALLOWS_RADIUS_CELLS`, but measures edge
+ * distance against `allIslands` so existing islands are respected. Only writes
+ * to cells that are currently implicit `deep` (not in the map) or already
+ * `shallows`, so later features (trenches, nodules, vents) are never
+ * overwritten. */
+function seedShallowsForIslands(
+  cells: Map<string, OceanCellSpec>,
+  allIslands: readonly IslandSpec[],
+  targetIslands: readonly IslandSpec[],
+): void {
+  const rect = islandsBoundingCellRect(targetIslands, SHALLOWS_RADIUS_CELLS);
+  for (let y = rect.y0; y <= rect.y1; y++) {
+    for (let x = rect.x0; x <= rect.x1; x++) {
+      const d = minCellDistanceToAnyIslandEdge(x, y, allIslands);
+      if (d === 0) continue; // cell sits on/inside an island — not ocean
+      if (d <= SHALLOWS_RADIUS_CELLS) {
+        const existing = cells.get(keyOf(x, y));
+        if (existing === undefined) {
+          setTerrain(cells, x, y, 'shallows');
+        }
+      }
+    }
+  }
+}
+
+/** Add hydrothermal vents for a subset of volcanic islands. Each island uses
+ * its own deterministic RNG stream so adding a new island never shifts rolls
+ * on existing ones. The validity check uses `allIslands` so vents never spawn
+ * on land. */
+function seedVentsForIslands(
+  cells: Map<string, OceanCellSpec>,
+  seed: string,
+  allIslands: readonly IslandSpec[],
+  targetIslands: readonly IslandSpec[],
+): void {
+  for (const isl of targetIslands) {
+    if (isl.biome !== 'volcanic') continue;
+    const rng = makeSeededRng(`${seed}_ocean_vent_${isl.id}`);
+    const target = rollInt(rng, 0, VENT_MAX_PER_ISLAND);
+
+    const islandCellX = Math.floor(isl.cx / CELL_SIZE_TILES);
+    const islandCellY = Math.floor(isl.cy / CELL_SIZE_TILES);
+    const search = {
+      x0: islandCellX - (VENT_ANCHOR_RADIUS_CELLS + 3),
+      x1: islandCellX + (VENT_ANCHOR_RADIUS_CELLS + 3),
+      y0: islandCellY - (VENT_ANCHOR_RADIUS_CELLS + 3),
+      y1: islandCellY + (VENT_ANCHOR_RADIUS_CELLS + 3),
+    };
+
+    for (let i = 0; i < target; i++) {
+      const { w, h } = rollVentClusterShape(rng);
+      let placed = false;
+      for (let attempt = 0; attempt < VENT_PLACE_ATTEMPTS && !placed; attempt++) {
+        const ax = rollInt(rng, search.x0, search.x1);
+        const ay = rollInt(rng, search.y0, search.y1);
+
+        if (cellDistanceToIslandEdgeCells(ax, ay, isl) > VENT_ANCHOR_RADIUS_CELLS) {
+          continue;
+        }
+
+        let valid = true;
+        for (let dy = 0; dy < h && valid; dy++) {
+          for (let dx = 0; dx < w && valid; dx++) {
+            const cx = ax + dx;
+            const cy = ay + dy;
+            if (minCellDistanceToAnyIslandEdge(cx, cy, allIslands) === 0) {
+              valid = false;
+              break;
+            }
+            const existing = cells.get(keyOf(cx, cy))?.terrain;
+            if (existing === 'trench' || existing === 'nodule_field') {
+              valid = false;
+              break;
+            }
+          }
+        }
+        if (!valid) continue;
+
+        for (let dy = 0; dy < h; dy++) {
+          for (let dx = 0; dx < w; dx++) {
+            setTerrain(cells, ax + dx, ay + dy, 'hydrothermal_vent');
+          }
+        }
+        placed = true;
+      }
+    }
+  }
+}
+
+/** Seed ocean terrain for newly-generated islands. Adds shallows and vents
+ * for `newIslands` while respecting the full `allIslands` context (so a
+ * new island's shallows don't overwrite land, and its vents don't spawn on
+ * existing islands). Safe to call multiple times as islands are added
+ * lazily — existing terrain is never removed.
+ *
+ * Pure with respect to `allIslands`; mutates `cells`. */
+export function seedOceanTerrainForIslands(
+  cells: Map<string, OceanCellSpec>,
+  seed: string,
+  allIslands: readonly IslandSpec[],
+  newIslands: readonly IslandSpec[],
+): void {
+  seedShallowsForIslands(cells, allIslands, newIslands);
+  seedVentsForIslands(cells, seed, allIslands, newIslands);
+}

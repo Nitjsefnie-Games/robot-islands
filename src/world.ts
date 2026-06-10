@@ -33,7 +33,7 @@ import {
   TILE_PX,
 } from './island.js';
 import type { OceanCellSpec } from './ocean-cell.js';
-import { generateOceanTerrain } from './ocean-gen.js';
+import { generateOceanTerrain, seedOceanTerrainForIslands } from './ocean-gen.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import type { Route } from './routes.js';
 import { RESOURCE_STORAGE_CATEGORY, baselineCap, storageBaseFor } from './storage-categories.js';
@@ -890,6 +890,11 @@ export function ensureCellGenerated(world: WorldState, cellX: number, cellY: num
     world.islands,
   );
   for (const s of newSpecs) world.islands.push(s);
+  // Ocean-layer §2 — seed shallows and vents for the newly minted specs so
+  // lazy generation produces the same terrain as the boot-time sweep.
+  if (newSpecs.length > 0) {
+    seedOceanTerrainForIslands(world.oceanCells, world.seed, world.islands, newSpecs);
+  }
   return newSpecs;
 }
 
