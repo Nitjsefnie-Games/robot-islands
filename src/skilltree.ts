@@ -354,9 +354,32 @@ export function tierRequiredForDepth(depth: number): Tier {
  *  tier band required to purchase a node at `depth`. Pure; the canonical
  *  predicate behind the hard gate in `buyNode` and the path-exclusion in
  *  `costToUnlock`. (Hoisted next to its tier-logic siblings for findability;
- *  function declarations hoist, so call-site order is unaffected.) */
-function depthTierEligible(level: number, depth: number): boolean {
-  return tierForLevel(level) >= tierRequiredForDepth(depth);
+ *  function declarations hoist, so call-site order is unaffected.)
+ *
+ *  Depth ≥ 8 requires T6, which has NO level threshold (§14.1) — `tierForLevel`
+ *  never returns 6, so the T6 band is satisfiable only through the `t6`
+ *  predicate (Ascendant Core crafted + operational Spaceport), threaded in by
+ *  callers via `stateT6Unlocked`. Defaults to false so duck-typed callers
+ *  without the flags keep the pre-T6 behavior. */
+function depthTierEligible(level: number, depth: number, t6 = false): boolean {
+  const required = tierRequiredForDepth(depth);
+  if (required === 6) return t6;
+  return tierForLevel(level) >= required;
+}
+
+/** Canonical §14.1 T6 access read off an island's runtime state. IslandState
+ *  carries both halves of the gate (`ascendantCoreCrafted` plus the live
+ *  `buildings` array, which is a shared reference to `IslandSpec.buildings`),
+ *  so the full-island `t6Unlocked` predicate can be evaluated from state
+ *  alone. Defensive against duck-typed partial states used in tests. */
+function stateT6Unlocked(state: {
+  ascendantCoreCrafted?: boolean;
+  buildings?: ReadonlyArray<{ defId: string }>;
+}): boolean {
+  return t6Unlocked(
+    { ascendantCoreCrafted: state.ascendantCoreCrafted === true },
+    { buildings: state.buildings ?? [] },
+  );
 }
 
 /** Spec §9.3 placeholder is `2^(depth-1)`, but combined with the flat
@@ -1374,8 +1397,9 @@ export function formatNodeMagnitude(node: SkillNode): string {
  * `buyNode` for real purchases.
  */
 export function hasPickableSkill(state: IslandState): boolean {
+  const t6 = stateT6Unlocked(state);
   for (const node of NODE_CATALOG) {
-    if (depthTierEligible(state.level, node.depth) && canSpend(state, node.id).ok) return true;
+    if (depthTierEligible(state.level, node.depth, t6) && canSpend(state, node.id).ok) return true;
   }
   return false;
 }
@@ -1407,7 +1431,7 @@ export function costToUnlock(
   // tier-locked target becomes unreachable (returns null), matching buyNode.
   const nodeDepth = new Map<NodeId, number>();
   for (const n of graph.nodes) nodeDepth.set(n.id as NodeId, n.depth);
-  const islandTier = tierForLevel(state.level);
+  const t6 = stateT6Unlocked(state);
   const adjacency = new Map<NodeId, Edge[]>();
   const allEdges: Edge[] = [
     ...graph.edges,
@@ -1425,7 +1449,7 @@ export function costToUnlock(
     if (e.mode === 'and') continue;
     if (KEYSTONE_TARGET_NODE_IDS.has(String(e.to))) continue;
     const toDepth = nodeDepth.get(e.to as NodeId);
-    if (toDepth !== undefined && islandTier < tierRequiredForDepth(toDepth)) continue;
+    if (toDepth !== undefined && !depthTierEligible(state.level, toDepth, t6)) continue;
     const list = adjacency.get(e.from as NodeId) ?? [];
     list.push(e);
     adjacency.set(e.from as NodeId, list);
@@ -1494,8 +1518,9 @@ export function buyNode(graph: Graph, state: IslandState, target: NodeId): void 
   // §9.3 hard tier gate (target). Checked before pathfinding so a tier-locked
   // target always reports the tier reason — not a "unreachable" artifact of
   // costToUnlock having filtered the tier-locked node out of the graph.
+  const t6 = stateT6Unlocked(state);
   const targetNode = graph.nodes.find((n) => n.id === target);
-  if (targetNode && !depthTierEligible(state.level, targetNode.depth)) {
+  if (targetNode && !depthTierEligible(state.level, targetNode.depth, t6)) {
     throw new Error(
       `buyNode: node ${target} requires tier ${tierRequiredForDepth(targetNode.depth)} ` +
         `(island is tier ${tierForLevel(state.level)})`,
@@ -1538,7 +1563,7 @@ export function buyNode(graph: Graph, state: IslandState, target: NodeId): void 
   // that the single target precheck would not catch.
   for (const e of result.path) {
     const node = graph.nodes.find((n) => n.id === e.to);
-    if (node && !depthTierEligible(state.level, node.depth)) {
+    if (node && !depthTierEligible(state.level, node.depth, t6)) {
       throw new Error(
         `buyNode: node ${e.to} requires tier ${tierRequiredForDepth(node.depth)} ` +
           `(island is tier ${tierForLevel(state.level)})`,
@@ -1590,7 +1615,7 @@ export function nodePurchaseStatus(
   }
   const node = graph.nodes.find((n) => n.id === target);
   if (!node) return 'unreachable';
-  if (!depthTierEligible(state.level, node.depth)) return 'tier-locked';
+  if (!depthTierEligible(state.level, node.depth, stateT6Unlocked(state))) return 'tier-locked';
   const result = costToUnlock(graph, state.unlockedNodes, state.unlockedEdges, state, target);
   let cost: number;
   if (result === null) {
