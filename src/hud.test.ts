@@ -19,6 +19,7 @@ import {
   HUD_CATEGORY_ORDER,
   CATEGORY_HUD_LABEL,
   mountHud,
+  mountIslandBar,
 } from './hud.js';
 import { makeRegistry } from './input.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
@@ -327,5 +328,43 @@ describe('mountHud DOM persistence', () => {
     // Element identity must be stable — same object references.
     expect(invBtnSecond).toBe(invBtnFirst);
     expect(trBtnSecond).toBe(trBtnFirst);
+  });
+});
+
+describe('§15.3 mountIslandBar rename repaint', () => {
+  it('option name textContent reflects the new name after rename + update()', () => {
+    const spec: IslandSpec = {
+      id: 'isle-1',
+      name: 'Old Name',
+      biome: 'plains',
+      cx: 0,
+      cy: 0,
+      majorRadius: 10,
+      minorRadius: 10,
+      populated: true,
+      discovered: true,
+      buildings: [],
+      modifiers: [],
+    };
+    const state = makeState();
+    const world = {
+      islands: [spec],
+      islandStates: new Map([['isle-1', state]]),
+    } as unknown as WorldState;
+    const bar = mountIslandBar(world, () => {});
+    const power = new Map<string, import('./economy.js').PowerBalance>();
+    // First update — option is created with 'Old Name'.
+    bar.update('isle-1', power, null);
+    const opt = document.querySelector('.ri-island-opt') as HTMLElement | null;
+    expect(opt).not.toBeNull();
+    const nameEl = opt!.querySelector('.ri-island-opt__name') as HTMLElement | null;
+    expect(nameEl).not.toBeNull();
+    expect(nameEl!.textContent).toBe('Old Name');
+    // Simulate a rename by mutating the spec (mirrors renameIsland + onRenameIsland).
+    spec.name = 'New Name';
+    // Second update with the same island id-signature — option persists but
+    // name textContent must now reflect the new name (§15.3 fix).
+    bar.update('isle-1', power, null);
+    expect(nameEl!.textContent).toBe('New Name');
   });
 });
