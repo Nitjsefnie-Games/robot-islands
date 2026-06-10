@@ -120,6 +120,11 @@ export interface RatesContext {
   readonly modifierMul?: ModifierMultipliers;
   readonly defs?: DefCatalog;
   readonly ncBuff?: number;
+  /** §9.9 active-play production bonus — world-level recipe-rate multiplier
+   *  (`activeBonusMul(world)` in active-bonus.ts). Unlike `ncBuff`
+   *  (per-island, networked T3+ only) this applies to EVERY island.
+   *  Default 1 (no bonus). */
+  readonly activeBonusMul?: number;
   /** Optional island terrain closure. Threaded to `resolveRecipe` for
    *  tile-dependent recipe selection per §8.1 (Mine produces ore on an
    *  ore-vein footprint, coal on a coal-vein footprint). Undefined =
@@ -782,6 +787,7 @@ export function computeRates(
     modifierMul = IDENTITY_MODIFIER_MULTIPLIERS,
     defs = BUILDING_DEFS,
     ncBuff = 1,
+    activeBonusMul = 1,
     terrainAt,
   } = ctx ?? {};
   // Filter out invalid buildings once so they don't participate in heat,
@@ -1066,13 +1072,15 @@ export function computeRates(
       continue;
     }
     // Recipe-rate multipliers compose: skill-tree (per-category) × modifier
-    // (per-category) × modifier (global) × NC global buff. Identity bundles
-    // in any of the new factors contribute 1× so existing callers see no change.
+    // (per-category) × modifier (global) × NC global buff × §9.9 active-play
+    // bonus. Identity bundles in any of the new factors contribute 1× so
+    // existing callers see no change.
     const rateMul =
       (skillMul.recipeRate[recipe.category] ?? 1) *
       (modifierMul.recipeRateByCategory[recipe.category] ?? 1) *
       modifierMul.globalRecipeRate *
-      ncBuff;
+      ncBuff *
+      activeBonusMul;
     const isT5Extractor =
       b.defId === 'aetheric_conduit' ||
       b.defId === 'spacetime_resonator' ||
@@ -1107,7 +1115,8 @@ export function computeRates(
       (skillMul.recipeRate[te.recipe.category] ?? 1) *
       (modifierMul.recipeRateByCategory[te.recipe.category] ?? 1) *
       modifierMul.globalRecipeRate *
-      ncBuff;
+      ncBuff *
+      activeBonusMul;
     // §4.5: soft-gate effectiveMul scales nominalRate so inputAvail's
     // demand calculation matches actual consumption under the gate.
     // Without this, a halved consumer over-claims inputs and starves
