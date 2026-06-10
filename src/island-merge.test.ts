@@ -303,7 +303,8 @@ describe('performMerge', () => {
     performMerge(world, states, a, b);
     expect(a.buildings).toHaveLength(2);
     expect(a.buildings[0]).toEqual({ id: 'a-mine', defId: 'mine', x: 1, y: 1 });
-    expect(a.buildings[1]).toEqual({ id: 'b-mine', defId: 'mine', x: 23, y: 4 });
+    // Absorbed buildings are re-minted from shifted coords (fix 1).
+    expect(a.buildings[1]).toEqual({ id: 'placed-23,4', defId: 'mine', x: 23, y: 4 });
   });
 
   it('redirects routes targeting absorbed; redirects routes leaving absorbed; deletes A↔B routes', () => {
@@ -396,6 +397,71 @@ describe('performMerge', () => {
     ]);
     performMerge(world, states, a, b);
     expect(world.vehicles[0]?.target).toBe('a');
+  });
+
+  it('re-mints absorbed building ids so no duplicates exist after merge', () => {
+    // Both islands own a building at local (0,0) — the ids collide if kept.
+    const a = makeSpec({
+      id: 'a',
+      cx: 0,
+      cy: 0,
+      buildings: [{ id: 'placed-0,0', defId: 'mine', x: 0, y: 0 }],
+    });
+    const b = makeSpec({
+      id: 'b',
+      cx: 20,
+      cy: 0,
+      buildings: [{ id: 'placed-0,0', defId: 'workshop', x: 0, y: 0 }],
+    });
+    const world = makeWorld([a, b]);
+    const states = new Map<string, IslandState>([
+      ['a', makeState({ id: 'a' })],
+      ['b', makeState({ id: 'b' })],
+    ]);
+    performMerge(world, states, a, b);
+    expect(a.buildings).toHaveLength(2);
+    const ids = a.buildings.map((b) => b.id);
+    expect(new Set(ids).size).toBe(2);
+    // Absorbed building shifted to (20,0) in A-local coords.
+    expect(a.buildings[1]).toEqual({ id: 'placed-20,0', defId: 'workshop', x: 20, y: 0 });
+  });
+
+  it('updates route sourceBuildingId when the absorbed building is re-minted', () => {
+    const a = makeSpec({
+      id: 'a',
+      cx: 0,
+      cy: 0,
+      buildings: [{ id: 'placed-0,0', defId: 'mine', x: 0, y: 0 }],
+    });
+    const b = makeSpec({
+      id: 'b',
+      cx: 20,
+      cy: 0,
+      buildings: [{ id: 'placed-0,0', defId: 'dock', x: 0, y: 0 }],
+    });
+    const c = makeSpec({ id: 'c', cx: 100, cy: 100, populated: true });
+    const world = makeWorld([a, b, c]);
+    world.routes.push({
+      id: 'route-1',
+      from: 'b',
+      to: 'c',
+      type: 'cargo',
+      capacityPerSec: 0.5,
+      mode: 'priority',
+      cargo: [{ resourceId: 'iron_ore' }],
+      transitTimeSec: 10,
+      inFlight: [],
+      sourceBuildingId: 'placed-0,0',
+    });
+    const states = new Map<string, IslandState>([
+      ['a', makeState({ id: 'a' })],
+      ['b', makeState({ id: 'b' })],
+      ['c', makeState({ id: 'c' })],
+    ]);
+    performMerge(world, states, a, b);
+    const route = world.routes.find((r) => r.from === 'a' && r.to === 'c');
+    expect(route).toBeDefined();
+    expect(route!.sourceBuildingId).toBe('placed-20,0');
   });
 });
 
