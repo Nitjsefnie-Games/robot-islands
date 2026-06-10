@@ -292,10 +292,21 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
   });
   statusLayer.addChild(labelText);
 
+  /** Shared label builder — used by both the paint path and getLabelMain().
+   *  Returns the main label fragment: optional MOVE prefix, building name,
+   *  footprint dimensions, and optional terrain-target suffix. */
+  function buildLabelMain(def: (typeof BUILDING_DEFS)[BuildingDefId], isRelocating: PlacedBuilding | null, terrainTarget: TerrainKind | undefined): string {
+    const targetSuffix = (def.terrainModifier === true && terrainTarget !== undefined)
+      ? `  ·  → ${terrainTarget.toUpperCase()}`
+      : '';
+    return `${isRelocating ? 'MOVE ' : ''}${def.displayName.toUpperCase()} ${shapeWidth(def.footprint)}×${shapeHeight(def.footprint)}${targetSuffix}`;
+  }
+
   function paintOutlineAndLabel(): void {
-    if (!active || activeDefId === null || !cursorSeen) {
+    if (!active || activeDefId === null) {
       previewLayer.visible = false;
       statusLayer.visible = false;
+      labelText.text = '';
       return;
     }
 
@@ -307,6 +318,7 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     // footprint covers a w×h block of cells (= w*16 × h*16 tiles), and
     // the status label folds in the ocean-validator reason on failure.
     if (def.oceanPlacement === true) {
+      if (!cursorSeen) return;
       paintOceanPreview(def, activeDefId);
       return;
     }
@@ -326,6 +338,57 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
       ? validatePlacement(targetSpec, targetState, activeDefId, localX, localY, rotation, DEFAULT_GRAPH, relocating.id, true)
       : validatePlacement(targetSpec, targetState, activeDefId, localX, localY, rotation);
     const color = v.ok ? OK_COLOR : WARN_COLOR;
+
+    // Status label — computed unconditionally so getLabelText() always returns
+    // the current label even before the cursor enters the canvas (cursorSeen).
+    //
+    // The label has three pieces:
+    //   1. Building name + footprint (always shown). For terrain_modifier,
+    //      the chosen target terrain is folded into labelMain so it survives
+    //      the unconditional labelText.text assignment below (§15.2).
+    //   2. Validation tail (only on failure). On `insufficient-resources`
+    //      the tail expands to "NEED 5 STONE, 3 WOOD" via `formatMissing`
+    //      so the player learns exactly what's short without consulting
+    //      the cost row.
+    //   3. Cost row (always shown) — listing every cost entry in
+    //      "20 STONE, 10 WOOD" form. The cost row colours its entries
+    //      red when short and the OK colour when affordable, summarising
+    //      the §14 affordability snapshot at a glance even when the
+    //      cursor is over a valid tile.
+    // §15.2: fold the chosen terrain target into labelMain so the annotation
+    // survives the unconditional labelText.text assignment below.
+    const labelMain = buildLabelMain(def, relocating, activeTerrainTarget);
+    const labelTail = v.ok
+      ? ''
+      : v.reason === 'insufficient-resources' && v.missing
+        ? `  ·  ${formatMissing(v.missing)}`
+        : `  ·  ${REASON_LABEL[v.reason ?? 'out-of-bounds']}`;
+    // §14 cost row — always rendered, summarising the basket regardless of
+    // current cursor state. Computed from inventory vs def cost; per-entry
+    // sufficiency is the input for the cost-row colour decision.
+    const cost = relocating ? relocateFee(relocating, def) : placementCostFor(def);
+    const shortfall = affordabilityShortfall(targetState.inventory, cost);
+    const costEntries: Array<[ResourceId, number]> = Object.entries(
+      cost,
+    ) as Array<[ResourceId, number]>;
+    const costStr =
+      costEntries.length === 0
+        ? ''
+        : costEntries
+            .map(([r, n]) => `${n} ${r.toUpperCase().replace(/_/g, ' ')}`)
+            .join(', ');
+    const costShort = Object.keys(shortfall).length > 0;
+    labelText.text =
+      labelMain + labelTail + (costStr ? `\n${relocating ? 'FEE' : 'COST'}: ${costStr}` : '');
+    // Cost-row colour: red when ANY cost entry is short on inventory, OK
+    // colour otherwise. The validation tail's own colour (which drives the
+    // main `color` var) is independent — geometry failures still paint the
+    // outline amber even when the cost is affordable.
+    labelText.style.fill = costShort ? WARN_COLOR : color;
+
+    // The outline + label layout below requires a screen position (cursorSeen).
+    // Text is already written above so getLabelText() works regardless.
+    if (!cursorSeen) return;
 
     // Footprint outline — one stroked rectangle per tile, plus a translucent
     // fill at 0.2 alpha. Drawn in world-pixel coordinates inside previewLayer
@@ -369,56 +432,6 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
 
     previewLayer.visible = true;
 
-    // Status label in screen space. Positioned offset from cursor so it
-    // doesn't sit underneath it (cursor pointer would obscure the first
-    // glyph on most platforms).
-    //
-    // The label has three pieces:
-    //   1. Building name + footprint (always shown). For terrain_modifier,
-    //      the chosen target terrain is folded into labelMain so it survives
-    //      the unconditional labelText.text assignment below (§15.2).
-    //   2. Validation tail (only on failure). On `insufficient-resources`
-    //      the tail expands to "NEED 5 STONE, 3 WOOD" via `formatMissing`
-    //      so the player learns exactly what's short without consulting
-    //      the cost row.
-    //   3. Cost row (always shown) — listing every cost entry in
-    //      "20 STONE, 10 WOOD" form. The cost row colours its entries
-    //      red when short and the OK colour when affordable, summarising
-    //      the §14 affordability snapshot at a glance even when the
-    //      cursor is over a valid tile.
-    // §15.2: fold the chosen terrain target into labelMain so the annotation
-    // survives the unconditional labelText.text assignment below.
-    const targetSuffix = (def.terrainModifier === true && activeTerrainTarget !== undefined)
-      ? `  ·  → ${activeTerrainTarget.toUpperCase()}`
-      : '';
-    const labelMain = `${relocating ? 'MOVE ' : ''}${def.displayName.toUpperCase()} ${shapeWidth(def.footprint)}×${shapeHeight(def.footprint)}${targetSuffix}`;
-    const labelTail = v.ok
-      ? ''
-      : v.reason === 'insufficient-resources' && v.missing
-        ? `  ·  ${formatMissing(v.missing)}`
-        : `  ·  ${REASON_LABEL[v.reason ?? 'out-of-bounds']}`;
-    // §14 cost row — always rendered, summarising the basket regardless of
-    // current cursor state. Computed from inventory vs def cost; per-entry
-    // sufficiency is the input for the cost-row colour decision.
-    const cost = relocating ? relocateFee(relocating, def) : placementCostFor(def);
-    const shortfall = affordabilityShortfall(targetState.inventory, cost);
-    const costEntries: Array<[ResourceId, number]> = Object.entries(
-      cost,
-    ) as Array<[ResourceId, number]>;
-    const costStr =
-      costEntries.length === 0
-        ? ''
-        : costEntries
-            .map(([r, n]) => `${n} ${r.toUpperCase().replace(/_/g, ' ')}`)
-            .join(', ');
-    const costShort = Object.keys(shortfall).length > 0;
-    labelText.text =
-      labelMain + labelTail + (costStr ? `\n${relocating ? 'FEE' : 'COST'}: ${costStr}` : '');
-    // Cost-row colour: red when ANY cost entry is short on inventory, OK
-    // colour otherwise. The validation tail's own colour (which drives the
-    // main `color` var) is independent — geometry failures still paint the
-    // outline amber even when the cost is affordable.
-    labelText.style.fill = costShort ? WARN_COLOR : color;
     // Lay out the background rectangle behind the text for legibility — same
     // panel-bg colour as the side docks but with no border.
     const padX = 6;
@@ -791,11 +804,7 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
 
   function getLabelMain(): string {
     if (!active || activeDefId === null) return '';
-    const def = BUILDING_DEFS[activeDefId];
-    const targetSuffix = (def.terrainModifier === true && activeTerrainTarget !== undefined)
-      ? `  ·  → ${activeTerrainTarget.toUpperCase()}`
-      : '';
-    return `${relocating ? 'MOVE ' : ''}${def.displayName.toUpperCase()} ${shapeWidth(def.footprint)}×${shapeHeight(def.footprint)}${targetSuffix}`;
+    return buildLabelMain(BUILDING_DEFS[activeDefId], relocating, activeTerrainTarget);
   }
 
   return {

@@ -1931,7 +1931,10 @@ async function main(): Promise<void> {
         ? Object.fromEntries(sharedNetwork.sharedStorageCap) as Record<ResourceId, number>
         : undefined;
 
-      advanceIsland(s, now, {
+      // §15.1: shared RatesContext builder — one source for both the
+      // advanceIsland call and the lastIslandCtx snapshot so the inspector
+      // uses byte-identical fields and rates always agree with the HUD.
+      const buildIslandRatesContext = (): RatesContext => ({
         modifierMul: modifierMulFor(s.id),
         ncBuff: ncBuffFor(s),
         activeBonusMul: activeBonusMul(worldState),
@@ -1940,10 +1943,13 @@ async function main(): Promise<void> {
         crossIsland,
         caps: isLatticeIsland ? unifiedCaps : sharedCaps,
         cableComponent,
-        worldSeed: worldState.seed,
         geothermalActive,
         solarBoost: solarBoostByIsland.get(s.id),
         world: worldState,
+      });
+      advanceIsland(s, now, {
+        ...buildIslandRatesContext(),
+        worldSeed: worldState.seed,
         onTerrainShotFire: (buildingId) => {
           const modifier = s.buildings.find((b) => b.id === buildingId);
           if (!modifier) return;
@@ -1951,23 +1957,7 @@ async function main(): Promise<void> {
           needRebuild = true;
         },
       }, nowWall);
-      // §15.1: build the RatesContext as a named variable so it can be
-      // snapshots for the inspector (getRatesContext dep) — the inspector
-      // must use the identical context to produce rates that agree with
-      // the HUD.
-      const islandCtx: RatesContext = {
-        modifierMul: modifierMulFor(s.id),
-        ncBuff: ncBuffFor(s),
-        activeBonusMul: activeBonusMul(worldState),
-        terrainAt: spec?.terrainAt,
-        inventory: isLatticeIsland ? unifiedInv : sharedInventory,
-        crossIsland,
-        caps: isLatticeIsland ? unifiedCaps : sharedCaps,
-        cableComponent,
-        geothermalActive,
-        solarBoost: solarBoostByIsland.get(s.id),
-        world: worldState,
-      };
+      const islandCtx: RatesContext = buildIslandRatesContext();
       lastIslandCtx.set(s.id, islandCtx);
       const { net, power } = computeRates(s, islandCtx, undefined, nowWall);
       islandNets.set(s.id, net);
