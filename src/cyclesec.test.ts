@@ -3,8 +3,6 @@ import { RECIPES } from './recipes.js';
 import { BUILDING_DEFS } from './building-defs.js';
 import { M, densityForRecipe, buildingForRecipe, outputKg, shouldDeriveCycleSec } from './recipe-density.js';
 
-
-
 function expectedCycleSec(id: string): number {
   const r = (RECIPES as any)[id];
   const def = (BUILDING_DEFS as any)[buildingForRecipe(id)];

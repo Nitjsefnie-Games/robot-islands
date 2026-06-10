@@ -924,7 +924,7 @@ describe('dead-def guard: every recipe-implying category has a recipe or power o
     'signal_exchange',
     // special / infrastructure (no recipe by design)
     'land_reclamation_hub', 'launch_tower', 'platform_constructor',
-    'time_lock', 'genesis_chamber', 'universe_editor', 'lattice_node',
+    'time_lock', 'genesis_chamber',
     'terrain_modifier', 'sonar_buoy', 'spaceport', 'orbital_tracking_station',
     'path_drone_foundry', 'probability_engine',
     // heat sources (passive adjacency enablers, not recipe buildings)
