@@ -1666,7 +1666,10 @@ export function buyKeystone(ks: KeystonePrereq, state: IslandState): void {
   state.auraAmpVersion++;
 }
 
-function isBridgeActive(bridge: BridgeEdge, state: IslandState, graph: Graph): boolean {
+/** Threshold gate for a bridge edge (§9.3). Exported as the single source of
+ *  truth — the graphview renders bridge activity from this same predicate the
+ *  pathing engine uses, so the two can never drift. */
+export function isBridgeActive(bridge: BridgeEdge, state: IslandState, graph: Graph): boolean {
   return bridge.threshold.some(({ branch, minSpent }) => spentInBranch(state, branch, graph) >= minSpent);
 }
 
@@ -1694,14 +1697,16 @@ function forEachSpCharge(
   for (const e of graph.edges) edgeById.set(String(e.id), e);
   for (const b of graph.bridges) edgeById.set(String(b.id), b);
 
+  // Defensive ?? [] — historical tests drive bridge gating with duck-typed
+  // partial states that carry only `unlockedEdges`.
   const nodesWithOwnedIncoming = new Set<string>();
-  for (const edgeId of state.unlockedEdges) {
+  for (const edgeId of state.unlockedEdges ?? []) {
     const e = edgeById.get(String(edgeId));
     if (!e) continue;
     nodesWithOwnedIncoming.add(String(e.to));
     visit(e.cost, byId.get(String(e.to)));
   }
-  for (const nodeId of state.unlockedNodes) {
+  for (const nodeId of state.unlockedNodes ?? []) {
     if (nodesWithOwnedIncoming.has(String(nodeId))) continue;
     const node = byId.get(String(nodeId));
     if (!node) continue;
@@ -1723,13 +1728,17 @@ export function computeSpentSkillPoints(
   return sum;
 }
 
-function spentInBranch(state: IslandState, branchId: BranchId, graph: Graph): number {
+/** SP spent into `branchId`, under the same charge model purchases use
+ *  (`forEachSpCharge`): owned-edge costs attributed to the destination node's
+ *  branch, plus purchase costs of nodes acquired without an owned incoming
+ *  edge (root-fallback buys, spendPoint, keystones). The old edge-only sum
+ *  missed root purchases entirely, so the engine undercounted branch spend
+ *  versus the UI's node-cost counter — a bridge could render active while
+ *  pathing refused to use it. Exported so the graphview consumes THIS. */
+export function spentInBranch(state: IslandState, branchId: BranchId, graph: Graph): number {
   let sum = 0;
-  for (const e of graph.edges) {
-    if (state.unlockedEdges.has(e.id as EdgeId)) {
-      const node = graph.nodes.find((n) => n.id === e.to);
-      if (node !== undefined && SUBPATH_BRANCH[node.subPath] === branchId) sum += e.cost;
-    }
-  }
+  forEachSpCharge(state, graph, (cost, node) => {
+    if (node !== undefined && SUBPATH_BRANCH[node.subPath] === branchId) sum += cost;
+  });
   return sum;
 }

@@ -6,12 +6,12 @@ import { Application, Container, Graphics, Text, TextStyle, Circle } from 'pixi.
 import {
   DEFAULT_GRAPH,
   BRANCH_LABEL,
-  SUBPATH_BRANCH,
   buyKeystone,
   buyNode,
   canBuyKeystone,
   costToUnlock,
   effectiveGraph,
+  isBridgeActive,
   keystonePrereqFor,
   bindCrystal,
   unbindCrystal,
@@ -26,7 +26,7 @@ import { CRYSTAL_CATALOG } from './skilltree-crystals.js';
 import { KEYSTONE_PREREQS } from './skilltree-catalog.js';
 import { computeSkillGraphLayout, type SkillGraphLayout } from './skilltree-layout.js';
 import type { IslandState } from './economy.js';
-import type { BridgeEdge, Graph, NodeId as GNodeId } from './skilltree-graph.js';
+import type { NodeId as GNodeId } from './skilltree-graph.js';
 
 export interface SkillGraphView {
   readonly el: HTMLDivElement;
@@ -49,20 +49,6 @@ type NodeKind = 'filler' | 'notable' | 'keystone';
 const KEYSTONE_TARGETS: ReadonlySet<string> = new Set(
   KEYSTONE_PREREQS.map((k) => String(k.targetNode)),
 );
-
-function spentInBranchLocal(state: IslandState, branchId: BranchId, graph: Graph): number {
-  let sum = 0;
-  for (const nid of state.unlockedNodes) {
-    const node = graph.nodes.find((n) => n.id === nid);
-    if (!node) continue;
-    if (SUBPATH_BRANCH[node.subPath] === branchId) sum += node.cost;
-  }
-  return sum;
-}
-
-function isBridgeActiveLocal(b: BridgeEdge, state: IslandState, graph: Graph): boolean {
-  return b.threshold.some(({ branch, minSpent }) => spentInBranchLocal(state, branch, graph) >= minSpent);
-}
 
 function buildEffectivePosMap(layout: SkillGraphLayout, state: IslandState): Map<string, { x: number; y: number }> {
   const map = new Map<string, { x: number; y: number }>();
@@ -725,7 +711,10 @@ export function mountSkillGraphView(
       const b = getPos(String(br.to));
       if (!a || !b) continue;
       const cp = controlPoint(a, b, curveSign(String(br.id)));
-      const active = isBridgeActiveLocal(br, state, graph);
+      // Same predicate the pathing engine uses (spentInBranch under the
+      // purchase charge model) — the renderer can no longer show a bridge
+      // active that costToUnlock would refuse to traverse.
+      const active = isBridgeActive(br, state, graph);
       const target = active ? gActive : gInactive;
       for (let i = 0; i < SEGMENTS; i += 2) {
         const p0 = sample(a, cp, b, i / SEGMENTS);
