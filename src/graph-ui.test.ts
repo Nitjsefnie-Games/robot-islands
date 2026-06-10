@@ -40,8 +40,8 @@ describe('graph-ui close button', () => {
         style: {} as Record<string, string>,
         dataset: {} as Record<string, string>,
         classList: {
-          add: (c: string) => { /* no-op */ },
-          remove: (c: string) => { /* no-op */ },
+          add: (_c: string) => { /* no-op */ },
+          remove: (_c: string) => { /* no-op */ },
           contains: () => false,
         },
         children: [] as unknown[],
