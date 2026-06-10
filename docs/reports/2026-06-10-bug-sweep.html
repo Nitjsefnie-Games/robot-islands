@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Robot Islands — bug-sweep report · 2026-06-10</title>
+  <style>
+    :root {
+      --ivory:#1B1A17; --slate:#F5F3EC; --clay:#D97757; --oat:#3A352B; --olive:#8FA56E;
+      --rust:#E08B7F; --warn:#E0B47F; --gray-150:#2E2C27; --gray-300:#3A3833; --gray-500:#8F8D82;
+      --gray-700:#CFCCC2; --white:#252420; --code-bg:#121110;
+      --serif:ui-serif,Georgia,'Times New Roman',serif;
+      --sans:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+      --mono:ui-monospace,'SF Mono',Menlo,Monaco,monospace;
+      --radius:12px; --border:1.5px solid var(--gray-300);
+    }
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:var(--sans);background:var(--ivory);color:var(--gray-700);line-height:1.58;padding:56px 32px 120px;-webkit-font-smoothing:antialiased}
+    .page{margin:0 auto;max-width:1080px}
+    header.page-head{margin-bottom:40px;max-width:980px}
+    .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--gray-500);margin-bottom:12px}
+    h1{font-family:var(--serif);font-weight:500;font-size:38px;line-height:1.14;color:var(--slate);margin-bottom:18px;letter-spacing:-.01em}
+    .context-box{background:var(--gray-150);border:var(--border);border-radius:var(--radius);padding:16px 20px;font-size:14.5px}
+    .context-box .label{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--gray-500);display:block;margin-bottom:6px}
+    nav.toc{font-size:13.5px;font-family:var(--mono);margin:14px 0 0;color:var(--gray-500)}
+    nav.toc a{color:var(--clay);text-decoration:none;margin-right:14px}
+    .summary{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:36px}
+    @media (max-width:900px){.summary{grid-template-columns:repeat(2,1fr)}}
+    .summary .cell{background:var(--white);border:var(--border);border-radius:var(--radius);padding:16px 18px}
+    .summary .k{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--gray-500);margin-bottom:6px}
+    .summary .v{font-size:17px;color:var(--slate);font-weight:600}
+    .summary .v.bad{color:var(--rust)} .summary .v.warn{color:var(--warn)} .summary .v.ok{color:var(--olive)}
+    .verdict{background:var(--white);border:var(--border);border-left:4px solid var(--olive);border-radius:var(--radius);padding:22px 26px;margin-bottom:48px}
+    .verdict .vt{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--olive);margin-bottom:8px}
+    .verdict .vh{font-family:var(--serif);font-size:22px;font-weight:500;color:var(--slate);margin-bottom:10px;letter-spacing:-.01em}
+    .verdict .vb{font-size:14.5px;max-width:880px}
+    section{margin-bottom:56px}
+    .sec-head{display:flex;align-items:baseline;gap:14px;margin-bottom:8px}
+    .sec-head .num{font-family:var(--mono);font-size:12px;background:var(--oat);color:var(--slate);padding:3px 9px;border-radius:8px}
+    .sec-head h2{font-family:var(--serif);font-weight:500;font-size:26px;color:var(--slate);letter-spacing:-.01em}
+    .sec-intro{font-size:14.5px;color:var(--gray-500);max-width:880px;margin-bottom:24px}
+    code{font-family:var(--mono);font-size:.88em;background:var(--gray-150);border:1px solid var(--gray-300);border-radius:5px;padding:1px 5px;color:#C9B98A}
+    .scope{display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:980px}
+    @media (max-width:820px){.scope{grid-template-columns:1fr}}
+    .scope .col{background:var(--white);border:var(--border);border-radius:var(--radius);overflow:hidden}
+    .scope .col-head{padding:12px 18px;font-family:var(--mono);font-size:11.5px;text-transform:uppercase;letter-spacing:.06em;border-bottom:var(--border)}
+    .scope .col.in .col-head{background:#232A1C;color:var(--olive)}
+    .scope .col.out .col-head{background:var(--gray-150);color:var(--gray-500)}
+    .scope .col-body{padding:14px 18px;font-size:13.5px}
+    .scope ul{list-style:none}
+    .scope li{margin:6px 0;padding-left:16px;position:relative}
+    .scope li::before{content:'';position:absolute;left:0;top:9px;width:6px;height:6px;border-radius:2px;background:var(--gray-500)}
+    .scope .in li::before{background:var(--olive)}
+    .finding{background:var(--white);border:var(--border);border-radius:var(--radius);margin-bottom:18px;overflow:hidden}
+    .f-head{display:flex;align-items:center;gap:12px;padding:14px 20px;background:var(--gray-150);border-bottom:var(--border);flex-wrap:wrap}
+    .f-id{font-family:var(--mono);font-size:12px;color:var(--gray-500)}
+    .f-title{font-family:var(--serif);font-size:17px;color:var(--slate);flex:1;min-width:220px}
+    .sev{display:inline-block;font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:6px;font-weight:600}
+    .sev.crit{background:#54231A;color:#F2A28E} .sev.high{background:#4A2A1C;color:#F0B79C}
+    .sev.med{background:var(--oat);color:var(--warn)} .sev.low{background:#2D3A24;color:#B6CC96}
+    .sev.info{background:var(--gray-150);color:var(--gray-500);border:1px solid var(--gray-300)}
+    .f-body{padding:16px 20px;display:grid;grid-template-columns:1fr 1fr;gap:16px 28px}
+    @media (max-width:820px){.f-body{grid-template-columns:1fr}}
+    .f-block .bk{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--gray-500);margin-bottom:6px}
+    .f-block .bv{font-size:13.5px}
+    .f-block .bv strong{color:var(--slate)}
+    .cite{display:inline-block;font-family:var(--mono);font-size:11px;background:var(--oat);color:var(--clay);border-radius:6px;padding:1px 7px}
+    .f-decide{display:flex;gap:10px;padding:0 20px 16px;flex-wrap:wrap}
+    .f-decide .opt{background:var(--ivory);border:var(--border);border-radius:8px;padding:7px 14px;cursor:pointer;font-family:var(--mono);font-size:12px;color:var(--gray-700);position:relative;user-select:none}
+    .f-decide .opt input{position:absolute;opacity:0;pointer-events:none}
+    .f-decide .opt:hover{border-color:var(--clay)}
+    .f-decide .opt[data-selected="true"]{border-color:var(--clay);color:var(--clay);background:#1F1D1A;box-shadow:0 0 0 1px var(--clay) inset}
+    .tbl{width:100%;border:var(--border);border-radius:var(--radius);border-collapse:separate;border-spacing:0;overflow:hidden;font-size:13.5px}
+    .tbl th,.tbl td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--gray-300);vertical-align:top}
+    .tbl th{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--gray-500);background:var(--gray-150);font-weight:600}
+    .tbl tr:last-child td{border-bottom:none}
+    .tbl td.mono{font-family:var(--mono);font-size:12.5px}
+    .badge{display:inline-block;font-family:var(--mono);font-size:10.5px;padding:2px 8px;border-radius:6px;letter-spacing:.04em}
+    .badge.fixed{background:#2D3A24;color:var(--olive)} .badge.open{background:#4A2A1C;color:var(--rust)}
+    .badge.accepted{background:var(--oat);color:var(--warn)}
+    .selections{background:var(--white);border:var(--border);border-left:4px solid var(--clay);border-radius:var(--radius);padding:22px 26px;margin-top:40px;position:sticky;bottom:22px}
+    .selections h3{font-family:var(--serif);font-size:20px;color:var(--slate);margin-bottom:12px}
+    .sel-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 22px;font-size:13px;margin-bottom:16px}
+    @media (max-width:720px){.sel-grid{grid-template-columns:1fr}}
+    .sel-row{display:flex;justify-content:space-between;gap:12px}
+    .sel-row .k{color:var(--gray-500);font-family:var(--mono);font-size:12px}
+    .sel-row .v{color:var(--slate);font-weight:600}
+    .actions{display:flex;gap:10px;flex-wrap:wrap}
+    button.action{font-family:var(--mono);font-size:12px;padding:9px 16px;background:var(--ivory);color:var(--clay);border:1.5px solid var(--clay);border-radius:8px;cursor:pointer;letter-spacing:.04em}
+    button.action:hover{background:#2A2521}
+    .toast{font-family:var(--mono);font-size:11.5px;color:var(--olive);margin-left:8px;opacity:0;transition:opacity 200ms ease}
+    .toast.show{opacity:1}
+    .footer{color:var(--gray-500);font-size:13px;margin-top:64px;padding-top:22px;border-top:1px solid var(--gray-300)}
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Bug-sweep report · robot-islands · 2026-06-10</div>
+      <h1>“Find and fix every bug” — full-codebase sweep</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        Eight parallel audit agents swept all ~88k lines of <code>src/</code> against the locked
+        <code>SPEC.md</code>, returning ~85 verified findings. Sixty-plus genuine defects were then fixed in
+        15 file-disjoint task batches (plus 3 incident fixes for regressions found mid-sweep), each batch
+        implemented by a dedicated agent (kimi or Claude), spec-reviewed and quality-reviewed by Opus, with
+        bounded fix loops. Work landed directly on <code>master</code> (linear history), base
+        <code>ffb246a</code> → head <code>235f08f</code>, and is pushed to GitHub.
+      </div>
+      <nav class="toc">
+        <a href="#scope">1 Scope</a><a href="#highlights">2 Highlights</a><a href="#register">3 Fix register</a>
+        <a href="#incidents">4 Mid-sweep incidents</a><a href="#deferred">5 Deferred</a><a href="#process">6 Process notes</a>
+      </nav>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Audit findings</div><div class="v">~85</div></div>
+      <div class="cell"><div class="k">Defects fixed</div><div class="v ok">60+ (98 commits)</div></div>
+      <div class="cell"><div class="k">Tests</div><div class="v ok">2863 → 3023 passing</div></div>
+      <div class="cell"><div class="k">Final gate</div><div class="v ok">test + tsc + build green</div></div>
+      <div class="cell"><div class="k">Deferred</div><div class="v warn">16 items (§5)</div></div>
+    </div>
+
+    <div class="verdict">
+      <div class="vt">Verdict</div>
+      <div class="vh">All 15 task batches landed, double-reviewed, and the final cross-cutting review returned READY.</div>
+      <div class="vb">The headline classes were exploits and dead content (free failed rocket launches, an
+        infinite skill-point mint, 21 permanently-locked T6 nodes, unusable crystal mini-trees), persistence
+        clock-domain bugs (satellites frozen after reload, offline drone scans lost, weather restarting every
+        session), and a UI cluster where per-frame DOM rebuilds made buttons physically unclickable. Suite
+        grew by 160 net passing tests; full run is ~12s after the lazy-ocean perf fix. Sixteen items are
+        deliberately deferred with rationale in §5 — use the pickers there to dispatch a follow-up.</div>
+    </div>
+
+    <section id="scope">
+      <div class="sec-head"><span class="num">1</span><h2>Scope</h2></div>
+      <p class="sec-intro">Deliberately-skipped items are named so the reader knows they were considered, not missed.</p>
+      <div class="scope">
+        <div class="col in">
+          <div class="col-head">Audited &amp; fixed</div>
+          <div class="col-body"><ul>
+            <li>Economy integrator (§15.3 four-pass loop, batteries, heat, maintenance)</li>
+            <li>Data tables: recipes, building defs, XP weights vs SPEC §6/§9.1</li>
+            <li>Persistence: perf-clock rebasing, migrations, import flow</li>
+            <li>Logistics: routes, drones, trade, network; weather clock domain</li>
+            <li>Skill tree: gating, crystals, refunds, branches, auras</li>
+            <li>World: placement, merge integrity, ocean generation, reclamation</li>
+            <li>Orbital: launch costs, hazard rates, satellites</li>
+            <li>UI: dead-click cluster, window manager, input, inspector context</li>
+          </ul></div>
+        </div>
+        <div class="col out">
+          <div class="col-head">Out of scope (deliberate — see §5)</div>
+          <div class="col-body"><ul>
+            <li>Phase 7/10 tracked rebalances (steel-mill scrap parity, reachability)</li>
+            <li>Balance-review items (filler cost curve, ocean extractor pacing)</li>
+            <li>Lattice partner-drain (§13.3 feature marked partial; needs design)</li>
+            <li>Speculative/design-intent flags from the audits</li>
+          </ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="highlights">
+      <div class="sec-head"><span class="num">2</span><h2>Highlights — the bugs that mattered most</h2></div>
+      <p class="sec-intro">Ten representative defects out of the 60+. Every fix cited here is commit-linked and was independently re-verified by an Opus reviewer (golden values re-derived from first principles where they changed).</p>
+
+      <article class="finding">
+        <div class="f-head"><span class="f-id">H-01</span><span class="f-title">Failed rocket launches were free — infinite re-rolls</span><span class="sev high">HIGH</span></div>
+        <div class="f-body">
+          <div class="f-block"><div class="bk">Bug</div><div class="bv"><span class="cite">orbital.ts:279–307</span> deducted the payload, insertion package and antimatter propellant only <strong>after</strong> the success roll; SPEC §14.7 says “Fuel and the launch payload are lost.” A test even pinned the wrong behavior.</div></div>
+          <div class="f-block"><div class="bk">Fix</div><div class="bv"><code>0d0e7f3</code> — deduction moved between validation and the roll; wrong-pin test rewritten; validation failures still cost nothing.</div></div>
+        </div>
+      </article>
+
+      <article class="finding">
+        <div class="f-head"><span class="f-id">H-02</span><span class="f-title">Crystal unbind minted skill points — infinite SP exploit</span><span class="sev high">HIGH</span></div>
+        <div class="f-body">
+          <div class="f-block"><div class="bk">Bug</div><div class="bv">Purchases charged edge costs but unbind refunded node + edge costs: bind → buy → unbind netted +7 SP, repeatable forever. Tier reset had the same asymmetry (bridges over/under-refunded; crystal SP destroyed).</div></div>
+          <div class="f-block"><div class="bk">Fix</div><div class="bv"><code>69c9999</code>, <code>7c03f71</code> — one shared charge-model walker (<code>forEachSpCharge</code>); reviewer-verified SP-neutral across chain+bridge+root+crystal sequences.</div></div>
+        </div>
+      </article>
+
+      <article class="finding">
+        <div class="f-head"><span class="f-id">H-03</span><span class="f-title">Dead endgame content: T6 nodes, keystone gates, crystal mini-trees</span><span class="sev high">HIGH</span></div>
+        <div class="f-body">
+          <div class="f-block"><div class="bk">Bug</div><div class="bv">All 21 depth-8 nodes were permanently unpurchasable (gate ignored the Ascendant-Core flag); keystone AND-prerequisites were bypassed by pathing (<code>buyKeystone</code> was dead code); bound crystals’ mini-trees were unreachable because the socket node was never owned.</div></div>
+          <div class="f-block"><div class="bk">Fix</div><div class="bv"><code>05aea3b</code>, <code>9d7093a</code>, <code>d929ba6</code> + anchor/branch/aura fixes (<code>7b79136</code>, <code>95e1002</code>, <code>965315f</code>).</div></div>
+        </div>
+      </article>
+
+      <article class="finding">
+        <div class="f-head"><span class="f-id">H-04</span><span class="f-title">Satellites froze for a whole session after reload</span><span class="sev high">HIGH</span></div>
+        <div class="f-body">
+          <div class="f-block"><div class="bk">Bug</div><div class="bv"><span class="cite">persistence.ts:901</span> never rebased <code>movingTo.arrivalMs</code> by <code>perfShift</code> — a sat saved mid-transit stayed “in transit” for roughly the previous session’s uptime. Buffers were also truncated to the global cap, ignoring skill-raised per-sat caps.</div></div>
+          <div class="f-block"><div class="bk">Fix</div><div class="bv"><code>289eaa2</code>, <code>400308e</code> (import flow now accepts all migratable save versions too).</div></div>
+        </div>
+      </article>
+
+      <article class="finding">
+        <div class="f-head"><span class="f-id">H-05</span><span class="f-title">Weather restarted from zero every page load; drones scanned nothing offline</span><span class="sev high">HIGH</span></div>
+        <div class="f-body">
+          <div class="f-block"><div class="bk">Bug</div><div class="bv">Every weather sample used the perf clock (resets ~0 per load) — sessions replayed identical dwells, violating §15.1; the same field was sampled incoherently (storm for losses, clear for capacity). Drone corridors flown while the tab was closed were never scanned, and doomed drones revealed their whole route before dying.</div></div>
+          <div class="f-block"><div class="bk">Fix</div><div class="bv"><code>0e7d318</code>, <code>3641ea5</code> (wall-anchored <code>weatherClockMs</code>, coherent biome+CO₂ field); <code>1a9c88c</code>, <code>528f85f</code>, <code>b322cad</code> (offline catch-up tick, dispatch-time fate, true polyline corridors).</div></div>
+        </div>
+      </article>
+
+      <article class="finding">
+        <div class="f-head"><span class="f-id">H-06</span><span class="f-title">Merged-island land was permanently unbuildable; merges corrupted state</span><span class="sev high">HIGH</span></div>
+        <div class="f-body">
+          <div class="f-block"><div class="bk">Bug</div><div class="bv"><span class="cite">placement.ts:278</span> validated against the primary ellipse only (§4.3 says any constituent); merges minted duplicate building ids, orphaned ocean platforms, dropped paid terrain conversions and lost absorbed storage capacity. Home-island terrain shots were no-ops until reload.</div></div>
+          <div class="f-block"><div class="bk">Fix</div><div class="bv"><code>860a8b4</code>, <code>90965a7</code>–<code>240e979</code>, <code>54a6cb0</code> + island-qualified new ids and island-scoped consumers (<code>7f480b2</code>).</div></div>
+        </div>
+      </article>
+
+      <article class="finding">
+        <div class="f-head"><span class="f-id">H-07</span><span class="f-title">Buttons across five panels physically couldn’t be clicked</span><span class="sev high">HIGH</span></div>
+        <div class="f-body">
+          <div class="f-block"><div class="bk">Bug</div><div class="bv">Per-frame DOM rebuilds destroyed click targets between mousedown and mouseup: orbital Upgrade/Arm-Launch, build-queue cancel, HUD tier-reset/inventory, universe-editor biome buttons; settlement dropdowns closed while open. Any clicked panel also collapsed to a 1×1 box after a window resize.</div></div>
+          <div class="f-block"><div class="bk">Fix</div><div class="bv"><code>ab8e63c</code>–<code>ea10626</code> (signature-gated renders, row caches, persistent buttons), <code>213657b</code> (window-manager degenerate-layout mint).</div></div>
+        </div>
+      </article>
+
+      <article class="finding">
+        <div class="f-head"><span class="f-id">H-08</span><span class="f-title">Coal furnaces served free heat forever; integrator conjured inputs</span><span class="sev med">MED</span></div>
+        <div class="f-body">
+          <div class="f-block"><div class="bk">Bug</div><div class="bv">Heat consumers kept producing at full rate after coal hit zero (§5.1); sub-1-unit cap events were skipped, granting whole offline segments of phantom production/XP; the pass-2 supply pool ignored per-building maintenance/toxicity factors; batteries had a float-residue freeze and ignored unified cable components.</div></div>
+          <div class="f-block"><div class="bk">Fix</div><div class="bv"><code>d5154ad</code>, <code>611b4b2</code> (re-enabled the long-skipped cryo regression test), <code>25e1df7</code>, <code>2ed73d9</code>, <code>90a66b3</code> — golden-value changes independently re-derived by the reviewer.</div></div>
+        </div>
+      </article>
+
+      <article class="finding">
+        <div class="f-head"><span class="f-id">H-09</span><span class="f-title">XP fountains from a broken cycle-time derivation</span><span class="sev high">HIGH</span></div>
+        <div class="f-body">
+          <div class="f-block"><div class="bk">Bug</div><div class="bv">Near-zero-mass outputs collapsed derived cycle times to ~1s: the antimatter refinery ran at 1s instead of SPEC’s 10 minutes (1000 XP/s), drilling rig at 1.5s — inverting the XP leaderboard by orders of magnitude. Seven XP weights also contradicted SPEC §6 tier placements; <code>bulk_concrete_plant</code> consumed 2 MW and produced nothing.</div></div>
+          <div class="f-block"><div class="bk">Fix</div><div class="bv"><code>0e737e3</code> (pins + derivation guard + <code>cycleSecPinned</code> flag), <code>1f0a0ae</code>, <code>8691bac</code> (recipe + dead-def guard test).</div></div>
+        </div>
+      </article>
+
+      <article class="finding">
+        <div class="f-head"><span class="f-id">H-10</span><span class="f-title">Frame-rate-dependent discovery and instant Kessler cascades</span><span class="sev med">MED</span></div>
+        <div class="f-body">
+          <div class="f-block"><div class="bk">Bug</div><div class="bv">Scanner discovery and debris hits rolled per render frame — 144 Hz players discovered islands 2.4× faster than 60 Hz; a fresh debris field destroyed satellites within seconds, gutting the §14.5 “hours of observation” design.</div></div>
+          <div class="f-block"><div class="bk">Fix</div><div class="bv"><code>4e62e52</code>, <code>32d95b1</code> — dt-scaled hazards with closed-form equivalence tests, calibrated to a 1000 ms reference tick.</div></div>
+        </div>
+      </article>
+    </section>
+
+    <section id="register">
+      <div class="sec-head"><span class="num">3</span><h2>Full fix register — 15 task batches</h2></div>
+      <p class="sec-intro">Every batch passed an Opus spec-compliance review and an Opus code-quality review (with fixup rounds where demanded). Implementers: kimi (K) or Claude (C).</p>
+      <table class="tbl">
+        <thead><tr><th>Task</th><th>Area · items fixed</th><th>By</th><th>Key commits</th><th>Reviews</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">1</td><td>Persistence: satellite arrival perfShift, per-sat buffer caps, migratable import, comm-packet shift</td><td>K</td><td class="mono">289eaa2 400308e</td><td><span class="badge fixed">clean</span></td></tr>
+          <tr><td class="mono">2</td><td>Orbital: launch costs on failure (§14.7), dt-scaled scanner + debris hazards</td><td>C</td><td class="mono">0d0e7f3 4e62e52 32d95b1</td><td><span class="badge fixed">clean</span></td></tr>
+          <tr><td class="mono">3</td><td>Economy core: conditional-bonus clock domain, sub-1-unit cap events, supply-pool factors, battery epsilon + unified gating, grace at zero cap, gate-flag timing, rate-history prune</td><td>C</td><td class="mono">f2cb5c8…ad35b64 (8)</td><td><span class="badge fixed">clean — goldens re-derived</span></td></tr>
+          <tr><td class="mono">4</td><td>Heat/maintenance: coal-stock gate, served-count billing, cost-per-cycle pick, disabled/invalid targeting + wear</td><td>C</td><td class="mono">d85e40f…21a09ea (4)</td><td><span class="badge fixed">clean</span></td></tr>
+          <tr><td class="mono">5</td><td>Data tables: recipe-graph resolution + tier labels, cycle pins + derivation guard, bulk_concrete_plant, 10 XP-weight corrections, stale comments</td><td>K</td><td class="mono">b13222c…75c4319 (7)</td><td><span class="badge fixed">1 fixup round</span></td></tr>
+          <tr><td class="mono">6</td><td>Drones: offline catch-up scan, T5 polyline corridors, dispatch-time fate, rare-ring scope, operational engines, UI fuel-efficiency</td><td>C</td><td class="mono">1a9c88c…925b527 +a18c85e</td><td><span class="badge fixed">salvaged + follow-up</span></td></tr>
+          <tr><td class="mono">7</td><td>Routes: dash-scroll matrix, §15.4 waterfall contention, instant-transit grace, endpoint cache keys</td><td>C</td><td class="mono">11e4aab…ba17239 (6)</td><td><span class="badge fixed">1 fixup round</span></td></tr>
+          <tr><td class="mono">8</td><td>Weather: wall-anchored timeline (§15.1), coherent biome+CO₂ field, cable-gate clock</td><td>C</td><td class="mono">0e7d318 3641ea5 a51a011</td><td><span class="badge fixed">clean</span></td></tr>
+          <tr><td class="mono">9</td><td>Skill tree: keystone AND gate, T6 depth gate, crystal sockets + SP-neutral refunds, tier-reset accounting, branch-spend unification, notable anchors, patronage branch, descriptions, additive auras, bind validation</td><td>C</td><td class="mono">9d7093a…1bcb3fa (11)</td><td><span class="badge fixed">clean</span></td></tr>
+          <tr><td class="mono">10</td><td>Sim misc: toxicity granularity invariance, daynight wrap, construction progress under speed-ups, fmtPower rounding</td><td>K</td><td class="mono">8426de4…d4d3d2a (5)</td><td><span class="badge fixed">1 fixup round</span></td></tr>
+          <tr><td class="mono">11</td><td>Island merge: id re-minting + route re-pointing, platform re-anchoring, tileOverrides carry-over, storage-cap crediting</td><td>K</td><td class="mono">90965a7…240e979 (4)</td><td><span class="badge fixed">clean</span></td></tr>
+          <tr><td class="mono">12</td><td>World/placement: constituent-aware validation + spacing, home-island overrides, ocean-overlap gate, lazy ocean seeding, union reclamation cost</td><td>K</td><td class="mono">860a8b4…b850498 (8) +2be7c7a</td><td><span class="badge accepted">scope waiver granted</span></td></tr>
+          <tr><td class="mono">13</td><td>UI input: window-manager 1×1 collapse, sticky pan keys, graph-panel toggle, rename Escape, Drones key label</td><td>K</td><td class="mono">213657b…45d8e44 (5) +28d0b6d +e74eecc</td><td><span class="badge fixed">tsc repair + fixup</span></td></tr>
+          <tr><td class="mono">14</td><td>UI dead-click cluster: signature-gated renders, row caches, persistent buttons, T5 option, Pixi destroy-on-detach, pad-count ledger</td><td>K</td><td class="mono">ab8e63c…ea10626 (8) +db7178d +1cbc44c</td><td><span class="badge fixed">2 incident follow-ups</span></td></tr>
+          <tr><td class="mono">15</td><td>UI misc: full inspector RatesContext, terrain-target label, dropdown rename repaint, island-qualified building ids + scoped consumers + merge-stale selection</td><td>C</td><td class="mono">ae53e58…7f480b2 (4) +ea79f7d</td><td><span class="badge fixed">quality fixups</span></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="incidents">
+      <div class="sec-head"><span class="num">4</span><h2>Mid-sweep incidents — found and fixed during the sweep</h2></div>
+      <table class="tbl">
+        <thead><tr><th>Incident</th><th>Root cause</th><th>Fix</th></tr></thead>
+        <tbody>
+          <tr><td><strong>Full suite hang</strong> (npm test never finished; stalled a kimi run for an hour)</td>
+            <td>Task 12’s lazy ocean seeding ran a full-world regen per newly-generated cell — the volcanic-path <code>seedShallows</code> scanned a ~450k-cell rect (~107M checks) per mint. Measured 50 lazy mints: 19.3s.</td>
+            <td class="mono">a5967fb — 19,316ms → 3ms; orbital scan 34.2s → 65ms; determinism reviewer-traced; suite now ~12s <span class="badge fixed">fixed</span></td></tr>
+          <tr><td><strong>Live <code>alphaMode</code> crash</strong> (browser, built bundle)</td>
+            <td>Task 14’s <code>destroy(true)</code> in the weather overlay is Pixi-8 shorthand for destroying the texture+source — it nuked the shared cached gradient texture that the next 5s rebuild reused.</td>
+            <td class="mono">db7178d — <code>destroy({children:true})</code>; other two sites verified to own their resources <span class="badge fixed">fixed</span></td></tr>
+          <tr><td><strong>tsc-red master</strong> (unused bindings in a new test)</td>
+            <td>Task 13’s kimi run was killed before its final gate; <code>graph-ui.test.ts</code> landed with TS6133 errors.</td>
+            <td class="mono">28d0b6d <span class="badge fixed">fixed</span></td></tr>
+          <tr><td><strong>Stale golden after Task 5</strong></td>
+            <td><code>terrain-modifier.test.ts</code> pinned the bug-era 1.5s drilling-rig cycle (1,728,000 helium-3 per 30d).</td>
+            <td class="mono">1171bd6 — recalibrated to the 800s design cycle (3,240) <span class="badge fixed">fixed</span></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="deferred">
+      <div class="sec-head"><span class="num">5</span><h2>Deferred items — decisions wanted</h2></div>
+      <p class="sec-intro">Known issues deliberately not fixed in this sweep, with rationale. Pick a decision per card; “Copy as remediation prompt” at the bottom produces a dispatch-ready follow-up brief.</p>
+
+      <article class="finding" id="D-01">
+        <div class="f-head"><span class="f-id">D-01</span><span class="f-title">Lattice unified pool never drains partner islands — matter from nothing</span><span class="sev high">HIGH</span></div>
+        <div class="f-body">
+          <div class="f-block"><div class="bk">Why deferred</div><div class="bv">§13.3 feature is marked <strong>partial</strong> in the status table; consumption-side reconciliation needs a designed drain pass (proportional partner draining or pool write-back), not a patch. <span class="cite">economy.ts:573</span> reads the unified pool; applyRates only clamps local inventory.</div></div>
+          <div class="f-block"><div class="bk">If fixed next</div><div class="bv">Drain the negative residue from partner islands proportionally after each segment; align <code>findNextCapEvent</code> depletion boundaries with the pooled stock.</div></div>
+        </div>
+        <div class="f-decide" data-picker="D-01"><label class="opt"><input type="radio" name="D-01" value="fix">fix next</label><label class="opt"><input type="radio" name="D-01" value="defer">defer</label><label class="opt"><input type="radio" name="D-01" value="accept">accept risk</label></div>
+      </article>
+
+      <article class="finding" id="D-02">
+        <div class="f-head"><span class="f-id">D-02</span><span class="f-title">steel_mill_from_scrap yield parity (§6.7) — Phase 10</span><span class="sev med">MED</span></div>
+        <div class="f-body">
+          <div class="f-block"><div class="bk">Why deferred</div><div class="bv">Tracked Phase-10 recalibration (TODO.md:161; skip at <span class="cite">recipes.test.ts:329</span>). Scrap path yields ~68% of the pig-iron steel rate; spec says rates match.</div></div>
+          <div class="f-block"><div class="bk">If fixed next</div><div class="bv">Pin the scrap variant’s cycle so steel/s matches base (≈49.7s per steel) or mirror the 85-steel batch; recalibrate the cohort tests together.</div></div>
+        </div>
+        <div class="f-decide" data-picker="D-02"><label class="opt"><input type="radio" name="D-02" value="fix">fix next</label><label class="opt"><input type="radio" name="D-02" value="defer">defer</label><label class="opt"><input type="radio" name="D-02" value="accept">accept risk</label></div>
+      </article>
+
+      <article class="finding" id="D-03">
+        <div class="f-head"><span class="f-id">D-03</span><span class="f-title">Rev-16 §12.9.5 reachability invariant violated — Phase 7</span><span class="sev med">MED</span></div>
+        <div class="f-body">
+          <div class="f-block"><div class="bk">Why deferred</div><div class="bv">battery_bank is not reachable in 45 min from the starter kit (<span class="cite">reachability.test.ts:13</span> it.todo); the named fix is the Phase-7 tutorial restructure, not a data patch.</div></div>
+          <div class="f-block"><div class="bk">If fixed next</div><div class="bv">Execute the §07 mitigation hierarchy: tutorial restructure with the steel-beam BOM rework.</div></div>
+        </div>
+        <div class="f-decide" data-picker="D-03"><label class="opt"><input type="radio" name="D-03" value="fix">fix next</label><label class="opt"><input type="radio" name="D-03" value="defer">defer</label><label class="opt"><input type="radio" name="D-03" value="accept">accept risk</label></div>
+      </article>
+
+      <article class="finding" id="D-04">
+        <div class="f-head"><span class="f-id">D-04</span><span class="f-title">Pass-2 sibling competition unrationed (economy)</span><span class="sev med">MED</span></div>
+        <div class="f-body">
+          <div class="f-block"><div class="bk">Why deferred</div><div class="bv">Found during Task 3: multiple small consumers can collectively over-claim a constrained supply (each compares its demand against the full pool individually). Out of the sweep’s scope; needs a rationing design in pass 2.</div></div>
+          <div class="f-block"><div class="bk">If fixed next</div><div class="bv">Proportionally ration <code>inputAvail</code> across competing consumers of the same resource within a segment.</div></div>
+        </div>
+        <div class="f-decide" data-picker="D-04"><label class="opt"><input type="radio" name="D-04" value="fix">fix next</label><label class="opt"><input type="radio" name="D-04" value="defer">defer</label><label class="opt"><input type="radio" name="D-04" value="accept">accept risk</label></div>
+      </article>
+
+      <article class="finding" id="D-05">
+        <div class="f-head"><span class="f-id">D-05</span><span class="f-title">Trench/nodule sync deferred for non-volcanic lazy mints</span><span class="sev low">LOW</span></div>
+        <div class="f-body">
+          <div class="f-block"><div class="bk">Why deferred</div><div class="bv">Side-effect of the hang fix (<code>a5967fb</code>): world-level trench/nodule cells aren’t synced into newly-minted non-volcanic cells until a volcanic island appears. No test pins either behavior; prior behavior was itself position-unstable.</div></div>
+          <div class="f-block"><div class="bk">If fixed next</div><div class="bv">Decide whether lazy non-volcanic mints should surface deep-zone features for ocean-building placement; if yes, bound the sync to the new cells’ bbox.</div></div>
+        </div>
+        <div class="f-decide" data-picker="D-05"><label class="opt"><input type="radio" name="D-05" value="fix">fix next</label><label class="opt"><input type="radio" name="D-05" value="defer">defer</label><label class="opt"><input type="radio" name="D-05" value="accept">accept risk</label></div>
+      </article>
+
+      <article class="finding" id="D-06">
+        <div class="f-head"><span class="f-id">D-06</span><span class="f-title">Balance-review items: filler cost curve, ocean extractor pacing, catalog counts</span><span class="sev info">INFO</span></div>
+        <div class="f-body">
+          <div class="f-block"><div class="bk">Why deferred</div><div class="bv">Skilltree filler costs deviate from SPEC §9.3’s <code>round(1.5^(depth−1))</code> ramp (~2.5×, looks deliberate); ocean extractors at 4.1s/weight-100 conform to the density-table doc but dwarf land extractors; catalog totals 363/86/31 vs SPEC’s “357 (246+81+30)”. All need a design decision or a SPEC amendment, not a code fix.</div></div>
+          <div class="f-block"><div class="bk">If fixed next</div><div class="bv">Run a balance pass; amend SPEC §9.3 counts or trim the catalog.</div></div>
+        </div>
+        <div class="f-decide" data-picker="D-06"><label class="opt"><input type="radio" name="D-06" value="fix">fix next</label><label class="opt"><input type="radio" name="D-06" value="defer">defer</label><label class="opt"><input type="radio" name="D-06" value="accept">accept risk</label></div>
+      </article>
+
+      <article class="finding" id="D-07">
+        <div class="f-head"><span class="f-id">D-07</span><span class="f-title">Test-debt buckets: Phase-10 stale fixtures, “deferred-rebalance §06” skips, mass-balance backlog, perf-test skip</span><span class="sev low">LOW</span></div>
+        <div class="f-body">
+          <div class="f-block"><div class="bk">Why deferred</div><div class="bv">8 blast-furnace/smelter fixture skips await the Phase-10 cohort; 3 skips cite a rebalance doc that doesn’t exist; 202 mass-balance skips are deliberately outside the binding gate; routes-renderer perf skip (2.48ms vs 0.76ms baseline) needs a profiled re-measure.</div></div>
+          <div class="f-block"><div class="bk">If fixed next</div><div class="bv">Recalibrate fixtures alongside D-02’s cohort; re-measure the perf gate on quiet hardware.</div></div>
+        </div>
+        <div class="f-decide" data-picker="D-07"><label class="opt"><input type="radio" name="D-07" value="fix">fix next</label><label class="opt"><input type="radio" name="D-07" value="defer">defer</label><label class="opt"><input type="radio" name="D-07" value="accept">accept risk</label></div>
+      </article>
+
+      <article class="finding" id="D-08">
+        <div class="f-head"><span class="f-id">D-08</span><span class="f-title">Design-intent flags: weather visibility units, rerollModifiers entropy, helicopter T1, CO₂ retroactive dwell, 5-point sampling, invSeen semantics, merge id format</span><span class="sev info">INFO</span></div>
+        <div class="f-body">
+          <div class="f-block"><div class="bk">Why deferred</div><div class="bv">Each is pinned by tests/docstrings as a plausible deliberate choice, or is cosmetic (merge re-mints use the legacy id format — disjoint namespace, no collision). Listed so they’re known, not lost.</div></div>
+          <div class="f-block"><div class="bk">If fixed next</div><div class="bv">Confirm intent per item with the spec owner; amend SPEC or code accordingly.</div></div>
+        </div>
+        <div class="f-decide" data-picker="D-08"><label class="opt"><input type="radio" name="D-08" value="fix">fix next</label><label class="opt"><input type="radio" name="D-08" value="defer">defer</label><label class="opt"><input type="radio" name="D-08" value="accept">accept risk</label></div>
+      </article>
+
+      <div class="selections">
+        <h3>Follow-up decisions</h3>
+        <div class="sel-grid" id="selGrid"></div>
+        <div class="actions">
+          <button class="action" id="copyJson">Copy as JSON</button>
+          <button class="action" id="copyPrompt">Copy as remediation prompt</button>
+          <span class="toast" id="toast"></span>
+        </div>
+      </div>
+    </section>
+
+    <section id="process">
+      <div class="sec-head"><span class="num">6</span><h2>Process notes — honest accounting</h2></div>
+      <p class="sec-intro">What the pipeline got right and where it broke, for the next sweep.</p>
+      <table class="tbl">
+        <thead><tr><th>Event</th><th>What happened</th><th>Lesson applied</th></tr></thead>
+        <tbody>
+          <tr><td>Two-stage Opus reviews</td><td>Caught real defects implementers missed: a vacuous determinism test, a positional-matching hazard, a signature missing rendered data, golden values that needed independent re-derivation.</td><td>Kept mandatory; reviewers now gate-first-then-read.</td></tr>
+          <tr><td>Task 6 implementer death</td><td>A sonnet implementer overflowed its context mid-task; 668 uncommitted lines were salvaged by a fresh agent and landed with full pin-verification.</td><td>Salvage-don’t-reset is now the default for substantial uncommitted work.</td></tr>
+          <tr><td>Workflow attempt (Tasks 12–15)</td><td>Haiku relay agents detached from their background kimi processes — no structured output, one task landed tsc-broken, reviews never ran. Stopped; remainder finished with direct dispatching.</td><td>Relay layers removed; lessons written into the SDD patch skill (await mechanics, triage-node model escalation).</td></tr>
+          <tr><td>Kimi “churn” incident</td><td>Kimi looped for an hour on Task 14 — vindicated by session forensics: the orchestrator brief claimed “suite green” while npm test was already hanging (the Task-12 lazy-seeding bomb). All 8 of its commits were correct.</td><td>Verify the gate before writing it into a brief; lesson recorded in the skill.</td></tr>
+          <tr><td>History hygiene</td><td>Three Task-12 commits were transiently tsc-red (exhaustive Record missing a key) — violates the every-commit-green invariant; not repairable without a rewrite.</td><td>Noted; per-commit tsc in implementer briefs.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <div class="footer">
+      <p>Bug-sweep report · generated 2026-06-10 · base <code>ffb246a</code> → head <code>235f08f</code> (98 commits, linear, pushed) ·
+      final gate: 3023 passed / 224 skipped / 1 todo · tsc clean · vite build clean ·
+      plan: <code>docs/superpowers/plans/2026-06-10-bug-sweep.md</code></p>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const state = {};
+      const strips = document.querySelectorAll('.f-decide');
+      strips.forEach((strip) => {
+        const name = strip.dataset.picker;
+        if (!name) return;
+        strip.querySelectorAll('input[type=radio]').forEach((r) => {
+          if (r.checked) state[name] = r.value;
+          r.addEventListener('change', () => { if (r.checked) { state[name] = r.value; render(); } });
+          r.closest('.opt').addEventListener('click', (e) => {
+            if (e.target.tagName === 'INPUT') return;
+            r.checked = true; state[name] = r.value; render();
+          });
+        });
+      });
+      function render() {
+        strips.forEach((strip) => {
+          strip.querySelectorAll('.opt').forEach((opt) => {
+            const r = opt.querySelector('input[type=radio]');
+            opt.dataset.selected = (r && r.checked) ? 'true' : 'false';
+          });
+        });
+        const grid = document.getElementById('selGrid');
+        if (!grid) return;
+        grid.innerHTML = '';
+        Object.entries(state).forEach(([k, v]) => {
+          const row = document.createElement('div');
+          row.className = 'sel-row';
+          row.innerHTML = '<span class="k">' + k + '</span><span class="v">' + v + '</span>';
+          grid.appendChild(row);
+        });
+      }
+      const toast = document.getElementById('toast');
+      function flash(msg) {
+        if (!toast) return;
+        toast.textContent = msg; toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 1600);
+      }
+      function clip(text, label) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(() => flash(label), () => fallback(text, label));
+        } else { fallback(text, label); }
+      }
+      function fallback(text, label) {
+        const ta = document.createElement('textarea');
+        ta.value = text; document.body.appendChild(ta);
+        ta.select(); try { document.execCommand('copy'); } catch (_) {}
+        document.body.removeChild(ta); flash(label);
+      }
+      document.getElementById('copyJson').addEventListener('click', () =>
+        clip(JSON.stringify(state, null, 2), '✓ JSON copied'));
+      document.getElementById('copyPrompt').addEventListener('click', () => {
+        const lines = Object.entries(state).map(([k, v]) => '- ' + k + ': ' + v);
+        clip('Apply these bug-sweep follow-up decisions (each "fix next" item is its own task with its own ' +
+             'verification; see docs/reports/2026-06-10-bug-sweep.html section 5 for evidence and remediation detail):\n' +
+             lines.join('\n'), '✓ Prompt copied');
+      });
+      render();
+    })();
+  </script>
+</body>
+</html>
