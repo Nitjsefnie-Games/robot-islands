@@ -32,8 +32,10 @@ import type { IslandSpec, WorldState } from './world.js';
 
 /**
  * Mounts a fixed-position panel and returns an `update` function. Calling
- * `update(state, net, power, …)` rewrites the panel's contents to match the
- * given state. The `net` argument carries per-resource net production rate
+ * `update(state, net, power, …)` refreshes the panel's contents to match the
+ * given state (retained DOM: structure rebuilds only when a row-set signature
+ * changes; otherwise only changed values are written).
+ * The `net` argument carries per-resource net production rate
  * (units/sec), consumed by the alarms section. The `power` argument carries
  * the §5.1 electrical balance; `factor` colour-codes brownout severity.
  */
@@ -444,20 +446,17 @@ function pushSparkSample(islandId: string, resourceId: ResourceId, rate: number)
   sparkHistory.set(key, buf);
 }
 
-function renderSparkline(samples: ReadonlyArray<number>, tone: 'success' | 'danger'): SVGSVGElement {
-  const w = 60;
-  const h = 14;
-  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-  svg.setAttribute('width', String(w));
-  svg.setAttribute('height', String(h));
-  svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
-  svg.style.cssText = 'display: inline-block; vertical-align: middle; margin-right: 4px';
-  if (samples.length < 2) return svg;
-  // Symmetric scale around 0 so a flipping sign is visible (negatives
-  // dip below the midline; positives sit above).
+const SPARK_W = 60;
+const SPARK_H = 14;
+
+/** Pure path-data builder for the sparkline polyline. Symmetric scale around
+ *  0 so a flipping sign is visible (negatives dip below the midline;
+ *  positives sit above). The 2-decimal `toFixed` quantization doubles as the
+ *  redraw gate: visually-identical frames produce the same string. */
+function sparklinePathD(samples: ReadonlyArray<number>): string {
   const peak = Math.max(0.0001, ...samples.map((s) => Math.abs(s)));
-  const mid = h / 2;
-  const stepX = w / Math.max(1, samples.length - 1);
+  const mid = SPARK_H / 2;
+  const stepX = SPARK_W / Math.max(1, samples.length - 1);
   let d = '';
   for (let i = 0; i < samples.length; i++) {
     const s = samples[i] ?? 0;
@@ -465,25 +464,109 @@ function renderSparkline(samples: ReadonlyArray<number>, tone: 'success' | 'dang
     const y = mid - (s / peak) * (mid - 1);
     d += (i === 0 ? 'M' : ' L') + x.toFixed(2) + ' ' + y.toFixed(2);
   }
+  return d;
+}
+
+/** Retained sparkline — SVG + children created once per rate row, mutated in
+ *  place. Per frame only the path's `d` (gated on the formatted/quantized
+ *  path string, so identical-looking frames skip the canvas work entirely)
+ *  and `stroke` (gated on tone) are written. With <2 samples the path and
+ *  baseline are detached so the output matches the legacy empty `<svg>`. */
+interface RetainedSparkline {
+  readonly svg: SVGSVGElement;
+  readonly path: SVGPathElement;
+  readonly base: SVGLineElement;
+  attached: boolean;
+  lastD: string;
+  lastStroke: string;
+}
+
+function makeRetainedSparkline(): RetainedSparkline {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('width', String(SPARK_W));
+  svg.setAttribute('height', String(SPARK_H));
+  svg.setAttribute('viewBox', `0 0 ${SPARK_W} ${SPARK_H}`);
+  svg.style.cssText = 'display: inline-block; vertical-align: middle; margin-right: 4px';
   const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-  path.setAttribute('d', d);
   path.setAttribute('fill', 'none');
-  path.setAttribute(
-    'stroke',
-    tone === 'success' ? 'var(--ri-success, #60d0a0)' : 'var(--ri-danger, #e6504c)',
-  );
   path.setAttribute('stroke-width', '1');
-  svg.appendChild(path);
   // Zero baseline.
   const base = document.createElementNS('http://www.w3.org/2000/svg', 'line');
   base.setAttribute('x1', '0');
-  base.setAttribute('x2', String(w));
-  base.setAttribute('y1', String(mid));
-  base.setAttribute('y2', String(mid));
+  base.setAttribute('x2', String(SPARK_W));
+  base.setAttribute('y1', String(SPARK_H / 2));
+  base.setAttribute('y2', String(SPARK_H / 2));
   base.setAttribute('stroke', 'var(--ri-border-strong, #2a3340)');
   base.setAttribute('stroke-width', '0.5');
-  svg.appendChild(base);
-  return svg;
+  return { svg, path, base, attached: false, lastD: '', lastStroke: '' };
+}
+
+function updateSparkline(
+  sp: RetainedSparkline,
+  samples: ReadonlyArray<number>,
+  tone: 'success' | 'danger',
+): void {
+  if (samples.length < 2) {
+    if (sp.attached) {
+      sp.svg.removeChild(sp.path);
+      sp.svg.removeChild(sp.base);
+      sp.attached = false;
+    }
+    return;
+  }
+  if (!sp.attached) {
+    sp.svg.appendChild(sp.path);
+    sp.svg.appendChild(sp.base);
+    sp.attached = true;
+  }
+  const d = sparklinePathD(samples);
+  if (d !== sp.lastD) {
+    sp.lastD = d;
+    sp.path.setAttribute('d', d);
+  }
+  const stroke =
+    tone === 'success' ? 'var(--ri-success, #60d0a0)' : 'var(--ri-danger, #e6504c)';
+  if (stroke !== sp.lastStroke) {
+    sp.lastStroke = stroke;
+    sp.path.setAttribute('stroke', stroke);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Change-gated DOM writers — house pattern (orbital-ui / build-queue-ui /
+// settlement-ui): structure rebuilds only on signature change; per-frame
+// value writes compare against the last-written string and skip the DOM
+// write when equal.
+// ---------------------------------------------------------------------------
+
+/** Change-gated `textContent` writer. */
+function gatedText(el: HTMLElement): (text: string) => void {
+  let last: string | null = null;
+  return (text) => {
+    if (text === last) return;
+    last = text;
+    el.textContent = text;
+  };
+}
+
+/** Change-gated `data-tone` writer. */
+function gatedTone(el: HTMLElement): (tone: string) => void {
+  let last: string | null = null;
+  return (tone) => {
+    if (tone === last) return;
+    last = tone;
+    el.dataset.tone = tone;
+  };
+}
+
+/** Change-gated CSS custom-property writer. */
+function gatedStyleProp(el: HTMLElement, prop: string): (value: string) => void {
+  let last: string | null = null;
+  return (value) => {
+    if (value === last) return;
+    last = value;
+    el.style.setProperty(prop, value);
+  };
 }
 
 export function mountHud(
@@ -513,8 +596,9 @@ export function mountHud(
   panel.appendChild(body);
 
   // Persistent interactive elements — created once so their click targets
-  // survive the 60Hz body rebuild. Marked with a data attribute so the
-  // clear loop skips them.
+  // (and listeners) are never recreated. The data attribute is the legacy
+  // persistence marker; kept for styling/test hooks even though the whole
+  // body is now retained.
   const tierResetRow = document.createElement('div');
   tierResetRow.classList.add('ri-kv');
   tierResetRow.dataset.hudPersistent = 'true';
@@ -535,17 +619,176 @@ export function mountHud(
   invBtn.textContent = 'Inventory (I)';
   invBtn.addEventListener('click', () => dispatchAction(reg, 'toggle-inventory'));
 
-  function clearDynamicChildren(): void {
-    let child = body.firstChild;
-    while (child) {
-      const next = child.nextSibling;
-      if (child instanceof HTMLElement && child.dataset.hudPersistent === 'true') {
-        // skip persistent elements
-      } else {
-        body.removeChild(child);
-      }
-      child = next;
-    }
+  // ── Static skeleton — built ONCE ──────────────────────────────────────────
+  // perf: the legacy per-frame teardown/rebuild (clearDynamicChildren +
+  // createElement for every row) profiled at 3.1% inclusive CPU plus GC
+  // churn. The body structure is now retained; update() only writes values
+  // that changed, and rebuilds a sub-region only when its row-set signature
+  // changes (which resources show, tier-reset/offer presence).
+
+  // XP block.
+  const xpKv = document.createElement('div');
+  xpKv.classList.add('ri-kv');
+  const xpK = document.createElement('span');
+  xpK.classList.add('ri-kv__k');
+  const xpV = document.createElement('span');
+  xpV.classList.add('ri-kv__v');
+  xpKv.appendChild(xpK);
+  xpKv.appendChild(xpV);
+
+  const xpMeter = document.createElement('div');
+  xpMeter.classList.add('ri-meter');
+  const xpFill = document.createElement('div');
+  xpFill.classList.add('ri-meter__fill');
+  xpMeter.appendChild(xpFill);
+
+  // Power row.
+  const powerKv = document.createElement('div');
+  powerKv.classList.add('ri-kv');
+  const powerK = document.createElement('span');
+  powerK.classList.add('ri-kv__k');
+  powerK.textContent = '⚡ POWER';
+  const powerV = document.createElement('span');
+  powerV.classList.add('ri-kv__v');
+  powerKv.appendChild(powerK);
+  powerKv.appendChild(powerV);
+
+  const powerMeter = document.createElement('div');
+  powerMeter.classList.add('ri-meter');
+  const powerFill = document.createElement('div');
+  powerFill.classList.add('ri-meter__fill');
+  powerMeter.appendChild(powerFill);
+
+  // Network row.
+  const netKv = document.createElement('div');
+  netKv.classList.add('ri-kv');
+  const netK = document.createElement('span');
+  netK.classList.add('ri-kv__k');
+  netK.textContent = '⌬ NETWORK';
+  const netV = document.createElement('span');
+  netV.classList.add('ri-kv__v');
+  netKv.appendChild(netK);
+  netKv.appendChild(netV);
+
+  // Site section.
+  const siteHead = document.createElement('div');
+  siteHead.classList.add('ri-sectionhead');
+  siteHead.textContent = 'Site';
+
+  const modRow = document.createElement('div');
+  modRow.classList.add('modifiers');
+
+  // Signal Exchange next-offer row — created once, attached only while the
+  // island hosts a Signal Exchange (presence managed in update()).
+  const offerKv = document.createElement('div');
+  offerKv.classList.add('ri-kv');
+  const offerK = document.createElement('span');
+  offerK.classList.add('ri-kv__k');
+  offerK.textContent = 'Next offer';
+  const offerV = document.createElement('span');
+  offerV.classList.add('ri-kv__v');
+  offerKv.appendChild(offerK);
+  offerKv.appendChild(offerV);
+
+  // §9.9 active-play bonus row.
+  const abKv = document.createElement('div');
+  abKv.classList.add('ri-kv');
+  const abK = document.createElement('span');
+  abK.classList.add('ri-kv__k');
+  abK.textContent = 'Active bonus';
+  const abV = document.createElement('span');
+  abV.classList.add('ri-kv__v');
+  abKv.appendChild(abK);
+  abKv.appendChild(abV);
+
+  // Output rates section.
+  const ratesHead = document.createElement('div');
+  ratesHead.classList.add('ri-sectionhead');
+  ratesHead.textContent = 'Output rates';
+
+  // Placeholder shown when no resource has a non-zero displayed rate.
+  const emptyRates = document.createElement('div');
+  emptyRates.classList.add('ri-kv__k');
+  emptyRates.textContent = 'no production';
+
+  // Assemble in render order. Conditional elements (tierResetRow before
+  // xpMeter, offerKv before abKv, rate rows before invBtn) are inserted
+  // against these stable anchors when their presence flips.
+  body.appendChild(xpKv);
+  body.appendChild(xpMeter);
+  body.appendChild(powerKv);
+  body.appendChild(powerMeter);
+  body.appendChild(netKv);
+  body.appendChild(siteHead);
+  body.appendChild(modRow);
+  body.appendChild(abKv);
+  body.appendChild(ratesHead);
+  body.appendChild(invBtn);
+
+  // Change-gated value writers.
+  const setTitle = gatedText(titleEl);
+  const setSub = gatedText(subEl);
+  const setXpK = gatedText(xpK);
+  const setXpV = gatedText(xpV);
+  const setXpPct = gatedStyleProp(xpFill, '--ri-meter-pct');
+  const setPowerV = gatedText(powerV);
+  const setPowerVTone = gatedTone(powerV);
+  const setPowerMeterTone = gatedTone(powerMeter);
+  const setPowerPct = gatedStyleProp(powerFill, '--ri-meter-pct');
+  const setNetV = gatedText(netV);
+  const setNetVTone = gatedTone(netV);
+  const setOfferV = gatedText(offerV);
+  const setAbV = gatedText(abV);
+
+  // Structural state — what the retained DOM currently shows.
+  let tierResetShown = false;
+  let offerShown = false;
+  let lastModSig: string | null = null;
+  let lastRatesSig: string | null = null;
+  let ratesRegion: HTMLElement[] = [];
+
+  // Rate-row cache, keyed by resource id (bounded by |ALL_RESOURCES| — no
+  // eviction needed, unlike build-queue-ui's unbounded building ids). The
+  // label is resource-derived and island-independent; tones/values/sparkline
+  // are rewritten per frame, so rows are safely reused across island switches.
+  interface RateRowEntry {
+    readonly row: HTMLDivElement;
+    readonly setDotTone: (t: string) => void;
+    readonly setVTone: (t: string) => void;
+    readonly setVText: (t: string) => void;
+    readonly spark: RetainedSparkline;
+  }
+  const rateRowCache = new Map<ResourceId, RateRowEntry>();
+
+  function makeRateRow(r: ResourceId): RateRowEntry {
+    const row = document.createElement('div');
+    row.classList.add('ri-kv');
+    const k = document.createElement('span');
+    k.classList.add('ri-kv__k');
+    const dot = document.createElement('span');
+    dot.classList.add('ri-dot');
+    k.appendChild(dot);
+    k.appendChild(document.createTextNode(' ' + toDisplayName(r)));
+    const v = document.createElement('span');
+    v.classList.add('ri-kv__v');
+    const spark = makeRetainedSparkline();
+    const vTextNode = document.createTextNode('');
+    v.appendChild(spark.svg);
+    v.appendChild(vTextNode);
+    row.appendChild(k);
+    row.appendChild(v);
+    let lastVText: string | null = null;
+    return {
+      row,
+      setDotTone: gatedTone(dot),
+      setVTone: gatedTone(v),
+      setVText: (t) => {
+        if (t === lastVText) return;
+        lastVText = t;
+        vTextNode.data = t;
+      },
+      spark,
+    };
   }
 
   function update(
@@ -559,127 +802,84 @@ export function mountHud(
     _activeIslandId: string,
     _islandPower: Map<string, PowerBalance>,
   ): void {
-    titleEl.textContent = spec.name;
+    setTitle(spec.name);
     const tier = tierForLevel(state.level);
     const biomeName = BIOME_DEFS[spec.biome].displayName;
-    subEl.textContent = `T${tier} · ${biomeName}`;
-
-    clearDynamicChildren();
+    setSub(`T${tier} · ${biomeName}`);
 
     // ---- XP block ---------------------------------------------------------
     const need = xpForLevel(state.level + 1);
     const xpPct = need > 0 ? Math.min(100, Math.round((state.xp / need) * 100)) : 100;
-    const xpKv = document.createElement('div');
-    xpKv.classList.add('ri-kv');
-    const xpK = document.createElement('span');
-    xpK.classList.add('ri-kv__k');
     if (tier >= 5) {
-      xpK.textContent = `Level ${state.level} · MAX TIER`;
+      setXpK(`Level ${state.level} · MAX TIER`);
     } else {
       const gap = NEXT_TIER_LEVEL[tier] - state.level;
-      xpK.textContent = `Level ${state.level} · ${gap} to T${tier + 1}`;
+      setXpK(`Level ${state.level} · ${gap} to T${tier + 1}`);
     }
-    const xpV = document.createElement('span');
-    xpV.classList.add('ri-kv__v');
-    xpV.textContent = `XP ${fmt(state.xp)} / ${fmt(need)}`;
-    xpKv.appendChild(xpK);
-    xpKv.appendChild(xpV);
-    body.appendChild(xpKv);
+    setXpV(`XP ${fmt(state.xp)} / ${fmt(need)}`);
+    setXpPct(`${xpPct}%`);
 
-    // §9.7 tier reset surface — append only when applicable; remove when not,
-    // so the element is absent from the DOM rather than hidden-and-orphaned.
-    // clearDynamicChildren skips it (hudPersistent), so we manage its presence here.
-    if (canTierReset(state, Date.now()).ok) {
-      body.appendChild(tierResetRow);
-    } else if (tierResetRow.parentNode) {
-      tierResetRow.parentNode.removeChild(tierResetRow);
+    // §9.7 tier reset surface — present only when applicable; absent from the
+    // DOM rather than hidden-and-orphaned. Presence is structural, so the
+    // insert/remove happens only on transitions (slot: after xpKv, before
+    // xpMeter — same order the legacy per-frame rebuild produced).
+    const tierResetOk = canTierReset(state, Date.now()).ok;
+    if (tierResetOk !== tierResetShown) {
+      tierResetShown = tierResetOk;
+      if (tierResetOk) body.insertBefore(tierResetRow, xpMeter);
+      else body.removeChild(tierResetRow);
     }
-
-    const xpMeter = document.createElement('div');
-    xpMeter.classList.add('ri-meter');
-    const xpFill = document.createElement('div');
-    xpFill.classList.add('ri-meter__fill');
-    xpFill.style.setProperty('--ri-meter-pct', `${xpPct}%`);
-    xpMeter.appendChild(xpFill);
-    body.appendChild(xpMeter);
 
     // ---- Power row --------------------------------------------------------
     const pTone = powerTone(power.factor);
-    const powerKv = document.createElement('div');
-    powerKv.classList.add('ri-kv');
-    const powerK = document.createElement('span');
-    powerK.classList.add('ri-kv__k');
-    powerK.textContent = '⚡ POWER';
-    const powerV = document.createElement('span');
-    powerV.classList.add('ri-kv__v');
-    powerV.dataset.tone = pTone;
-    powerV.textContent = `${fmtPower(power.produced)} / ${fmtPower(power.consumed)} · ${power.factor.toFixed(2)}×`;
-    powerKv.appendChild(powerK);
-    powerKv.appendChild(powerV);
-    body.appendChild(powerKv);
-
-    const powerMeter = document.createElement('div');
-    powerMeter.classList.add('ri-meter');
-    powerMeter.dataset.tone = pTone;
-    const powerFill = document.createElement('div');
-    powerFill.classList.add('ri-meter__fill');
+    setPowerVTone(pTone);
+    setPowerV(`${fmtPower(power.produced)} / ${fmtPower(power.consumed)} · ${power.factor.toFixed(2)}×`);
+    setPowerMeterTone(pTone);
     const powerPct = power.produced > 0 ? Math.min(100, Math.round((power.consumed / power.produced) * 100)) : 0;
-    powerFill.style.setProperty('--ri-meter-pct', `${powerPct}%`);
-    powerMeter.appendChild(powerFill);
-    body.appendChild(powerMeter);
+    setPowerPct(`${powerPct}%`);
 
     // ---- Network row ------------------------------------------------------
-    const netKv = document.createElement('div');
-    netKv.classList.add('ri-kv');
-    const netK = document.createElement('span');
-    netK.classList.add('ri-kv__k');
-    netK.textContent = '⌬ NETWORK';
-    const netV = document.createElement('span');
-    netV.classList.add('ri-kv__v');
     const enRouteSuffix = vehiclesEnRoute > 0 ? ` · +${vehiclesEnRoute} en route` : '';
     if (ncState.tier3PlusCount === 0) {
-      netV.textContent = enRouteSuffix === '' ? '—' : `—${enRouteSuffix}`;
-      netV.dataset.tone = vehiclesEnRoute > 0 ? 'success' : 'dim';
+      setNetV(enRouteSuffix === '' ? '—' : `—${enRouteSuffix}`);
+      setNetVTone(vehiclesEnRoute > 0 ? 'success' : 'dim');
     } else {
       const buffPct = Math.round((ncState.globalProductionBuff - 1) * 100);
-      netV.textContent = `${ncState.tier3PlusCount} at T3+ · NC tier ${ncState.milestone} · +${buffPct}%${enRouteSuffix}`;
-      netV.dataset.tone = 'success';
+      setNetV(`${ncState.tier3PlusCount} at T3+ · NC tier ${ncState.milestone} · +${buffPct}%${enRouteSuffix}`);
+      setNetVTone('success');
     }
-    netKv.appendChild(netK);
-    netKv.appendChild(netV);
-    body.appendChild(netKv);
 
     // ---- Site section -----------------------------------------------------
-    const siteHead = document.createElement('div');
-    siteHead.classList.add('ri-sectionhead');
-    siteHead.textContent = 'Site';
-    body.appendChild(siteHead);
-
-    const modRow = document.createElement('div');
-    modRow.classList.add('modifiers');
-    if (spec.modifiers.length === 0) {
-      const empty = document.createElement('span');
-      empty.classList.add('ri-kv__k');
-      empty.textContent = '—';
-      modRow.appendChild(empty);
-    } else {
-      for (const id of spec.modifiers) {
-        const def = MODIFIER_DEFS[id];
-        const chip = document.createElement('span');
-        chip.classList.add('ri-chip');
-        chip.textContent = def.displayName;
-        chip.title = def.description + (def.placeholder ? ' (placeholder — system pending)' : '');
-        const tone =
-          def.category === 'positive' ? 'success' :
-          def.category === 'warning' ? 'warn' :
-          def.category === 'exotic' ? 'exotic' :
-          undefined;
-        if (tone) chip.dataset.tone = tone;
-        if (def.placeholder) chip.style.borderStyle = 'dashed';
-        modRow.appendChild(chip);
+    // Chips derive entirely from the modifier-id list (static MODIFIER_DEFS),
+    // so the row-set signature is just the joined ids — rebuild on island
+    // switch / modifier change only. Chips carry no event listeners.
+    const modSig = spec.modifiers.join(',');
+    if (modSig !== lastModSig) {
+      lastModSig = modSig;
+      while (modRow.firstChild) modRow.removeChild(modRow.firstChild);
+      if (spec.modifiers.length === 0) {
+        const empty = document.createElement('span');
+        empty.classList.add('ri-kv__k');
+        empty.textContent = '—';
+        modRow.appendChild(empty);
+      } else {
+        for (const id of spec.modifiers) {
+          const def = MODIFIER_DEFS[id];
+          const chip = document.createElement('span');
+          chip.classList.add('ri-chip');
+          chip.textContent = def.displayName;
+          chip.title = def.description + (def.placeholder ? ' (placeholder — system pending)' : '');
+          const tone =
+            def.category === 'positive' ? 'success' :
+            def.category === 'warning' ? 'warn' :
+            def.category === 'exotic' ? 'exotic' :
+            undefined;
+          if (tone) chip.dataset.tone = tone;
+          if (def.placeholder) chip.style.borderStyle = 'dashed';
+          modRow.appendChild(chip);
+        }
       }
     }
-    body.appendChild(modRow);
 
     // ---- Signal Exchange next-offer countdown -----------------------------
     // §9.8: an island hosting a Signal Exchange surfaces a barter offer when
@@ -687,45 +887,26 @@ export function mountHud(
     // Show that countdown so the player knows when to check back. The cooldown
     // sits at 0 both while an offer is live and the instant before one spawns,
     // so 0 reads as "available now". Rendered only for islands that have the
-    // building (no Signal Exchange → no trade machinery → no row).
-    if (islandHasSignalExchange(state)) {
-      const offerKv = document.createElement('div');
-      offerKv.classList.add('ri-kv');
-      const offerK = document.createElement('span');
-      offerK.classList.add('ri-kv__k');
-      offerK.textContent = 'Next offer';
-      const offerV = document.createElement('span');
-      offerV.classList.add('ri-kv__v');
-      offerV.textContent =
-        state.tradeCooldownMs <= 0 ? 'available now' : formatCountdown(state.tradeCooldownMs);
-      offerKv.appendChild(offerK);
-      offerKv.appendChild(offerV);
-      body.appendChild(offerKv);
+    // building (no Signal Exchange → no trade machinery → no row). Presence
+    // is structural (slot: before abKv); the countdown text is value-gated.
+    const hasOffer = islandHasSignalExchange(state);
+    if (hasOffer !== offerShown) {
+      offerShown = hasOffer;
+      if (hasOffer) body.insertBefore(offerKv, abKv);
+      else body.removeChild(offerKv);
+    }
+    if (hasOffer) {
+      setOfferV(state.tradeCooldownMs <= 0 ? 'available now' : formatCountdown(state.tradeCooldownMs));
     }
 
     // ---- §9.9 active-play bonus -------------------------------------------
     // World-level: every focused minute adds +0.1% to every recipe on every
     // island; decays at 3× while away (including closed). Always rendered so
     // the mechanic is discoverable; "—" reads as "no bonus right now".
-    const abKv = document.createElement('div');
-    abKv.classList.add('ri-kv');
-    const abK = document.createElement('span');
-    abK.classList.add('ri-kv__k');
-    abK.textContent = 'Active bonus';
-    const abV = document.createElement('span');
-    abV.classList.add('ri-kv__v');
     const abPct = (activeBonusMul(world) - 1) * 100;
-    abV.textContent = abPct >= 0.05 ? `+${abPct.toFixed(1)}%` : '—';
-    abKv.appendChild(abK);
-    abKv.appendChild(abV);
-    body.appendChild(abKv);
+    setAbV(abPct >= 0.05 ? `+${abPct.toFixed(1)}%` : '—');
 
     // ---- Output rates section ---------------------------------------------
-    const ratesHead = document.createElement('div');
-    ratesHead.classList.add('ri-sectionhead');
-    ratesHead.textContent = 'Output rates';
-    body.appendChild(ratesHead);
-
     // Sample every resource's current net rate for the active island so
     // sparklines build full history even for resources that drop out of
     // the top-5 list briefly.
@@ -756,48 +937,53 @@ export function mountHud(
       .sort((a, b) => Math.abs(b.rate) - Math.abs(a.rate))
       .slice(0, 5);
 
-    if (topRates.length === 0) {
-      const empty = document.createElement('div');
-      empty.classList.add('ri-kv__k');
-      empty.textContent = 'no production';
-      body.appendChild(empty);
-    } else {
-      for (const { r, rate } of topRates) {
-        const row = document.createElement('div');
-        row.classList.add('ri-kv');
-        const k = document.createElement('span');
-        k.classList.add('ri-kv__k');
-        const dot = document.createElement('span');
-        dot.classList.add('ri-dot');
-        dot.dataset.tone = rate > 0 ? 'ok' : 'danger';
-        k.appendChild(dot);
-        k.appendChild(document.createTextNode(' ' + toDisplayName(r)));
-        const v = document.createElement('span');
-        v.classList.add('ri-kv__v');
-        v.dataset.tone = rate > 0 ? 'success' : 'danger';
-        const sign = rate > 0 ? '+' : '−';
-        const absRate = Math.abs(rate);
-        let vText = `${sign}${absRate.toFixed(2)}/s`;
-        if (rate < 0) {
-          const have = inv(state, r);
-          if (have > 0) {
-            const sec = Math.floor(have / absRate);
-            vText += ` · ${sec}s`;
+    // Row-set signature: the ordered resource ids. Order is structural here —
+    // rows are sorted by |rate| — so a reorder rebuilds the region (cached
+    // rows are re-inserted, not recreated). Identical signature → value
+    // writes only.
+    const ratesSig = topRates.map((e) => e.r).join(',');
+    if (ratesSig !== lastRatesSig) {
+      lastRatesSig = ratesSig;
+      for (const el of ratesRegion) body.removeChild(el);
+      ratesRegion = [];
+      if (topRates.length === 0) {
+        body.insertBefore(emptyRates, invBtn);
+        ratesRegion.push(emptyRates);
+      } else {
+        for (const { r } of topRates) {
+          let entry = rateRowCache.get(r);
+          if (!entry) {
+            entry = makeRateRow(r);
+            rateRowCache.set(r, entry);
           }
+          body.insertBefore(entry.row, invBtn);
+          ratesRegion.push(entry.row);
         }
-        v.textContent = vText;
-        const samples = sparkHistory.get(sparkKey(state.id, r)) ?? [];
-        const tone: 'success' | 'danger' = rate > 0 ? 'success' : 'danger';
-        const spark = renderSparkline(samples, tone);
-        v.prepend(spark);
-        row.appendChild(k);
-        row.appendChild(v);
-        body.appendChild(row);
       }
     }
 
-    // ---- Inventory hint ---------------------------------------------------
-    body.appendChild(invBtn);
+    // Per-frame value writes on the visible rate rows (all change-gated).
+    for (const { r, rate } of topRates) {
+      const entry = rateRowCache.get(r);
+      if (!entry) continue;
+      entry.setDotTone(rate > 0 ? 'ok' : 'danger');
+      const tone: 'success' | 'danger' = rate > 0 ? 'success' : 'danger';
+      entry.setVTone(tone);
+      const sign = rate > 0 ? '+' : '−';
+      const absRate = Math.abs(rate);
+      let vText = `${sign}${absRate.toFixed(2)}/s`;
+      if (rate < 0) {
+        const have = inv(state, r);
+        if (have > 0) {
+          const sec = Math.floor(have / absRate);
+          vText += ` · ${sec}s`;
+        }
+      }
+      entry.setVText(vText);
+      updateSparkline(entry.spark, sparkHistory.get(sparkKey(state.id, r)) ?? [], tone);
+    }
+
+    // Inventory hint (invBtn) is part of the static skeleton — always last.
 
     // Objective display lives in the bottom-center tutorial banner
     // (tutorial-ui.ts). The HUD's previous "Next objective" row was a
