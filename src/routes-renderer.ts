@@ -67,9 +67,11 @@ export class RouteRenderer {
   ): void {
     const key = routesCacheKey(routes);
 
-    // Static layer rebuilds on geometry-key change only; draft + visibility
-    // never invalidate the static cache (they live in the per-frame overlay).
-    if (key !== this.lastFullKey) {
+    // Static layer rebuilds when the route list changes OR when any endpoint
+    // position changes (fix 7.4: island moves / merge §3.6 were otherwise
+    // invisible until inFlight changed).  diffRebuild is O(routes) but cheap
+    // because the per-route key comparison short-circuits unchanged entries.
+    if (key !== this.lastFullKey || this.anyEndpointMoved(routes)) {
       this.diffRebuild(routes);
       this.lastFullKey = key;
     }
@@ -78,16 +80,33 @@ export class RouteRenderer {
     this.paintOverlay(routes, nowMs, draftKey, panelVisible);
   }
 
+  /** Return true if any existing entry's stored endpoint coords no longer
+   *  match the resolver's current output.  O(entries) — no allocation. */
+  private anyEndpointMoved(routes: ReadonlyArray<Route>): boolean {
+    for (const r of routes) {
+      const e = this.entries.get(r.id);
+      if (!e) continue; // new route — diffRebuild will handle it
+      const from = this.resolveIslandPos(r.from);
+      const to = this.resolveIslandPos(r.to);
+      if (!from || !to) continue;
+      if (from.x !== e.fromX || from.y !== e.fromY ||
+          to.x !== e.toX || to.y !== e.toY) return true;
+    }
+    return false;
+  }
+
   private diffRebuild(routes: ReadonlyArray<Route>): void {
     const seen = new Set<string>();
     for (const r of routes) {
       seen.add(r.id);
-      const perRouteKey = `${r.type}|${r.from}|${r.to}|${r.inFlight.length}`;
-      const existing = this.entries.get(r.id);
-      if (existing && existing.cacheKey === perRouteKey) continue;
-
+      // Fix 7.4: include endpoint world coords in the per-route key so that an
+      // island-centre move (merge §3.6 / land reclamation) invalidates the cache
+      // and the drawn route is rebuilt to the new position.
       const from = this.resolveIslandPos(r.from);
       const to = this.resolveIslandPos(r.to);
+      const perRouteKey = `${r.type}|${r.from}|${r.to}|${r.inFlight.length}|${from?.x}|${from?.y}|${to?.x}|${to?.y}`;
+      const existing = this.entries.get(r.id);
+      if (existing && existing.cacheKey === perRouteKey) continue;
       if (!from || !to) {
         // Defensive — drop any half-built entry until both endpoints resolve.
         if (existing) {
