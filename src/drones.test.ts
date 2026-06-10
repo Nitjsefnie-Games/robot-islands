@@ -1841,3 +1841,86 @@ describe('Fix 6.3: destruction fate decided at dispatch', () => {
     expect(w.revealedCells.size).toBeGreaterThan(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Fix 6.4 — rare-island bias only applies to rare islands
+// ---------------------------------------------------------------------------
+
+describe('Fix 6.4: rare-bias ring discovers rare islands only', () => {
+  // The Probability Engine expands the corridor ONLY for RARE islands
+  // (discoverRareIslands). Ordinary islands must use the plain `corridor`.
+  //
+  // Ring geometry: T5 drone (scanRadius 12) with one operational
+  // probability_engine (bias 0.25 → expanded radius 15) flying east along
+  // y=2. `corridorCells` clips its candidate walk to the path bbox expanded
+  // by the radius: plain reaches y ≤ 14 (cell row 0 only), expanded reaches
+  // y ≤ 17 (row 1 included; row-1 cell centers at y=24 sit at distance 22
+  // ≤ 15 + half-cell-diagonal ≈ 26.3). An island whose footprint lies
+  // entirely in row 1 is therefore in the expanded corridor but NOT the
+  // plain one — the rare-bias ring.
+
+  function makeWorld6_4(seed: string): WorldState {
+    return {
+      islands: [{
+        id: 'home', name: 'home', biome: 'plains',
+        cx: 0, cy: 0, majorRadius: 5, minorRadius: 5,
+        populated: true, discovered: true,
+        buildings: [{ id: 'pe1', defId: 'probability_engine', x: 0, y: 0 }],
+        modifiers: [],
+      }],
+      drones: [], routes: [], vehicles: [],
+      revealedCells: new Set(), satellites: [], repairDrones: [], debrisFields: [],
+      endgameState: { achieved: new Set(), firstAchievedMs: null },
+      latticeActive: false, latticeNodeIslands: [], commPackets: [],
+      totalCo2Kg: 0, playerLat: null, playerLon: null,
+      oceanCells: new Map(), depthRevealedCells: new Set(),
+      seed,
+      recentBuildAttempts: new Set(), recentBuildAttemptTs: new Map(),
+    };
+  }
+
+  /** Dispatch the ring-probe T5 drone and tick its whole flight. The island
+   *  under test sits at (30, 24), footprint y∈[21,27] — cell row 1 only. */
+  function flyRingProbe(w: WorldState, island: IslandSpec): void {
+    const home = makeIslandState({
+      id: 'home',
+      buildings: [{ id: 'pe1', defId: 'probability_engine', x: 0, y: 0 }],
+    });
+    home.inventory.plasma_charge = 50;
+    w.islands.push(island);
+    // Path 60 tiles → round-trip 120 = 15 fuel × DRONE_T5_EFFICIENCY (8).
+    const waypoints = [{ x: 0, y: 2 }, { x: 60, y: 2 }] as const;
+    const r = dispatchDrone(w, home, 0, 2, 1, 0, 15, 0, waypoints);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.drone.probabilityBias).toBe(0.25); // guard: engine counted
+    tickDrones(w, r.drone.expectedReturnTime + 1000, 0);
+    // Guard: drone survived, so the return flush DID run — an undiscovered
+    // ordinary island below is not explained by drone loss.
+    expect(r.drone.status).toBe('returned');
+  }
+
+  it('ordinary island only in the expanded ring stays undiscovered', () => {
+    const w = makeWorld6_4('clear-0');
+    const ordinaryIsland: IslandSpec = {
+      id: 'ordinary', name: 'ordinary', biome: 'plains',
+      cx: 30, cy: 24, majorRadius: 3, minorRadius: 3,
+      populated: false, discovered: false, buildings: [],
+      modifiers: [], // NOT rare
+    };
+    flyRingProbe(w, ordinaryIsland);
+    expect(ordinaryIsland.discovered).toBe(false);
+  });
+
+  it('rare island in the same ring IS discovered', () => {
+    const w = makeWorld6_4('clear-0');
+    const rareIsland: IslandSpec = {
+      id: 'rare', name: 'rare', biome: 'plains',
+      cx: 30, cy: 24, majorRadius: 3, minorRadius: 3,
+      populated: false, discovered: false, buildings: [],
+      modifiers: ['aetheric_anomaly'], // RARE
+    };
+    flyRingProbe(w, rareIsland);
+    expect(rareIsland.discovered).toBe(true);
+  });
+});
