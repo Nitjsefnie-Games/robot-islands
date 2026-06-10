@@ -76,6 +76,12 @@ export interface PlacedBuilding {
    *  Optional for forward-compat with saves minted before this field shipped
    *  (legacy = treat as 0 = fully constructed). */
   constructionRemainingMs?: number;
+  /** §9.3 total ms of the in-progress construction job at the moment it was
+   *  started (placement or upgrade). Used so the progress arc divides by the
+   *  actual initial duration, which may differ from the unmultiplied base when
+   *  Robotics `constructionTimeMul` is > 1. Optional for forward-compat with
+   *  saves minted before this field shipped (legacy = fall back to base). */
+  constructionTotalMs?: number;
   /** §queue: true while this placement/upgrade waits in the build queue. A
    *  queued build occupies its footprint and has paid its cost, but does NOT
    *  tick (`tickConstruction`/`nextConstructionCompletionMs` skip it) and is

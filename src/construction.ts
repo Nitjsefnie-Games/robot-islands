@@ -15,16 +15,6 @@ import type { BuildingDef } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
 import type { Tier } from './skilltree.js';
 
-declare module './buildings.js' {
-  interface PlacedBuilding {
-    /** §9.3 total ms of the in-progress construction job at the moment it was
-     *  started (placement or upgrade). Used so the progress arc divides by the
-     *  actual initial duration, which may differ from the unmultiplied base
-     *  when Robotics `constructionTimeMul` is > 1. Optional for legacy saves. */
-    constructionTotalMs?: number;
-  }
-}
-
 /** Base construction times in ms, per tier. Placeholders — tune in Appendix A.
  *  Scale with tier so a T6 spaceport is a much bigger commitment than a T1
  *  Mine, but small enough T1 builders don't notice the wait in normal play. */
