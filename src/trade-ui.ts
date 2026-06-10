@@ -15,7 +15,10 @@ export interface TradeUiHandle {
   update(rt: TradeRuntime, activeIslandId: string, nowMs: number): void;
 }
 
-export function mountTradeUi(onAccept: (offer: TradeOffer) => void): TradeUiHandle {
+export function mountTradeUi(
+  onAccept: (offer: TradeOffer) => void,
+  onReject: (offer: TradeOffer) => void,
+): TradeUiHandle {
   const el = document.createElement('div');
   el.classList.add('ri-panel');
   el.id = 'trade-offer-panel';
@@ -78,7 +81,8 @@ export function mountTradeUi(onAccept: (offer: TradeOffer) => void): TradeUiHand
             '<span class="ri-kv__v ri-mono" style="color:var(--ri-accent);">→</span>' +
             '<span class="ri-kv__v">Get <b class="ri-mono" style="color:var(--ri-success);">' + here.get.qty.toFixed(0) + ' ' + here.get.res + '</b></span>' +
           '</div>' +
-          '<button class="ri-accentbtn" data-accept="' + here.id + '">Accept</button>',
+          '<button class="ri-accentbtn" data-accept="' + here.id + '">Accept</button>' +
+          '<button class="ri-btn" data-reject="' + here.id + '" style="margin-left:8px;">Reject</button>',
       );
     }
     if (elsewhere > 0) {
@@ -86,8 +90,10 @@ export function mountTradeUi(onAccept: (offer: TradeOffer) => void): TradeUiHand
     }
     body.innerHTML = parts.join('');
 
-    const btn = body.querySelector<HTMLButtonElement>('button[data-accept]');
-    if (btn && here) btn.onclick = () => onAccept(here);
+    const acceptBtn = body.querySelector<HTMLButtonElement>('button[data-accept]');
+    if (acceptBtn && here) acceptBtn.onclick = () => onAccept(here);
+    const rejectBtn = body.querySelector<HTMLButtonElement>('button[data-reject]');
+    if (rejectBtn && here) rejectBtn.onclick = () => onReject(here);
   }
 
   return { el, update };
