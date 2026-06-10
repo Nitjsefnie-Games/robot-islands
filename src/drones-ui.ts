@@ -8,7 +8,7 @@
 import { Container, Graphics } from 'pixi.js';
 
 import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
-import { hasOperationalBuilding, isOperationalBuilding } from './buildings.js';
+import { hasOperationalBuilding, isOperationalBuilding, type PlacedBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
 import { mountPanel, Zone } from './ui-zones.js';
 import { inv } from './economy.js';
@@ -36,6 +36,12 @@ import { shapeHeight, shapeWidth } from './shape-mask.js';
 import { effectiveSkillMultipliers, tierForLevel } from './skilltree.js';
 import { tileToWorldPx, VISION_BLUE, type IslandSpec, type WorldState } from './world.js';
 
+/** Filter a buildings array to operational Drone Pads only.
+ *  Extracted to DRY the repeated `b.defId === 'dronepad' && isOperationalBuilding(b)` predicate. */
+function operationalDronepads(buildings: ReadonlyArray<PlacedBuilding>): PlacedBuilding[] {
+  return buildings.filter((b) => b.defId === 'dronepad' && isOperationalBuilding(b));
+}
+
 /** Resolve the Drone Pad's footprint centre on the launching island.
  *  §11.1: drone launches originate from the Drone Pad's footprint centre,
  *  NOT the island geometric centre. Returns null when no Drone Pad is
@@ -47,9 +53,7 @@ export function selectedPadCentre(
   state: IslandState,
   padId: string | null,
 ): { x: number; y: number } | null {
-  const ops = state.buildings.filter(
-    (b) => b.defId === 'dronepad' && isOperationalBuilding(b),
-  );
+  const ops = operationalDronepads(state.buildings);
   if (ops.length === 0) return null;
   const pad = ops.find((b) => b.id === padId) ?? ops[0]!;
   const def = BUILDING_DEFS[pad.defId as BuildingDefId];
@@ -896,9 +900,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
       (d) => d.status !== 'lost' && d.status !== 'returned',
     );
     const originSpec = deps.getOriginSpec();
-    const operationalPads = originSpec.buildings.filter(
-      (b) => b.defId === 'dronepad' && isOperationalBuilding(b),
-    );
+    const operationalPads = operationalDronepads(originSpec.buildings);
     const padCount = operationalPads.length;
     if (active.length === 0) {
       ledgerList.appendChild(ledgerEmpty);
@@ -989,9 +991,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     const originSpec = deps.getOriginSpec();
 
     // 1. Operational-pad list (filtered, in placement order).
-    const operationalPads = originSpec.buildings.filter(
-      (b) => b.defId === 'dronepad' && isOperationalBuilding(b),
-    );
+    const operationalPads = operationalDronepads(originSpec.buildings);
 
     // 2. Active-island switch → reset to first pad.
     if (origin.id !== prevOriginId) {

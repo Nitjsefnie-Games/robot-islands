@@ -546,7 +546,7 @@ export function mountOrbitalUi(
       const sp = findOperationalBuilding(s.buildings, 'spaceport');
       const tier = sp?.tier ?? 1;
       const ascendant = s.ascendantCoreCrafted === true;
-      sig += `;${s.id},t${tier},a${ascendant ? 1 : 0},n${nameForIsland(deps.world, s.id)}`;
+      sig += `;${s.id},t${tier},a${ascendant ? 1 : 0}`;
       for (const r of COMMON_RESOURCES) {
         sig += `,${r}:${inv(s, r)}`;
       }
@@ -562,10 +562,15 @@ export function mountOrbitalUi(
       for (const v of VARIANTS) {
         sig += `,${v.variant}:${inv(s, v.payload)}`;
       }
+      // Name is free-text — placing it last prevents it from weakening
+      // collision-resistance for the structured numeric fields before it.
+      sig += `,n${nameForIsland(deps.world, s.id)}`;
     }
     sig += `;sats:${deps.world.satellites.length},debris:${deps.world.debrisFields.length}`;
     for (const sat of deps.world.satellites) {
-      sig += `;${sat.variant},${sat.spaceportIslandId},n${nameForIsland(deps.world, sat.spaceportIslandId)},${Math.round(sat.fuel)},${sat.locked ? 'L' : sat.movingTo ? 'M' : 'F'}`;
+      // Name is free-text — placed last so it doesn't weaken collision-resistance
+      // for the structured fields (variant, id, fuel, status) before it.
+      sig += `;${sat.variant},${sat.spaceportIslandId},${Math.round(sat.fuel)},${sat.locked ? 'L' : sat.movingTo ? 'M' : 'F'},n${nameForIsland(deps.world, sat.spaceportIslandId)}`;
     }
     sig += `;flash:${lastFlash && performance.now() < lastFlash.until ? lastFlash.msg : '-'}`;
     return sig;
