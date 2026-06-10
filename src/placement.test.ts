@@ -357,6 +357,30 @@ describe('validatePlacement', () => {
       // skipCostGate true (8th arg) → geometry-only validation passes.
       expect(validatePlacement(spec, state, 'mine', 0, 0, 0, DEFAULT_GRAPH, undefined, true).ok).toBe(true);
     });
+
+    it('accepts placement on absorbed-constituent land (extraEllipse) per SPEC §4.3', () => {
+      const spec = makeSpec({
+        majorRadius: 5,
+        minorRadius: 5,
+        extraEllipses: [{ major: 5, minor: 5, rotation: 0, offsetX: 10, offsetY: 0 }],
+      });
+      const state = makeState(spec);
+      // (12, 0) lies inside the extra ellipse (local to extra: (2, 0) inside r=5).
+      expect(validatePlacement(spec, state, 'workshop', 12, 0, 0).ok).toBe(true);
+    });
+
+    it('rejects placement outside ALL constituents of a merged island', () => {
+      const spec = makeSpec({
+        majorRadius: 5,
+        minorRadius: 5,
+        extraEllipses: [{ major: 5, minor: 5, rotation: 0, offsetX: 10, offsetY: 0 }],
+      });
+      const state = makeState(spec);
+      // (20, 0) is outside both primary (r=5) and extra (centre at 10, r=5).
+      const v = validatePlacement(spec, state, 'workshop', 20, 0, 0);
+      expect(v.ok).toBe(false);
+      expect(v.reason).toBe('out-of-bounds');
+    });
   });
 });
 
