@@ -547,6 +547,17 @@ function buildStandardEdges(nodes: ReadonlyArray<SkillNode>): Edge[] {
 
 export const STANDARD_EDGES: Edge[] = buildStandardEdges(NODE_CATALOG);
 
+/** Node ids of AND-gated keystones. These are excluded from pathing
+ *  adjacency (`costToUnlock`) — keystones are bought only via `buyKeystone`. */
+const KEYSTONE_TARGET_NODE_IDS: ReadonlySet<string> = new Set(
+  KEYSTONE_PREREQS.map((ks) => String(ks.targetNode)),
+);
+
+/** The AND-prereq spec for a keystone node id, or undefined for non-keystones. */
+export function keystonePrereqFor(nodeId: NodeId): KeystonePrereq | undefined {
+  return KEYSTONE_PREREQS.find((ks) => String(ks.targetNode) === String(nodeId));
+}
+
 /** Default skill graph — full catalog with generated edges + bridge catalog + graft sockets. */
 export const DEFAULT_GRAPH: Graph = {
   nodes: NODE_CATALOG,
@@ -1403,6 +1414,16 @@ export function costToUnlock(
     ...graph.bridges.filter((b) => isBridgeActive(b, state, graph)),
   ];
   for (const e of allEdges) {
+    // §9.3 keystone gate: AND-prereq edges (`mode: 'and'`) are purchase gates,
+    // not traversable graph edges — including them let a keystone be reached
+    // (or even auto-owned as a path intermediate) through any ONE prereq,
+    // bypassing the AND-list. More broadly, NO edge may deliver keystone
+    // ownership through pathing ("even if a path exists, the keystone stays
+    // locked until every prereq is satisfied") — keystones are bought only
+    // via `buyKeystone`, so edges into keystone targets (incl. bridges) are
+    // excluded from the adjacency entirely.
+    if (e.mode === 'and') continue;
+    if (KEYSTONE_TARGET_NODE_IDS.has(String(e.to))) continue;
     const toDepth = nodeDepth.get(e.to as NodeId);
     if (toDepth !== undefined && islandTier < tierRequiredForDepth(toDepth)) continue;
     const list = adjacency.get(e.from as NodeId) ?? [];
@@ -1558,6 +1579,15 @@ export function nodePurchaseStatus(
   target: NodeId,
 ): NodePurchaseStatus {
   if (state.unlockedNodes.has(target)) return 'owned';
+  // §9.3 keystones: bought via `buyKeystone` (AND-prereqs + flat SP cost; the
+  // depth→tier gate does not apply per spec). Unmet prereqs render as locked.
+  const ks = keystonePrereqFor(target);
+  if (ks) {
+    for (const req of ks.requires) {
+      if (!state.unlockedNodes.has(req as NodeId)) return 'unreachable';
+    }
+    return state.unspentSkillPoints >= ks.cost ? 'purchasable' : 'insufficient-sp';
+  }
   const node = graph.nodes.find((n) => n.id === target);
   if (!node) return 'unreachable';
   if (!depthTierEligible(state.level, node.depth)) return 'tier-locked';
