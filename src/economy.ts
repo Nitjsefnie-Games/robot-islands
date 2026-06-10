@@ -2151,6 +2151,10 @@ export function advanceIsland(
         // no operatingMs accrual, no maintenance degradation. Re-enable
         // resumes accrual at the frozen operatingMs value.
         if (b.disabled === true) continue;
+        // Fix 4.4: invalid buildings are non-operational the same way
+        // (mirrors isOperationalBuilding, buildings.ts) — they produce
+        // nothing in computeRates, so they must not accrue wear either.
+        if (b.invalid === true) continue;
         // §4.7 maintenance interpretation: skip accrual for buildings
         // with no productive recipe outputs. The maintenanceFactor is
         // only multiplied into recipe `effectiveRate`; a building whose
