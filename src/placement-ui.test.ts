@@ -370,4 +370,31 @@ describe('terrain_modifier placement-ui brush commit', () => {
     expect(placed.terrainShotRemainingMs).toBe(4000);
     expect(placed.terrainTarget).toBeUndefined();
   });
+
+  // §15.2: terrain target annotation must survive the unconditional label
+  // recompute in paintOutlineAndLabel.
+  it('§15.2 label contains the chosen terrain target after picker resolves', async () => {
+    const spec = makeSpec();
+    const state = makeState(spec);
+    state.inventory.steel = 100;
+    state.inventory.gear = 100;
+    const ui = mountPlacementUi({
+      getTargetSpec: () => spec,
+      getTargetState: () => state,
+      screenToWorldTile: (x, y) => ({ x, y }),
+      onPlaced: () => {},
+      // Picker resolves 'ore' — the label must include '→ ORE'.
+      pickTerrainTarget: () => Promise.resolve('ore'),
+    });
+    ui.begin('terrain_modifier');
+    // While picker is pending, placement is not yet armed.
+    expect(ui.isActive()).toBe(false);
+    // Flush microtasks so the picker promise resolves and paintOutlineAndLabel fires.
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(ui.isActive()).toBe(true);
+    // getLabelMain() computes the label fragment from internal state without
+    // triggering a Pixi paint (no CanvasTextMetrics, no document required).
+    expect(ui.getLabelMain()).toContain('→ ORE');
+  });
 });
