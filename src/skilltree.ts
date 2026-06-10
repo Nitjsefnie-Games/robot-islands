@@ -767,6 +767,12 @@ export function bindCrystal(
   }
   state.inventory[rid] = have - 1;
   state.socketBindings.set(socketId, crystalId);
+  // Own the synthetic socket node (cost 0). The mini-tree's only incoming
+  // edges come FROM the socket, and Dijkstra seeds from owned nodes — without
+  // this the whole mini-tree is unreachable. Removed on unbind (rebinding a
+  // different crystal keeps the socket owned).
+  state.unlockedNodes.add(socketId);
+  state.auraAmpVersion++;
 }
 
 /** Unbind the crystal from a socket, returning it to inventory.
@@ -778,6 +784,9 @@ export function unbindCrystal(state: IslandState, socketId: string): void {
   state.inventory[prevRid] = (state.inventory[prevRid] ?? 0) + 1;
   refundAndClearMiniTree(state, socketId, prev);
   state.socketBindings.delete(socketId);
+  // Mirror of bindCrystal: the synthetic socket node (cost 0, owned at bind
+  // time) is no longer ownable once the socket is empty.
+  state.unlockedNodes.delete(socketId);
 }
 
 /**
@@ -1462,6 +1471,19 @@ export function costToUnlock(
   for (const n of ownedNodes) {
     distance.set(n, 0);
     queue.push({ node: n, cost: 0 });
+  }
+  // Belt-and-braces for pre-socket-ownership saves: a BOUND graft socket is
+  // always a valid (cost-0) source even when the save predates bindCrystal
+  // adding the socket id to unlockedNodes (or a tier reset cleared it while
+  // the binding survived).
+  const bindings = (state as { socketBindings?: ReadonlyMap<string, CrystalId> }).socketBindings;
+  if (bindings) {
+    for (const socketId of bindings.keys()) {
+      const sid = socketId as NodeId;
+      if (distance.has(sid)) continue;
+      distance.set(sid, 0);
+      queue.push({ node: sid, cost: 0 });
+    }
   }
 
   while (queue.length > 0) {
