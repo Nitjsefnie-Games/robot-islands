@@ -4,6 +4,7 @@
 
 import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
 import { RECIPES, type RecipeCategory, type ResourceId } from './recipes.js';
+import { buildingForRecipe } from './recipe-density.js';
 
 export interface RecipeTableEntry {
   readonly resource: ResourceId;
@@ -41,12 +42,7 @@ export interface RecipeTableRow {
   readonly gates: ReadonlyArray<GateEntry>;
 }
 
-function ownerOf(recipeKey: string): BuildingDefId {
-  if (recipeKey === 'mine_on_ore' || recipeKey === 'mine_on_coal') {
-    return 'mine';
-  }
-  return recipeKey as BuildingDefId;
-}
+
 
 export function buildRecipeTableRows(): ReadonlyArray<RecipeTableRow> {
   const rows: RecipeTableRow[] = [];
@@ -64,7 +60,7 @@ export function buildRecipeTableRows(): ReadonlyArray<RecipeTableRow> {
 
     if (inputs.length === 0 && outputs.length === 0) continue;
 
-    const buildingId = ownerOf(recipeKey);
+    const buildingId = buildingForRecipe(recipeKey);
     const def = BUILDING_DEFS[buildingId];
     const buildingLabel = def?.displayName ?? buildingId;
     const tier = def?.tier ?? 0;

@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
 import { RECIPES } from './recipes.js';
+import { BUILDING_DEFS } from './building-defs.js';
 import { buildRecipeTableRows } from './recipe-graph.js';
+import { buildingForRecipe } from './recipe-density.js';
 
 describe('buildRecipeTableRows', () => {
   const rows = buildRecipeTableRows();
@@ -57,6 +59,13 @@ describe('buildRecipeTableRows', () => {
         a.buildingLabel.localeCompare(b.buildingLabel) ||
         a.recipeKey.localeCompare(b.recipeKey);
       expect(cmp).toBeLessThanOrEqual(0);
+    }
+  });
+
+  it('every recipe key resolves to a building def that exists in BUILDING_DEFS', () => {
+    for (const row of rows) {
+      const def = BUILDING_DEFS[row.buildingId];
+      expect(def, `recipe ${row.recipeKey} -> building ${row.buildingId} missing from BUILDING_DEFS`).toBeDefined();
     }
   });
 });
