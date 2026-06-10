@@ -32,6 +32,7 @@ import {
   SCANNER_REF_TICK_MS,
   scannerDiscoveryProbability,
   scannerPerCallProbability,
+  debrisPerCallProbability,
   cellsCoveredBySat,
   tickScannerDiscovery,
   buildCommGraph,
@@ -1040,7 +1041,7 @@ describe('tickDebris', () => {
       islandStates: new Map(),
       satellites: [makeMinimalSat({ id: 's1', x: 0, y: 0 })],
     });
-    tickDebris(world, 0);
+    tickDebris(world, 0, SCANNER_REF_TICK_MS);
     expect(world.satellites).toHaveLength(1);
   });
 
@@ -1051,7 +1052,7 @@ describe('tickDebris', () => {
       satellites: [],
     });
     world.debrisFields.push({ cellX: 0, cellY: 0, fragments: 100 });
-    tickDebris(world, 0);
+    tickDebris(world, 0, SCANNER_REF_TICK_MS);
     expect(world.debrisFields).toHaveLength(1);
   });
 
@@ -1062,7 +1063,7 @@ describe('tickDebris', () => {
       satellites: [makeMinimalSat({ id: 's1', x: 0, y: 0, locked: false })],
     });
     world.debrisFields.push({ cellX: 0, cellY: 0, fragments: 100 });
-    tickDebris(world, 0);
+    tickDebris(world, 0, SCANNER_REF_TICK_MS);
     expect(world.satellites).toHaveLength(1);
   });
 
@@ -1076,7 +1077,8 @@ describe('tickDebris', () => {
     world.debrisFields.push({ cellX: 0, cellY: 0, fragments: 2000 });
     // Deterministic lodge: seed '0_debris_0_s1' with hitP≈0.99 produces a hit,
     // and the second RNG roll lands below DEBRIS_LODGE_PROBABILITY (0.9) → lodge.
-    tickDebris(world, 0);
+    // Passing SCANNER_REF_TICK_MS so per-call probability equals the raw hitP (identity).
+    tickDebris(world, 0, SCANNER_REF_TICK_MS);
     expect(world.satellites).toHaveLength(1);
     const sat = world.satellites[0]!;
     // At least one lodge value should have increased.
@@ -1097,6 +1099,7 @@ describe('tickDebris', () => {
     // With the default DEBRIS_LODGE_PROBABILITY = 0.9, destruction requires rng >= 0.9.
     // Seed '0_debris_0_s1' first roll ≈0.003 (hit), second roll ≈0.718 (lodge).
     // We need a seed where second roll >= 0.9.  Let's brute-search in the test.
+    // Passing SCANNER_REF_TICK_MS so probabilities are at reference calibration.
     let found = false;
     for (let t = 0; t < 2000; t++) {
       const w = makeBfsWorld({
@@ -1105,7 +1108,7 @@ describe('tickDebris', () => {
         satellites: [makeMinimalSat({ id: `s${t}`, x: 0, y: 0, variant: 'sweeper' })],
       });
       w.debrisFields.push({ cellX: 0, cellY: 0, fragments: 2000 });
-      tickDebris(w, t);
+      tickDebris(w, t, SCANNER_REF_TICK_MS);
       if (w.satellites.length === 0) {
         // Satellite was destroyed; check that fragments increased.
         const field = w.debrisFields.find((f) => f.cellX === 0 && f.cellY === 0);
@@ -2256,5 +2259,34 @@ describe('§14.5 dt-scaled scanner discovery — scannerPerCallProbability', () 
     const pCall = scannerPerCallProbability(pBase, 10000);
     expect(pCall).toBeGreaterThan(0.3);
     expect(pCall).toBeLessThan(1);
+  });
+});
+
+// §14.8 Fix 2.3 — dt-scaled debris hit hazard
+describe('§14.8 dt-scaled debris hit hazard — debrisPerCallProbability', () => {
+  it('at dt = SCANNER_REF_TICK_MS the per-call probability equals the raw hitP (identity)', () => {
+    const field: DebrisField = { cellX: 0, cellY: 0, fragments: 100 };
+    const sat = makeMinimalSat({ id: 's1', x: 0, y: 0, variant: 'sweeper' });
+    const hitP = debrisHitProbability(field, sat);
+    expect(debrisPerCallProbability(hitP, SCANNER_REF_TICK_MS)).toBeCloseTo(hitP, 12);
+  });
+
+  it('closed-form dt-scaling: (1 - pCall(16.7ms))^60 ≈ (1 - pCall(1000ms)) within 1e-9', () => {
+    const dtExact = 1000 / 60; // ≈ 16.666...ms — exact 60fps frame
+    const field: DebrisField = { cellX: 0, cellY: 0, fragments: 100 };
+    const sat = makeMinimalSat({ id: 's1', x: 0, y: 0, variant: 'sweeper' });
+    const hitP = debrisHitProbability(field, sat);
+    const p60 = debrisPerCallProbability(hitP, dtExact);
+    const p1000 = debrisPerCallProbability(hitP, 1000);
+    const miss60 = Math.pow(1 - p60, 60);
+    const miss1000 = 1 - p1000;
+    expect(Math.abs(miss60 - miss1000)).toBeLessThan(1e-9);
+  });
+
+  it('at dt = 0 the per-call probability is 0', () => {
+    const field: DebrisField = { cellX: 0, cellY: 0, fragments: 100 };
+    const sat = makeMinimalSat({ id: 's1', x: 0, y: 0, variant: 'sweeper' });
+    const hitP = debrisHitProbability(field, sat);
+    expect(debrisPerCallProbability(hitP, 0)).toBe(0);
   });
 });
