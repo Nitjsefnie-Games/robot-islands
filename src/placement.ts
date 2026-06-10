@@ -776,8 +776,8 @@ export function buildingAtTile(
  *
  * Walks every populated island's `buildings[]` (ocean platforms are stored
  * on their anchor's array per Task 10). First-match wins; ocean footprints
- * can't overlap by construction (the validator's `land-overlap` +
- * anchor-range gate joint-prevents overlap across multiple anchors too).
+ * can't overlap by construction (the validator's `land-overlap`,
+ * `ocean-overlap`, and anchor-range gates jointly prevent overlap).
  *
  * Returns `{ spec, building }` to mirror what main.ts needs (the anchor
  * spec, so the inspector can resolve the anchor's `IslandState`). Returns
@@ -1199,7 +1199,12 @@ export type OceanPlacementReason =
    *  which means cells INSIDE an island's tile grid would otherwise satisfy
    *  `['shallows', 'deep']` terrainReqs and silently accept the placement.
    *  See `isOceanTile` in world.ts. */
-  | 'land-overlap';
+  | 'land-overlap'
+  /** The placement cell footprint intersects an existing ocean building's
+   *  cell footprint. Ocean platforms are stored on their anchor island's
+   *  `buildings[]`; this guard prevents two platforms from occupying the
+   *  same ocean cell regardless of which anchor they belong to. */
+  | 'ocean-overlap';
 
 export interface OceanPlacementValidation {
   readonly ok: boolean;
@@ -1273,6 +1278,27 @@ export function validateOceanPlacement(
       }
     }
   }
+  // Ocean-vs-ocean overlap: walk every populated island's buildings and
+  // reject if any existing ocean-building footprint intersects the new
+  // footprint in cell coordinates. This prevents two platforms (from
+  // different anchors) from sharing the same cell.
+  for (const spec of world.islands) {
+    if (!spec.populated) continue;
+    for (const b of spec.buildings) {
+      const existingDef = BUILDING_DEFS[b.defId];
+      if (existingDef.oceanPlacement !== true) continue;
+      const ew = shapeWidth(existingDef.footprint);
+      const eh = shapeHeight(existingDef.footprint);
+      const ex = (spec.cx + b.x) / CELL_SIZE_TILES;
+      const ey = (spec.cy + b.y) / CELL_SIZE_TILES;
+      const overlapX = cellX < ex + ew && cellX + w > ex;
+      const overlapY = cellY < ey + eh && cellY + h > ey;
+      if (overlapX && overlapY) {
+        return { ok: false, reason: 'ocean-overlap' };
+      }
+    }
+  }
+
   // Terrain match. If `terrainReqs` is undefined / empty, the def accepts
   // any ocean terrain (matches the sonar_buoy "any discovered ocean" rule
   // in the §3 table). `footprintMatches` short-circuits on the first

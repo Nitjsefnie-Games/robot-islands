@@ -1274,6 +1274,42 @@ describe('§3 ocean building footprint validation', () => {
     expect(v.ok).toBe(false);
     expect(v.reason).toBe('land-overlap');
   });
+
+  it('rejects ocean-vs-ocean cell overlap from a different anchor', () => {
+    // First platform: island A places a 1×1 sonar_buoy at cell (5, 5).
+    const islandA = makeSpec({
+      id: 'island-a',
+      cx: 0,
+      cy: 0,
+      populated: true,
+      buildings: [
+        {
+          id: 'buoy-a',
+          defId: 'sonar_buoy',
+          x: 5 * CELL_SIZE_TILES,
+          y: 5 * CELL_SIZE_TILES,
+          rotation: 0,
+          placedAt: 0,
+          operatingMs: 0,
+          maintainedAt: 0,
+          anchorIslandId: 'island-a',
+        } as PlacedBuilding,
+      ],
+    });
+    // Second anchor: island B is also within range of cell (5, 5).
+    const islandB = makeSpec({
+      id: 'island-b',
+      cx: 10 * CELL_SIZE_TILES,
+      cy: 0,
+      populated: true,
+      buildings: [],
+    });
+    const world = makeOceanWorld(new Map(), [islandA, islandB]);
+    // Island B tries to place on the SAME cell — should be rejected.
+    const v = validateOceanPlacement(world, 'sonar_buoy', 5, 5);
+    expect(v.ok).toBe(false);
+    expect(v.reason).toBe('ocean-overlap');
+  });
 });
 
 describe('§3 land validator defense-in-depth', () => {
