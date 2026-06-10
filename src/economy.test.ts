@@ -1966,6 +1966,47 @@ describe('§13 core-craft auto-flip', () => {
     expect(state.inventory.ai_core ?? 0).toBeGreaterThan(0);
   });
 
+  it('does not flip aiCoreCrafted on a zero-length forced segment (fix 3.2)', () => {
+    // Same producing fixture as the positive flip test above, but the first
+    // (and only) segment is forced to zero length: a microscopic pending
+    // terrain-shot countdown makes `nextShotMs = t + 1e-9`, which at
+    // `t = 1e8` (realistic perf-clock magnitude, ULP ≈ 1.5e-8 ms) rounds
+    // back to exactly `t`. segEndMs == t ⇒ dtSec == 0 ⇒ the force-jump
+    // skips all integration — NOTHING was produced, so the §13 T5-access
+    // flag must NOT flip.
+    const CRYO: PlacedBuilding & { terrainShotRemainingMs?: number } = {
+      id: 'b-cryo',
+      defId: 'cryogenic_compute_center',
+      x: 0,
+      y: 0,
+      terrainShotRemainingMs: 1e-9,
+    };
+    const powerFreeCryo = ((): DefCatalog => {
+      const base = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
+      const { power: _p, ...rest } = base.cryogenic_compute_center;
+      base.cryogenic_compute_center = rest as BuildingDef;
+      return base;
+    })();
+    const T0 = 1e8;
+    const state = makeState({
+      buildings: [CRYO],
+      inventory: { ...blankInventory(), steel: 100, quantum_chip: 20, argon: 20 },
+      storageCaps: blankCaps(10000),
+      level: 50,
+      aiCoreCrafted: false,
+      lastTick: T0,
+    });
+    advanceIsland(state, T0 + 60_000, { defs: powerFreeCryo });
+    expect(state.inventory.ai_core ?? 0).toBe(0); // zero-length: nothing integrated
+    expect(state.aiCoreCrafted).toBe(false);
+    // Contrast: clear the shot and advance a real positive window — the flag
+    // flips on actual production.
+    delete CRYO.terrainShotRemainingMs;
+    advanceIsland(state, T0 + 6_060_000, { defs: powerFreeCryo });
+    expect(state.inventory.ai_core ?? 0).toBeGreaterThan(0);
+    expect(state.aiCoreCrafted).toBe(true);
+  });
+
   it('does not flip aiCoreCrafted from inventory presence alone', () => {
     const state = makeState({
       inventory: { ...blankInventory(), ai_core: 5 },
