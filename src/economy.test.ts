@@ -1939,6 +1939,23 @@ describe('§9.9 active-play bonus integration', () => {
   });
 });
 
+describe('§12.4 starter inventory grace — cap()', () => {
+  it('grace applies even when the nominal cap is 0 (fix 3.3)', () => {
+    // A starter-kit resource with NO storage built yet (nominal cap 0) must
+    // still be holdable up to its grace allowance — otherwise applyRates'
+    // clamp destroys the kit stock on the first tick.
+    const state = makeState({
+      storageCaps: blankCaps(0),
+      starterInventoryGrace: { ...blankInventory(), iron_ore: 50 },
+    });
+    expect(cap(state, 'iron_ore')).toBe(50);
+    // ignoreGrace must still bypass the grace and report the bare cap.
+    expect(cap(state, 'iron_ore', undefined, { ignoreGrace: true })).toBe(0);
+    // A resource with no grace keeps the zero cap.
+    expect(cap(state, 'coal')).toBe(0);
+  });
+});
+
 describe('§13 core-craft auto-flip', () => {
   it('flips aiCoreCrafted on first ai_core production', () => {
     const CRYO: PlacedBuilding = {
