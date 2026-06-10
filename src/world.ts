@@ -731,6 +731,11 @@ export interface WorldState {
   latticeActive: boolean;
   /** Island IDs that have an active Lattice Node. */
   latticeNodeIslands: string[];
+  /** §9.9 Active-Play Production Bonus balance — "effective focused
+   *  milliseconds". Accrued/decayed by `tickActiveBonus` (active-bonus.ts);
+   *  read via `activeBonusMul`. Optional so legacy saves and test fixtures
+   *  compile without change; `makeInitialWorld` always seeds it. */
+  activeBonusMs?: number;
   /** §14.4 in-flight comm packets. Mutable. */
   commPackets: import('./orbital.js').CommPacket[];
   /** §2.1 infinite map — set of cell keys (`"cellX,cellY"`) that have
@@ -855,7 +860,7 @@ export function makeInitialWorld(_nowMs: number): WorldState {
   // Ocean-layer §5 — depth visibility starts empty. Sonar Buoys and Scanner
   // Sat upgrades populate it as the player builds those revealers.
   const depthRevealedCells = new Set<string>();
-  return { islands, drones: [], routes: [], vehicles: [], revealedCells, seed: WORLD_SEED, satellites: [], repairDrones: [], debrisFields: [], tutorialState: { completed: new Set(), current: 'place_solar' }, endgameState: { achieved: new Set<VictoryCondition>(), firstAchievedMs: null }, latticeActive: false, latticeNodeIslands: [], commPackets: [], totalCo2Kg: 0, playerLat: null, playerLon: null, generatedCells, oceanCells, depthRevealedCells, recentBuildAttempts: new Set(), recentBuildAttemptTs: new Map() };
+  return { islands, drones: [], routes: [], vehicles: [], revealedCells, seed: WORLD_SEED, satellites: [], repairDrones: [], debrisFields: [], tutorialState: { completed: new Set(), current: 'place_solar' }, endgameState: { achieved: new Set<VictoryCondition>(), firstAchievedMs: null }, latticeActive: false, latticeNodeIslands: [], activeBonusMs: 0, commPackets: [], totalCo2Kg: 0, playerLat: null, playerLon: null, generatedCells, oceanCells, depthRevealedCells, recentBuildAttempts: new Set(), recentBuildAttemptTs: new Map() };
 }
 
 /**

@@ -6,6 +6,7 @@ import {
   tickActiveBonus,
 } from './active-bonus.js';
 import { ONLINE_DT_CAP_MS } from './trade.js';
+import { makeInitialWorld } from './world.js';
 
 describe('tickActiveBonus (§9.9 accrual law)', () => {
   it('accrues focused frame dt 1:1', () => {
@@ -23,6 +24,7 @@ describe('tickActiveBonus (§9.9 accrual law)', () => {
     expect(w.activeBonusMs).toBe(
       600_000 + ONLINE_DT_CAP_MS - ACTIVE_DECAY_RATIO * (gap - ONLINE_DT_CAP_MS),
     );
+    expect(w.activeBonusMs).toBe(432_000); // 600_000 + 3_000 − 3 × 57_000, pinned literal
   });
 
   it('decays blurred-but-visible frames at 3×', () => {
@@ -48,6 +50,12 @@ describe('tickActiveBonus (§9.9 accrual law)', () => {
     tickActiveBonus(w, true, 0);
     tickActiveBonus(w, false, -5);
     expect(w.activeBonusMs).toBe(123);
+  });
+});
+
+describe('makeInitialWorld §9.9 seed', () => {
+  it('seeds activeBonusMs at 0', () => {
+    expect(makeInitialWorld(0).activeBonusMs).toBe(0);
   });
 });
 
