@@ -486,6 +486,46 @@ describe('tickRoutes — instant transit (T4 teleporter equivalent)', () => {
     expect(dst.inventory.iron_ore).toBeCloseTo(1, 9);
     expect(r.inFlight.length).toBe(0);
   });
+
+  it('fix 7.3 — two instant routes do not overflow into grace headroom beyond normal cap (§12.4)', () => {
+    // Phase-1 headroom for both routes is cap(ignoreGrace)-inv-inFlight = 5-0-0 = 5.
+    // Each route gets 5 approved by Phase-2 (different sources, no source contention).
+    // Phase-3 sequential execution:
+    //   Before fix: route-A deposits 5, inv=5.  Route-B instant branch: cap(WITH_grace)=100,
+    //               room=100-5=95, deposits 5, inv=10.  OVERFLOW beyond storageCaps=5.
+    //   After fix:  route-A deposits 5, inv=5.  Route-B instant branch: cap(ignoreGrace)=5,
+    //               room=5-5=0, deposits 0, inv=5.  Correct.
+    const srcA = makeState('a', { inventory: { ...blankInventory(), iron_ore: 10 } });
+    const srcB = makeState('b', { inventory: { ...blankInventory(), iron_ore: 10 } });
+    const dst = makeState('c', {
+      storageCaps: { ...blankCaps(100), iron_ore: 5 },
+      starterInventoryGrace: { ...blankInventory(), iron_ore: 100 } as Record<ResourceId, number>,
+    });
+    const r1 = cargoRoute('a', 'c', 'iron_ore', [], 10, 0); // instant from a
+    const r2 = cargoRoute('b', 'c', 'iron_ore', [], 10, 0); // instant from b
+    const world = makeWorld([r1, r2]);
+    const states = new Map([['a', srcA], ['b', srcB], ['c', dst]]);
+    dispatchAttempt(world, states, 0, 1);
+    // Must not exceed storageCaps=5 regardless of grace=100.
+    expect(dst.inventory.iron_ore).toBeLessThanOrEqual(5);
+  });
+
+  it('fix 7.3 — instant delivery delivers 0 when destination has only grace headroom (§12.4)', () => {
+    // Destination storageCaps[iron_ore]=0, grace=10.
+    // destinationHeadroom (Phase-1) already uses ignoreGrace:true → blocks dispatch.
+    // This test is a regression guard confirming the combined behaviour.
+    const src = makeState('a', { inventory: { ...blankInventory(), iron_ore: 10 } });
+    const dst = makeState('b', {
+      storageCaps: { ...blankCaps(100), iron_ore: 0 },
+      starterInventoryGrace: { ...blankInventory(), iron_ore: 10 } as Record<ResourceId, number>,
+    });
+    const r = cargoRoute('a', 'b', 'iron_ore', [], 0.5, 0); // transitTimeSec=0
+    const world = makeWorld([r]);
+    const states = new Map([['a', src], ['b', dst]]);
+    dispatchAttempt(world, states, 0, 2);
+    expect(dst.inventory.iron_ore).toBe(0);
+    expect(src.inventory.iron_ore).toBe(10);
+  });
 });
 
 

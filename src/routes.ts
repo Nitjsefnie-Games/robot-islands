@@ -848,7 +848,12 @@ function dispatchPhase(
       }
       const destState = states.get(d.route.to);
       if (destState) {
-        const room = cap(destState, d.resourceId) - inv(destState, d.resourceId);
+        // §12.4: instant-transit route arrivals respect the normal cap, not the
+        // starter-grace cap, matching deliverArrivals (~589) and destinationHeadroom
+        // (~467) which both pass { ignoreGrace: true } for the same reason.
+        // Without this, two instant routes dispatched in the same tick to the same
+        // destination could sequentially over-fill into grace space beyond storageCaps.
+        const room = cap(destState, d.resourceId, undefined, { ignoreGrace: true }) - inv(destState, d.resourceId);
         const accept = Math.max(0, Math.min(amount, room));
         if (accept > 0) {
           destState.inventory[d.resourceId] = inv(destState, d.resourceId) + accept;
