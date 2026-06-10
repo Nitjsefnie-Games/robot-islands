@@ -44,6 +44,7 @@ Legend: **L** = live · **P** = partial · **N** = not implemented.
 | §9.6 Network Consciousness | P | Network reachability + 3/5/10/20-island milestone tiers + global production buff. Auto-Patronage at 10-island milestone (3 default routes from nearest Patron Hub) L. |
 | §9.7 Tier Reset | L | Reset logic + cost formula + cooldown + spec'd preserve/clear sets. Merged-island reset operates on the absorber's IslandState transparently (no merge-specific code needed). UI cost preview in the Skill Tree's reset row + confirm dialog. |
 | §9.8 Trade Offers | L | Signal Exchange (T1 logistics) building + online-only expiring barter offers (`trade.ts`/`trade-ui.ts`). Ever-produced get-gate, fill-biased give/get pick, tier-reach cap, `xp_weight`-ratio pricing × `0.8^Δtier` spread, size cap to give-stock % clamped to output headroom; accept grants no XP. Persisted per-island online-time cooldown (`tradeCooldownMs`, refresh-proof) + 1%/accept compounding speedup floored at ~1 min (`tradeAcceptCount`), both at schema v20. Logistics-Network skill cluster tunes frequency/size/reach/spread. Offers themselves ephemeral (not serialized). |
+| §9.9 Active-play production bonus | L | +0.1%/min focused, −0.3%/min away (incl. closed), floor 0, no cap; world-level recipe-rate multiplier, schema v22. |
 | §10 Funneling | L | Per-resource consumed-on-route XP bonus while below T3. |
 | §11 Drones | P | T1/T2/T3 drone dispatch via Drone Pad; T4 omnidirectional pulse via Launch Tower; T5 path-drawn via Path Drone Foundry. Drone Pad (T2) is the gate; once built, the tier picker lets the player launch any tier from T1 up to the launching island's current tier (T1 = biofuel = cheap entry option for short scouts). Fuel auto-computed per click. |
 | §11.7 Fuel / range / dispatch | L | Per-tier fuel matching, range = fuel × efficiency, per-craft concurrency caps, lost-on-timeout failure model. |
@@ -1300,6 +1301,21 @@ The 1%-per-accept compounding speedup (§9.8.4) is a flat mechanic, not a tunabl
 #### 9.8.7 Offline parity
 
 Trade Offers preserve the offline-parity pillar of §15.5. Both the cooldown countdown and the accept accumulator advance on **focused online time only** — offline (or unfocused) time advances neither. An absent player simply misses optional offers; the base economic simulation and offline catch-up are unchanged. Wall-clock pacing was rejected precisely because a returning player would otherwise get an instant offer, softening the online-only contract.
+
+\---
+
+### 9.9 Active-Play Production Bonus
+
+A global recipe-rate buff that rewards focused presence, complementing §9.8's online-only trade cadence. Every focused minute adds **+0.1%** to every recipe rate on **every** island; every unfocused minute — alt-tabbed, minimized, or with the game closed — burns the accrued bonus at **−0.3%/min**, floored at 0. There is no cap: decay is the only counterweight (an overnight gap erases any realistic balance, so in practice this is a same-session mechanic despite being persisted).
+
+* **Focus condition** — identical to §9.8.3 trading: `document.visibilityState === 'visible' && document.hasFocus()`. "Covered but focused" is not JS-detectable; accepted limit.
+* **State** — `WorldState.activeBonusMs`, a balance of "effective focused milliseconds". Bonus fraction = `activeBonusMs / 60000 × 0.001`; the multiplier `1 + fraction` threads into `computeRates` as `RatesContext.activeBonusMul` alongside `ncBuff`. XP accrues on the boosted production, like every rate buff. Unlike `ncBuff` (networked T3+ only) it applies to every island.
+* **Accrual law** — one rule covers every loss mode: focused frame-dt accrues (clamped to the §9.8.3 3 s online-dt cap); every other wall-clock millisecond decays at 3×. A hidden-tab gap (rAF stops) is charged on the refocus frame; a closed-game gap is charged at load from the snapshot's `savedAt`, before offline catch-up runs — catch-up production uses the post-decay multiplier.
+* **Sampling** — the multiplier drifts 0.1%/min, so it is sampled per advance call as a constant; §15.3's constant-rate piecewise integration is unaffected.
+* **UI** — the HUD economy panel shows an always-visible "Active bonus" row (`+X.X%`, `—` at 0); the inspector recipe bonuses line appends `active ×N.NN` when above 1.
+* **Persistence** — schema v22 (`activeBonusMs`; v21 saves migrate with 0).
+
+Source of truth: `src/active-bonus.ts`.
 
 \---
 
