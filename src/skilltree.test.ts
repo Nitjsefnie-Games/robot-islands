@@ -787,6 +787,68 @@ describe('buyNode — depth→tier gate (§9.3, tierRequiredForDepth)', () => {
   });
 });
 
+describe('depth-8 (T6) gate honours the §14.1 flags (Ascendant Core + Spaceport)', () => {
+  // depth 8 → tierRequiredForDepth = 6. T6 has NO level threshold (§14.1): it
+  // unlocks via ascendantCoreCrafted + an operational Spaceport. Before the
+  // fix the gate compared tierForLevel (max 5) against 6 — never satisfiable.
+  const T6_FILLER = 'mining.recipeRate.8';
+
+  function spaceport(): { id: string; defId: 'spaceport'; x: number; y: number } {
+    return { id: 'sp1', defId: 'spaceport', x: 0, y: 0 };
+  }
+
+  it('sanity: the depth-8 filler exists in the real catalog', () => {
+    const node = DEFAULT_GRAPH.nodes.find((n) => n.id === T6_FILLER);
+    expect(node).toBeDefined();
+    expect(node!.depth).toBe(8);
+  });
+
+  it('high level + both T6 flags: depth-8 filler is purchasable end-to-end', () => {
+    const state = makeState({
+      level: 60,
+      unspentSkillPoints: 10_000,
+      ascendantCoreCrafted: true,
+      buildings: [spaceport() as never],
+    });
+    buyNode(DEFAULT_GRAPH, state, 'mining.recipeRate.1');
+    expect(nodePurchaseStatus(DEFAULT_GRAPH, state, T6_FILLER)).toBe('purchasable');
+    buyNode(DEFAULT_GRAPH, state, T6_FILLER);
+    expect(state.unlockedNodes.has(T6_FILLER)).toBe(true);
+  });
+
+  it('same level without the flags: depth-8 stays tier-locked', () => {
+    const state = makeState({ level: 60, unspentSkillPoints: 10_000 });
+    buyNode(DEFAULT_GRAPH, state, 'mining.recipeRate.1');
+    expect(nodePurchaseStatus(DEFAULT_GRAPH, state, T6_FILLER)).toBe('tier-locked');
+    expect(() => buyNode(DEFAULT_GRAPH, state, T6_FILLER)).toThrow(/tier/i);
+    expect(
+      costToUnlock(DEFAULT_GRAPH, state.unlockedNodes, state.unlockedEdges, state, T6_FILLER),
+    ).toBeNull();
+  });
+
+  it('ascendant core alone (no Spaceport placed) is not enough', () => {
+    const state = makeState({
+      level: 60,
+      unspentSkillPoints: 10_000,
+      ascendantCoreCrafted: true,
+    });
+    buyNode(DEFAULT_GRAPH, state, 'mining.recipeRate.1');
+    expect(nodePurchaseStatus(DEFAULT_GRAPH, state, T6_FILLER)).toBe('tier-locked');
+    expect(() => buyNode(DEFAULT_GRAPH, state, T6_FILLER)).toThrow(/tier/i);
+  });
+
+  it('depths below 8 are unaffected by the T6 flags (depth 7 still wants T5 level)', () => {
+    const state = makeState({
+      level: 14, // tier 2
+      unspentSkillPoints: 10_000,
+      ascendantCoreCrafted: true,
+      buildings: [spaceport() as never],
+    });
+    // depth-3 node still tier-locked at level 14 even with T6 flags set.
+    expect(() => buyNode(DEFAULT_GRAPH, state, 'mining.recipeRate.3')).toThrow(/tier/i);
+  });
+});
+
 describe('magic recipeInputMul chain — T3 gate + reachability (real DEFAULT_GRAPH)', () => {
   const MAGIC_ROOT = 'smelting.inputEff.3';
 
