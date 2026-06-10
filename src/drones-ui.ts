@@ -360,12 +360,12 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     opt.textContent = `T${t}`;
     tierSelect.appendChild(opt);
   }
-  if (canUsePathMode()) {
-    const opt = document.createElement('option');
-    opt.value = '5-path';
-    opt.textContent = 'T5 Path';
-    tierSelect.appendChild(opt);
-  }
+  // Always mount the T5 path option; refresh() toggles disabled so it
+  // surfaces automatically when path mode is unlocked mid-session.
+  const pathOpt = document.createElement('option');
+  pathOpt.value = '5-path';
+  pathOpt.textContent = 'T5 Path';
+  tierSelect.appendChild(pathOpt);
   tierSelect.addEventListener('change', () => {
     const v = tierSelect.value;
     if (v === '5-path') {
