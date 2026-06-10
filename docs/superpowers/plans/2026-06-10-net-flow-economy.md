@@ -738,8 +738,38 @@ for (const fb of flowBuildings) {
     if (stock >= cap(state, id, ctx?.caps, undefined, ctx?.baseMult)) capConstrained.add(r);
   }
 }
+// §5.2 furnace coal burn — cap-side demand (owner decision 2026-06-10, see
+// design doc § flow-solver contract): each billing furnace appends a
+// synthetic consumer entry so a coal producer at a pinned coal bin
+// throttles to recipe-draw + burn. SKIPPED when coal is zero-constrained —
+// the binary fuel-starvation recompute (Fix 4.1 below) owns that regime,
+// and a synthetic entry would let the solver share fuel proportionally,
+// contradicting §5.2's all-or-none heat gate. Hoist the existing
+// `const COAL_CYCLE_SEC = 30;` declaration (currently just above the
+// pass-4 burn fold, economy.ts:1497) up here so both sites share it —
+// do NOT declare a second copy.
+if (!zeroConstrained.has('coal')) {
+  for (const [furnaceId, servedCount] of heat.coalConsumersByFurnace) {
+    if (servedCount <= 0) continue;
+    const furnace = validBuildings.find((b) => b.id === furnaceId);
+    if (!furnace) continue;
+    const coalPerCycle = defs[furnace.defId].heatSource?.coalPerCycle ?? 0;
+    if (coalPerCycle <= 0) continue;
+    flowBuildings.push({
+      produces: {},
+      consumes: { coal: (coalPerCycle * servedCount) / COAL_CYCLE_SEC },
+    });
+  }
+}
 const flowGates = solveFlow(flowBuildings, { capConstrained, zeroConstrained }).gates;
 ```
+
+The synthetic entries sit at indices ≥ `tentative.length`; passes 3–4 index
+`flowGates` only by tentative index, so they are never read back — they
+exist purely to shape θ_coal. Note `capConstrained`/`zeroConstrained` are
+scanned from the RECIPE entries before the synthetics are appended: if no
+recipe touches coal, θ_coal has no producers to throttle and the synthetic
+entries are inert, which is correct.
 
 Import at the top of economy.ts:
 ```ts
@@ -859,6 +889,16 @@ describe('net-flow at storage cap (§15.3 rework)', () => {
     // advance on the pinned-bin island must complete with safety counter
     // headroom (e.g. expose/observe via a spy on computeRates call count —
     // expect < 20 calls, vs hundreds under the old binary regime).
+  });
+
+  it('coal mine at a pinned coal bin throttles to recipe-draw + furnace burn', () => {
+    // Arrange: coal at cap; one coal producer; one billing coal furnace
+    // (heat.coalConsumersByFurnace non-empty — place a requiresHeat
+    // consumer adjacent per the existing heat-test fixtures); optionally a
+    // recipe consumer of coal. Assert across many segments: net coal flow
+    // exactly 0 (bin pinned), producer utilization equals
+    // (recipeDraw + coalPerCycle×servedCount/30) / fullRate, constant — no
+    // oscillation. (Owner decision 2026-06-10: burn is cap-side demand.)
   });
 
   it('offline catchup ≡ incremental ticks (existing invariant, net-flow regime)', () => {
