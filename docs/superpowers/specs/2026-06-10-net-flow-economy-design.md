@@ -55,8 +55,20 @@ lag kept, same as today).
   - Complementarity: a constraint binds only while actually violated; the
     active set is solved consistently (deactivating constraints relax other
     producers).
-  - Maximality: greatest fixed point — start `g = 1`, recompute θ/φ from
-    realized flows, take mins; monotone non-increasing ⇒ converges.
+  - Maximality: greatest fixed point consistent with deadlock-stays-dead.
+    DAG nodes: single exact update from finalized dependencies (multipliers
+    start at 1). **Inside true-cycle SCCs the start is pessimistic (0), not
+    1** — (1,1) is itself a fixed point of the A↔B bootstrap deadlock, so a
+    from-above start falsely self-certifies; from below, a cycle rises
+    exactly when genuine external supply exists (verified: a 0.5/s external
+    seed recovers (1,1)). [Corrected 2026-06-10 during Task 3 — the
+    original "start g=1, monotone non-increasing" wording fails the spec's
+    own deadlock example; do not "fix" the code back to it.]
+  - Self-loop algebra: a building that both produces and consumes the same
+    constrained resource enters that resource's equation with NET
+    coefficient (p−c on the cap side, c−p on the zero side); its self-draw
+    is NOT added to the target. Net≤0 participants drop out (feasible-safe,
+    conservative). [Corrected 2026-06-10 during Task 3.]
 - **Algorithm**: graph over constrained resources only → SCC condensation →
   topological order; exact propagation through the DAG; inside an SCC,
   damped iteration to ε = 1e-9 with hard iteration guard. Deterministic.
