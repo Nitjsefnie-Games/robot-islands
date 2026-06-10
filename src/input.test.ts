@@ -141,4 +141,20 @@ describe('InputRegistry', () => {
     releaseHandlers[action]!();
     expect(held.up).toBe(false);
   });
+
+  it('toggle-drones and toggle-skill-graph have distinct registry bindings', () => {
+    const reg = makeRegistry();
+    installDefaultBindings(reg);
+    const dronesEntry = Array.from(reg.bindings.entries()).find(
+      ([, a]) => a === 'toggle-drones',
+    );
+    const graphEntry = Array.from(reg.bindings.entries()).find(
+      ([, a]) => a === 'toggle-skill-graph',
+    );
+    expect(dronesEntry).toBeDefined();
+    expect(graphEntry).toBeDefined();
+    // The action strip previously advertised N for both; the registry must
+    // bind them to different keys so the strip can show the real binding.
+    expect(dronesEntry![0]).not.toBe(graphEntry![0]);
+  });
 });
