@@ -36,7 +36,7 @@ import {
 import { CELL_SIZE_TILES, type IslandSpec, type WorldState } from './world.js';
 import type { BuildingDefId } from './building-defs.js';
 import { hasOperationalBuilding, type PlacedBuilding } from './buildings.js';
-import { planCargo, type ViableEntry, type CargoDemand } from './route-cargo.js';
+import { planCargo, type ViableEntry } from './route-cargo.js';
 import type { CargoMode, CargoEntry } from './route-cargo.js';
 import { ALL_RESOURCES } from './recipes.js';
 
@@ -472,12 +472,23 @@ function destinationHeadroom(
  *  (source stock > 0, destination headroom > 0, source-floor gate passes),
  *  then run the route's mode allocator over `budget`. Pure-ish: reads
  *  world/states, mutates nothing. */
+/** Internal result of planRouteCargo: CargoDemand plus the §15.4 unclamped
+ *  desired used by Phase-2 proportional distribution. */
+interface PlannedDemand {
+  readonly resourceId: ResourceId;
+  /** Spill-semantics amount (sourceAvail-clamped in waterfall mode). */
+  readonly amount: number;
+  /** §15.4 Phase-2 desired: capacity share BEFORE sourceAvail clamp.
+   *  Equal to `amount` for non-waterfall modes (no contention bias). */
+  readonly unclampedDesired: number;
+}
+
 function planRouteCargo(
   world: WorldState,
   states: Map<string, IslandState>,
   route: Route,
   budget: number,
-): CargoDemand[] {
+): PlannedDemand[] {
   const srcState = states.get(route.from);
   const destState = states.get(route.to);
   if (!srcState || !destState) return [];
@@ -519,7 +530,26 @@ function planRouteCargo(
       tryPush(entry, entry.resourceId);
     }
   }
-  return planCargo(route.mode, viable, budget);
+
+  const planned = planCargo(route.mode, viable, budget);
+
+  // §15.4 fix 7.2: waterfall mode clamps each entry's `amount` to sourceAvail
+  // for intra-route spill ordering.  Phase-2 must see the UNCLAMPED capacity
+  // share so contending routes are scaled proportionally to capacity, not to
+  // the current inventory snapshot.  Compute the unclamped desired by re-running
+  // planCargo on a copy of viable with sourceAvail = Infinity.
+  if (route.mode === 'waterfall') {
+    const viableUnlocked = viable.map((e) => ({ ...e, sourceAvail: Infinity }));
+    const unclampedPlanned = planCargo('waterfall', viableUnlocked, budget);
+    // Match by position: both loops iterate the same viable array in order.
+    return planned.map((d, i) => ({
+      resourceId: d.resourceId,
+      amount: d.amount,
+      unclampedDesired: unclampedPlanned[i]?.amount ?? d.amount,
+    }));
+  }
+
+  return planned.map((d) => ({ resourceId: d.resourceId, amount: d.amount, unclampedDesired: d.amount }));
 }
 
 // ---------------------------------------------------------------------------
@@ -730,7 +760,9 @@ function dispatchPhase(
         : [];
     const planned = planRouteCargo(world, states, route, capDemand);
     for (const d of planned) {
-      demands.push({ route, resourceId: d.resourceId, desired: d.amount, weatherMul, crossedCells });
+      // §15.4 fix 7.2: use unclampedDesired so Phase-2 proportional distribution
+      // sees capacity-share, not the sourceAvail-clamped amount (waterfall fix).
+      demands.push({ route, resourceId: d.resourceId, desired: d.unclampedDesired, weatherMul, crossedCells });
     }
   }
 
