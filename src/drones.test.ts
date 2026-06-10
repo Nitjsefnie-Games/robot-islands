@@ -1924,3 +1924,47 @@ describe('Fix 6.4: rare-bias ring discovers rare islands only', () => {
     expect(rareIsland.discovered).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Fix 6.5 — Probability Engine counts only operational buildings
+// ---------------------------------------------------------------------------
+
+describe('Fix 6.5: probabilityBiasForIsland only counts operational buildings', () => {
+  it('under-construction probability_engine grants no bias', () => {
+    const result = probabilityBiasForIsland({
+      buildings: [{ defId: 'probability_engine', constructionRemainingMs: 5000 }],
+    });
+    expect(result).toBe(0);
+  });
+
+  it('invalid probability_engine grants no bias', () => {
+    const result = probabilityBiasForIsland({
+      buildings: [{ defId: 'probability_engine', invalid: true }],
+    });
+    expect(result).toBe(0);
+  });
+
+  it('disabled probability_engine grants no bias', () => {
+    const result = probabilityBiasForIsland({
+      buildings: [{ defId: 'probability_engine', disabled: true }],
+    });
+    expect(result).toBe(0);
+  });
+
+  it('operational probability_engine still grants 0.25 bias', () => {
+    const result = probabilityBiasForIsland({
+      buildings: [{ defId: 'probability_engine' }],
+    });
+    expect(result).toBe(0.25);
+  });
+
+  it('mixed: 1 under-construction + 1 operational = bias for 1 engine', () => {
+    const result = probabilityBiasForIsland({
+      buildings: [
+        { defId: 'probability_engine', constructionRemainingMs: 5000 },
+        { defId: 'probability_engine' },
+      ],
+    });
+    expect(result).toBe(0.25);
+  });
+});

@@ -16,7 +16,7 @@
 //     aviation kerosene, etc. No fallback to lower grades.
 
 import { computeSignalRanges, pointInSignalRange } from './antenna.js';
-import { hasOperationalBuilding } from './buildings.js';
+import { hasOperationalBuilding, isOperationalBuilding } from './buildings.js';
 import { corridorCells, islandCells, parseCellKey } from './discovery.js';
 import type { IslandState } from './economy.js';
 import { inv } from './economy.js';
@@ -256,9 +256,13 @@ export type DispatchResult =
   | { ok: true; drone: Drone }
   | { ok: false; reason: 'insufficient-fuel' | 'invalid-direction' | 'already-in-flight' | 'path-too-long' };
 
-/** §13.3 Probability Engine — compute the rare-island scan bias for an island. */
-export function probabilityBiasForIsland(state: { buildings: ReadonlyArray<{ defId: string }> }): number {
-  const engineCount = state.buildings.filter((b) => b.defId === 'probability_engine').length;
+/** §13.3 Probability Engine — compute the rare-island scan bias for an island.
+ *  Only OPERATIONAL buildings count — under-construction, invalid, or disabled
+ *  Probability Engines grant no bias. */
+export function probabilityBiasForIsland(state: { buildings: ReadonlyArray<{ defId: string; invalid?: boolean; constructionRemainingMs?: number; disabled?: boolean }> }): number {
+  const engineCount = state.buildings.filter(
+    (b) => b.defId === 'probability_engine' && isOperationalBuilding(b),
+  ).length;
   if (engineCount === 0) return 0;
   if (engineCount === 1) return 0.25;
   if (engineCount === 2) return 0.40;
