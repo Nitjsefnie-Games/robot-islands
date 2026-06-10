@@ -509,9 +509,19 @@
         solver, not segment-by-segment luck, picks the consistent answer.
       </div>
 
-      <p class="body"><strong>Unconditional flows are out of the solver's scope:</strong>
-        rare-find trickles and furnace coal burn bypass recipes today and are
-        clamp-pinned by <code>applyRates</code>; they keep that behavior.</p>
+      <p class="body"><strong>Rare-find trickles stay outside the solver's scope</strong> —
+        clamp-pinned by <code>applyRates</code> as today (cap overflow of a bonus
+        trickle vanishes; unchanged behavior).</p>
+      <p class="body"><strong>Furnace coal burn is solver-visible on the cap side
+        (owner decision 2026-06-10):</strong> the §5.2 burn
+        (<code>coalPerCycle × servedCount / 30s</code>, folded into <code>net.coal</code>
+        post-recipe) appends one synthetic consumer entry
+        <code>{ consumes: { coal: burnPerSec } }</code> per billing furnace, so a coal
+        producer at a pinned coal bin throttles to recipe-draw + burn — without it the
+        cap flicker loop returns for coal specifically. The synthetic entries are
+        <em>skipped</em> when coal is zero-constrained: the existing binary
+        fuel-starvation recompute (Fix 4.1) owns that regime per §5.2's all-or-none
+        heat gate; proportional fuel/heat is explicitly deferred (see §10).</p>
     </section>
 
     <section id="s4">
@@ -691,6 +701,10 @@
         <div class="defer">
           <div class="dt">UI exposure of utilization</div>
           <div class="dd">BuildingRate.utilization makes a "running at 60%" badge trivial for inspector/HUD, but UI work is a separate change after the engine lands.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Proportional fuel/heat (continuous furnace starvation)</div>
+          <div class="dd">A partially-fueled furnace serving partial heat would remove the binary starve/unstarve oscillation at zero coal stock, but rewrites §5.2's locked all-or-none heat semantics and pulls heat.ts into scope. Cap-side burn demand ships now; this follow-up is deliberate.</div>
         </div>
         <div class="defer">
           <div class="dt">Maintenance threshold retuning</div>

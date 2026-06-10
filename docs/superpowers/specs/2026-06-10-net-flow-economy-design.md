@@ -60,8 +60,18 @@ lag kept, same as today).
 - **Algorithm**: graph over constrained resources only → SCC condensation →
   topological order; exact propagation through the DAG; inside an SCC,
   damped iteration to ε = 1e-9 with hard iteration guard. Deterministic.
-- Unconditional flows (rare-find trickle, furnace coal burn) stay outside
-  the solver, clamp-pinned by `applyRates` as today.
+- Rare-find trickles stay outside the solver, clamp-pinned by `applyRates`
+  as today (cap overflow of a bonus trickle vanishes — unchanged behavior).
+- **Furnace coal burn — cap-side demand (owner decision 2026-06-10):** the
+  §5.2 coal burn (`coalPerCycle × servedCount / 30s`, folded into
+  `net.coal` post-recipe at `economy.ts:1497-1508`) IS solver-visible on
+  the cap side: each billing furnace appends a synthetic consumer entry
+  `{ consumes: { coal: burnPerSec } }` so a coal producer at a pinned coal
+  bin throttles to recipe-draw + burn (otherwise the cap flicker loop
+  returns for coal specifically). The synthetic entries are SKIPPED when
+  coal is zero-constrained: the existing binary fuel-starvation recompute
+  (Fix 4.1, `economy.ts:1510-1546`) owns that regime per §5.2's
+  all-or-none heat gate; proportional fuel/heat is explicitly deferred.
 
 ### Worked examples (= unit tests)
 
@@ -159,4 +169,6 @@ lag kept, same as today).
 ## Out of scope
 
 Power as a solver commodity; UI utilization badge (BuildingRate.utilization
-makes it trivial later); maintenance threshold retuning.
+makes it trivial later); maintenance threshold retuning; proportional
+fuel/heat (continuous furnace starvation — would rewrite §5.2's all-or-none
+heat gate; cap-side burn demand ships now, this follow-up is deliberate).
