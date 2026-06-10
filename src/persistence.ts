@@ -882,6 +882,9 @@ export function deserializeWorld(
       ...d,
       launchTime: d.launchTime + perfShift,
       expectedReturnTime: d.expectedReturnTime + perfShift,
+      // §Fix 6.3: doomedAtMs is a perf-clock timestamp — shift it just like
+      // launchTime/expectedReturnTime. Absent on old saves (undefined) → stays undefined.
+      ...(d.doomedAtMs !== undefined ? { doomedAtMs: d.doomedAtMs + perfShift } : {}),
       scanBuffer: new Set<string>((d as unknown as { scanBuffer?: ReadonlyArray<string> }).scanBuffer ?? []),
     })),
     routes: snapshot.world.routes.map((r) => ({
