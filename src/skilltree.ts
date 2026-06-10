@@ -549,14 +549,36 @@ function buildStandardEdges(nodes: ReadonlyArray<SkillNode>): Edge[] {
     }
     if (subPathChains.length === 0) continue; // no chain to anchor to
 
-    // Prefer a chain whose effect kind matches the notable's.
-    const match = subPathChains.find(([, arr]) => arr[0]?.effect.kind === n.effect.kind);
-    const chosen = match ?? subPathChains.sort(([a], [b]) => a.localeCompare(b))[0]!;
-    const chain = chosen[1];
-
-    // Anchor from chain depth (notable.depth - 1) if it exists; else deepest.
     const targetDepth = Math.max(1, n.depth - 1);
-    const fromNode = chain.find((c) => c.depth === targetDepth) ?? chain[chain.length - 1]!;
+    // Prefer a chain whose effect kind matches the notable's; fall back to
+    // the rest of the sub-path's chains in alphabetical order.
+    const match = subPathChains.find(([, arr]) => arr[0]?.effect.kind === n.effect.kind);
+    const alphabetical = subPathChains.slice().sort(([a], [b]) => a.localeCompare(b));
+    const ordered = match ? [match, ...alphabetical.filter((c) => c !== match)] : alphabetical;
+
+    // Anchor at exactly depth (notable.depth - 1), searching ALL the
+    // sub-path's chains in preference order; if no chain has that depth,
+    // take the nearest node BELOW the target across all chains; if nothing
+    // sits below (every chain starts deeper), the preferred chain's
+    // shallowest node. The old single-chain fallback anchored to the DEEPEST
+    // node, which hung depth-3/cost-3 notables off depth-6 T5-locked tails
+    // whenever the alphabetically-first chain started at depth 3 (the
+    // refinement `inputEff` chains).
+    let fromNode: SkillNode | undefined;
+    for (const [, arr] of ordered) {
+      const exact = arr.find((c) => c.depth === targetDepth);
+      if (exact) { fromNode = exact; break; }
+    }
+    if (fromNode === undefined) {
+      for (const [, arr] of ordered) {
+        for (const c of arr) {
+          if (c.depth < targetDepth && (fromNode === undefined || c.depth > fromNode.depth)) {
+            fromNode = c;
+          }
+        }
+      }
+    }
+    fromNode ??= ordered[0]![1][0]!; // chains are depth-sorted: [0] = shallowest
     edges.push({
       id: `edge.notable.${fromNode.id}.${n.id}.${edgeCounter++}` as EdgeId,
       from: fromNode.id as unknown as import('./skilltree-graph.js').NodeId,
