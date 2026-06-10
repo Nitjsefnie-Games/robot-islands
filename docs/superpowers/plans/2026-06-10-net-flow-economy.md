@@ -953,6 +953,16 @@ git commit -m "test(economy): net-flow steady-state, XP throttle, segment-count,
 
 ---
 
+> **Folded in from the Task 4 quality review:** while touching this region,
+> build one `Map<string, PlacedBuilding>` (id → building) after pass 1 in
+> `computeRates` and route through it (a) pass-3's O(V²)
+> `tentative.findIndex` per building — note `tentative` is NOT
+> index-aligned with `validBuildings` (recipe-less buildings skip the
+> push), so map `building → tentative index` explicitly; and (b) all three
+> `validBuildings.find((b) => b.id === furnaceId)` scans (pass 2.5 furnace
+> entries + the two pass-4 burn folds). Behavior-neutral refactor, own
+> commit, suite must stay green.
+
 ### Task 6: utilization-scaled maintenance wear
 
 **Files:**
