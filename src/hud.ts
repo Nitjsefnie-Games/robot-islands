@@ -5,6 +5,7 @@
 // The panel mounts in zone BR via `ui-zones.ts`; the multi-island bar is
 // extracted to `mountIslandBar` in zone TC.
 
+import { activeBonusMul } from './active-bonus.js';
 import { BIOME_DEFS, MODIFIER_DEFS } from './biomes.js';
 import { BUILDING_DEFS, type BuildingCategory, type BuildingDefId } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
@@ -12,7 +13,6 @@ import { nextSunEvent, realPhaseName, solarMultiplier, type DayPhase } from './d
 import { cap, inv, type IslandState, type PowerBalance, xpForLevel } from './economy.js';
 import { fmtPower } from './format.js';
 import { dispatchAction, type InputRegistry } from './input.js';
-import { activeBonusMul } from './active-bonus.js';
 import type { NetworkConsciousnessState } from './network-consciousness.js';
 import {
   RATE_WINDOW_MS,
@@ -683,8 +683,8 @@ export function mountHud(
     abK.textContent = 'Active bonus';
     const abV = document.createElement('span');
     abV.classList.add('ri-kv__v');
-    const abFrac = activeBonusMul(world) - 1;
-    abV.textContent = abFrac > 0 ? `+${(abFrac * 100).toFixed(1)}%` : '—';
+    const abPct = (activeBonusMul(world) - 1) * 100;
+    abV.textContent = abPct >= 0.05 ? `+${abPct.toFixed(1)}%` : '—';
     abKv.appendChild(abK);
     abKv.appendChild(abV);
     body.appendChild(abKv);
