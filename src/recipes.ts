@@ -787,7 +787,7 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   copper_ingot: 3,
   tin_ingot: 3,
   lead_ingot: 3,
-  solder: 10,
+  solder: 3,
   // Phase 7 — Bronze + Brass (§7.2)
   bronze: 10,
   brass: 10,
@@ -795,8 +795,8 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   alumina: 10,
   aluminum: 10,
   // Byproducts (§6.7) — T1 refined weight per spec §9.1.
-  oxygen: 3,
-  argon: 3,
+  oxygen: 30,
+  argon: 30,
   slag: 3,
   // T1 refined
   biofuel: 3,
@@ -842,7 +842,7 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   // Phase 6 — T2 mechanical components (§6.3)
   heavy_cable: 10,
   // Phase 6 — T3 battery (§6.3 / §7.9)
-  battery: 30,
+  battery: 10,
   // Phase 6 — T2 glass_panel (§6.3)
   glass_panel: 10,
   // Phase 6 — T2 coolant + ceramic_insulator (§6.3)
@@ -874,13 +874,13 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   // §6.6 T5 component (memetic core)
   memetic_core: 300,
   // T4 endgame (§6.5)
-  helium_3: 100,
+  helium_3: 30,
   cryogenic_hydrogen: 100,
   quantum_chip: 100,
   exotic_alloy: 100,
   ai_core: 100,
   // §9.5 T4 component (Carbon Forge — Forest-unique)
-  carbon_fiber: 100,
+  carbon_fiber: 30,
   // T5 transcendent (§6.6) — partial step-13 catalog
   casimir_energy: 300,
   reality_anchor: 300,
@@ -922,7 +922,7 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   repair_drone: 1000,
   // repair_pack is a T5-equivalent consumable per task brief.
   repair_pack: 300,
-  pcb: 10,
+  pcb: 30,
   circuit_board: 30,
   processor: 30,
   computing_module: 30,
