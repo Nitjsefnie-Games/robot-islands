@@ -58,6 +58,14 @@ export function averageRate(
  * Drop samples that fall outside the `RATE_WINDOW_MS` window ending at `now`,
  * mutating `buffer` in place. One sample just past the window edge is kept so
  * the average spans a full window. Never prunes below 2 samples.
+ *
+ * Fix 3.8 — long-rAF-gap head drop: after the tab sleeps for hours, the
+ * first post-gap sample is already in-window, so the steady-state rule above
+ * would keep the HOURS-old pre-gap head as the "one past-edge sample" for the
+ * next RATE_WINDOW_MS — diluting `averageRate` toward 0 (the HUD showed
+ * near-zero rates after refocus). A head older than 2 × RATE_WINDOW_MS is a
+ * gap artifact, not a window anchor: drop it as soon as ≥ 2 in-window samples
+ * remain to carry the average.
  */
 export function pruneRateBuffer(buffer: RateSample[], now: number): void {
   const cutoff = now - RATE_WINDOW_MS;
@@ -65,6 +73,15 @@ export function pruneRateBuffer(buffer: RateSample[], now: number): void {
     const second = buffer[1];
     if (!second || second.t >= cutoff) break;
     buffer.shift();
+  }
+  const head = buffer[0];
+  if (buffer.length >= 3 && head !== undefined && head.t < now - 2 * RATE_WINDOW_MS) {
+    let inWindow = 0;
+    for (let i = 1; i < buffer.length; i++) {
+      const s = buffer[i];
+      if (s && s.t >= cutoff) inWindow++;
+    }
+    if (inWindow >= 2) buffer.shift();
   }
 }
 
