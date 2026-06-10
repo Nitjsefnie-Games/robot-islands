@@ -535,7 +535,9 @@ through the maintenance factor and degrading would have no gameplay
 effect. Eternal Servitors are always exempt.
 
 
-Every placed building has an internal operating-time counter that ticks at wall-clock real-time from the moment of placement until the moment of destruction. Idle buildings, stalled buildings, and inactive buildings (per §5.1) all accrue maintenance time the same as actively-producing ones — maintenance is a function of presence, not productivity. This is what gives Eternal Servitor conversion (§13.3) its long-term value: exempt-from-maintenance is exempt from a real ongoing cost regardless of how the building is used.
+Every placed building has an internal operating-time counter. **It accrues in utilization-scaled operating time — duty cycle, not wall clock (net-flow rework; see `docs/superpowers/specs/2026-06-10-net-flow-economy-design.md`).** Each segment a building accrues `dt × utilization`, where `utilization` is the same `[0,1]` duty cycle that scales its effective rate: the product of the building's dynamic gates (net-flow solver gate `g`, power brownout factor for consumers, heat throttle, adjacency soft-gate). `utilization` **excludes** the maintenance factor itself (no degradation-slows-degradation feedback — a building past its threshold still wears at full duty speed), time-acceleration, and variance. A building idling against a full bin (`utilization` 0) no longer wears at all.
+
+This **deliberately inverts** the old rule that idle/stalled/inactive buildings accrued maintenance time identically to active ones ("maintenance is a function of presence, not productivity"): under the net-flow model maintenance pressure follows actual duty, so a building can escape it by sitting at a capped output with no consumer. Eternal Servitor conversion (§13.3) keeps its long-term value: exempt-from-maintenance is exempt from a real ongoing cost regardless of how the building is used.
 
 Once accumulated operating time reaches the maintenance threshold for the building's tier (placeholder: T1 = 12h, T2 = 16h, T3 = 20h, T4 = 24h, T5 = 24h), the building enters a "needs maintenance" state.
 
@@ -602,7 +604,9 @@ power\_factor = P\_consumed == 0 ? 1 : min(1, P\_produced / P\_consumed)
 
 `power\_factor` multiplies the production rate of every consumer on the island. This produces smooth brownout: under-supplied islands see proportional output reduction, never hard cutoffs or building damage.
 
-**`active` definition.** A building is `active` iff `inputAvail > 0` (per §15.3) AND all gates pass: terrain/tile requirement, adjacency requirement (heat, cooling, etc. per §5.2), and direct fuel-consumption stockpile if applicable. Solar-class buildings additionally require the current day-cycle phase (§2.7) to provide non-zero solar output. Otherwise inactive: contributes zero to `P\_produced` and `P\_consumed`. A generator's `P\_produced` is additionally scaled by its §4.5 cluster-bonus multiplier (clustered generators boost each other); `P\_consumed` is not.
+**Throughput-scaled draw.** A consumer's electrical draw scales with how hard it is actually running: `P\_consumed` for a building is its nominal consumption × its throughput factor. That throughput factor is the **net-flow solver gate `g`** (§15.3) — formerly `inputAvail × outputAvail`. The extremes are identical (`g = 0` when fully starved/blocked ⇒ no draw; `g = 1` when unconstrained ⇒ full draw); the middle is now the continuous shared-factor solve rather than a product of two binary-ish terms. **A power producer's wattage is never gated by `g`:** a generator whose recipe output sits at cap keeps producing its full W — the solver gate throttles only its resource side, not its electrical output (`casimir_tap`, `cryogenic_generator`).
+
+**`active` definition.** A building is `active` iff its solver gate `g > 0` (per §15.3) AND all gates pass: terrain/tile requirement, adjacency requirement (heat, cooling, etc. per §5.2), and direct fuel-consumption stockpile if applicable. Solar-class buildings additionally require the current day-cycle phase (§2.7) to provide non-zero solar output. Otherwise inactive: contributes zero to `P\_produced` and `P\_consumed`. A generator's `P\_produced` is additionally scaled by its §4.5 cluster-bonus multiplier (clustered generators boost each other); `P\_consumed` is not.
 
 ### 5.2 Heat (Adjacency-Based)
 
@@ -2003,9 +2007,14 @@ function computeRates(island: Island) {
     const buffStack = adjBonus
                     \* computeModifierBuffs(island, def.recipe)
                     \* computeNetworkBuff(world, island);
-    const inputAvail = inputAvailabilityFactor(island, def.recipe);  // continuous [0,1]; 0 = stalled (no output, no XP)
-    const outputAvail = outputAvailabilityFactor(island, def.recipe); // binary; 0 = some output bin at cap; back-propagates upstream
-    const rate = (1 / def.recipe.cycleSec) \* powerFactor \* buffStack \* Math.min(inputAvail, outputAvail);
+    // Net-flow throttle (supersedes the old binary outputAvail): a single
+    // shared per-building gate `g` ∈ [0,1] replaces `min(inputAvail,
+    // outputAvail)`. `g` is solved exactly across the island so producers at
+    // a full bin and consumers at an empty bin rescale to the live flows on
+    // the other side of the bin (continuous, not binary). See the net-flow
+    // throttle note below for the math.
+    const g = flowGate(island, b);                                   // continuous [0,1]; 0 = idle (no flow, no XP)
+    const rate = (1 / def.recipe.cycleSec) \* powerFactor \* buffStack \* g;
     addToRates(rates, def.recipe, rate);
   }
   return rates;
@@ -2013,6 +2022,39 @@ function computeRates(island: Island) {
 ```
 
 `findNextCapEvent` returns the timestamp at which any inventory hits its cap or empties given current rates, or `now` if nothing changes within the interval.
+
+**Net-flow throttle (supersedes the binary `outputAvail`).** `outputAvail` is
+no longer a binary stall — a single output bin at cap once froze the whole
+building (no inputs, no outputs, no XP, no power draw), which oscillated
+stall→drain→wake→refill against any live consumer. It is now a *continuous,
+demand-coupled* throttle. For each constrained resource a single shared factor
+is solved across the island so realized production exactly matches realized
+consumption at a pinned bin: a capped resource `r` yields a shared throttle
+`θ[r]` over all of `r`'s producers (target = the consumers' realized draw), and
+an empty resource `r` yields a shared factor `φ[r]` over all of `r`'s consumers
+(target = the producers' realized supply) — `φ` generalizes the old
+`inputAvail`. Each building takes the **min rule**: its gate `g` is the minimum
+of 1, every `θ` over its capped outputs, and every `φ` over its emptied inputs,
+so the most-constrained stream governs the whole building (a full byproduct bin
+still chokes a multi-output building, continuously). The factors are solved
+*exactly* via an active-set / piecewise-linear method (a constraint binds only
+while it would actually be violated; deactivating constraints relax the other
+producers), not by a fixed-point relaxation. The §15.3 piecewise-constant-rate
+invariant is **preserved**: factors are constant between events, so rates stay
+piecewise-constant. A pinned bin runs at net exactly 0 and therefore **emits no
+cap event** — `findNextCapEvent` skips a stock already at its boundary, so a
+steady throttled state advances in O(1) segments instead of one boundary event
+per segment forever. **Coal-burn cap-side demand (§5.2):** the per-furnace coal
+burn (`coalPerCycle × servedCount / 30 s`) is solver-visible on the cap side as
+a synthetic consumer entry, so a coal producer at a pinned coal bin throttles to
+recipe-draw + burn rather than flickering; this synthetic demand is skipped when
+coal is at zero, where §5.2's all-or-none fuel gate owns the regime.
+**Generator wattage is never solver-gated:** a power producer whose recipe
+output is cap-pinned keeps producing its full W; the gate throttles its resource
+side only (§5.1). Implementation: `src/flow-solver.ts` (pure leaf module — no
+PixiJS, like `ocean-gen.ts` in §2.1) holds the exact solve; `computeRates` feeds
+it in a pass-2.5 and consumes the gate in passes 3–4. Full design and worked
+examples: `docs/superpowers/specs/2026-06-10-net-flow-economy-design.md`.
 
 Construction completions are also event boundaries: when `constructionRemainingMs` reaches zero during a segment, the loop iterates there. At that completion point a storage building's capacity multiplier is credited to the island's caps (§4.6, expanded to `multiplier × storage_base(r)` per affected resource) — the base multiplier for a fresh placement (floorLevel 0), the flat per-level multiplier increment for a completed floor upgrade (floorLevel ≥ 1); the same loop runs every segment, so a build completing mid-offline-catchup is credited correctly. Immediately after each segment `promoteQueuedBuilds` promotes the FIFO head of the build queue (lowest `queueSeq`) into any newly freed running slot, so queued builds start ticking within the same advance/offline-catchup call (§4.8).
 
