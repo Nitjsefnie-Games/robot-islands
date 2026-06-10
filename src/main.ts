@@ -1982,7 +1982,7 @@ async function main(): Promise<void> {
     const orbitalDeltaMs = now - prevFrameMs;
     tickSatMovement(worldState, now);
     tickSweeperCleanup(worldState, orbitalDeltaMs);
-    tickDebris(worldState, now);
+    tickDebris(worldState, now, orbitalDeltaMs);
     tickScannerDiscovery(worldState, orbitalDeltaMs, now);
     tickCommPackets(worldState);
     tickRepairDrones(worldState, now);
