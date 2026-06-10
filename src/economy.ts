@@ -40,7 +40,7 @@ import {
 import { advanceToxicityRolls, toxicityMultiplier } from './reactor-toxicity.js';
 import { makeSeededRng } from './rng.js';
 import { nextRotateOutputBoundaryMs, resolveRecipe, resolveRotatingOutput, XP_WEIGHT, type Recipe, type ResourceId } from './recipes.js';
-import { effectiveSkillMultipliers, skillPointsForLevelUp, type NodeId, effectiveTierShift, tierForLevel, skillUnlockedAdjacencyRules, type SkillMultipliers, DEFAULT_GRAPH, type ConditionalEffectCondition, type ExoticAdjacencyRule } from './skilltree.js';
+import { cloneSkillMultipliers, effectiveSkillMultipliers, skillPointsForLevelUp, type NodeId, effectiveTierShift, tierForLevel, skillUnlockedAdjacencyRules, type SkillMultipliers, DEFAULT_GRAPH, type ConditionalEffectCondition, type ExoticAdjacencyRule } from './skilltree.js';
 import { solveFlow, type FlowBuildingSpec } from './flow-solver.js';
 import type { CrystalId, EdgeId, Graph } from './skilltree-graph.js';
 import { networkedIslandIds } from './network-consciousness.js';
@@ -449,7 +449,10 @@ export function inv(state: IslandState, r: ResourceId): number {
  * still displays nominal caps; the economy uses these effective caps. That
  * UX inconsistency is left to a later step alongside the broader storage UI.
  */
-// TODO(perf): callers that don't thread ctx.baseMult recompute effectiveSkillMultipliers per call (UI paths); route through DerivationsMemo or memoize at source.
+// Perf note: callers that don't thread `mult` (UI paths — hud/inventory/
+// inspector, per resource per frame) fall back to `effectiveSkillMultipliers`,
+// which is memoized at source since §perf-2026-06-10 (skilltree.ts) — the
+// fallback is a signature check + clone, not a full graph re-fold.
 export function cap(
   state: IslandState,
   r: ResourceId,
@@ -823,7 +826,11 @@ export function fledglingRecipeMul(level: number): number {
 //   - clusterMuls            — §4.5 cluster-bonus multipliers (eager)
 //   - exoticRules            — §9.3 exotic adjacency pair rules (eager)
 //   - baseSkillMul           — un-layered effectiveSkillMultipliers fold
-//                              (eager; ALWAYS cloned before handing out —
+//                              (eager; itself a clone served by the source
+//                              memo in skilltree.ts since §perf-2026-06-10 —
+//                              harmless double-caching, kept layered so the
+//                              equivalence argument stays per-memo-local;
+//                              ALWAYS cloned before handing out —
 //                              layerConditionalBonuses mutates in place, the
 //                              Option-B landmine in the 2026-05-27
 //                              skillmult-memoize spec)
@@ -942,17 +949,9 @@ function getDerivationsMemo(
   return entry;
 }
 
-/** Deep-enough copy of a SkillMultipliers bundle: fresh nested records so
- *  `layerConditionalBonuses`' in-place mutation can never reach the memoized
- *  base. All other fields are primitives, covered by the spread. */
-function cloneSkillMultipliers(m: SkillMultipliers): SkillMultipliers {
-  return {
-    ...m,
-    recipeRate: { ...m.recipeRate },
-    storageCategoryCap: { ...m.storageCategoryCap },
-    xpGainByCategory: { ...m.xpGainByCategory },
-  };
-}
+// cloneSkillMultipliers moved to skilltree.ts (§perf-2026-06-10) — it now
+// lives next to the source memo whose private master it protects, and is
+// re-imported above. One clone implementation, one mutation-safety contract.
 
 /**
  * Compute per-building production rates given the current state.
