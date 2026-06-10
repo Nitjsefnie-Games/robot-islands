@@ -156,5 +156,5 @@ export function outputKg(recipe: { outputs?: Partial<Record<string, number>> }):
  *  floor to a bogus 1s). Spec companion table §10. Both the generator and the cycleSec
  *  sanity test import THIS predicate so they can never diverge. */
 export function shouldDeriveCycleSec(recipe: { outputs?: Partial<Record<string, number>>; category?: string }): boolean {
-  return recipe.category !== 'power' && outputKg(recipe) > 0;
+  return recipe.category !== 'power' && outputKg(recipe) >= 0.01;
 }
