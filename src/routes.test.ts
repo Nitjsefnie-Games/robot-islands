@@ -307,6 +307,27 @@ describe('dispatchAttempt — multi-route source contention', () => {
     expect(r1Out?.amount).toBeCloseTo(1.0, 9);
     expect(r2Out?.amount).toBeCloseTo(3.0, 9);
   });
+
+  it('fix 7.2 — waterfall routes split proportionally to capacity (§15.4)', () => {
+    // Source has 5 iron_ore.  Route A capacity 1/s, route B capacity 10/s, both waterfall.
+    // Before fix: desired clamped to sourceAvail=5, giving A=0.83, B=4.17.
+    // After fix:  desired unclamped (1 and 10), Phase-2 scale=5/11 → A≈0.45, B≈4.55.
+    const src = makeState('a', { inventory: { ...blankInventory(), iron_ore: 5 } });
+    const dst1 = makeState('b');
+    const dst2 = makeState('c');
+    const r1 = cargoRoute('a', 'b', 'iron_ore', [], 1,  10, 'waterfall');
+    const r2 = cargoRoute('a', 'c', 'iron_ore', [], 10, 10, 'waterfall');
+    const world = makeWorld([r1, r2]);
+    const states = new Map([['a', src], ['b', dst1], ['c', dst2]]);
+    const out = dispatchAttempt(world, states, 0, 1); // 1 second elapsed
+    expect(out.length).toBe(2);
+    const r1Out = out.find((d) => d.routeId === r1.id);
+    const r2Out = out.find((d) => d.routeId === r2.id);
+    // Capacity-proportional split: A gets 1/11 × 5 ≈ 0.4545, B gets 10/11 × 5 ≈ 4.5454
+    expect(r1Out?.amount).toBeCloseTo(5 / 11, 4);
+    expect(r2Out?.amount).toBeCloseTo(50 / 11, 4);
+    expect(src.inventory.iron_ore).toBeCloseTo(0, 9);
+  });
 });
 
 describe('deliverArrivals', () => {
