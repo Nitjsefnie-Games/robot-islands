@@ -151,7 +151,10 @@ lag kept, same as today).
 - §4.7: wear accrues in utilization-scaled operating time; thresholds,
   ramp, recipes unchanged.
 - §5.1: throughput-scaled draw factor renamed to solver gate g; extremes
-  identical.
+  identical. **Generator wattage is never solver-gated** (clarified during
+  Task 4 review): a power producer whose recipe output is cap-pinned keeps
+  producing its full W (old probe activeness preserved — `casimir_tap`,
+  `cryogenic_generator`); the solver gate throttles its resource side only.
 
 ## Verification
 

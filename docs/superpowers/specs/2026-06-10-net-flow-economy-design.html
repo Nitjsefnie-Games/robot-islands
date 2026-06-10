@@ -642,7 +642,7 @@
         <tbody>
           <tr><td class="slate">§15.3</td><td>outputAvail "binary; 0 = some output bin at cap; back-propagates upstream"</td><td>Continuous demand-coupled throttle: at-cap producers rescale to consumer draw (shared θ per resource, min rule per building, exact active-set solve). Piecewise-constant-rate invariant explicitly preserved.</td></tr>
           <tr><td class="slate">§4.7</td><td>Wear accrues in wall-clock operating time</td><td>Wear accrues in <em>utilization-scaled</em> operating time (duty cycle); thresholds/ramp/recipes unchanged. The "can't escape maintenance by capping output" rationale is inverted by design.</td></tr>
-          <tr><td class="slate">§5.1</td><td>Throughput-scaled draw via ia × oa</td><td>Same mechanic, factor renamed to the solver gate g. Behavior at the extremes identical (stall → 0 W).</td></tr>
+          <tr><td class="slate">§5.1</td><td>Throughput-scaled draw via ia × oa</td><td>Same mechanic, factor renamed to the solver gate g. Behavior at the extremes identical (stall → 0 W). <strong>Generator wattage is never solver-gated</strong> (clarified during Task 4 review): a power producer whose recipe output is cap-pinned keeps its full W output — the gate throttles its resource side only (<code>casimir_tap</code>, <code>cryogenic_generator</code>).</td></tr>
         </tbody>
       </table>
     </section>
