@@ -114,3 +114,147 @@ describe('solveFlow — trivial cases', () => {
     expect(r.gates[0]).toBe(1);
   });
 });
+
+describe('solveFlow — spec worked examples', () => {
+  it('example 1 — cap throttle: mine 5/s, workshop draws 3/s, iron at cap', () => {
+    const r = solveFlow(
+      [B({ iron: 5 }), B({}, { iron: 3 })],
+      { capConstrained: new Set(['iron']), zeroConstrained: new Set() },
+    );
+    expect(r.gates[0]).toBeCloseTo(0.6, 9); // mine throttled to consumer draw
+    expect(r.gates[1]).toBe(1);             // consumer unconstrained
+    expect(r.converged).toBe(true);
+  });
+
+  it('example 1b — cap with NO consumer: producer idles at 0', () => {
+    const r = solveFlow(
+      [B({ iron: 5 })],
+      { capConstrained: new Set(['iron']), zeroConstrained: new Set() },
+    );
+    expect(r.gates[0]).toBe(0);
+  });
+
+  it('example 2 — zero flow-through: mine 3/s, workshop demands 5/s, iron at 0', () => {
+    const r = solveFlow(
+      [B({ iron: 3 }), B({}, { iron: 5 })],
+      { capConstrained: new Set(), zeroConstrained: new Set(['iron']) },
+    );
+    expect(r.gates[0]).toBe(1);
+    expect(r.gates[1]).toBeCloseTo(0.6, 9); // workshop ticks at 60%
+  });
+
+  it('example 3 — min rule: alloy capped (small draw), slag buffered', () => {
+    const r = solveFlow(
+      [B({ alloy: 4, slag: 2 }), B({}, { alloy: 1 })],
+      { capConstrained: new Set(['alloy']), zeroConstrained: new Set() },
+    );
+    expect(r.gates[0]).toBeCloseTo(0.25, 9); // slag slows with the alloy throttle
+  });
+
+  it('example 4a — deactivating constraint: second capped output has zero demand', () => {
+    // B outputs r1 (cap, demand 2/s of 10) and r2 (cap, demand 0).
+    // θ_r2 = 0 ⇒ g(B) = 0; r1 then has zero supply < demand, its constraint
+    // deactivates (θ_r1 = 1) — but r2 still pins the building at 0.
+    const r = solveFlow(
+      [B({ r1: 10, r2: 10 }), B({}, { r1: 2 })],
+      { capConstrained: new Set(['r1', 'r2']), zeroConstrained: new Set() },
+    );
+    expect(r.gates[0]).toBe(0);
+  });
+
+  it('example 4b — partial deactivation: r2 demand 5/s', () => {
+    // θ_r1 = 0.2 binds; at g=0.2 r2 supplies 2 < 5 demand → r2 deactivates.
+    const r = solveFlow(
+      [B({ r1: 10, r2: 10 }), B({}, { r1: 2 }), B({}, { r2: 5 })],
+      { capConstrained: new Set(['r1', 'r2']), zeroConstrained: new Set() },
+    );
+    expect(r.gates[0]).toBeCloseTo(0.2, 9);
+  });
+
+  it('3-stage chain, middle bin capped: throttle propagates upstream', () => {
+    // A → ore (capped) → S → plate (buffered) → W draws plate implicitly via
+    // S consuming ore at 4/s only if S itself runs. S consumes ore 4/s,
+    // produces plate 4/s; sink consumes plate 1/s; plate ALSO capped.
+    // θ_plate = 1/4 → g(S)=0.25 → S draws ore at 1/s → θ_ore = 1/8 → g(A)=0.125.
+    const r = solveFlow(
+      [B({ ore: 8 }), B({ plate: 4 }, { ore: 4 }), B({}, { plate: 1 })],
+      { capConstrained: new Set(['ore', 'plate']), zeroConstrained: new Set() },
+    );
+    expect(r.gates[1]).toBeCloseTo(0.25, 9);
+    expect(r.gates[0]).toBeCloseTo(0.125, 9);
+  });
+
+  it('A↔B cycle at zero stocks: mutual bootstrap deadlock → both 0', () => {
+    const r = solveFlow(
+      [B({ x: 1 }, { y: 1 }), B({ y: 1 }, { x: 1 })],
+      { capConstrained: new Set(), zeroConstrained: new Set(['x', 'y']) },
+    );
+    expect(r.gates[0]).toBe(0);
+    expect(r.gates[1]).toBe(0);
+    expect(r.converged).toBe(true);
+  });
+
+  it('self-loop: building produces and consumes the same capped resource', () => {
+    // Net producer (p=5, c=2) at cap with external draw 1/s:
+    // realized prod ≤ realized cons: 5g ≤ 2g + 1 → g ≤ 1/3.
+    const r = solveFlow(
+      [B({ iron: 5 }, { iron: 2 }), B({}, { iron: 1 })],
+      { capConstrained: new Set(['iron']), zeroConstrained: new Set() },
+    );
+    expect(r.gates[0]!).toBeCloseTo(1 / 3, 6);
+  });
+});
+
+describe('solveFlow — property test', () => {
+  it('random problems satisfy constraints and maximality', () => {
+    // Deterministic LCG so the test is reproducible.
+    let seed = 0x2f6e2b1;
+    const rnd = (): number => {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      return seed / 0x7fffffff;
+    };
+    const RESOURCES = ['a', 'b', 'c', 'd', 'e'];
+    for (let trial = 0; trial < 200; trial++) {
+      const n = 1 + Math.floor(rnd() * 6);
+      const buildings: FlowBuildingSpec[] = [];
+      for (let i = 0; i < n; i++) {
+        const produces: Record<string, number> = {};
+        const consumes: Record<string, number> = {};
+        for (const res of RESOURCES) {
+          if (rnd() < 0.3) produces[res] = 0.5 + rnd() * 9.5;
+          else if (rnd() < 0.3) consumes[res] = 0.5 + rnd() * 9.5;
+        }
+        buildings.push({ produces, consumes });
+      }
+      const capConstrained = new Set<string>();
+      const zeroConstrained = new Set<string>();
+      for (const res of RESOURCES) {
+        const roll = rnd();
+        if (roll < 0.3) capConstrained.add(res);
+        else if (roll < 0.6) zeroConstrained.add(res);
+      }
+      const { gates, converged } = solveFlow(buildings, { capConstrained, zeroConstrained });
+      expect(converged).toBe(true);
+      const prod: Record<string, number> = {};
+      const cons: Record<string, number> = {};
+      for (let i = 0; i < n; i++) {
+        const g = gates[i]!;
+        expect(g).toBeGreaterThanOrEqual(0);
+        expect(g).toBeLessThanOrEqual(1);
+        for (const [res, p] of Object.entries(buildings[i]!.produces)) {
+          prod[res] = (prod[res] ?? 0) + p * g;
+        }
+        for (const [res, c] of Object.entries(buildings[i]!.consumes)) {
+          cons[res] = (cons[res] ?? 0) + c * g;
+        }
+      }
+      const TOL = 1e-6;
+      for (const res of capConstrained) {
+        expect((prod[res] ?? 0)).toBeLessThanOrEqual((cons[res] ?? 0) + TOL);
+      }
+      for (const res of zeroConstrained) {
+        expect((cons[res] ?? 0)).toBeLessThanOrEqual((prod[res] ?? 0) + TOL);
+      }
+    }
+  });
+});
