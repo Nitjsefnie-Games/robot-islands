@@ -7,9 +7,12 @@ import {
   DEFAULT_GRAPH,
   BRANCH_LABEL,
   SUBPATH_BRANCH,
+  buyKeystone,
   buyNode,
+  canBuyKeystone,
   costToUnlock,
   effectiveGraph,
+  keystonePrereqFor,
   bindCrystal,
   unbindCrystal,
   computeMiniTreeRefund,
@@ -359,9 +362,19 @@ export function mountSkillGraphView(
   function handleNodeClick(nodeId: GNodeId): void {
     const state = deps.getState();
     if (state.unlockedNodes.has(nodeId)) return;
-    // Uniform Dijkstra path for everything — fillers, notables, keystones.
-    // buyNode handles the root-node fallback for depth-1 fillers (no incoming
-    // edges) and walks the cheapest path otherwise, auto-owning intermediates.
+    // Keystones are AND-gated (§9.3): bought via buyKeystone, which requires
+    // EVERY prereq node owned plus the flat keystone cost. They are excluded
+    // from the Dijkstra solver, so buyNode would report them unreachable.
+    const ks = keystonePrereqFor(nodeId);
+    if (ks) {
+      if (!canBuyKeystone(ks, state)) return;
+      try { buyKeystone(ks, state); } catch { return; }
+      refresh();
+      return;
+    }
+    // Dijkstra path for fillers and notables. buyNode handles the root-node
+    // fallback for depth-1 fillers (no incoming edges) and walks the cheapest
+    // path otherwise, auto-owning intermediates.
     const graph = effectiveGraph(state);
     try { buyNode(graph, state, nodeId); } catch { return; }
     refresh();
