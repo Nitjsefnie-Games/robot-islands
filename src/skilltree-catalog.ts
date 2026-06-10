@@ -872,6 +872,7 @@ export const RULE_BREAKER_KEYSTONES: RawSkillNode[] = [
   },
   {
     id: 'oceanography.keystone.sonarPair' as NodeId,
+    // TODO(balance): economically inert — dock has no RECIPES entry, so the pairBoost multiplies a rate that never exists.
     subPath: 'oceanography', depth: 7, cost: 8, effect: { kind: 'exoticAdjacency', description: 'Dock+Tidal pair boost', effect: { kind: 'pairBoost', pair: ['dock', 'tidal_array'], recipeRateBonus: 0.2 } },
     description: 'Tidal Pairing — Adjacent Dock + Tidal Array boost each other'
   },

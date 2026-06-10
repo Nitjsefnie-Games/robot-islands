@@ -7,7 +7,7 @@
 // The interesting logic (per-category building enumeration, alarm
 // classification) is exported as pure functions; we test those directly.
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { PlacedBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
@@ -328,6 +328,148 @@ describe('mountHud DOM persistence', () => {
     // Element identity must be stable — same object references.
     expect(invBtnSecond).toBe(invBtnFirst);
     expect(trBtnSecond).toBe(trBtnFirst);
+  });
+});
+
+describe('mountHud retained DOM (perf: change-gated writes, no per-frame rebuild)', () => {
+  function makeMinimalWorld(): WorldState {
+    return {
+      islands: [],
+      seed: 'test',
+      drones: [],
+      routes: [],
+      vehicles: [],
+      revealedCells: new Set(),
+      satellites: [],
+      repairDrones: [],
+      debrisFields: [],
+      endgameState: { achieved: new Set(), firstAchievedMs: null },
+      latticeActive: false,
+      latticeNodeIslands: [],
+      commPackets: [],
+      oceanCells: new Map(),
+      depthRevealedCells: new Set(),
+      totalCo2Kg: 0,
+      playerLat: 0,
+      playerLon: 0,
+      recentBuildAttempts: new Set(),
+      recentBuildAttemptTs: new Map(),
+    };
+  }
+
+  function makeSpec(id: string): IslandSpec {
+    return {
+      id,
+      name: 'Test Island',
+      biome: 'plains',
+      cx: 0,
+      cy: 0,
+      majorRadius: 10,
+      minorRadius: 10,
+      populated: true,
+      discovered: true,
+      buildings: [],
+      modifiers: [],
+    };
+  }
+
+  function zeroNet(): Record<ResourceId, number> {
+    const net = {} as Record<ResourceId, number>;
+    for (const r of ALL_RESOURCES) net[r] = 0;
+    return net;
+  }
+
+  const power: PowerBalance = { produced: 10, consumed: 5, factor: 1, rawProduced: 10, rawConsumed: 5 };
+  const ncState: NetworkConsciousnessState = { tier3PlusCount: 0, milestone: 0, globalProductionBuff: 1 };
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('second update() with identical inputs is DOM-identical and creates zero elements', () => {
+    const parent = document.createElement('div');
+    const hud = mountHud(parent, makeMinimalWorld(), () => {}, makeRegistry());
+    const spec = makeSpec('retained-identical');
+    const state = { ...makeState(), id: 'retained-identical' };
+    const net = zeroNet();
+
+    hud.update(state, net, power, spec, ncState, null, 0, spec.id, new Map());
+    const htmlAfterFirst = parent.innerHTML;
+
+    const createSpy = vi.spyOn(document, 'createElement');
+    const createNsSpy = vi.spyOn(document, 'createElementNS');
+    hud.update(state, net, power, spec, ncState, null, 0, spec.id, new Map());
+
+    // Identical inputs → identical serialized DOM, with zero structural
+    // mutations (no element churn at all on the steady-state path).
+    expect(parent.innerHTML).toBe(htmlAfterFirst);
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(createNsSpy).not.toHaveBeenCalled();
+  });
+
+  it('a new resource appearing in the rates list restructures the rates region correctly', () => {
+    const parent = document.createElement('div');
+    const hud = mountHud(parent, makeMinimalWorld(), () => {}, makeRegistry());
+    const spec = makeSpec('retained-rates');
+    const state = { ...makeState(), id: 'retained-rates' };
+    const net = zeroNet();
+
+    // Drive the shared 60s realized-delta average with controlled timestamps:
+    // the rate buffer samples at most every 250ms of performance.now() time.
+    const nowSpy = vi.spyOn(performance, 'now');
+
+    const rateRows = (): string[] =>
+      [...parent.querySelectorAll('.ri-kv')]
+        .filter((row) => row.querySelector('.ri-dot'))
+        .map((row) => row.querySelector('.ri-kv__k')!.textContent ?? '');
+
+    nowSpy.mockReturnValue(0);
+    hud.update(state, net, power, spec, ncState, null, 0, spec.id, new Map());
+    // No realized deltas yet → placeholder, no rate rows.
+    expect(parent.textContent).toContain('no production');
+    expect(rateRows()).toEqual([]);
+
+    // iron_ore climbs by 100 over 1s → +100/s average → row appears.
+    state.inventory.iron_ore = 100;
+    nowSpy.mockReturnValue(1000);
+    hud.update(state, net, power, spec, ncState, null, 0, spec.id, new Map());
+    expect(parent.textContent).not.toContain('no production');
+    expect(rateRows()).toEqual([' Iron Ore']);
+
+    // coal appears too (smaller |rate|) → second row, ordered after iron_ore.
+    state.inventory.coal = 50;
+    nowSpy.mockReturnValue(2000);
+    hud.update(state, net, power, spec, ncState, null, 0, spec.id, new Map());
+    expect(rateRows()).toEqual([' Iron Ore', ' Coal']);
+  });
+
+  it('tier-reset row appears and disappears per canTierReset', () => {
+    const parent = document.createElement('div');
+    const hud = mountHud(parent, makeMinimalWorld(), () => {}, makeRegistry());
+    const spec = makeSpec('retained-tier-reset');
+    const net = zeroNet();
+
+    const tierResetVisible = (): boolean =>
+      [...parent.querySelectorAll('.ri-kv__k')].some((el) => el.textContent === '↺ TIER RESET');
+
+    // Level 1 → tier too low → row absent.
+    const lowState = { ...makeState(), id: 'retained-tier-reset' };
+    hud.update(lowState, net, power, spec, ncState, null, 0, spec.id, new Map());
+    expect(tierResetVisible()).toBe(false);
+
+    // Level 15 with steel/gear covering tierResetCost(15) → row present.
+    const readyState = {
+      ...makeState({ inventory: { steel: 300, gear: 200 } }),
+      id: 'retained-tier-reset',
+      level: 15,
+    };
+    hud.update(readyState, net, power, spec, ncState, null, 0, spec.id, new Map());
+    expect(tierResetVisible()).toBe(true);
+
+    // Resources spent → row disappears again.
+    readyState.inventory.steel = 0;
+    hud.update(readyState, net, power, spec, ncState, null, 0, spec.id, new Map());
+    expect(tierResetVisible()).toBe(false);
   });
 });
 
