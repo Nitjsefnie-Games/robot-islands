@@ -378,6 +378,31 @@ describe('pickMostDegradedTarget', () => {
     const normal = mkBuilding('mine', T1_THRESHOLD + 1);
     expect(pickMostDegradedTarget([servitor, normal], BUILDING_DEFS)).toBe(normal);
   });
+
+  it('skips disabled buildings — a less-degraded enabled sibling is targeted (fix 4.4)', () => {
+    // The disabled one is plateau-deep (most degraded); without the filter
+    // it would be targeted and — its recipe likely out of stock — block ALL
+    // auto-maintenance on the island (caller picks exactly one target).
+    const disabled = mkBuilding('mine', T1_THRESHOLD + MAINTENANCE_DEGRADE_DURATION_MS * 2);
+    (disabled as { disabled?: boolean }).disabled = true;
+    const enabled = mkBuilding('mine', T1_THRESHOLD + 1000);
+    expect(pickMostDegradedTarget([disabled, enabled], BUILDING_DEFS)).toBe(enabled);
+  });
+
+  it('skips invalid buildings (fix 4.4)', () => {
+    const invalid = mkBuilding('mine', T1_THRESHOLD + MAINTENANCE_DEGRADE_DURATION_MS * 2);
+    (invalid as { invalid?: boolean }).invalid = true;
+    const enabled = mkBuilding('mine', T1_THRESHOLD + 1000);
+    expect(pickMostDegradedTarget([invalid, enabled], BUILDING_DEFS)).toBe(enabled);
+  });
+
+  it('returns null when every degraded building is disabled or invalid (fix 4.4)', () => {
+    const disabled = mkBuilding('mine', T1_THRESHOLD + 1000);
+    (disabled as { disabled?: boolean }).disabled = true;
+    const invalid = mkBuilding('mine', T1_THRESHOLD + 1000);
+    (invalid as { invalid?: boolean }).invalid = true;
+    expect(pickMostDegradedTarget([disabled, invalid], BUILDING_DEFS)).toBeNull();
+  });
 });
 
 

@@ -2822,6 +2822,48 @@ describe('§4.7 maintenance — integration with advanceIsland', () => {
     expect(state.inventory.bolt).toBe(0);
   });
 
+  it('disabled degraded building neither soaks materials nor blocks an enabled sibling (fix 4.4)', () => {
+    // The DISABLED mine is plateau-deep (most degraded). Without the
+    // disabled filter in pickMostDegradedTarget it would be targeted: with
+    // materials in stock it soaks them while producing nothing; the enabled
+    // just-past-threshold sibling is never serviced. With the filter, the
+    // sibling is the target and gets maintained.
+    const state = makeState({
+      buildings: [
+        {
+          ...MINE,
+          id: 'mine-disabled',
+          disabled: true,
+          operatingMs: T1_THRESHOLD + MAINTENANCE_DEGRADE_DURATION_MS + 1000,
+          placedAt: 0,
+          maintainedAt: 0,
+        },
+        {
+          ...MINE,
+          id: 'mine-enabled',
+          operatingMs: T1_THRESHOLD + 10,
+          placedAt: 0,
+          maintainedAt: 0,
+        },
+      ],
+      storageCaps: blankCaps(1_000_000),
+      inventory: {
+        ...blankInventory(),
+        lubricant: 2, // exactly one T1 recipe
+        bolt: 5,
+      },
+    });
+    advanceIsland(state, 1_000, { defs: POWER_FREE });
+    const disabled = state.buildings.find((b) => b.id === 'mine-disabled')!;
+    const enabled = state.buildings.find((b) => b.id === 'mine-enabled')!;
+    // The ENABLED sibling got the cycle: reset to 0 then 1 s of accrual.
+    expect(enabled.operatingMs).toBe(1_000);
+    // The disabled one is untouched (frozen — no accrual, no reset).
+    expect(disabled.operatingMs).toBe(T1_THRESHOLD + MAINTENANCE_DEGRADE_DURATION_MS + 1000);
+    expect(state.inventory.lubricant).toBe(0);
+    expect(state.inventory.bolt).toBe(0);
+  });
+
   it('waits when the most-degraded building lacks materials — does not service a lesser candidate', () => {
     // T3 building at plateau (most degraded) but its T3 recipe inputs
     // (electric_motor, capacitor) are NOT in stock. A T1 building is also
@@ -4244,6 +4286,20 @@ describe('disabled building does not accrue operatingMs', () => {
   it('operatingMs stays at its pre-disable value across a 1h advance', () => {
     const state = makeState({
       buildings: [{ id: 'm', defId: 'mine', x: 0, y: 0, disabled: true, operatingMs: 5000 }],
+      inventory: blankInventory(),
+    });
+    advanceIsland(state, 3600 * 1000, { defs: BUILDING_DEFS });
+    const m = state.buildings.find((b) => b.id === 'm')!;
+    expect(m.operatingMs ?? 0).toBe(5000);
+  });
+});
+
+describe('invalid building does not accrue operatingMs (fix 4.4)', () => {
+  it('operatingMs stays at its pre-invalidation value across a 1h advance', () => {
+    // Invalid buildings produce nothing (isOperationalBuilding filters them
+    // from computeRates) — they must not accrue maintenance wear either.
+    const state = makeState({
+      buildings: [{ id: 'm', defId: 'mine', x: 0, y: 0, invalid: true, operatingMs: 5000 } as PlacedBuilding],
       inventory: blankInventory(),
     });
     advanceIsland(state, 3600 * 1000, { defs: BUILDING_DEFS });
