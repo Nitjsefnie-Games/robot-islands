@@ -35,6 +35,7 @@ import type { ObjectiveId } from './tutorial.js';
 import type { EdgeId } from './skilltree-graph.js';
 import { cumulativeSkillPointsForLevel } from './skilltree.js';
 
+import { ACTIVE_DECAY_RATIO } from './active-bonus.js';
 import {
   SCHEMA_VERSION,
   SUPPORTED_LOAD_VERSIONS,
@@ -53,6 +54,7 @@ import {
   migrateV18toV19,
   migrateV19toV20,
   migrateV20toV21,
+  migrateV21toV22,
   serializeWorld,
   type SaveSnapshot,
   type SerializedSnapshotV7,
@@ -150,7 +152,7 @@ describe('serializeWorld', () => {
     const states = new Map<string, IslandState>();
     const snap = serializeWorld(world, states, /* savedAt */ 1_234_567);
     expect(snap.v).toBe(SCHEMA_VERSION);
-    expect(snap.v).toBe(21);
+    expect(snap.v).toBe(22);
     expect(snap.savedAt).toBe(1_234_567);
   });
 
@@ -1506,7 +1508,7 @@ describe('persistence — tileOverrides round-trip (schema 7)', () => {
     const states = new Map<string, IslandState>();
     states.set('home', makeInitialIslandState(homeSpec!, 0));
     const snap = serializeWorld(world, states, 1_700_000_000_000, 0);
-    expect(snap.v).toBe(21);
+    expect(snap.v).toBe(22);
     const { world: rehydrated } = deserializeWorld(snap, 1_700_000_000_000, 0);
     const rh = rehydrated.islands.find((s) => s.id === 'home');
     expect(rh?.tileOverrides).toEqual({
@@ -2209,8 +2211,8 @@ describe('v17 -> v18 migration', () => {
     homeState.nextQueueSeq = 2;
     const states = new Map<string, IslandState>([['home', homeState]]);
     const snap = serializeWorld(world, states, 0, 0);
-    // The snapshot must be at v21 (SCHEMA_VERSION).
-    expect(snap.v).toBe(21);
+    // The snapshot must be at v22 (SCHEMA_VERSION).
+    expect(snap.v).toBe(22);
     const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
     const { world: restored, islandStates: restoredStates } = deserializeWorld(json, 0, 0);
     const rSpec = restored.islands.find((s) => s.id === 'home')!;
@@ -2235,8 +2237,8 @@ describe('v17 -> v18 migration', () => {
 });
 
 describe('v18 -> v19 migration (everProduced seen-set)', () => {
-  it('SCHEMA_VERSION is 21', () => {
-    expect(SCHEMA_VERSION).toBe(21);
+  it('SCHEMA_VERSION is 22', () => {
+    expect(SCHEMA_VERSION).toBe(22);
   });
 
   it('migrateV18toV19 backfills everProduced only from POSITIVE-stock resources', () => {
@@ -2280,7 +2282,7 @@ describe('v18 -> v19 migration (everProduced seen-set)', () => {
     homeState.everProduced = new Set(['bolt', 'iron_ingot']);
     const states = new Map<string, IslandState>([['home', homeState]]);
     const snap = serializeWorld(world, states, 0, 0);
-    expect(snap.v).toBe(21);
+    expect(snap.v).toBe(22);
     const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
     const { islandStates: restored } = deserializeWorld(json, 0, 0);
     const rState = restored.get('home')!;
@@ -2324,7 +2326,7 @@ describe('v20 -> v21 tutorial xpBumpClaimed migration', () => {
     } as unknown as Parameters<typeof migrateV20toV21>[0];
     const out = migrateV20toV21(v20);
     expect(out.v).toBe(21);
-    expect(SCHEMA_VERSION).toBe(21);
+    expect(SCHEMA_VERSION).toBe(22);
     expect((out.world.tutorialState as unknown as { xpBumpClaimed: string[] }).xpBumpClaimed)
       .toEqual(['a', 'b']);
   });
@@ -2355,5 +2357,51 @@ describe('v21 tutorialState.xpBumpClaimed round-trip', () => {
     const { world: restored } = deserializeWorld(json, 0, 0);
     expect(restored.tutorialState!.xpBumpClaimed).toBeInstanceOf(Set);
     expect(restored.tutorialState!.xpBumpClaimed!.has('a' as ObjectiveId)).toBe(true);
+  });
+});
+
+describe('schema v22 — activeBonusMs (§9.9)', () => {
+  it('migrateV21toV22 seeds world.activeBonusMs = 0 and bumps v', () => {
+    const v21 = {
+      v: 21,
+      savedAt: 1_000,
+      savedAtPerf: 500,
+      world: { tutorialState: undefined },
+    } as unknown as Parameters<typeof migrateV21toV22>[0];
+    const out = migrateV21toV22(v21);
+    expect(out.v).toBe(22);
+    expect((out.world as { activeBonusMs?: number }).activeBonusMs).toBe(0);
+  });
+
+  it('round-trips activeBonusMs through serialize/deserialize with closed-gap decay', () => {
+    const world = makeInitialWorld(0);
+    world.activeBonusMs = 600_000; // 10 focused minutes banked
+    const snap = serializeWorld(world, new Map(), 1_000_000, 500);
+    expect(snap.v).toBe(22);
+    expect(snap.world.activeBonusMs).toBe(600_000);
+    // Reload 1 minute of wall-clock later: decay 3 × 60_000.
+    const { world: loaded } = deserializeWorld(snap, 1_000_000 + 60_000, 9_999);
+    expect(loaded.activeBonusMs).toBe(600_000 - ACTIVE_DECAY_RATIO * 60_000);
+  });
+
+  it('floors load-time decay at 0 (overnight gap)', () => {
+    const world = makeInitialWorld(0);
+    world.activeBonusMs = 600_000;
+    const snap = serializeWorld(world, new Map(), 1_000_000, 500);
+    const eightHours = 8 * 3600 * 1000;
+    const { world: loaded } = deserializeWorld(snap, 1_000_000 + eightHours, 9_999);
+    expect(loaded.activeBonusMs).toBe(0);
+  });
+
+  it('a v21 snapshot (no activeBonusMs) loads with 0', () => {
+    const world = makeInitialWorld(0);
+    const snap = serializeWorld(world, new Map(), 1_000_000, 500);
+    const v21 = {
+      ...snap,
+      v: 21,
+      world: { ...snap.world, activeBonusMs: undefined },
+    } as unknown as SaveSnapshot;
+    const { world: loaded } = deserializeWorld(v21, 1_000_000, 9_999);
+    expect(loaded.activeBonusMs).toBe(0);
   });
 });
