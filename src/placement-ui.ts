@@ -223,12 +223,17 @@ function formatMissing(
   return `NEED ${body}`;
 }
 
-// Stable id derived from anchor coordinates (not a session counter, which
-// reset on reload and collided with saved ids). `validatePlacement` rejects
-// overlap, so two buildings can never share an (x, y) anchor — the id is
-// therefore unique by construction across reloads, with no counter to seed.
-function placedIdFor(x: number, y: number): string {
-  return `placed-${x},${y}`;
+// Stable id derived from island id + anchor coordinates.  Island-qualified
+// so buildings on different islands with identical local coords don't share
+// an id — collisions caused misfire in the toggle-disable hotkey and
+// hover-suppression path (§15.4).  `validatePlacement` still rejects
+// overlap within an island, so the id is unique by construction across
+// reloads for any given island.
+// NOTE: do NOT parse the coordinate tail out of ids — ids are opaque tokens.
+// Old saves retain the pre-§15.4 `placed-X,Y` format; new placements get the
+// island-qualified `placed-{islandId}-X,Y` format.
+function placedIdFor(islandId: string, x: number, y: number): string {
+  return `placed-${islandId}-${x},${y}`;
 }
 
 export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
@@ -712,7 +717,7 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
           localX,
           localY,
           0, // ocean defs ignore rotation (square footprints in initial scope)
-          () => placedIdFor(localX, localY),
+          () => placedIdFor(anchorSpec.id, localX, localY),
           undefined, // nowMs — keep the default (state.lastTick)
           undefined, // cargoLabelOverride — ocean defs aren't generic-storage
           picked, // anchorIslandId
@@ -768,7 +773,7 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
       localX,
       localY,
       rotation,
-      () => placedIdFor(localX, localY),
+      () => placedIdFor(targetSpec.id, localX, localY),
       undefined, // nowMs — keep the default (state.lastTick)
       activeCargoLabel, // §4.6 picker pick — undefined for non-generic defs
       undefined, // anchorIslandId — land path, never set
