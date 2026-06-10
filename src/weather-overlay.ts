@@ -135,7 +135,16 @@ export function mountWeatherOverlay(world: WorldState): WeatherOverlayHandle {
   };
 
   const rebuild = (nowMs: number, sources: WeatherVisionSources, wallOffsetMs: number): void => {
-    for (const c of layer.removeChildren()) c.destroy(true);
+    // destroy({children:true}) only — NOT destroy(true). The sprites here all
+    // share the module-level cellTexture (cached in getCellTexture()). Passing
+    // destroy(true) is shorthand for {children:true, texture:true,
+    // textureSource:true} and would destroy that shared texture, leaving its
+    // source null on the next rebuild → "Cannot read properties of null
+    // (reading 'alphaMode')" crash in Pixi's addRenderable (see commit 412ee27
+    // regression). Container.destroy({children:true}) propagates to children
+    // but the Sprite subclass only destroys its texture when options.texture is
+    // explicitly true, so the shared cellTexture survives.
+    for (const c of layer.removeChildren()) c.destroy({ children: true });
     const totalCo2Kg = sumIslandCo2(world);
     // §15.1: weather samples are wall-anchored; the throttle bookkeeping
     // below stays in the perf domain (`nowMs`).
