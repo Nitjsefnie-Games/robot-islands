@@ -5114,3 +5114,189 @@ describe('storage caps granted on construction completion', () => {
     expect(state.storageCaps.iron_ore).toBe(ironBefore + 500);
   });
 });
+
+
+describe('net-flow at storage cap (§15.3 rework)', () => {
+  it('producer at a full bin throttles to consumer draw — no oscillation', () => {
+    const state = makeState({
+      buildings: [MINE, WORKSHOP],
+      inventory: { ...blankInventory(), iron_ore: 100, coal: 50 },
+    });
+    const ctx = { defs: POWER_FREE };
+
+    // Mine nominal rate = 1/20 iron_ore/s. Workshop draws 1/4300 iron_ore/s.
+    // θ = consumerDraw / producerNominal = (1/4300) / (1/20) = 1/215.
+    const theta = (1 / 4300) / (1 / 20);
+
+    for (let i = 1; i <= 60; i++) {
+      advanceIsland(state, i * 1000, ctx);
+      // Bin must stay exactly pinned at cap.
+      expect(state.inventory.iron_ore).toBeCloseTo(100, 9);
+
+      const { byBuilding } = computeRates(state, ctx);
+      const mineRate = byBuilding.find((r) => r.building === MINE);
+      const wsRate = byBuilding.find((r) => r.building === WORKSHOP);
+
+      // Mine utilization = θ, constant — no flicker.
+      expect(mineRate?.utilization).toBeCloseTo(theta, 9);
+      // Mine effectiveRate = nominal × θ.
+      expect(mineRate?.effectiveRate).toBeCloseTo((1 / 20) * theta, 9);
+      // Workshop runs at full rate (inputs available, no cap on bolt).
+      expect(wsRate?.effectiveRate).toBeCloseTo(1 / 4300, 9);
+      expect(wsRate?.utilization).toBeCloseTo(1, 9);
+    }
+  });
+
+  it('producer at a full bin with NO consumer idles at utilization 0', () => {
+    const state = makeState({
+      buildings: [MINE],
+      inventory: { ...blankInventory(), iron_ore: 100 },
+    });
+    advanceIsland(state, 10_000, { defs: POWER_FREE });
+    const { byBuilding } = computeRates(state, { defs: POWER_FREE });
+    const mineRate = byBuilding.find((r) => r.building === MINE);
+    expect(mineRate?.utilization).toBe(0);
+    expect(mineRate?.effectiveRate).toBe(0);
+    expect(state.inventory.iron_ore).toBeCloseTo(100, 9);
+  });
+
+  it('XP accrues at the throttled rate, not the nominal rate', () => {
+    const N = 600; // seconds
+
+    // Capped island: mine throttled by workshop draw.
+    const capped = makeState({
+      buildings: [MINE, WORKSHOP],
+      inventory: { ...blankInventory(), iron_ore: 100, coal: 50 },
+    });
+    advanceIsland(capped, N * 1000, { defs: POWER_FREE });
+
+    // Empty-bin island: mine runs at full rate.
+    const empty = makeState({
+      buildings: [MINE, WORKSHOP],
+      inventory: { ...blankInventory(), coal: 50 },
+    });
+    advanceIsland(empty, N * 1000, { defs: POWER_FREE });
+
+    // Workshop-only control: same workshop XP in both scenarios.
+    const workshopOnly = makeState({
+      buildings: [WORKSHOP],
+      inventory: { ...blankInventory(), iron_ore: 10, coal: 50 },
+    });
+    advanceIsland(workshopOnly, N * 1000, { defs: POWER_FREE });
+
+    // Mine's XP contribution = total - workshop-only.
+    const mineXpCapped = capped.xp - workshopOnly.xp;
+    const mineXpEmpty = empty.xp - workshopOnly.xp;
+
+    // Throttled mine rate = (1/20) × (1/215) = 1/4300 cycles/s.
+    // Mine XP = rate × XP_WEIGHT.iron_ore × N = N / 4300.
+    expect(mineXpCapped).toBeCloseTo(N / 4300, 9);
+
+    // Full mine rate = 1/20 cycles/s.
+    // Mine XP = (1/20) × 1 × N = N / 20.
+    expect(mineXpEmpty).toBeCloseTo(N / 20, 9);
+
+    // Ratio must equal consumerDraw / mineRate = 1/215.
+    expect(mineXpCapped / mineXpEmpty).toBeCloseTo(1 / 215, 9);
+  });
+
+  it('long advance over a pinned bin takes O(1) segments, not O(cap-hits)', () => {
+    // Without spy machinery on computeRates (same-module ESM calls are not
+    // interceptable by vi.spyOn), the strongest deterministic proxy is the
+    // exact-cap invariant: net-flow keeps net=0 at the pinned bin, so after
+    // a 1-hour advance the inventory is still exactly 100. The old binary
+    // regime would let the cap drift down at consumer-draw speed
+    // (100 − 3600/4300 ≈ 99.16) over the same interval.
+    const state = makeState({
+      buildings: [MINE, WORKSHOP],
+      inventory: { ...blankInventory(), iron_ore: 100, coal: 50 },
+    });
+    const ONE_HOUR_MS = 60 * 60 * 1000;
+    advanceIsland(state, ONE_HOUR_MS, { defs: POWER_FREE });
+    expect(state.lastTick).toBe(ONE_HOUR_MS);
+    expect(state.inventory.iron_ore).toBeCloseTo(100, 9);
+    // Additionally, XP accrued must match the exact throttled expectation
+    // to 1e-6 — any per-segment drift from fragmentation would break this.
+    // Mine throttled XP over 1h = (1/4300) × 1 × 3600 = 3600/4300.
+    // Workshop bolt XP over 1h = (1/4300) × 10 × 3600 = 36000/4300.
+    // Total = 39600/4300.
+    expect(state.xp).toBeCloseTo(39600 / 4300, 6);
+  });
+
+  it('coal mine at a pinned coal bin throttles to recipe-draw + furnace burn', () => {
+    const COAL_PWR_FREE: DefCatalog = ((): DefCatalog => {
+      const base = { ...POWER_FREE } as Record<BuildingDefId, BuildingDef>;
+      const { power: _p, ...rest } = base.blast_furnace;
+      base.blast_furnace = rest as BuildingDef;
+      return base;
+    })();
+
+    const COAL_MINE: PlacedBuilding = { id: 'b-coal-mine', defId: 'mine', x: 5, y: 5 };
+    const BF: PlacedBuilding = { id: 'bf', defId: 'blast_furnace', x: 0, y: 0 };
+    const CF: PlacedBuilding = { id: 'cf', defId: 'coal_furnace', x: 3, y: 1 };
+
+    const state = makeState({
+      buildings: [COAL_MINE, BF, CF],
+      inventory: {
+        ...blankInventory(),
+        coal: 10_000, // pinned at cap (matches storageCaps)
+        iron_ore: 1000,
+        coke: 1000,
+        limestone: 1000,
+      },
+      storageCaps: blankCaps(10_000),
+      level: 10,
+    });
+
+    const ctx = { defs: COAL_PWR_FREE, terrainAt: () => 'coal' as TerrainKind };
+
+    // Coal mine nominal rate = 1/20 coal/s (mine_on_coal, cycleSec=20).
+    // Blast furnace does not consume coal in its recipe.
+    // Coal furnace burn = coalPerCycle × servedCount / 30 = 1 × 1 / 30 = 1/30 coal/s.
+    // Total coal demand = 1/30.
+    // Utilization = (1/30) / (1/20) = 2/3.
+    const expectedUtilization = (1 / 30) / (1 / 20); // = 2/3
+
+    for (let i = 1; i <= 60; i++) {
+      advanceIsland(state, i * 1000, ctx);
+      // Coal bin pinned at cap.
+      expect(state.inventory.coal).toBeCloseTo(10_000, 9);
+
+      const { byBuilding } = computeRates(state, ctx);
+      const mineRate = byBuilding.find((r) => r.building === COAL_MINE);
+
+      expect(mineRate?.utilization).toBeCloseTo(expectedUtilization, 9);
+      expect(mineRate?.effectiveRate).toBeCloseTo((1 / 20) * expectedUtilization, 9);
+    }
+  });
+
+  it('offline catchup ≡ incremental ticks (existing invariant, net-flow regime)', () => {
+    const MINE_ES: PlacedBuilding = { ...MINE, eternalServitor: true };
+    const WORKSHOP_ES: PlacedBuilding = { ...WORKSHOP, eternalServitor: true };
+
+    const N = 24 * 3600; // 24 hours in seconds
+
+    // Single 24h advance (offline catchup).
+    const bulk = makeState({
+      buildings: [MINE_ES, WORKSHOP_ES],
+      inventory: { ...blankInventory(), iron_ore: 100, coal: 50 },
+    });
+    advanceIsland(bulk, N * 1000, { defs: POWER_FREE });
+
+    // Same total time in 1-second increments.
+    const incremental = makeState({
+      buildings: [MINE_ES, WORKSHOP_ES],
+      inventory: { ...blankInventory(), iron_ore: 100, coal: 50 },
+    });
+    for (let i = 0; i < N; i++) {
+      advanceIsland(incremental, (i + 1) * 1000, { defs: POWER_FREE });
+    }
+
+    // Every resource must agree within 1e-6.
+    for (const r of ALL_RESOURCES) {
+      expect(bulk.inventory[r]).toBeCloseTo(incremental.inventory[r] ?? 0, 6);
+    }
+    expect(bulk.xp).toBeCloseTo(incremental.xp, 6);
+    expect(bulk.lastTick).toBe(incremental.lastTick);
+  });
+});
