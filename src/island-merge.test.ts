@@ -525,6 +525,42 @@ describe('performMerge', () => {
     // terrainAt should resolve the override.
     expect(a.terrainAt!(21, 1)).toBe('ore');
   });
+
+  it('credits absorbed storage caps before the inventory transfer', () => {
+    const a = makeSpec({
+      id: 'a',
+      cx: 0,
+      cy: 0,
+      buildings: [],
+    });
+    const b = makeSpec({
+      id: 'b',
+      cx: 20,
+      cy: 0,
+      buildings: [
+        { id: 'crate-1', defId: 'crate', x: 0, y: 0, cargoLabel: 'iron_ore' },
+      ],
+    });
+    const sa = makeState({
+      id: 'a',
+      storageCaps: { ...caps(2000), iron_ore: 100 },
+      inventory: { ...emptyInv(), iron_ore: 0 },
+    });
+    const sb = makeState({
+      id: 'b',
+      inventory: { ...emptyInv(), iron_ore: 150 },
+    });
+    const world = makeWorld([a, b]);
+    const states = new Map<string, IslandState>([
+      ['a', sa],
+      ['b', sb],
+    ]);
+    performMerge(world, states, a, b);
+    // The crate's cap contribution should now be on the absorber.
+    expect(sa.storageCaps.iron_ore).toBeGreaterThan(100);
+    // Inventory should have been transferred into the raised cap, not clamped.
+    expect(sa.inventory.iron_ore).toBe(150);
+  });
 });
 
 describe('findNextMerge', () => {
