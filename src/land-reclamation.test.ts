@@ -212,6 +212,31 @@ describe('expandIsland', () => {
 });
 
 // Biome-cap gates — Plains (28,28), Coast (28,14), Volcanic (14,14)
+describe('landReclamationCost — union-aware delta for merged islands', () => {
+  it('charges only genuinely-new tiles when extraEllipse overlaps the expansion ring', () => {
+    // Primary r=3, extra at (4,0) r=3. Expanding major to 4 adds 4 primary
+    // tiles, but 2 of them (x=2, y=-1 and y=0) are already inside the extra.
+    // Union delta should be 2 vs primary-only delta of 4.
+    const extra = [{ major: 3, minor: 3, rotation: 0, offsetX: 4, offsetY: 0 }] as const;
+    const primaryOnly = landReclamationCost(3, 3, 'major');
+    const unionAware = landReclamationCost(3, 3, 'major', extra as unknown as IslandSpec['extraEllipses']);
+
+    // Verify the union-aware cost is strictly smaller.
+    expect(unionAware.steel_beam).toBeLessThan(primaryOnly.steel_beam!);
+    expect(unionAware.concrete).toBeLessThan(primaryOnly.concrete!);
+
+    // Hand-counted expectation: 2 new tiles.
+    expect(unionAware.steel_beam).toBe(2 * (LAND_TILE_COST.steel_beam ?? 0));
+    expect(unionAware.concrete).toBe(2 * (LAND_TILE_COST.concrete ?? 0));
+  });
+
+  it('falls back to primary-only delta when extraEllipses is absent', () => {
+    const withoutExtra = landReclamationCost(3, 3, 'major');
+    const withEmptyExtra = landReclamationCost(3, 3, 'major', []);
+    expect(withEmptyExtra).toEqual(withoutExtra);
+  });
+});
+
 describe('§3.4 BIOME_MAX_RADII gates', () => {
   it('Plains: expand to (28,28) then both axes reject further expansion', () => {
     const spec = makeSpec({

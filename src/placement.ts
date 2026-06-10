@@ -33,7 +33,7 @@ export { rotateShape, type ShapeMask };
 import { floorLevel, floorScaledCapacity, hasOperationalBuilding, type PlacedBuilding } from './buildings.js';
 import { constructionTimeFor, upgradeConstructionMs } from './construction.js';
 import type { IslandState } from './economy.js';
-import { islandInscribedAny, tileInscribedInEllipse } from './island.js';
+import { islandInscribedAny } from './island.js';
 import { footprintMatches } from './ocean-cell.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import { effectiveSkillMultipliers, hasBiomeBypass, effectiveTierShift, tierForLevel, DEFAULT_GRAPH } from './skilltree.js';

@@ -197,6 +197,7 @@ const OCEAN_REASON_LABEL: Readonly<Record<OceanPlacementReason, string>> = {
   'terrain-mismatch': 'TERRAIN MISMATCH',
   'no-anchor-in-range': 'NO ANCHOR IN RANGE',
   'land-overlap': 'LAND OVERLAP',
+  'ocean-overlap': 'OCEAN OVERLAP',
 };
 
 /** Pretty-print a §14 shortfall record as "NEED 5 STONE, 3 WOOD" for the
