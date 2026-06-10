@@ -28,13 +28,61 @@ export interface FlowConstraints {
 
 export interface FlowSolution {
   /** Gate per building, same order as the input array, each in [0,1]. */
-  readonly gates: number[];
+  readonly gates: readonly number[];
   /** False only if the SCC iteration guard tripped (pathological cycle). */
   readonly converged: boolean;
 }
 
 export const FLOW_EPSILON = 1e-9;
 export const FLOW_MAX_SWEEPS = 1000;
+
+/** One participant in a shared-factor solve: its flow coefficient and the
+ *  gate its OTHER constraints impose (the exclusion gate g^{¬r}). */
+export interface SharedFactorEntry {
+  readonly coeff: number;
+  readonly otherGate: number;
+}
+
+/**
+ * Solve Σᵢ coeffᵢ · min(otherGateᵢ, θ) = target for the largest θ ∈ [0,1].
+ * Piecewise-linear and monotone in θ, so: if even θ=1 stays ≤ target the
+ * constraint is slack (return 1); otherwise walk the sorted otherGate
+ * breakpoints and solve the linear segment containing the root. Exact.
+ */
+export function solveSharedFactor(
+  entries: ReadonlyArray<SharedFactorEntry>,
+  target: number,
+): number {
+  const live = entries.filter((e) => e.coeff > 0 && e.otherGate > 0);
+  if (live.length === 0) return 1;
+  let full = 0;
+  for (const e of live) full += e.coeff * Math.min(e.otherGate, 1);
+  if (full <= target + FLOW_EPSILON) return 1; // slack — deactivated
+  if (target <= 0) return 0;
+  // Sort ascending by otherGate; below breakpoint k, entries 0..k-1 are
+  // pinned (contribute coeff×otherGate), the rest scale with θ.
+  const sorted = [...live].sort((a, b) => a.otherGate - b.otherGate);
+  let pinnedSum = 0; // Σ coeff×otherGate of entries pinned below θ
+  let freeCoeff = 0; // Σ coeff of entries scaling with θ
+  for (const e of sorted) freeCoeff += e.coeff;
+  let lo = 0;
+  for (let k = 0; k <= sorted.length; k++) {
+    const hi = k < sorted.length ? Math.min(sorted[k]!.otherGate, 1) : 1;
+    // On [lo, hi): realized(θ) = pinnedSum + freeCoeff × θ
+    const theta = (target - pinnedSum) / freeCoeff;
+    if (theta >= lo - FLOW_EPSILON && theta <= hi + FLOW_EPSILON) {
+      return Math.min(1, Math.max(0, theta));
+    }
+    if (k < sorted.length) {
+      const e = sorted[k]!;
+      pinnedSum += e.coeff * Math.min(e.otherGate, 1);
+      freeCoeff -= e.coeff;
+      lo = hi;
+      if (freeCoeff <= 0) break;
+    }
+  }
+  return 1; // unreachable given the full > target guard; defensive
+}
 
 export function solveFlow(
   buildings: ReadonlyArray<FlowBuildingSpec>,
