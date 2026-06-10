@@ -284,8 +284,8 @@ describe('byproducts', () => {
     expect(RECIPES.oxygen_converter!.outputs.steel).toBe(2);
   });
 
-  it('XP_WEIGHT.oxygen is 3', () => {
-    expect(XP_WEIGHT.oxygen).toBe(3);
+  it('XP_WEIGHT.oxygen is 30 (§6.4 T3 byproduct)', () => {
+    expect(XP_WEIGHT.oxygen).toBe(30);
   });
 
   it('XP_WEIGHT.slag is 3', () => {
@@ -687,9 +687,9 @@ describe('§6.2 T1 refined — copper/tin/lead ingots (Task 2.6)', () => {
 });
 
 describe('§6.2/§7.2 solder + solder_alloyer (Task 2.7)', () => {
-  it('solder is in ALL_RESOURCES with xp_weight 10 (T2 component)', () => {
+  it('solder is in ALL_RESOURCES with xp_weight 3 (§6.2 T1 refined)', () => {
     expect(ALL_RESOURCES).toContain('solder' as ResourceId);
-    expect(XP_WEIGHT.solder).toBe(10);
+    expect(XP_WEIGHT.solder).toBe(3);
   });
   it('solder_alloyer recipe: tin_ingot + lead_ingot → 2 solder', () => {
     expect(RECIPES.solder_alloyer).toBeDefined();
@@ -1060,9 +1060,9 @@ describe('§6.3 heavy_cable via cable_mill (Task 6.3)', () => {
 });
 
 describe('§6.3/§7.9 battery via battery_factory (Task 6.4)', () => {
-  it('battery is in ALL_RESOURCES with xp_weight 30', () => {
+  it('battery is in ALL_RESOURCES with xp_weight 10 (§6.3 T2 component)', () => {
     expect(ALL_RESOURCES).toContain('battery');
-    expect(XP_WEIGHT.battery).toBe(30);
+    expect(XP_WEIGHT.battery).toBe(10);
   });
   it('battery_factory recipe: lithium + rigid_plastic + wire → battery', () => {
     expect(RECIPES.battery_factory).toBeDefined();
