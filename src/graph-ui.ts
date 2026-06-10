@@ -307,7 +307,10 @@ closeBtn.setAttribute('aria-label', 'Close recipe graph');
 closeBtn.style.cssText =
   'background:transparent;border:0;color:var(--ri-fg-3);' +
   'font-size:16px;line-height:1;cursor:pointer;padding:0 4px;';
-closeBtn.addEventListener('click', () => panelHandle.setVisible(false));
+closeBtn.addEventListener('click', () => {
+  visible = false;
+  panelHandle.setVisible(false);
+});
 head.appendChild(headTitle);
 head.appendChild(headSub);
 head.appendChild(closeBtn);
