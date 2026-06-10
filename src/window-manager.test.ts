@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 // Node test env lacks localStorage; provide a minimal in-memory mock.
 if (typeof globalThis.localStorage === 'undefined') {
@@ -29,6 +29,7 @@ import {
   LAYOUT_STORAGE_KEY,
   MIN_PANEL_W,
   MIN_PANEL_H,
+  makePanelDraggable,
   type UiLayoutBlob,
 } from './window-manager.js';
 
@@ -174,6 +175,78 @@ describe('parseLayoutBlob — degenerate-dimension floor', () => {
     expect(result!.panels.good).toBeDefined();
     expect(result!.panels.bad).toBeUndefined();
     expect(result!.globalZCounter).toBe(5);
+  });
+});
+
+describe('bringToFront must not mint degenerate layout entries', () => {
+  beforeEach(() => {
+    localStorage.clear();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('pointerdown on a never-dragged panel does not create a blob entry', () => {
+    // Minimal DOM mock so makePanelDraggable can run in a Node test env.
+    const captured: Array<{ type: string; fn: Function; capture?: boolean }> = [];
+    const mockPanel = {
+      addEventListener(type: string, fn: Function, capture?: boolean) {
+        captured.push({ type, fn, capture });
+      },
+      querySelector: () => null,
+      classList: {
+        contains: () => false,
+        add: () => {},
+        remove: () => {},
+      },
+      style: {} as Record<string, string>,
+      dataset: {} as Record<string, string | undefined>,
+      appendChild: () => {},
+      firstElementChild: null,
+      getBoundingClientRect: () => ({ left: 100, top: 100, width: 200, height: 150 }),
+    } as unknown as HTMLElement;
+
+    const origDoc = (globalThis as Record<string, unknown>).document;
+    const origHTMLElement = (globalThis as Record<string, unknown>).HTMLElement;
+    const origWindow = (globalThis as Record<string, unknown>).window;
+    vi.stubGlobal('window', { setTimeout: globalThis.setTimeout.bind(globalThis), clearTimeout: globalThis.clearTimeout.bind(globalThis) });
+    vi.stubGlobal('HTMLElement', class HTMLElement {});
+    vi.stubGlobal('document', {
+      createElement: () => ({
+        classList: { add: () => {}, remove: () => {} },
+        setAttribute: () => {},
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        setPointerCapture: () => {},
+        releasePointerCapture: () => {},
+        getBoundingClientRect: () => ({ left: 0, top: 0, width: 16, height: 16 }),
+        style: {} as Record<string, string>,
+        dataset: {} as Record<string, string>,
+      }),
+    });
+
+    try {
+      makePanelDraggable(mockPanel, 'test-never-dragged');
+      const captureListener = captured.find(
+        (l) => l.type === 'pointerdown' && l.capture === true,
+      )?.fn;
+      expect(captureListener).toBeDefined();
+
+      // Simulate a click inside the panel.
+      captureListener!({} as PointerEvent);
+
+      // Flush the 250 ms debounced write.
+      vi.runAllTimers();
+
+      const blob = readBlob();
+      expect(blob.panels['test-never-dragged']).toBeUndefined();
+    } finally {
+      vi.stubGlobal('document', origDoc);
+      vi.stubGlobal('HTMLElement', origHTMLElement);
+      vi.stubGlobal('window', origWindow);
+    }
   });
 });
 

@@ -403,7 +403,12 @@ function promoteToFree(
 function bringToFront(id: string): void {
   if (!wiredEls.has(id)) return;
   const z = bumpGlobalZ();
-  updatePanelLayout(id, { zRank: z });
+  // Only patch zRank when a layout entry already exists (i.e. the panel
+  // has been dragged or resized). Clicking a zone-anchored panel must
+  // NOT mint a degenerate x:0,y:0,w:0,h:0 entry.
+  if (blob.panels[id]) {
+    updatePanelLayout(id, { zRank: z });
+  }
   recomputeZIndexes();
 }
 
@@ -432,7 +437,8 @@ if (typeof window !== 'undefined') {
     for (const id of panelRecordIds()) {
       const el = wiredEls.get(id);
       const layout = blob.panels[id];
-      if (!el || !layout) continue;
+      // Skip panels that are still zone-anchored — only clamp free panels.
+      if (!el || !layout || !el.classList.contains('ri-free')) continue;
       const clamped = clampToViewport(
         { x: layout.x, y: layout.y, w: layout.w, h: layout.h },
         { w: window.innerWidth, h: window.innerHeight },
