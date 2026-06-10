@@ -192,12 +192,11 @@ const REASON_LABEL: Readonly<Record<PlacementReason, string>> = {
 /** §4 ocean-layer (Task 10) reason → label. Distinct from `PlacementReason`
  *  per the `OceanPlacementReason` union; surfaced by the status painter
  *  when the player hovers over an invalid ocean cell. */
-const OCEAN_REASON_LABEL: Readonly<Record<OceanPlacementReason, string>> = {
+const OCEAN_REASON_LABEL: Readonly<Partial<Record<OceanPlacementReason, string>>> = {
   'def-not-ocean': 'DEF NOT OCEAN',
   'terrain-mismatch': 'TERRAIN MISMATCH',
   'no-anchor-in-range': 'NO ANCHOR IN RANGE',
   'land-overlap': 'LAND OVERLAP',
-  'ocean-overlap': 'OCEAN OVERLAP',
 };
 
 /** Pretty-print a §14 shortfall record as "NEED 5 STONE, 3 WOOD" for the
