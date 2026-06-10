@@ -5,13 +5,14 @@
 import { describe, expect, it } from 'vitest';
 
 import type { IslandState } from './economy.js';
-import { ALL_RESOURCES, type ResourceId } from './recipes.js';
+import { ALL_RESOURCES, type RecipeCategory, type ResourceId } from './recipes.js';
 import {
   bindCrystal,
   buyKeystone,
   buyNode,
   canBuyKeystone,
   canSpend,
+  clearSkillMultipliersMemoForTests,
   computeMiniTreeRefund,
   costForDepth,
   costToUnlock,
@@ -527,6 +528,104 @@ describe('effectiveSkillMultipliers', () => {
     const mul = effectiveSkillMultipliers(s, { nodes: LG_RIM, edges: [], bridges: [], graftSockets: [] } as Graph);
     expect(mul.recipeInput).toBeCloseTo(1.32, 5);
     expect(mul.powerConsumption).toBe(1); // negative assertion: cross-contamination guard
+  });
+});
+
+describe('effectiveSkillMultipliers memo (§perf-2026-06-10)', () => {
+  // The memo engages only for DEFAULT_GRAPH (transient/test graphs take the
+  // uncached fold path — covered by every LG test above), so these tests
+  // unlock REAL catalog nodes. Picks are derived from the live catalog:
+  // aura-less recipeRateMul nodes. With no aura SOURCE owned, every aura
+  // amp is 1, so the expected fold is the plain per-category product of
+  // (1 + magnitude) over owned nodes — derived, no hardcoded catalog values.
+  interface RateNodePick { id: string; category: RecipeCategory; magnitude: number }
+  function pickRateNode(skip: ReadonlySet<string> = new Set()): RateNodePick {
+    for (const n of NODE_CATALOG) {
+      if (n.effect.kind === 'recipeRateMul' && n.aura === undefined && !skip.has(n.id)) {
+        return { id: n.id, category: n.effect.category, magnitude: n.magnitude };
+      }
+    }
+    throw new Error('catalog has no aura-less recipeRateMul node');
+  }
+  const nodeA = pickRateNode();
+  const nodeB = pickRateNode(new Set([nodeA.id]));
+  /** Expected fold for `cat` given owned aura-less rate nodes (amps all 1). */
+  function expectedFor(cat: RecipeCategory, owned: ReadonlyArray<RateNodePick>): number {
+    return owned.filter((n) => n.category === cat).reduce((acc, n) => acc * (1 + n.magnitude), 1);
+  }
+
+  it('repeat calls on the same state return equal values (warm hit ≡ cold fold)', () => {
+    clearSkillMultipliersMemoForTests();
+    const s = makeState({ unlockedNodes: new Set([nodeA.id]) });
+    const cold = effectiveSkillMultipliers(s); // builds the memo entry
+    const warm = effectiveSkillMultipliers(s); // serves the memo entry
+    expect(warm).toEqual(cold);
+    // Derived: one aura-less node, amp 1 → 1 + magnitude on its category.
+    expect(warm.recipeRate[nodeA.category]).toBeCloseTo(1 + nodeA.magnitude, 9);
+    // A genuinely cold re-fold (memo reset) agrees with the warm read.
+    clearSkillMultipliersMemoForTests();
+    expect(effectiveSkillMultipliers(s)).toEqual(warm);
+  });
+
+  it('returns a fresh clone each call — mutating result A does not affect result B', () => {
+    clearSkillMultipliersMemoForTests();
+    const s = makeState({ unlockedNodes: new Set([nodeA.id]) });
+    const a = effectiveSkillMultipliers(s);
+    const b = effectiveSkillMultipliers(s);
+    expect(b).not.toBe(a);
+    expect(b.recipeRate).not.toBe(a.recipeRate);
+    // layerConditionalBonuses-style in-place mutation of A's nested records…
+    (a.recipeRate as Record<string, number>)[nodeA.category] = 999;
+    (a.storageCategoryCap as Record<string, number>)['rare'] = 999;
+    (a.xpGainByCategory as Record<string, number>)[nodeA.category] = 999;
+    // …must not reach B, nor poison the memo's private master for later reads.
+    expect(b.recipeRate[nodeA.category]).toBeCloseTo(1 + nodeA.magnitude, 9);
+    const c = effectiveSkillMultipliers(s);
+    expect(c.recipeRate[nodeA.category]).toBeCloseTo(1 + nodeA.magnitude, 9);
+    expect(c.storageCategoryCap.rare).toBe(1);
+    expect(c.xpGainByCategory[nodeA.category]).toBe(1);
+  });
+
+  it('unlocking another node invalidates (signature catches a direct Set add, no version bump)', () => {
+    clearSkillMultipliersMemoForTests();
+    const s = makeState({ unlockedNodes: new Set([nodeA.id]) });
+    const before = effectiveSkillMultipliers(s);
+    expect(before.recipeRate[nodeA.category]).toBeCloseTo(1 + nodeA.magnitude, 9);
+    // Direct Set mutation WITHOUT bumping auraAmpVersion — the content
+    // signature alone must catch it (self-validating; no bump-site to miss).
+    // Aura-less picks keep the stale Layer-2 aura cache harmless (`?? 1`),
+    // exactly as the unmemoized fold behaved.
+    s.unlockedNodes.add(nodeB.id);
+    const after = effectiveSkillMultipliers(s);
+    // Derived: per-category product of (1 + magnitude) over the two nodes.
+    expect(after.recipeRate[nodeA.category]).toBeCloseTo(expectedFor(nodeA.category, [nodeA, nodeB]), 9);
+    expect(after.recipeRate[nodeB.category]).toBeCloseTo(expectedFor(nodeB.category, [nodeA, nodeB]), 9);
+  });
+
+  it('tier-reset-style shrink of unlockedNodes invalidates (the set does not "only grow")', () => {
+    clearSkillMultipliersMemoForTests();
+    const s = makeState({ unlockedNodes: new Set([nodeA.id, nodeB.id]) });
+    const full = effectiveSkillMultipliers(s);
+    expect(full.recipeRate[nodeA.category]).toBeCloseTo(expectedFor(nodeA.category, [nodeA, nodeB]), 9);
+    // §9.7 Tier Reset removes nodes and bumps auraAmpVersion (tier-reset.ts)
+    // — mirror that sanctioned-mutation contract here.
+    s.unlockedNodes.delete(nodeB.id);
+    s.auraAmpVersion++;
+    const shrunk = effectiveSkillMultipliers(s);
+    expect(shrunk.recipeRate[nodeA.category]).toBeCloseTo(expectedFor(nodeA.category, [nodeA]), 9);
+    expect(shrunk.recipeRate[nodeB.category]).toBeCloseTo(expectedFor(nodeB.category, [nodeA]), 9);
+  });
+
+  it('two states with the same id keep independent entries (WeakMap keyed on object identity)', () => {
+    clearSkillMultipliersMemoForTests();
+    const s1 = makeState({ unlockedNodes: new Set([nodeA.id]) }); // id 'test'
+    const s2 = makeState(); // same id 'test', empty unlock set
+    const m1 = effectiveSkillMultipliers(s1);
+    expect(m1.recipeRate[nodeA.category]).toBeCloseTo(1 + nodeA.magnitude, 9);
+    const m2 = effectiveSkillMultipliers(s2);
+    expect(m2.recipeRate[nodeA.category]).toBe(1);
+    // s2's read must not have evicted or shadowed s1's entry.
+    expect(effectiveSkillMultipliers(s1).recipeRate[nodeA.category]).toBeCloseTo(1 + nodeA.magnitude, 9);
   });
 });
 

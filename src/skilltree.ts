@@ -1020,16 +1020,129 @@ export function blankMultipliers(): SkillMultipliers {
   };
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// §perf-2026-06-10 — memoized skill-multiplier fold (ZERO behavior change).
+//
+// `effectiveSkillMultipliers` used to re-fold the full unlocked-node set
+// (catalog lookup, aura pre-pass, ~40-axis switch) on EVERY call. The hot
+// economy paths read it through economy.ts's DerivationsMemo, but unthreaded
+// callers remained — notably `cap()` without `ctx.baseMult`, which the
+// HUD/inventory/inspector paths call per resource per frame (~0.9% self time
+// in the live browser profile). Memoizing at the source fixes every caller
+// at once; DerivationsMemo layering on top stays correct (its entry simply
+// stores a clone).
+//
+// CACHED (constant while the validation inputs are stable): the folded
+// `SkillMultipliers` bundle — a pure function of
+//   - `state.unlockedNodes` CONTENTS: the fold and the aura walk read
+//     nothing else off the state (verified against the implementation;
+//     `unlockedEdges` feeds neither — aura adjacency comes from the GRAPH's
+//     edges). Folded insertion-order, same reasoning as economy.ts's
+//     `derivationsSignature`: §9.7 Tier Reset and tests can shrink/replace
+//     the set, so "only grows" does not hold; a same-content different-order
+//     set misses and rebuilds (correct, just unmemoized). String signature
+//     (not a number hash) on purpose: a hash collision would serve stale
+//     data; string equality cannot.
+//   - `state.auraAmpVersion`: the aura-cache contract (§perf-2026-05-27
+//     Layer 2 — every sanctioned `unlockedNodes`/`unlockedEdges` mutation
+//     site bumps it; that contract is REUSED here, not changed). Checked in
+//     ADDITION to the signature: the version catches sanctioned mutations,
+//     the signature catches a direct Set mutation that skipped the bump
+//     (tests do this). An edge-only bump forces a spurious rebuild (auras
+//     don't read `unlockedEdges`) — a harmless miss, never stale data.
+//   - the graph: gated on `graph === DEFAULT_GRAPH`, mirroring
+//     `computeAuraAmplifiers`' Layer-2 gate — crystal-bound transient graphs
+//     and test catalogs take the uncached fold path and never touch the memo.
+//
+// Deliberately LIVE (never cached here): conditional bonuses —
+// `layerConditionalBonuses` (economy.ts) mutates the bundle's nested records
+// (`recipeRate`, `storageCategoryCap`, `xpGainByCategory`) in place on top
+// of this base. The memo therefore keeps a PRIVATE master and hands out a
+// fresh `cloneSkillMultipliers` copy on every return — the pre-memo code
+// built a fresh object per call, so clone-per-call is the identical caller
+// contract (callers may mutate what they get).
+//
+// Keyed by WeakMap on the state OBJECT (not `state.id`): states are
+// long-lived and mutated in place, so identity is stable; WeakMap avoids
+// both id-collision concerns (two worlds, same island id) and entry leaks
+// when a state is dropped. Stale same-object contents are caught by the
+// version + signature validation above.
+//
+// Pure-layer caveat: observable behavior stays pure; this WeakMap is an
+// invisible memo — callers see bit-identical results (the cached value was
+// produced by the same code on the same inputs), only repeated fold work is
+// skipped.
+// ───────────────────────────────────────────────────────────────────────────
+
+interface SkillMulMemoEntry {
+  /** `state.auraAmpVersion` this entry was built at. */
+  auraAmpVersion: number;
+  /** Insertion-order fold of `unlockedNodes` this entry was built for. */
+  signature: string;
+  /** Private master copy — never handed out; cloned on every return. */
+  value: SkillMultipliers;
+}
+
+let skillMulMemo = new WeakMap<IslandState, SkillMulMemoEntry>();
+
+/** Test hook: reset the memo so a test can compare a warm-cache read against
+ *  a cold fold (mirrors `clearDerivationsMemoForTests` / the weather cache).
+ *  WeakMaps can't be cleared — rebind to a fresh one. */
+export function clearSkillMultipliersMemoForTests(): void {
+  skillMulMemo = new WeakMap();
+}
+
+function skillMulSignature(state: IslandState): string {
+  const parts: string[] = [];
+  for (const n of state.unlockedNodes) parts.push(n as string);
+  return parts.join(';');
+}
+
+/** Deep-enough copy of a SkillMultipliers bundle: fresh nested records so
+ *  `layerConditionalBonuses`' in-place mutation can never reach the memoized
+ *  base. All other fields are primitives, covered by the spread. Lives here,
+ *  next to the memo whose contract it protects (economy.ts re-imports it). */
+export function cloneSkillMultipliers(m: SkillMultipliers): SkillMultipliers {
+  return {
+    ...m,
+    recipeRate: { ...m.recipeRate },
+    storageCategoryCap: { ...m.storageCategoryCap },
+    xpGainByCategory: { ...m.xpGainByCategory },
+  };
+}
+
 /**
  * Fold every unlocked node's effect into a single `SkillMultipliers` bundle.
  * Multiple nodes targeting the same axis compose multiplicatively:
  *   mining.1 (+5%) × mining.2 (+10%) → 1.05 × 1.10 = 1.155×.
  *
  * Aura-bearing notables amplify adjacent owned nodes' factors.
+ *
+ * Memoized per state for the default graph (see the §perf block above);
+ * every call returns a fresh clone the caller may freely mutate.
  */
 export function effectiveSkillMultipliers(
   state: IslandState,
   graph: Graph = DEFAULT_GRAPH,
+): SkillMultipliers {
+  if (graph !== DEFAULT_GRAPH) {
+    // Transient graph (crystal preview, test catalog) — uncached fold. The
+    // memo must never serve a default-graph entry against another graph.
+    return computeEffectiveSkillMultipliers(state, graph);
+  }
+  const signature = skillMulSignature(state);
+  const hit = skillMulMemo.get(state);
+  if (hit !== undefined && hit.auraAmpVersion === state.auraAmpVersion && hit.signature === signature) {
+    return cloneSkillMultipliers(hit.value);
+  }
+  const value = computeEffectiveSkillMultipliers(state, graph);
+  skillMulMemo.set(state, { auraAmpVersion: state.auraAmpVersion, signature, value });
+  return cloneSkillMultipliers(value);
+}
+
+function computeEffectiveSkillMultipliers(
+  state: IslandState,
+  graph: Graph,
 ): SkillMultipliers {
   const cat = graph.nodes === NODE_CATALOG ? DEFAULT_CATALOG : buildCatalog(graph.nodes);
   const out = blankMultipliers();
