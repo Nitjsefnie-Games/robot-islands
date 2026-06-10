@@ -813,8 +813,11 @@ export function debrisHitProbability(
  * Destruction: removes the satellite and seeds SAT_DESTRUCTION_FRAGMENTS
  * into the cell — Kessler cascade emerges naturally.
  *
+ * Hit probability is dt-scaled via `debrisPerCallProbability` so the hazard
+ * rate is frame-rate independent — calibrated at `SCANNER_REF_TICK_MS` (1000 ms).
+ *
  * Deterministic — RNG seeded from `${world.seed}_debris_${nowMs}_${sat.id}`. */
-export function tickDebris(world: WorldState, nowMs: number): void {
+export function tickDebris(world: WorldState, nowMs: number, tickDeltaMs: number): void {
   if (world.debrisFields.length === 0 || world.satellites.length === 0) return;
   const survivors: Satellite[] = [];
   for (const sat of world.satellites) {
@@ -840,7 +843,8 @@ export function tickDebris(world: WorldState, nowMs: number): void {
     const protection = ownerState
       ? effectiveSkillMultipliers(ownerState).debrisProtection
       : 1;
-    const hitP = debrisHitProbability(field, sat) / protection;
+    const hitPRefTick = debrisHitProbability(field, sat) / protection;
+    const hitP = debrisPerCallProbability(hitPRefTick, tickDeltaMs);
     const rng = makeSeededRng(`${world.seed}_debris_${nowMs}_${sat.id}`);
     if (rng() >= hitP) {
       survivors.push(sat);
