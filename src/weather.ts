@@ -225,6 +225,9 @@ interface CellWalker {
   segments: DwellSegment[];
 }
 
+// Pure-layer caveat (deferred review note 2026-06-10): observable behavior
+// stays pure; this Map is an invisible memo — callers see bit-identical
+// results, only repeated walk work is skipped.
 const weatherCache = new Map<string, CellWalker>();
 
 /** Test hook: reset the memo so a test can observe cold-walk behavior. */

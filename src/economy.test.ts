@@ -20,6 +20,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { effectiveModifierMultipliers } from './biomes.js';
 import {
   BUILDING_DEFS,
+  CATEGORY_ADJACENCY_RATE,
   unlockedDefs,
   type BuildingDef,
   type BuildingDefId,
@@ -30,6 +31,7 @@ import {
   accrueXp,
   advanceIsland,
   cap,
+  clearDerivationsMemoForTests,
   computeRates,
   fledglingRecipeMul,
   findNextCapEvent,
@@ -5383,5 +5385,154 @@ describe('utilization-scaled maintenance wear (§4.7 net-flow)', () => {
     const mine = state.buildings[0]!;
     // Full wall-clock accrual because u=1 despite mf=0.75.
     expect(mine.operatingMs).toBe(T1_THRESHOLD + 3 * HOUR_MS);
+  });
+});
+
+// ── §perf-2026-06-10 derivations memo — equivalence under mutation ──────────
+//
+// computeRates memoizes adjacency/skill derivations (cluster muls, buff
+// stacks, gate results, exotic rules, isBuildingActive, the base skill-mul
+// fold) behind a structural signature recomputed fresh each call. These
+// tests prove the memo is INVISIBLE: every mutation that feeds a cached
+// derivation must change the next computeRates result exactly as the spec'd
+// effect dictates, and a warm-cache compute must be bit-identical to a
+// cold-cache one (clearDerivationsMemoForTests = the fresh-module proxy).
+describe('computeRates derivations memo — equivalence under mutation', () => {
+  /** Two 2×2 mines at x=0 and x=2 share a footprint border (A covers
+   *  x∈{0,1}, B covers x∈{2,3}; B's x=2 column lies in A's border set) —
+   *  a same-category (extraction) cluster of k=2 per §4.5. */
+  function mkMine(id: string, x: number): PlacedBuilding {
+    return { id, defId: 'mine', x, y: 0 };
+  }
+  function rateOf(res: ReturnType<typeof computeRates>, id: string): number {
+    return res.byBuilding.find((br) => br.building.id === id)?.effectiveRate ?? 0;
+  }
+  // §4.5 cluster bonus rate for the mine's category (extraction = 0.1):
+  // each member of a k=2 cluster runs at ×(1 + (2−1)×rate) = ×1.1.
+  const EXTRACTION_RATE = CATEGORY_ADJACENCY_RATE[BUILDING_DEFS.mine.category] ?? 0;
+
+  it('warm-cache compute is bit-identical to a cold-cache compute', () => {
+    const state = makeState({ buildings: [mkMine('m-a', 0), mkMine('m-b', 2)] });
+    const cold1 = computeRates(state, { defs: POWER_FREE });
+    const warm = computeRates(state, { defs: POWER_FREE }); // memo hit
+    clearDerivationsMemoForTests();
+    const cold2 = computeRates(state, { defs: POWER_FREE }); // rebuilt from scratch
+    // Bit-identical across cold → warm → cold: same per-building rates,
+    // same aggregates, same power balance.
+    for (const res of [warm, cold2]) {
+      expect(res.byBuilding.map((br) => [br.building.id, br.effectiveRate, br.utilization]))
+        .toEqual(cold1.byBuilding.map((br) => [br.building.id, br.effectiveRate, br.utilization]));
+      expect(res.production).toEqual(cold1.production);
+      expect(res.consumption).toEqual(cold1.consumption);
+      expect(res.net).toEqual(cold1.net);
+      expect(res.power).toEqual(cold1.power);
+    }
+  });
+
+  it('disable → re-enable round-trips: cluster bonus drops to solo and is restored', () => {
+    const a = mkMine('m-a', 0);
+    const b = mkMine('m-b', 2);
+    const state = makeState({ buildings: [a, b] });
+    const clustered = computeRates(state, { defs: POWER_FREE });
+    const clusteredRate = rateOf(clustered, 'm-a');
+    expect(clusteredRate).toBeGreaterThan(0);
+
+    // Disable B: A loses its only same-category neighbour, so its §4.5
+    // cluster multiplier falls from ×(1 + rate) to ×1 — soloRate =
+    // clusteredRate / 1.1. B itself vanishes from byBuilding entirely
+    // (disabled ⇒ not operational ⇒ filtered before pass 1).
+    b.disabled = true;
+    const solo = computeRates(state, { defs: POWER_FREE });
+    expect(rateOf(solo, 'm-a')).toBeCloseTo(clusteredRate / (1 + EXTRACTION_RATE), 12);
+    expect(solo.byBuilding.find((br) => br.building.id === 'm-b')).toBeUndefined();
+
+    // Re-enable: exact restoration (same inputs ⇒ same derivations).
+    b.disabled = false;
+    const restored = computeRates(state, { defs: POWER_FREE });
+    expect(rateOf(restored, 'm-a')).toBe(clusteredRate);
+    expect(rateOf(restored, 'm-b')).toBe(clusteredRate);
+  });
+
+  it('placing an adjacent same-category building raises the buffStack-derived rate', () => {
+    const a = mkMine('m-a', 0);
+    const state = makeState({ buildings: [a] });
+    const solo = computeRates(state, { defs: POWER_FREE });
+    const soloRate = rateOf(solo, 'm-a');
+    expect(soloRate).toBeGreaterThan(0);
+
+    // Place an adjacent mine the way placement does — push into the live
+    // buildings array. Cluster k 1→2: both run at soloRate × (1 + 0.1).
+    state.buildings.push(mkMine('m-b', 2));
+    const clustered = computeRates(state, { defs: POWER_FREE });
+    expect(rateOf(clustered, 'm-a')).toBeCloseTo(soloRate * (1 + EXTRACTION_RATE), 12);
+    expect(rateOf(clustered, 'm-b')).toBeCloseTo(soloRate * (1 + EXTRACTION_RATE), 12);
+  });
+
+  it('completing construction brings the building into the cluster/rate pool', () => {
+    const a = mkMine('m-a', 0);
+    const c: PlacedBuilding = { ...mkMine('m-c', 2), constructionRemainingMs: 5_000, constructionTotalMs: 5_000 };
+    const state = makeState({ buildings: [a, c] });
+    const before = computeRates(state, { defs: POWER_FREE });
+    const soloRate = rateOf(before, 'm-a');
+    // Under construction: invisible to adjacency, no rate entry.
+    expect(before.byBuilding.find((br) => br.building.id === 'm-c')).toBeUndefined();
+
+    // Completion (what tickConstruction does at the boundary).
+    c.constructionRemainingMs = 0;
+    const after = computeRates(state, { defs: POWER_FREE });
+    // Both now form a k=2 extraction cluster: ×1.1 over the solo rate.
+    expect(rateOf(after, 'm-a')).toBeCloseTo(soloRate * (1 + EXTRACTION_RATE), 12);
+    expect(rateOf(after, 'm-c')).toBeCloseTo(soloRate * (1 + EXTRACTION_RATE), 12);
+  });
+
+  it('unlocking a recipeRateMul skill node scales rates by the fresh skill-mul fold', () => {
+    const state = makeState({ buildings: [mkMine('m-a', 0)] });
+    const before = computeRates(state, { defs: POWER_FREE });
+    const baseRate = rateOf(before, 'm-a');
+
+    // Unlock Blast Optimization (recipeRateMul, category extraction).
+    // Per the IslandState doc, unlockedNodes mutations bump auraAmpVersion.
+    state.unlockedNodes.add('mining.notable.blastOptimization' as NodeId);
+    state.auraAmpVersion++;
+    // Independent derivation of the expected multiplier straight from the
+    // skilltree module (not through the economy memo).
+    const expectedMul = effectiveSkillMultipliers(state).recipeRate.extraction;
+    expect(expectedMul).toBeGreaterThan(1);
+
+    const after = computeRates(state, { defs: POWER_FREE });
+    expect(rateOf(after, 'm-a')).toBeCloseTo(baseRate * expectedMul, 12);
+  });
+
+  it('unlocking a tierBypass node flips isBuildingActive for the shifted def', () => {
+    // drilling_rig is T3; level 10 ⇒ tier 2 ⇒ inactive. The
+    // drilling.keystone.earlyRig node carries tierShift 1 ⇒ T3−1 = 2 ≤ 2 ⇒
+    // active. Power stripped so the tier gate is the only rate-limiting
+    // factor (drilling_rig has no recipe inputs and no adjacency gates).
+    const defs = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
+    const { power: _power, ...rigRest } = defs.drilling_rig;
+    defs.drilling_rig = rigRest as BuildingDef;
+    const rig: PlacedBuilding = { id: 'b-rig', defId: 'drilling_rig', x: 0, y: 0 };
+    const state = makeState({ buildings: [rig], level: 10 });
+
+    const before = computeRates(state, { defs });
+    expect(rateOf(before, 'b-rig')).toBe(0);
+
+    state.unlockedNodes.add('drilling.keystone.earlyRig' as NodeId);
+    state.auraAmpVersion++;
+    const after = computeRates(state, { defs });
+    // Now active: helium_3 flows at the recipe rate (1 / 800s, ×1 buffs).
+    expect(rateOf(after, 'b-rig')).toBeGreaterThan(0);
+    expect(after.production.helium_3 ?? 0).toBeGreaterThan(0);
+  });
+
+  it('memo keyed by island id cannot leak across states sharing an id', () => {
+    // Both states use makeState's default id 'test'. The second has a
+    // DIFFERENT building set — the signature must miss and rebuild, never
+    // serve the first state's cluster multipliers.
+    const s1 = makeState({ buildings: [mkMine('m-a', 0), mkMine('m-b', 2)] });
+    const clusteredRate = rateOf(computeRates(s1, { defs: POWER_FREE }), 'm-a');
+    const s2 = makeState({ buildings: [mkMine('m-a', 0)] });
+    const soloRate = rateOf(computeRates(s2, { defs: POWER_FREE }), 'm-a');
+    expect(soloRate).toBeCloseTo(clusteredRate / (1 + EXTRACTION_RATE), 12);
   });
 });

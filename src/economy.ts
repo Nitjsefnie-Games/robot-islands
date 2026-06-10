@@ -11,7 +11,7 @@
 // linear and exact. The integration converges in O(events × resources)
 // regardless of `now - lastTick`, so multi-day offline catchup is cheap.
 
-import { borderTiles, checkGates, clusterBonusMuls, computeBuffStack, footprintKeySet, touchesBorder } from './adjacency.js';
+import { borderTiles, checkGates, clusterBonusMuls, computeBuffStack, footprintKeySet, touchesBorder, type GateResult } from './adjacency.js';
 import { IDENTITY_MODIFIER_MULTIPLIERS, type ModifierMultipliers } from './biomes.js';
 import { nextConstructionCompletionMs, tickConstruction } from './construction.js';
 import { creditStorageCaps, promoteQueuedBuilds } from './placement.js';
@@ -40,7 +40,7 @@ import {
 import { advanceToxicityRolls, toxicityMultiplier } from './reactor-toxicity.js';
 import { makeSeededRng } from './rng.js';
 import { nextRotateOutputBoundaryMs, resolveRecipe, resolveRotatingOutput, XP_WEIGHT, type Recipe, type ResourceId } from './recipes.js';
-import { effectiveSkillMultipliers, skillPointsForLevelUp, type NodeId, effectiveTierShift, tierForLevel, skillUnlockedAdjacencyRules, type SkillMultipliers, DEFAULT_GRAPH, type ConditionalEffectCondition } from './skilltree.js';
+import { effectiveSkillMultipliers, skillPointsForLevelUp, type NodeId, effectiveTierShift, tierForLevel, skillUnlockedAdjacencyRules, type SkillMultipliers, DEFAULT_GRAPH, type ConditionalEffectCondition, type ExoticAdjacencyRule } from './skilltree.js';
 import { solveFlow, type FlowBuildingSpec } from './flow-solver.js';
 import type { CrystalId, EdgeId, Graph } from './skilltree-graph.js';
 import { networkedIslandIds } from './network-consciousness.js';
@@ -796,6 +796,163 @@ export function fledglingRecipeMul(level: number): number {
   return 1 + 1.5 * Math.max(0, (10 - level) / 9);
 }
 
+// ───────────────────────────────────────────────────────────────────────────
+// §perf-2026-06-10 — signature-keyed memo for adjacency/skill derivations.
+//
+// computeRates used to re-derive, on EVERY call (every integration segment,
+// every frame, every island), a family of values that only change when
+// buildings or skills change: cluster-bonus multipliers (`clusterBonusMuls`,
+// 20.6% incl in the live-save profile), per-building buff stacks and gate
+// results (`computeBuffStack`/`checkGates` via the borderTiles/touchesBorder
+// footprint walks, ~25% combined), exotic adjacency rules
+// (`skillUnlockedAdjacencyRules`, 5.1% — previously re-folded PER BUILDING
+// inside pass 1), per-def tier activation (`isBuildingActive`, 8%), and the
+// base skill-multiplier fold (`effectiveSkillMultipliers`).
+//
+// The cache is SELF-VALIDATING: `derivationsSignature` re-folds every input
+// that feeds the cached family on every call and compares it to the
+// signature the entry was built for. There are no invalidation call-sites to
+// maintain — any mutation that affects a cached derivation changes the
+// signature and forces a rebuild, so a missed mutation site can never serve
+// stale data. (Same observable-purity story as the weather memo: behavior is
+// bit-identical — the cached values were produced by the same code on the
+// same inputs — only repeated work is skipped.)
+//
+// CACHED (constant while the signature is stable):
+//   - clusterMuls            — §4.5 cluster-bonus multipliers (eager)
+//   - exoticRules            — §9.3 exotic adjacency pair rules (eager)
+//   - baseSkillMul           — un-layered effectiveSkillMultipliers fold
+//                              (eager; ALWAYS cloned before handing out —
+//                              layerConditionalBonuses mutates in place, the
+//                              Option-B landmine in the 2026-05-27
+//                              skillmult-memoize spec)
+//   - buffStack / gateResult — per-building-id, lazily filled
+//   - activeByDefId          — isBuildingActive verdicts, per defId, lazy
+//
+// Deliberately LIVE (time- or inventory-varying within a stable signature):
+// solar/wind multipliers, variance, maintenanceFactor (operatingMs),
+// toxicity, heat assignments + the coal-starvation recompute, recipe
+// resolution (§6.7 scrap substitution reads inventory), rotating outputs,
+// inputAvail, the pass-2.5 flow solve, the power balance + battery, and the
+// fledgling/acceleration/conditional-bonus multipliers.
+interface DerivationsMemo {
+  /** Signature of the inputs this entry was built for. */
+  signature: string;
+  /** Def catalog identity guard — tests inject custom catalogs, and the
+   *  footprints/categories/gates of every cached derivation come from it.
+   *  Compared by reference. */
+  defs: DefCatalog;
+  clusterMuls: Map<string, number>;
+  exoticRules: ReadonlyArray<ExoticAdjacencyRule>;
+  baseSkillMul: SkillMultipliers;
+  buffStack: Map<string, number>;
+  gateResult: Map<string, GateResult>;
+  activeByDefId: Map<BuildingDefId, boolean>;
+}
+
+const derivationsMemoByIsland = new Map<string, DerivationsMemo>();
+
+/** Test hook: reset the memo so equivalence tests can compare a warm-cache
+ *  compute against a cold one (mirrors `clearWeatherCacheForTests`). */
+export function clearDerivationsMemoForTests(): void {
+  derivationsMemoByIsland.clear();
+}
+
+/**
+ * Structural signature over every input feeding the cached derivations.
+ * Enumerated against the actual functions (see the per-line notes):
+ *
+ *   - per building: id, defId, x, y, rotation (footprints for cluster /
+ *     buff / gate walks), disabled / invalid / under-construction-bit
+ *     (`isOperationalBuilding` membership in `validBuildings` — only the
+ *     BINARY operational state matters, so construction progress folds as
+ *     `>0`, not the remaining ms; a decrementing countdown doesn't thrash
+ *     the cache and the completion flip rebuilds it), floorLevel (folded
+ *     conservatively; it feeds only live rate math today).
+ *     NOT folded: `paused` (mutated by computeRates itself; read live in
+ *     pass 3, feeds nothing cached), `eternalServitor` / `operatingMs` /
+ *     `toxicityExpiryMs` (feed the live maintenance/toxicity factors only),
+ *     `cargoLabel`/`tier`/queue fields (no cached consumer).
+ *   - state.level, aiCoreCrafted, ascendantCoreCrafted — `isBuildingActive`
+ *     inputs (`buildingUnlocked`, `tierForLevel`). The spaceport half of the
+ *     §14.1 gate is derived from the buildings fold above.
+ *   - unlockedNodes CONTENTS (not size+last: §9.7 Tier Reset and tests can
+ *     remove/replace nodes, so "only grows" does not hold) — feeds
+ *     `effectiveSkillMultipliers`, `skillUnlockedAdjacencyRules`,
+ *     `effectiveTierShift`. Insertion-order fold: a same-content different-
+ *     order set misses and rebuilds (correct, just unmemoized).
+ *     `unlockedEdges` feeds NO cached derivation (verified: the skill-mul
+ *     fold and aura walk read `unlockedNodes` only) and is not folded.
+ *   - geothermalActive, and ctx.crossIsland id+defId pairs — `checkGates`
+ *     inputs (§13.3 lattice neighbors match by def only; positions are
+ *     irrelevant because `collectNeighbors` adds them unconditionally).
+ *
+ * String (not number-hash) on purpose: a hash collision would serve stale
+ * data; string equality cannot. One join per call, no JSON.stringify.
+ */
+function derivationsSignature(
+  state: IslandState,
+  geothermalActive: boolean,
+  crossIsland: ReadonlyArray<PlacedBuilding> | undefined,
+): string {
+  const parts: string[] = [
+    String(state.level),
+    state.aiCoreCrafted ? '1' : '0',
+    state.ascendantCoreCrafted ? '1' : '0',
+    geothermalActive ? '1' : '0',
+  ];
+  for (const b of state.buildings) {
+    parts.push(
+      `${b.id},${b.defId},${b.x},${b.y},${b.rotation ?? 0},${b.disabled === true ? 1 : 0},${b.invalid === true ? 1 : 0},${(b.constructionRemainingMs ?? 0) > 0 ? 1 : 0},${b.floorLevel ?? 0}`,
+    );
+  }
+  parts.push('#n');
+  for (const n of state.unlockedNodes) parts.push(n as string);
+  if (crossIsland !== undefined && crossIsland.length > 0) {
+    parts.push('#x');
+    for (const cb of crossIsland) parts.push(`${cb.id},${cb.defId}`);
+  }
+  return parts.join(';');
+}
+
+function getDerivationsMemo(
+  state: IslandState,
+  defs: DefCatalog,
+  geothermalActive: boolean,
+  crossIsland: ReadonlyArray<PlacedBuilding> | undefined,
+): DerivationsMemo {
+  const signature = derivationsSignature(state, geothermalActive, crossIsland);
+  const hit = derivationsMemoByIsland.get(state.id);
+  if (hit !== undefined && hit.signature === signature && hit.defs === defs) {
+    return hit;
+  }
+  const validBuildings = state.buildings.filter((b) => isOperationalBuilding(b));
+  const entry: DerivationsMemo = {
+    signature,
+    defs,
+    clusterMuls: clusterBonusMuls(validBuildings, defs),
+    exoticRules: skillUnlockedAdjacencyRules(state),
+    baseSkillMul: effectiveSkillMultipliers(state),
+    buffStack: new Map(),
+    gateResult: new Map(),
+    activeByDefId: new Map(),
+  };
+  derivationsMemoByIsland.set(state.id, entry);
+  return entry;
+}
+
+/** Deep-enough copy of a SkillMultipliers bundle: fresh nested records so
+ *  `layerConditionalBonuses`' in-place mutation can never reach the memoized
+ *  base. All other fields are primitives, covered by the spread. */
+function cloneSkillMultipliers(m: SkillMultipliers): SkillMultipliers {
+  return {
+    ...m,
+    recipeRate: { ...m.recipeRate },
+    storageCategoryCap: { ...m.storageCategoryCap },
+    xpGainByCategory: { ...m.xpGainByCategory },
+  };
+}
+
 /**
  * Compute per-building production rates given the current state.
  * Pure function — does not mutate state.
@@ -867,10 +1024,24 @@ export function computeRates(
   // neither power nor recipe inputs, contribute zero output, and are
   // invisible to adjacency-buff scans until they finish.
   const validBuildings = state.buildings.filter((b) => isOperationalBuilding(b));
+  // §perf-2026-06-10: signature-keyed memo for the adjacency/skill
+  // derivations (see the DerivationsMemo block above computeRates).
+  const memo = getDerivationsMemo(state, defs, ctx?.geothermalActive ?? false, ctx?.crossIsland);
   // §4.5 cluster-bonus multipliers — labelled once per tick for the whole
   // island; recipe-rate (computeBuffStack) and generator-power both read from
   // this map instead of re-deriving each building's cluster.
-  const clusterMuls = clusterBonusMuls(validBuildings, defs);
+  const clusterMuls = memo.clusterMuls;
+  // §4.5 gating adjacency, memoized per building id within the signature-
+  // stable world (pass 1, pass 3, and the genesis paths all evaluate the
+  // same (building, validBuildings, defs, geothermal, crossIsland) tuple).
+  const gateFor = (b: PlacedBuilding): GateResult => {
+    let r = memo.gateResult.get(b.id);
+    if (r === undefined) {
+      r = checkGates(b, validBuildings, defs, ctx?.geothermalActive ?? false, ctx?.crossIsland);
+      memo.gateResult.set(b.id, r);
+    }
+    return r;
+  };
   // §2.7 day-night cycle. `nowMs` defaults to `state.lastTick` so existing
   // callers (and tests) that don't pass an explicit time see the multiplier
   // for the state's own clock. The integrator in `advanceIsland` passes the
@@ -914,7 +1085,7 @@ export function computeRates(
   // consistent values. Recipe-rate buffs apply to baseRate AND to pass-2's
   // nominalRate (so producer/consumer supply ratios stay correct when only
   // one side is buffed). Power multipliers apply in pass 3.
-  const skillMul = effectiveSkillMultipliers(state);
+  const skillMul = cloneSkillMultipliers(memo.baseSkillMul);
   // Conditional bonuses are evaluated in WALL-clock domain (`solarClockMs ?? t`),
   // not perf domain: the during-night condition calls `realPhaseName`, which is
   // astronomically anchored to the Date.now epoch — same reasoning as the
@@ -972,6 +1143,11 @@ export function computeRates(
   // building.
   const hasSpaceport = hasOperationalBuilding(validBuildings, 'spaceport');
   function isBuildingActive(b: PlacedBuilding): boolean {
+    // §perf-2026-06-10: the verdict is a pure function of (defId, level,
+    // core flags, hasSpaceport, unlockedNodes) — all folded in the memo
+    // signature — so it's memoized per defId.
+    const cached = memo.activeByDefId.get(b.defId);
+    if (cached !== undefined) return cached;
     const def = BUILDING_DEFS[b.defId];
     const tierShift = effectiveTierShift(state, b.defId);
     let unlocked = buildingUnlocked(
@@ -984,6 +1160,7 @@ export function computeRates(
     if (!unlocked && tierShift > 0 && def.tier <= 4) {
       unlocked = tierForLevel(state.level) >= def.tier - tierShift;
     }
+    memo.activeByDefId.set(b.defId, unlocked);
     return unlocked;
   }
   interface Tentative {
@@ -1088,7 +1265,7 @@ export function computeRates(
         cycleSec: GENESIS_CYCLE_SEC,
         category: 'manufacturing',
       };
-      const gateResult = checkGates(b, validBuildings, defs, ctx?.geothermalActive ?? false, ctx?.crossIsland);
+      const gateResult = gateFor(b);
       if (gateResult.effectiveMul === 0) {
         tentative.push({ building: b, recipe: syntheticRecipe, baseRate: 0, buffStack: 1, effectiveMul: 0, perBuildingMul: 1 });
         continue;
@@ -1116,8 +1293,13 @@ export function computeRates(
     // 4-neighbor footprint border. Captured here so pass 2's nominal-rate
     // sees the same factor and producer/consumer supply ratios stay correct.
     // Returns 1.0 when no same-category neighbour and no exotic rule applies.
-    const exoticRules = skillUnlockedAdjacencyRules(state);
-    const buffStack = computeBuffStack(b, validBuildings, defs, undefined, exoticRules, clusterMuls.get(b.id) ?? 1);
+    // Memoized per building id (the exotic rules come from the memo too —
+    // previously the rule fold re-ran per building, per call).
+    let buffStack = memo.buffStack.get(b.id);
+    if (buffStack === undefined) {
+      buffStack = computeBuffStack(b, validBuildings, defs, undefined, memo.exoticRules, clusterMuls.get(b.id) ?? 1);
+      memo.buffStack.set(b.id, buffStack);
+    }
     // Fix 3.7 — per-building throughput factors (maintenance × toxicity ×
     // per-type yield bonus), computed ONCE here and reused by pass-1's
     // tentSupply, pass-2's nominalRate, and pass-4's effectiveRate so the
@@ -1181,7 +1363,7 @@ export function computeRates(
       }
     }
     // §4.5 gating adjacency: hard gates zero output; soft gates degrade.
-    const gateResult = checkGates(b, validBuildings, defs, ctx?.geothermalActive ?? false, ctx?.crossIsland);
+    const gateResult = gateFor(b);
     if (gateResult.effectiveMul === 0) {
       tentative.push({ building: b, recipe, baseRate: 0, buffStack, effectiveMul: 0, perBuildingMul });
       continue;
@@ -1391,7 +1573,7 @@ export function computeRates(
       heatFactorPass3 = factor;
     }
     // §4.5 gating adjacency: a building with a failed hard gate draws no power.
-    const gateResult = checkGates(b, validBuildings, defs, ctx?.geothermalActive ?? false, ctx?.crossIsland);
+    const gateResult = gateFor(b);
     if (gateResult.effectiveMul === 0) continue;
     // Same tile-aware resolution as the pass-1 loop. `active` only checks
     // recipe presence here, so the variant chosen doesn't matter — but we
@@ -1461,7 +1643,7 @@ export function computeRates(
   for (const b of validBuildings) {
     if (b.defId !== 'genesis_chamber') continue;
     if (!isBuildingActive(b)) continue;
-    const gcGateResult = checkGates(b, validBuildings, defs, ctx?.geothermalActive ?? false, ctx?.crossIsland);
+    const gcGateResult = gateFor(b);
     if (gcGateResult.effectiveMul === 0) continue;
     if (!state.genesisTarget) continue;
     const targetTier = tierForResource(state.genesisTarget);
@@ -1989,8 +2171,11 @@ export function advanceIsland(
   // do not mutate during this advanceIsland call (level-ups don't
   // auto-spend points; spend paths are UI-driven outside the tick),
   // so this object is constant for the duration. Freeze to catch
-  // accidental mutation in dev.
-  const baseMult = effectiveSkillMultipliers(state);
+  // accidental mutation in dev. §perf-2026-06-10: read from the
+  // signature-keyed memo (clone — the memoized base is never handed out).
+  const baseMult = cloneSkillMultipliers(
+    getDerivationsMemo(state, defs, ctx?.geothermalActive ?? false, ctx?.crossIsland).baseSkillMul,
+  );
   Object.freeze(baseMult);  // shallow — covers all primitive fields
   // §13.3 Time Lock banking: if the island has at least one Time Lock and
   // banking is enabled, accumulate offline time into the bank instead of
@@ -2053,7 +2238,13 @@ export function advanceIsland(
     // §13.3 Battery buffer — bound segment to battery depletion/fill so the
     // piecewise integrator stays exact (rates are constant within a segment).
     const validBuildings = state.buildings.filter((b) => !b.invalid);
-    const skillMul = effectiveSkillMultipliers(state);
+    // §perf-2026-06-10: re-fetched per segment (NOT hoisted out of the loop)
+    // because level-ups / construction completions inside this advance change
+    // the signature; the memo hit path makes the steady-state cost a string
+    // compare. Clone before layering — layerConditionalBonuses mutates.
+    const skillMul = cloneSkillMultipliers(
+      getDerivationsMemo(state, defs, ctx?.geothermalActive ?? false, ctx?.crossIsland).baseSkillMul,
+    );
     // Per-segment WALL-clock evaluation (`t + wallOffset`, NOT end-of-advance
     // `nowMs`): a multi-hour offline catch-up must evaluate each segment's
     // during-night boolean at the segment's own time. The integrator clamps
