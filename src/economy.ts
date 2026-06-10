@@ -443,7 +443,15 @@ export function cap(
   mult?: SkillMultipliers,
 ): number {
   const nominal = override?.[r] ?? state.storageCaps[r] ?? 0;
-  if (nominal === 0) return 0;
+  // §12.4: starter grace must apply even at zero nominal cap — the early
+  // return on nominal === 0 sat BEFORE the grace read, which made the kit
+  // allowance unreachable for resources with no storage built yet (fix 3.3).
+  // The zero short-circuit is kept (skill-mul fold skipped) but now resolves
+  // to the grace value unless the caller asked to ignore it.
+  if (nominal === 0) {
+    if (opts?.ignoreGrace) return 0;
+    return state.starterInventoryGrace[r] ?? 0;
+  }
   const resolvedMult = mult ?? effectiveSkillMultipliers(state);
   // Storage sub-path (depth ≥ 2): per-category cap multiplier. Looks up the
   // resource's storage category — if it hasn't been categorised yet
