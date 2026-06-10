@@ -174,7 +174,15 @@ export function resolveHeatAssignments(
     return { hasHeat, coalConsumersByFurnace, assignedSource, heatThrottleFactor: new Map() };
   }
 
-  const sortedCoal = [...coalSources].sort((a, b) => a.id.localeCompare(b.id));
+  // §5.2 literal: "the source with the lowest cost-per-cycle bills
+  // (deterministic tie-break: lowest source building ID)". Sort by
+  // (coalPerCycle, id) so the first ADJACENT match in the walk below is the
+  // cheapest-burning adjacent source, with id breaking equal-cost ties.
+  const sortedCoal = [...coalSources].sort((a, b) => {
+    const costA = BUILDING_DEFS[a.defId].heatSource?.coalPerCycle ?? 0;
+    const costB = BUILDING_DEFS[b.defId].heatSource?.coalPerCycle ?? 0;
+    return costA - costB || a.id.localeCompare(b.id);
+  });
 
   for (const consumer of sortedConsumers) {
     const fp = footprintKeySet(consumer);
