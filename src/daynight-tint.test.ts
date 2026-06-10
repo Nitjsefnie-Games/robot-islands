@@ -49,6 +49,19 @@ describe('currentTint', () => {
     expect(at.alpha).toBeLessThan(after.alpha);
   });
 
+  it('wraps the phase-0.0 boundary crossfade instead of clamping to full dawn', () => {
+    // Boundary at phase 0.0 (night → dawn). A pre-boundary phase like 0.9966 is
+    // inside the transition window and should be near full night, not full dawn.
+    const boundaryMs = -(DAY_DURATION_MS * 0.375) + DAY_DURATION_MS * 0.0;
+    const before = currentTint(boundaryMs - 5 * 60 * 1000); // ≈ window entry
+    const at = currentTint(boundaryMs); // t = 0.5
+    const after = currentTint(boundaryMs + 2 * 60 * 1000); // deeper into dawn side
+    // Night alpha 0.32 > Dawn alpha 0.10, so alpha should fall through the window.
+    expect(before.alpha).toBeCloseTo(0.32, 2);
+    expect(at.alpha).toBeCloseTo(0.21, 2); // midpoint of 0.32 and 0.10
+    expect(after.alpha).toBeLessThan(at.alpha);
+  });
+
   it('matches expected phase identity at midpoints (sanity)', () => {
     expect(dayPhase(MID_DAWN)).toBeCloseTo(0.125, 5);
     expect(dayPhase(MID_DAY)).toBeCloseTo(0.375, 5);
