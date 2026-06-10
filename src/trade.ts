@@ -1,3 +1,4 @@
+import { makeSeededRng } from './rng.js';
 import { XP_WEIGHT, type ResourceId } from './recipes.js';
 import { inv, cap, type IslandState } from './economy.js';
 import type { PlacedBuilding } from './buildings.js';
@@ -104,10 +105,21 @@ let _offerSeq = 0;
 /** Generate one trade offer for an island, or null if no valid pair exists. */
 export function generateOffer(
   state: IslandState,
-  rng: () => number,
+  rngOrSeed: (() => number) | string,
   tuning: TradeTuning,
   nowMs: number,
 ): TradeOffer | null {
+  // Deterministic per-offer seeding:
+  //   seed = `${worldSeed}_trade_${islandId}_${reactionCount}`
+  // Refresh mid-offer → same seed + same persisted count → same offer regenerates.
+  // Timeout → count unchanged → same offer returns next cycle, deterministically.
+  // Accept or manual reject → count bumps → genuinely new offer.
+  // Live inventory / everProduced still influence the give/get pool, so extreme
+  // inventory drift can still alter terms. The offer's expiresAt/spawnedAt stay
+  // runtime (a reload restarts the 5-minute window — acceptable).
+  const rng = typeof rngOrSeed === 'string'
+    ? makeSeededRng(`${rngOrSeed}_trade_${state.id}_${state.tradeAcceptCount}`)
+    : rngOrSeed;
   const givePool = (Object.keys(state.inventory) as ResourceId[]).filter((r) => inv(state, r) > 0);
   const getPool = [...state.everProduced];
   if (givePool.length === 0 || getPool.length === 0) return null;
@@ -196,7 +208,7 @@ export function tuningFor(mult: SkillMultipliers): TradeTuning {
 export function tickTradeOffers(
   rt: TradeRuntime,
   islandStates: ReadonlyMap<string, IslandState>,
-  rng: () => number,
+  worldSeed: string,
   tuningFor: (state: IslandState) => TradeTuning,
   nowMs: number,
   onlineDtMs: number,
@@ -229,7 +241,7 @@ export function tickTradeOffers(
     state.tradeCooldownMs = Math.max(0, state.tradeCooldownMs - onlineDtMs);
     if (state.tradeCooldownMs > 0) continue;
     const tuning = tuningFor(state);
-    const offer = generateOffer(state, rng, tuning, nowMs);
+    const offer = generateOffer(state, worldSeed, tuning, nowMs);
     if (offer) rt.offers.push(offer);
   }
 }

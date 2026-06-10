@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { advanceIsland, type DefCatalog, type IslandState } from './economy.js';
 import { BUILDING_DEFS, type BuildingDef, type BuildingDefId } from './building-defs.js';
 import { attachTerrainAt, makeInitialIslandState } from './world.js';
@@ -95,7 +95,7 @@ describe('generateOffer — candidate selection', () => {
   it('never gets a resource absent from everProduced', () => {
     const s = stocked();
     for (let k = 0; k < 200; k++) {
-      const o = generateOffer(s, Math.random, DEFAULT_TRADE_TUNING, 1000);
+      const o = generateOffer(s, 'test-seed', DEFAULT_TRADE_TUNING, 1000);
       if (o) expect(s.everProduced.has(o.get.res)).toBe(true);
     }
   });
@@ -103,21 +103,27 @@ describe('generateOffer — candidate selection', () => {
   it('never gives a resource it holds zero of', () => {
     const s = stocked();
     for (let k = 0; k < 200; k++) {
-      const o = generateOffer(s, Math.random, DEFAULT_TRADE_TUNING, 1000);
+      const o = generateOffer(s, 'test-seed', DEFAULT_TRADE_TUNING, 1000);
       if (o) expect((s.inventory[o.give.res] ?? 0)).toBeGreaterThan(0);
     }
   });
 
   it('biases the give side toward higher fill% (roll-twice-take-higher)', () => {
     const s = stocked();
-    let stoneGives = 0, woodGives = 0;
-    for (let k = 0; k < 400; k++) {
-      const o = generateOffer(s, Math.random, DEFAULT_TRADE_TUNING, 1000);
-      if (!o) continue;
-      if (o.give.res === 'stone') stoneGives++;
-      if (o.give.res === 'wood') woodGives++;
+    // Isolate pool so the bias is unambiguous.
+    for (const k of Object.keys(s.inventory) as ResourceId[]) {
+      if (k !== 'stone' && k !== 'wood') s.inventory[k] = 0;
     }
-    expect(stoneGives).toBeGreaterThan(woodGives);
+    s.everProduced.clear(); s.everProduced.add('stone'); s.everProduced.add('wood');
+    // Deterministic rng sequence:
+    //   give pick 1 -> wood (index 0), give pick 2 -> stone (index 1)
+    //   get  pick 1 -> stone (index 0), get  pick 2 -> wood (index 1)
+    const seq = [0.1, 0.6, 0.1, 0.6];
+    let i = 0;
+    const o = generateOffer(s, () => seq[i++]!, DEFAULT_TRADE_TUNING, 1000);
+    expect(o).not.toBeNull();
+    expect(o!.give.res).toBe('stone'); // higher fill wins
+    expect(o!.get.res).toBe('wood');   // lower fill wins
   });
 
   it('returns null when the only give-resource equals the only ever-produced resource', () => {
@@ -138,7 +144,7 @@ describe('generateOffer — candidate selection', () => {
   it('respects the tier-reach cap', () => {
     const s = stocked();
     for (let k = 0; k < 200; k++) {
-      const o = generateOffer(s, Math.random, { ...DEFAULT_TRADE_TUNING, maxReach: 1 }, 1000);
+      const o = generateOffer(s, 'test-seed', { ...DEFAULT_TRADE_TUNING, maxReach: 1 }, 1000);
       if (o) expect(Math.abs(tierOf(o.get.res) - tierOf(o.give.res))).toBeLessThanOrEqual(1);
     }
   });
@@ -189,6 +195,50 @@ describe('generateOffer — pricing & size', () => {
     // rng=1 -> spread = 1*(1 + (1-0.5)*2*0.25) = 1.25
     const hi = generateOffer(s, () => 1.0, { ...DEFAULT_TRADE_TUNING, sizePct: 0.10, biasK: 1 }, 1000)!;
     expect(hi.get.qty / hi.give.qty).toBeCloseTo(1.25, 2);
+  });
+});
+
+describe('generateOffer — deterministic seeding', () => {
+  function seededState(count = 0): IslandState {
+    const s = homeState();
+    s.storageCaps.stone = 100; s.inventory.stone = 90;
+    s.everProduced.add('stone'); s.everProduced.add('wood');
+    s.storageCaps.wood = 100; s.inventory.wood = 5;
+    s.buildings = [...s.buildings, { id: 'b-sx', defId: 'signal_exchange', x: 1, y: 1 }];
+    s.tradeAcceptCount = count;
+    return s;
+  }
+
+  it('produces identical offers for identical (seed, islandId, count, state)', () => {
+    const s1 = seededState(3);
+    const s2 = seededState(3);
+    const o1 = generateOffer(s1, 'world-42', DEFAULT_TRADE_TUNING, 1000);
+    const o2 = generateOffer(s2, 'world-42', DEFAULT_TRADE_TUNING, 1000);
+    expect(o1).not.toBeNull();
+    expect(o2).not.toBeNull();
+    expect(o1!.give.res).toBe(o2!.give.res);
+    expect(o1!.get.res).toBe(o2!.get.res);
+    expect(o1!.give.qty).toBeCloseTo(o2!.give.qty, 6);
+    expect(o1!.get.qty).toBeCloseTo(o2!.get.qty, 6);
+  });
+
+  it('produces different offers when the reaction count differs', () => {
+    const results = new Set<string>();
+    for (let count = 0; count < 8; count++) {
+      const s = seededState(count);
+      const o = generateOffer(s, 'world-42', DEFAULT_TRADE_TUNING, 1000);
+      if (o) results.add(`${o.give.res}:${o.get.res}`);
+    }
+    // Probabilistic: at least one of 8 counts should differ in give/get pair.
+    expect(results.size).toBeGreaterThan(1);
+  });
+
+  it('does not call Math.random when given a seed string', () => {
+    const spy = vi.spyOn(Math, 'random').mockImplementation(() => 0.5);
+    const s = seededState(0);
+    generateOffer(s, 'world-42', DEFAULT_TRADE_TUNING, 1000);
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
   });
 });
 
@@ -268,9 +318,9 @@ describe('offer lifecycle (online-time cooldown)', () => {
     const s = ready();
     const rt: TradeRuntime = { offers: [] };
     const states = new Map([[s.id, s]]);
-    tickTradeOffers(rt, states, Math.random, TUNE, 0, 16);
+    tickTradeOffers(rt, states, 'test-seed', TUNE, 0, 16);
     expect(rt.offers.filter((o) => o.islandId === s.id).length).toBe(1);
-    tickTradeOffers(rt, states, Math.random, TUNE, 1000, 16);
+    tickTradeOffers(rt, states, 'test-seed', TUNE, 1000, 16);
     expect(rt.offers.filter((o) => o.islandId === s.id).length).toBe(1);
   });
 
@@ -279,10 +329,10 @@ describe('offer lifecycle (online-time cooldown)', () => {
     s.tradeCooldownMs = 5000;
     const rt: TradeRuntime = { offers: [] };
     const states = new Map([[s.id, s]]);
-    tickTradeOffers(rt, states, Math.random, TUNE, 0, 1000);
+    tickTradeOffers(rt, states, 'test-seed', TUNE, 0, 1000);
     expect(rt.offers.length).toBe(0);
     expect(s.tradeCooldownMs).toBe(4000);
-    for (let i = 0; i < 4; i++) tickTradeOffers(rt, states, Math.random, TUNE, i + 1, 1000);
+    for (let i = 0; i < 4; i++) tickTradeOffers(rt, states, 'test-seed', TUNE, i + 1, 1000);
     expect(rt.offers.length).toBe(1);
   });
 
@@ -291,7 +341,7 @@ describe('offer lifecycle (online-time cooldown)', () => {
     s.tradeCooldownMs = 5000;
     const rt: TradeRuntime = { offers: [] };
     const states = new Map([[s.id, s]]);
-    tickTradeOffers(rt, states, Math.random, TUNE, 0, 0);
+    tickTradeOffers(rt, states, 'test-seed', TUNE, 0, 0);
     expect(s.tradeCooldownMs).toBe(5000);
     expect(rt.offers.length).toBe(0);
   });
@@ -300,9 +350,9 @@ describe('offer lifecycle (online-time cooldown)', () => {
     const s = ready();
     const rt: TradeRuntime = { offers: [] };
     const states = new Map([[s.id, s]]);
-    tickTradeOffers(rt, states, Math.random, TUNE, 0, 16);
+    tickTradeOffers(rt, states, 'test-seed', TUNE, 0, 16);
     expect(rt.offers.length).toBe(1);
-    tickTradeOffers(rt, states, Math.random, TUNE, 6 * 60 * 1000, 16);
+    tickTradeOffers(rt, states, 'test-seed', TUNE, 6 * 60 * 1000, 16);
     expect(rt.offers.length).toBe(0);
     expect(s.tradeCooldownMs).toBeGreaterThan(DEFAULT_TRADE_TUNING.cadenceMs - 100);
   });
@@ -312,8 +362,8 @@ describe('offer lifecycle (online-time cooldown)', () => {
     s.tradeAcceptCount = 100;
     const rt: TradeRuntime = { offers: [] };
     const states = new Map([[s.id, s]]);
-    tickTradeOffers(rt, states, Math.random, TUNE, 0, 16);
-    tickTradeOffers(rt, states, Math.random, TUNE, 6 * 60 * 1000, 16);
+    tickTradeOffers(rt, states, 'test-seed', TUNE, 0, 16);
+    tickTradeOffers(rt, states, 'test-seed', TUNE, 6 * 60 * 1000, 16);
     expect(s.tradeCooldownMs).toBe(
       effectiveCadenceMs(100, DEFAULT_TRADE_TUNING.cadenceMs),
     );
@@ -326,14 +376,14 @@ describe('offer lifecycle (online-time cooldown)', () => {
     s.everProduced.clear(); // nothing ever produced → no valid get-pool
     const rt: TradeRuntime = { offers: [] };
     const states = new Map([[s.id, s]]);
-    tickTradeOffers(rt, states, Math.random, TUNE, 0, 16);
+    tickTradeOffers(rt, states, 'test-seed', TUNE, 0, 16);
     expect(rt.offers.length).toBe(0);
     expect(s.tradeCooldownMs).toBe(0);
 
     // Now make it eligible: add an everProduced entry (wood as get candidate)
     // and ensure stone has stock so it can be the give side.
     s.everProduced.add('wood'); // wood is the get-pool; stone is give
-    tickTradeOffers(rt, states, Math.random, TUNE, 100, 16);
+    tickTradeOffers(rt, states, 'test-seed', TUNE, 100, 16);
     expect(rt.offers.length).toBe(1);
     expect(rt.offers[0]!.islandId).toBe(s.id);
   });
@@ -364,14 +414,14 @@ describe('offer lifecycle (online-time cooldown)', () => {
     const states = new Map([['island-a', a], ['island-b', b]]);
 
     // First tick (onlineDt=1000): A should spawn, B should not.
-    tickTradeOffers(rt, states, Math.random, TUNE, 0, 1000);
+    tickTradeOffers(rt, states, 'test-seed', TUNE, 0, 1000);
     expect(rt.offers.filter((o) => o.islandId === 'island-a').length).toBe(1);
     expect(rt.offers.filter((o) => o.islandId === 'island-b').length).toBe(0);
     expect(b.tradeCooldownMs).toBe(4000);
 
     // Burn B's cooldown down to zero over 4 more ticks.
     for (let i = 1; i <= 4; i++) {
-      tickTradeOffers(rt, states, Math.random, TUNE, i * 1000, 1000);
+      tickTradeOffers(rt, states, 'test-seed', TUNE, i * 1000, 1000);
     }
     expect(rt.offers.filter((o) => o.islandId === 'island-b').length).toBe(1);
     // A's offer count stays at 1 (no duplicate spawn while offer is active).

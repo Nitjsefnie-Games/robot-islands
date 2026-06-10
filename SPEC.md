@@ -1287,7 +1287,7 @@ so every accept makes that island's next offer arrive ≈1% sooner — "every tr
 
 #### 9.8.5 Persistence
 
-`tradeCooldownMs` and `tradeAcceptCount` persist per island (schema v20; backfilled to 0 for pre-v20 saves via `migrateV19toV20`). Active offers do **not** persist — they are regenerated fresh after load once the cooldown elapses.
+`tradeCooldownMs` and `tradeAcceptCount` persist per island (schema v20; backfilled to 0 for pre-v20 saves via `migrateV19toV20`). Active offers do **not** persist — they are regenerated fresh after load once the cooldown elapses. Offers are, however, deterministic per `(worldSeed, islandId, tradeAcceptCount)` so a reload cannot re-roll the terms.
 
 Both fields are **preserved across Tier Reset (§9.7)** — `tradeAcceptCount` is a permanent per-island accumulator and is never cleared; the §9.7 preserve-set extends to it.
 

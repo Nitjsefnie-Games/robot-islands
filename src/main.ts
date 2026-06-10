@@ -2067,7 +2067,7 @@ async function main(): Promise<void> {
     tickTradeOffers(
       tradeRuntime,
       islandStates,
-      Math.random,
+      worldState.seed,
       (state) => tuningFor(effectiveSkillMultipliers(state)),
       now,
       onlineDtMs,
