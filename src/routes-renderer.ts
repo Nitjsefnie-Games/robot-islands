@@ -10,7 +10,7 @@
 //                    primitives, rebuilt every update; not cached).
 
 import { Container, Graphics, Matrix } from 'pixi.js';
-import { routesCacheKey, type Route } from './routes.js';
+import type { Route } from './routes.js';
 import { VISION_BLUE } from './world.js';
 import { colorForRouteType, getDashedStrokeTexture } from './routes-dash-texture.js';
 
@@ -42,7 +42,6 @@ export class RouteRenderer {
   private readonly overlayGfx = new Graphics();
 
   private readonly entries = new Map<string, RouteRenderState>();
-  private lastFullKey: string | null = null;
   private _disposed = false;
   private readonly _scrollMatrix = new Matrix();
 
@@ -53,8 +52,9 @@ export class RouteRenderer {
     this.overlayLayer.addChild(this.overlayGfx);
   }
 
-  /** Per-frame update. Fast path = compare key + redraw cheap overlay.
-   *  Slow path = diff against the cache and rebuild changed entries.
+  /** Per-frame update. diffRebuild runs every frame; its per-route cacheKey
+   *  (type, endpoints, endpoint world coords, inFlight count) short-circuits
+   *  unchanged entries, so geometry only rebuilds when something visible moved.
    *  @param routes      current world.routes
    *  @param nowMs       performance.now() at the ticker callsite
    *  @param draftKey    `${fromIslandId}|${toIslandId}` or '' when hidden
@@ -65,34 +65,15 @@ export class RouteRenderer {
     draftKey: string,
     panelVisible: boolean,
   ): void {
-    const key = routesCacheKey(routes);
-
-    // Static layer rebuilds when the route list changes OR when any endpoint
-    // position changes (fix 7.4: island moves / merge §3.6 were otherwise
-    // invisible until inFlight changed).  diffRebuild is O(routes) but cheap
-    // because the per-route key comparison short-circuits unchanged entries.
-    if (key !== this.lastFullKey || this.anyEndpointMoved(routes)) {
-      this.diffRebuild(routes);
-      this.lastFullKey = key;
-    }
-
+    // Fix 7.4: diffRebuild runs unconditionally so island-centre moves
+    // (merge §3.6 / land reclamation) are picked up the same frame — a
+    // route-list-level key can't see them because Route carries island ids,
+    // not coordinates.  Steady-state per-frame cost is two resolveIslandPos
+    // calls (each allocates a small point object via tileToWorldPx) plus one
+    // template-string build + compare per route; route counts are small.
+    this.diffRebuild(routes);
     this.updateAnimationOnly(nowMs);
     this.paintOverlay(routes, nowMs, draftKey, panelVisible);
-  }
-
-  /** Return true if any existing entry's stored endpoint coords no longer
-   *  match the resolver's current output.  O(entries) — no allocation. */
-  private anyEndpointMoved(routes: ReadonlyArray<Route>): boolean {
-    for (const r of routes) {
-      const e = this.entries.get(r.id);
-      if (!e) continue; // new route — diffRebuild will handle it
-      const from = this.resolveIslandPos(r.from);
-      const to = this.resolveIslandPos(r.to);
-      if (!from || !to) continue;
-      if (from.x !== e.fromX || from.y !== e.fromY ||
-          to.x !== e.toX || to.y !== e.toY) return true;
-    }
-    return false;
   }
 
   private diffRebuild(routes: ReadonlyArray<Route>): void {
