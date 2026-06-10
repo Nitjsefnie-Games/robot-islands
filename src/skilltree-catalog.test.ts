@@ -5,6 +5,8 @@ import {
 } from './skilltree-catalog.js';
 import { SUBPATH_LABEL, BRANCH_LABEL, BRANCH_SUBPATHS, SUBPATH_BRANCH, costToUnlock, type SkillNode, type NodeId } from './skilltree.js';
 import type { Graph, BridgeEdge, Edge } from './skilltree-graph.js';
+import { RECIPES } from './recipes.js';
+import { BUILDING_DEFS } from './building-defs.js';
 
 describe('NOTABLES catalog', () => {
   it('has ~80 notables', () => {
@@ -379,5 +381,47 @@ describe('§9.3 branch composition — Patronage under Logistics', () => {
     expect(storagePatronage).toBeDefined();
     // storage and patronage are BOTH logistics now — within-branch bridge.
     expect(storagePatronage!.threshold.map((t) => t.branch)).toEqual(['logistics']);
+  });
+});
+
+describe('exoticAdjacency pairBoost nodes are economically non-vacuous', () => {
+  // pairBoost is directional (computeBuffStack, adjacency.ts): pair[0] gets
+  // the recipe-rate bonus when a pair[1] building is adjacent. A pair[0]
+  // without a RECIPES entry has no rate to multiply — the node buys nothing
+  // (the original sonarPair dock+tidal_array regression).
+  const pairBoostNodes = FULL_CATALOG.flatMap((n) =>
+    n.effect.kind === 'exoticAdjacency' && n.effect.effect.kind === 'pairBoost'
+      ? [{ node: n, pair: n.effect.effect.pair }]
+      : [],
+  );
+
+  it('the sonarPair keystone is a pairBoost node', () => {
+    expect(pairBoostNodes.map(({ node }) => String(node.id))).toContain(
+      'oceanography.keystone.sonarPair',
+    );
+  });
+
+  it('every boosted member (pair[0]) has a RECIPES entry — the bonus multiplies a real rate', () => {
+    for (const { node, pair } of pairBoostNodes) {
+      expect(RECIPES[pair[0]], `${node.id}: pair[0]=${pair[0]} has no recipe`).toBeDefined();
+    }
+  });
+
+  it('every pair member is a real building def and the pair is not degenerate', () => {
+    for (const { node, pair } of pairBoostNodes) {
+      expect(pair[0], String(node.id)).not.toBe(pair[1]);
+      for (const member of pair) {
+        expect(BUILDING_DEFS[member], `${node.id}: ${member}`).toBeDefined();
+      }
+    }
+  });
+
+  it('sonarPair pair is a coherent chain: the trigger building produces an input of the boosted building', () => {
+    const sonar = pairBoostNodes.find(({ node }) => String(node.id) === 'oceanography.keystone.sonarPair')!;
+    const boosted = RECIPES[sonar.pair[0]]!;
+    const trigger = RECIPES[sonar.pair[1]]!;
+    const triggerOutputs = Object.keys(trigger.outputs);
+    const boostedInputs = Object.keys(boosted.inputs);
+    expect(boostedInputs.some((r) => triggerOutputs.includes(r))).toBe(true);
   });
 });
