@@ -1662,3 +1662,182 @@ describe('Fix 6.2: T5 L-shaped path scans true polyline not chord', () => {
     expect(d.scanBuffer.has(chordOnlyCellKey)).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Fix 6.3 — destruction fate decided at dispatch (§11.7); doomed drones
+// never scan past their death cell; old saves fall back to return-time roll
+// ---------------------------------------------------------------------------
+
+describe('Fix 6.3: destruction fate decided at dispatch', () => {
+  function worldWithSeed(seed: string): WorldState {
+    return {
+      islands: [{
+        id: 'home',
+        name: 'home',
+        biome: 'plains',
+        cx: 0,
+        cy: 0,
+        majorRadius: 5,
+        minorRadius: 5,
+        populated: true,
+        discovered: true,
+        buildings: [],
+        modifiers: [],
+      }],
+      drones: [],
+      routes: [],
+      vehicles: [],
+      revealedCells: new Set(),
+      satellites: [],
+      repairDrones: [],
+      debrisFields: [],
+      endgameState: { achieved: new Set(), firstAchievedMs: null },
+      latticeActive: false,
+      latticeNodeIslands: [],
+      commPackets: [],
+      totalCo2Kg: 0,
+      playerLat: null,
+      playerLon: null,
+      oceanCells: new Map(),
+      depthRevealedCells: new Set(),
+      seed,
+      recentBuildAttempts: new Set(),
+      recentBuildAttemptTs: new Map(),
+    };
+  }
+
+  /** Hand-built T2 straight-line drone: origin (0,0) → east 30 tiles →
+   *  back. Speed 0.5 t/s ⇒ apex at 60s, return at 120s. The `doomedAtMs`
+   *  field is set (or omitted) per test to pin the fate plumbing without
+   *  hunting RNG seeds through dispatchDrone. */
+  function manualDrone(over: Partial<Drone> & Pick<Drone, 'id'>): Drone {
+    return {
+      fromIslandId: 'home',
+      originX: 0,
+      originY: 0,
+      dirX: 1,
+      dirY: 0,
+      outboundTiles: 30,
+      scanRadius: 4,
+      launchTime: 0,
+      expectedReturnTime: 120_000,
+      tier: 2,
+      fuelLoaded: 10,
+      fuelResource: 'diesel',
+      status: 'active',
+      waypoints: [],
+      darkMode: true,
+      darkModeDiscoveries: [],
+      scanBuffer: new Set<string>(),
+      probabilityBias: 0,
+      ...over,
+    };
+  }
+
+  it('per-tick scanning clamps segEndMs to doomedAtMs: no cells past the death point', () => {
+    // Doomed at t=30s — drone is at x=15, well short of the apex (x=30).
+    // Tick to t=119s (still pre-return so buffers are not GC'd yet): the
+    // scan must cover only [0s, 30s] → cells near the origin, NOT the cell
+    // out at the apex.
+    const w = worldWithSeed('any-seed');
+    const d = manualDrone({ id: 'doomed-1', doomedAtMs: 30_000 });
+    w.drones.push(d);
+    tickDrones(w, 119_000, 0);
+    // Launch cell scanned (corridor [x=0 .. x=15]).
+    expect(d.scanBuffer.has('0,0')).toBe(true);
+    // Apex-adjacent cell (x≈40 → cell 2) is past the death point. Without
+    // the clamp the corridor runs to the apex and back and buffers it.
+    expect(d.scanBuffer.has('2,0')).toBe(false);
+  });
+
+  it('return-time bookkeeping uses the stored fate, not a fresh roll', () => {
+    // 'legacy-0' does NOT destroy this drone under the return-time roll
+    // (verified below). With doomedAtMs stored the drone must be lost
+    // anyway — the dispatch-time fate is authoritative.
+    const seed = 'legacy-0';
+    const reroll = rollVehicleDestruction(seed, legacyStraightPath(), 1.0, 'doomed-2');
+    expect(reroll.destroyed).toBe(false); // guard: re-roll would say "survive"
+    const w = worldWithSeed(seed);
+    const d = manualDrone({ id: 'doomed-2', doomedAtMs: 30_000 });
+    w.drones.push(d);
+    const r = tickDrones(w, 121_000, 0);
+    expect(d.status).toBe('lost');
+    expect(r.lost).toHaveLength(1);
+    // §11.6 data lost on failure: buffer GC'd, nothing flushed.
+    expect(d.scanBuffer.size).toBe(0);
+    expect(w.revealedCells.size).toBe(0);
+  });
+
+  /** The exact path the legacy (return-time) roll rasterizes for the
+   *  manualDrone above — outbound + return legs, (cell,time)-deduped. */
+  function legacyStraightPath(): Array<{ cx: number; cy: number; entryMs: number }> {
+    const out = rasterizePath(0, 0, 1, 0, 30, 0.5, 0, 16);
+    const ret = rasterizePath(30, 0, -1, 0, 30, 0.5, 60_000, 16);
+    const seen = new Set<string>();
+    const path: Array<{ cx: number; cy: number; entryMs: number }> = [];
+    for (const p of [...out, ...ret]) {
+      const k = `${p.cx},${p.cy},${p.entryMs}`;
+      if (seen.has(k)) continue;
+      seen.add(k);
+      path.push(p);
+    }
+    return path;
+  }
+
+  it('old save without doomedAtMs falls back to the return-time roll (destroyed)', () => {
+    // 'legacy-71' destroys drone id 'legacy-drone' on this path (found by
+    // deterministic scan; guarded here so a weather/RNG change is loud).
+    const seed = 'legacy-71';
+    const roll = rollVehicleDestruction(seed, legacyStraightPath(), 1.0, 'legacy-drone');
+    expect(roll.destroyed).toBe(true); // guard
+    const w = worldWithSeed(seed);
+    const d = manualDrone({ id: 'legacy-drone' }); // doomedAtMs absent
+    w.drones.push(d);
+    const r = tickDrones(w, 121_000, 0);
+    expect(d.status).toBe('lost');
+    expect(r.lost).toHaveLength(1);
+    expect(w.revealedCells.size).toBe(0);
+  });
+
+  it('old save without doomedAtMs falls back to the return-time roll (survives)', () => {
+    const seed = 'legacy-0';
+    const roll = rollVehicleDestruction(seed, legacyStraightPath(), 1.0, 'legacy-drone');
+    expect(roll.destroyed).toBe(false); // guard
+    const w = worldWithSeed(seed);
+    const d = manualDrone({ id: 'legacy-drone' });
+    w.drones.push(d);
+    const r = tickDrones(w, 121_000, 0);
+    expect(d.status).toBe('returned');
+    expect(r.returned).toHaveLength(1);
+    // Survivor flushes its full-flight buffer on return.
+    expect(w.revealedCells.has('0,0')).toBe(true);
+    expect(w.revealedCells.has('1,0')).toBe(true);
+  });
+
+  it('dispatch pre-computes a surviving fate as undefined (clear weather)', () => {
+    let clearSeed = '';
+    for (let i = 0; i < 1000; i++) {
+      const s = `clear-${i}`;
+      const path = rasterizePath(0, 0, 1, 0, 20, 0.5, 0, 16);
+      const apexTime = (20 / 0.5) * 1000;
+      const retPath = rasterizePath(20, 0, -1, 0, 20, 0.5, apexTime, 16);
+      let allClear = true;
+      for (const p of [...path, ...retPath]) {
+        if (weather(s, p.cx, p.cy, p.entryMs).state !== 'clear') { allClear = false; break; }
+      }
+      if (allClear) { clearSeed = s; break; }
+    }
+    expect(clearSeed).not.toBe('');
+
+    const w = worldWithSeed(clearSeed);
+    const home = makeIslandState();
+    home.inventory.biofuel = 50;
+    const res = dispatchDrone(w, home, 0, 0, 1, 0, 10, 0);
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.drone.doomedAtMs).toBeUndefined();
+    tickDrones(w, res.drone.expectedReturnTime + 1000, 0);
+    expect(res.drone.status).toBe('returned');
+    expect(w.revealedCells.size).toBeGreaterThan(0);
+  });
+});

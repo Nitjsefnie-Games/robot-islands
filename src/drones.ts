@@ -78,6 +78,14 @@ export interface Drone {
   readonly scanBuffer: Set<string>;
   /** §13.3 Probability Engine bias stored at dispatch time. */
   readonly probabilityBias: number;
+  /** §Fix 6.3 §2.6 deterministic fate: the perf-clock ms of the weather-cell
+   *  entry that will destroy this drone, pre-computed at dispatch time.
+   *  `undefined` means the drone survives. The tick loop clamps `segEndMs` to
+   *  this value so a doomed drone never live-reveals cells past its death cell.
+   *  At return time the tick uses this stored fate instead of re-rolling the
+   *  same RNG stream. Old saves (field absent) fall back to the return-time
+   *  roll (pre-fix behaviour). */
+  readonly doomedAtMs?: number;
 }
 
 /** Drone fuel efficiency — round-trip tiles per unit of fuel, per drone
@@ -428,11 +436,46 @@ export function dispatchDrone(
 
   origin.inventory[fuelResource] = inv(origin, fuelResource) - fuelLoaded;
 
+  // §Fix 6.3 §2.6: pre-compute the deterministic weather-destruction fate at
+  // dispatch time. This ensures a drone doomed to die at cell N never
+  // live-reveals cells past N during per-tick scanning (the tick loop clamps
+  // segEndMs to doomedAtMs). The same RNG stream is used here as was used
+  // historically at return time — identical outcome. Old saves lack this field;
+  // the tick loop falls back to the return-time roll when `doomedAtMs` is
+  // `undefined`.
+  const droneId = nextDroneId();
+  const multiplier = DRONE_TIER_MULTIPLIERS[tier];
+  let doomedAtMs: number | undefined;
+  {
+    let dispatchPath: Array<{ cx: number; cy: number; entryMs: number }>;
+    if (isPathDrawn && waypoints) {
+      dispatchPath = rasterizeWaypointPathForWeather(waypoints, speed, nowMs, CELL_SIZE_TILES);
+    } else {
+      const outPath = rasterizePath(originX, originY, ux, uy, outboundTiles, speed, nowMs, CELL_SIZE_TILES);
+      const apexTime = nowMs + (outboundTiles / speed) * 1000;
+      const apexX = originX + ux * outboundTiles;
+      const apexY = originY + uy * outboundTiles;
+      const retPath = rasterizePath(apexX, apexY, -ux, -uy, outboundTiles, speed, apexTime, CELL_SIZE_TILES);
+      const seen = new Set<string>();
+      dispatchPath = [];
+      for (const p of [...outPath, ...retPath]) {
+        const key = `${p.cx},${p.cy},${p.entryMs}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        dispatchPath.push(p);
+      }
+    }
+    const roll = rollVehicleDestruction(world.seed, dispatchPath, multiplier, droneId);
+    if (roll.destroyed && roll.atCellIndex !== null) {
+      doomedAtMs = dispatchPath[roll.atCellIndex]!.entryMs;
+    }
+  }
+
   // Spawn coords: caller is source of truth. The engine trusts originX/originY
   // without further resolution — the dispatch UI already validated the pad
   // and computed the launch position before invoking dispatchDrone.
   const drone: Drone = {
-    id: nextDroneId(),
+    id: droneId,
     fromIslandId: origin.id,
     originX,
     originY,
@@ -451,6 +494,7 @@ export function dispatchDrone(
     darkModeDiscoveries: [],
     scanBuffer: new Set<string>(),
     probabilityBias: probabilityBiasForIsland(origin),
+    doomedAtMs,
   };
   world.drones.push(drone);
   return { ok: true, drone };
@@ -609,7 +653,13 @@ export function tickDrones(
     //    "single tick spans the whole flight" case (the cell-test goes
     //    over a one-tick flight from launch to return).
     const segStartMs = Math.max(prevTickMs, d.launchTime);
-    const segEndMs = Math.min(nowMs, d.expectedReturnTime);
+    // §Fix 6.3: clamp segEndMs to doomedAtMs so a drone fated to be destroyed
+    // never live-reveals cells past its destruction point. If doomedAtMs is
+    // undefined (old save or surviving drone), fall through to expectedReturnTime.
+    const segEndMs = Math.min(
+      nowMs,
+      d.doomedAtMs !== undefined ? d.doomedAtMs : d.expectedReturnTime,
+    );
     if (segEndMs >= segStartMs) {
       const speed = droneSpeed(d);
       const apexMs = d.launchTime + (d.outboundTiles / speed) * 1000;
@@ -743,51 +793,44 @@ export function tickDrones(
       continue;
     }
 
-    // §2.6 weather destruction roll — outbound + return legs.
-    const speed = droneSpeed(d);
-    let path: Array<{ cx: number; cy: number; entryMs: number }>;
-    if (d.waypoints.length >= 2) {
-      // T5 path-drawn: rasterize the waypoint polyline.
-      path = rasterizeWaypointPathForWeather(d.waypoints, speed, d.launchTime, CELL_SIZE_TILES);
+    // §2.6 weather destruction roll — use pre-computed fate (doomedAtMs) when
+    // available (Fix 6.3: deterministic fate set at dispatch time). Fall back
+    // to a fresh roll for old saves (doomedAtMs === undefined).
+    let willBeDestroyed: boolean;
+    if (d.doomedAtMs !== undefined) {
+      // Pre-computed fate: drone is doomed iff doomedAtMs is defined.
+      willBeDestroyed = true;
     } else {
-      const outboundPath = rasterizePath(
-        d.originX,
-        d.originY,
-        d.dirX,
-        d.dirY,
-        d.outboundTiles,
-        speed,
-        d.launchTime,
-        CELL_SIZE_TILES,
-      );
-      const apexTime = d.launchTime + (d.outboundTiles / speed) * 1000;
-      const apexX = d.originX + d.dirX * d.outboundTiles;
-      const apexY = d.originY + d.dirY * d.outboundTiles;
-      const returnPath = rasterizePath(
-        apexX,
-        apexY,
-        -d.dirX,
-        -d.dirY,
-        d.outboundTiles,
-        speed,
-        apexTime,
-        CELL_SIZE_TILES,
-      );
-      // Concatenate outbound + return legs. Dedup only exact (cell, time)
-      // duplicates so both legs are evaluated by rollVehicleDestruction.
-      const seen = new Set<string>();
-      path = [];
-      for (const p of [...outboundPath, ...returnPath]) {
-        const key = `${p.cx},${p.cy},${p.entryMs}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        path.push(p);
+      // Legacy path: re-run the roll (identical RNG stream = identical result).
+      const speed2 = droneSpeed(d);
+      let path: Array<{ cx: number; cy: number; entryMs: number }>;
+      if (d.waypoints.length >= 2) {
+        path = rasterizeWaypointPathForWeather(d.waypoints, speed2, d.launchTime, CELL_SIZE_TILES);
+      } else {
+        const outboundPath = rasterizePath(
+          d.originX, d.originY, d.dirX, d.dirY, d.outboundTiles, speed2, d.launchTime, CELL_SIZE_TILES,
+        );
+        const apexTime = d.launchTime + (d.outboundTiles / speed2) * 1000;
+        const apexX = d.originX + d.dirX * d.outboundTiles;
+        const apexY = d.originY + d.dirY * d.outboundTiles;
+        const returnPath = rasterizePath(
+          apexX, apexY, -d.dirX, -d.dirY, d.outboundTiles, speed2, apexTime, CELL_SIZE_TILES,
+        );
+        const seen2 = new Set<string>();
+        path = [];
+        for (const p of [...outboundPath, ...returnPath]) {
+          const key = `${p.cx},${p.cy},${p.entryMs}`;
+          if (seen2.has(key)) continue;
+          seen2.add(key);
+          path.push(p);
+        }
       }
+      const multiplier = DRONE_TIER_MULTIPLIERS[d.tier];
+      const roll = rollVehicleDestruction(world.seed, path, multiplier, d.id);
+      willBeDestroyed = roll.destroyed;
     }
-    const multiplier = DRONE_TIER_MULTIPLIERS[d.tier];
-    const roll = rollVehicleDestruction(world.seed, path, multiplier, d.id);
 
-    if (roll.destroyed) {
+    if (willBeDestroyed) {
       d.status = 'lost';
       lost.push(d);
       // Discard dark-mode discoveries on destruction.
