@@ -895,12 +895,17 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     const active = deps.world.drones.filter(
       (d) => d.status !== 'lost' && d.status !== 'returned',
     );
+    const originSpec = deps.getOriginSpec();
+    const operationalPads = originSpec.buildings.filter(
+      (b) => b.defId === 'dronepad' && isOperationalBuilding(b),
+    );
+    const padCount = operationalPads.length;
     if (active.length === 0) {
       ledgerList.appendChild(ledgerEmpty);
-      ledgerR.textContent = '0 / 1';
+      ledgerR.textContent = `0 / ${padCount}`;
       return;
     }
-    ledgerR.textContent = `${active.length} / 1`;
+    ledgerR.textContent = `${active.length} / ${padCount}`;
     for (const d of active) {
       ledgerList.appendChild(renderLedgerRow(d, nowMs));
     }
