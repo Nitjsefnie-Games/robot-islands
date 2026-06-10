@@ -29,7 +29,9 @@ import {
   SCANNER_INITIAL_P_PER_TICK,
   SCANNER_ASYMPTOTE_P_PER_TICK,
   SCANNER_DWELL_TIME_CONSTANT_MS,
+  SCANNER_REF_TICK_MS,
   scannerDiscoveryProbability,
+  scannerPerCallProbability,
   cellsCoveredBySat,
   tickScannerDiscovery,
   buildCommGraph,
@@ -2211,5 +2213,48 @@ describe('§5 Scanner Sat ocean cell discovery', () => {
     tickScannerDiscovery(world, 1000, 0);
     expect(world.depthRevealedCells.size).toBe(0);
     expect(world.revealedCells.size).toBe(0);
+  });
+});
+
+// §14.5 Fix 2.2 — dt-scaled scanner discovery hazard
+describe('§14.5 dt-scaled scanner discovery — scannerPerCallProbability', () => {
+  it('SCANNER_REF_TICK_MS is exported and equals 1000', () => {
+    expect(SCANNER_REF_TICK_MS).toBe(1000);
+  });
+
+  it('at dt = SCANNER_REF_TICK_MS the per-call probability equals the base p (identity)', () => {
+    const dwellMs = SCANNER_DWELL_TIME_CONSTANT_MS;
+    const pBase = scannerDiscoveryProbability(dwellMs);
+    const pCall = scannerPerCallProbability(pBase, SCANNER_REF_TICK_MS);
+    expect(pCall).toBeCloseTo(pBase, 12);
+  });
+
+  it('closed-form dt-scaling: (1 - pCall(16.7ms))^60 ≈ (1 - pCall(1000ms)) within 1e-9', () => {
+    // This verifies the hazard-rate equivalence: 60 frame-ticks of (1000/60)ms
+    // each must have exactly the same cumulative miss probability as one 1000ms
+    // tick (closed-form: (1-p)^((dt/1000)*n) == (1-p)^1 when n*dt == 1000).
+    // Use the exact per-frame duration 1000/60 so n*dt == 1000 exactly.
+    const dtExact = 1000 / 60; // ≈ 16.666...ms — exact 60fps frame
+    const dwellMs = SCANNER_DWELL_TIME_CONSTANT_MS;
+    const pBase = scannerDiscoveryProbability(dwellMs);
+    const p60 = scannerPerCallProbability(pBase, dtExact);
+    const p1000 = scannerPerCallProbability(pBase, 1000);
+    // Cumulative miss over 60 frame-ticks vs single 1s tick.
+    const miss60 = Math.pow(1 - p60, 60);
+    const miss1000 = 1 - p1000;
+    expect(Math.abs(miss60 - miss1000)).toBeLessThan(1e-9);
+  });
+
+  it('at dt = 0 the per-call probability is 0 (no time elapsed → no chance)', () => {
+    const pBase = SCANNER_INITIAL_P_PER_TICK;
+    expect(scannerPerCallProbability(pBase, 0)).toBe(0);
+  });
+
+  it('at dt >> SCANNER_REF_TICK_MS the per-call probability saturates below 1', () => {
+    // pBase close to asymptote, dt = 10000ms. Should be large but < 1.
+    const pBase = SCANNER_ASYMPTOTE_P_PER_TICK;
+    const pCall = scannerPerCallProbability(pBase, 10000);
+    expect(pCall).toBeGreaterThan(0.3);
+    expect(pCall).toBeLessThan(1);
   });
 });
