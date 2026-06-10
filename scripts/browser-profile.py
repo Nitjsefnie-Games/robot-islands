@@ -108,7 +108,12 @@ inject_js = '''
       const db = req.result;
       const tx = db.transaction('keyval', 'readwrite');
       const store = tx.objectStore('keyval');
-      const key = `robot-islands:save:v${save.v}`;
+      // STORAGE_KEY is pinned at v14 in src/persistence.ts (the snapshot's
+      // internal `v` carries the real schema version). Writing to
+      // `save:v${save.v}` lands on a key loadWorld never probes — its
+      // fallback walk skips v === SCHEMA_VERSION assuming that's the
+      // primary key, which it isn't. Always inject at the pinned primary.
+      const key = 'robot-islands:save:v14';
       store.put(save, key);
       tx.oncomplete = () => resolve({key, v: save.v});
       tx.onerror = () => reject(tx.error?.message ?? 'tx-error');
