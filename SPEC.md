@@ -1277,13 +1277,13 @@ Offers exist only while the player is present, and the cadence that paces them i
 
 #### 9.8.4 Compounding speedup
 
-Each island carries a `tradeAcceptCount`. Every accepted trade on that island increments it, and the island's **effective cadence** is
+Each island carries a `tradeAcceptCount`. Every accepted trade or manual reject on that island increments it, and the island's **effective cadence** is
 
 ```
 effective\_cadence\_ms = max(FLOOR\_MS, base\_cadence\_ms \* 0.99^tradeAcceptCount)
 ```
 
-so every accept makes that island's next offer arrive ≈1% sooner — "every trade you accept makes the next one come a little faster." `base\_cadence\_ms` is the per-island base spawn interval (placeholder 2 hours of online time, already folded with the frequency skill of §9.8.6). The result is floored at `FLOOR\_MS` (placeholder ~1 minute) so an enthusiastic trader cannot drive cadence toward zero and re-open the farm by another route. The accept counter is per-island, matching the per-island Signal Exchange / cadence / state.
+so every timely reaction (accept or manual reject) makes that island's next offer arrive ≈1% sooner — "every trade you react to on time makes the next one come a little faster." `base\_cadence\_ms` is the per-island base spawn interval (placeholder 2 hours of online time, already folded with the frequency skill of §9.8.6). The result is floored at `FLOOR\_MS` (placeholder ~1 minute) so an enthusiastic trader cannot drive cadence toward zero and re-open the farm by another route. The accept counter is per-island, matching the per-island Signal Exchange / cadence / state. Silent expiry resets the cooldown without compounding.
 
 #### 9.8.5 Persistence
 

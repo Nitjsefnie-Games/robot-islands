@@ -1749,20 +1749,34 @@ async function main(): Promise<void> {
   // Trade offer overlay — card shown on the active island when a signal_exchange
   // is present and an offer has spawned. Acceptance mutates the island's inventory
   // via applyOffer and removes the offer from the runtime list.
-  const tradeUi = mountTradeUi((offer) => {
-    const st = islandStates.get(offer.islandId);
-    if (!st) return;
-    applyOffer(st, offer);
-    // Each accepted trade compounds this island's next offer 1% sooner; the
-    // cooldown is reset HERE (on resolution) so the increment lands on the
-    // very next offer. tuningFor folds in the Logistics-Network frequency node.
-    st.tradeAcceptCount += 1;
-    st.tradeCooldownMs = effectiveCadenceMs(
-      st.tradeAcceptCount,
-      tuningFor(effectiveSkillMultipliers(st)).cadenceMs,
-    );
-    tradeRuntime.offers = tradeRuntime.offers.filter((o) => o.id !== offer.id);
-  });
+  const tradeUi = mountTradeUi(
+    (offer) => {
+      const st = islandStates.get(offer.islandId);
+      if (!st) return;
+      applyOffer(st, offer);
+      // Each accepted trade compounds this island's next offer 1% sooner; the
+      // cooldown is reset HERE (on resolution) so the increment lands on the
+      // very next offer. tuningFor folds in the Logistics-Network frequency node.
+      st.tradeAcceptCount += 1;
+      st.tradeCooldownMs = effectiveCadenceMs(
+        st.tradeAcceptCount,
+        tuningFor(effectiveSkillMultipliers(st)).cadenceMs,
+      );
+      tradeRuntime.offers = tradeRuntime.offers.filter((o) => o.id !== offer.id);
+    },
+    (offer) => {
+      const st = islandStates.get(offer.islandId);
+      if (!st) return;
+      // Manual reject counts as a timely reaction: it compounds cadence but
+      // exchanges no goods.
+      st.tradeAcceptCount += 1;
+      st.tradeCooldownMs = effectiveCadenceMs(
+        st.tradeAcceptCount,
+        tuningFor(effectiveSkillMultipliers(st)).cadenceMs,
+      );
+      tradeRuntime.offers = tradeRuntime.offers.filter((o) => o.id !== offer.id);
+    },
+  );
 
   // Update tick: apply held pan flags + sync camera state to the world
   // container, advance every populated island's economy, advance drone fleet,

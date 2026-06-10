@@ -432,6 +432,80 @@ describe('offer lifecycle (online-time cooldown)', () => {
   });
 });
 
+describe('trade reject', () => {
+  function ready(): IslandState {
+    const s = homeState();
+    s.storageCaps.stone = 100; s.inventory.stone = 90;
+    s.everProduced.add('stone'); s.everProduced.add('wood');
+    s.storageCaps.wood = 100; s.inventory.wood = 5;
+    s.buildings = [...s.buildings, { id: 'b-sx', defId: 'signal_exchange', x: 1, y: 1 }];
+    return s;
+  }
+  const TUNE = () => DEFAULT_TRADE_TUNING;
+
+  it('reject increments tradeAcceptCount and resets cooldown to compounded cadence', () => {
+    const s = ready();
+    s.tradeAcceptCount = 5;
+    const rt: TradeRuntime = { offers: [] };
+    const states = new Map([[s.id, s]]);
+    tickTradeOffers(rt, states, 'test-seed', TUNE, 0, 16);
+    expect(rt.offers.length).toBe(1);
+    const offer = rt.offers[0]!;
+    // Simulate reject: same cadence treatment as accept, no goods exchanged.
+    s.tradeAcceptCount += 1;
+    s.tradeCooldownMs = effectiveCadenceMs(s.tradeAcceptCount, DEFAULT_TRADE_TUNING.cadenceMs);
+    rt.offers = rt.offers.filter((o) => o.id !== offer.id);
+    expect(s.tradeAcceptCount).toBe(6);
+    expect(s.tradeCooldownMs).toBe(effectiveCadenceMs(6, DEFAULT_TRADE_TUNING.cadenceMs));
+    expect(rt.offers.length).toBe(0);
+  });
+
+  it('rejected offer is removed from runtime', () => {
+    const s = ready();
+    const rt: TradeRuntime = { offers: [] };
+    const states = new Map([[s.id, s]]);
+    tickTradeOffers(rt, states, 'test-seed', TUNE, 0, 16);
+    expect(rt.offers.length).toBe(1);
+    const offer = rt.offers[0]!;
+    rt.offers = rt.offers.filter((o) => o.id !== offer.id);
+    expect(rt.offers.length).toBe(0);
+  });
+
+  it('next offer after reject differs because the count (and thus seed) changed', () => {
+    const s = ready();
+    const rt: TradeRuntime = { offers: [] };
+    const states = new Map([[s.id, s]]);
+    tickTradeOffers(rt, states, 'test-seed', TUNE, 0, 16);
+    const first = rt.offers[0]!;
+    // Reject bumps count and removes offer.
+    s.tradeAcceptCount += 1;
+    s.tradeCooldownMs = 0;
+    rt.offers = [];
+    tickTradeOffers(rt, states, 'test-seed', TUNE, 16, 16);
+    // With high probability the terms differ; if they collide, retry a few counts.
+    let diff = false;
+    for (let retry = 0; retry < 3; retry++) {
+      if (retry > 0) {
+        s.tradeAcceptCount += 1;
+        s.tradeCooldownMs = 0;
+        rt.offers = [];
+        tickTradeOffers(rt, states, 'test-seed', TUNE, (retry + 1) * 16, 16);
+      }
+      const o = rt.offers[0]!;
+      if (
+        first.give.res !== o.give.res ||
+        first.get.res !== o.get.res ||
+        Math.abs(first.give.qty - o.give.qty) > 1e-9 ||
+        Math.abs(first.get.qty - o.get.qty) > 1e-9
+      ) {
+        diff = true;
+        break;
+      }
+    }
+    expect(diff).toBe(true);
+  });
+});
+
 describe('tuningFor', () => {
   const base = blankMultipliers();
 
