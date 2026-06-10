@@ -1123,7 +1123,7 @@ export async function clearSave(): Promise<void> {
 export function isValidSaveSnapshot(value: unknown): value is SaveSnapshot {
   if (typeof value !== 'object' || value === null) return false;
   const v = value as Record<string, unknown>;
-  if (typeof v['v'] !== 'number' || v['v'] !== SCHEMA_VERSION) return false;
+  if (typeof v['v'] !== 'number' || !SUPPORTED_LOAD_VERSIONS.has(v['v'])) return false;
   if (typeof v['savedAt'] !== 'number') return false;
   if (typeof v['savedAtPerf'] !== 'number') return false;
   if (typeof v['world'] !== 'object' || v['world'] === null) return false;

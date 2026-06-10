@@ -524,6 +524,21 @@ describe('schema version', () => {
     expect(() => deserializeWorld(v3Shaped, 0, 0)).toThrow(/not supported/);
   });
 
+  it('isValidSaveSnapshot accepts any supported migratable version', () => {
+    // A minimal v7 top-level blob (the oldest supported version).
+    const v7 = {
+      v: 7,
+      savedAt: 0,
+      savedAtPerf: 0,
+      world: {},
+      islandStates: [],
+    } as unknown as SaveSnapshot;
+    expect(isValidSaveSnapshot(v7)).toBe(true);
+
+    // Unsupported versions and non-numeric versions are still rejected.
+    expect(isValidSaveSnapshot({ ...v7, v: 3 } as unknown as SaveSnapshot)).toBe(false);
+    expect(isValidSaveSnapshot({ ...v7, v: 'seven' } as unknown as SaveSnapshot)).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------
