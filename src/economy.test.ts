@@ -892,6 +892,62 @@ describe('§5.3 cable network — computeRates honours cableComponent.unified', 
     const { power } = computeRates(state); // no cableComponent
     expect(power.factor).toBe(0);
   });
+
+  it('unified component bypasses the local battery: no discharge under a local deficit (fix 3.5)', () => {
+    // Per the §5.3 doc comment, the battery's local deficit-cover "is
+    // bypassed when unified — a unified component balances at the network
+    // level, not per-island". Stored energy must therefore NOT drain into a
+    // local deficit that the component already covers.
+    const state = makeState({
+      buildings: [
+        { id: 'bb1', defId: 'battery_bank', x: 0, y: 0 },
+        { id: 'wt1', defId: 'wind_turbine', x: 10, y: 0 }, // 100 kW local
+        // 5 × 25 kW Mines ⇒ 125 kW local demand ⇒ 25 kW LOCAL deficit.
+        { id: 'm1', defId: 'mine', x: 20, y: 0 },
+        { id: 'm2', defId: 'mine', x: 30, y: 0 },
+        { id: 'm3', defId: 'mine', x: 40, y: 0 },
+        { id: 'm4', defId: 'mine', x: 50, y: 0 },
+        { id: 'm5', defId: 'mine', x: 60, y: 0 },
+      ],
+      batteryStoredWs: 1_000_000,
+      storageCaps: blankCaps(100_000),
+    });
+    advanceIsland(state, 100_000, {
+      cableComponent: {
+        unified: true,
+        producedTotal: 200, // component-wide surplus covers the local deficit
+        consumedTotal: 125,
+        cableCapacityTotal: 1000,
+        requiredTransmission: 25,
+      },
+    });
+    // Mines ran at the component factor (1.0) — and the battery was inert.
+    expect(state.inventory.iron_ore).toBeCloseTo(5 * 0.05 * 100, 6);
+    expect(state.batteryStoredWs).toBe(1_000_000);
+  });
+
+  it('unified component bypasses the local battery: no charge under a local surplus (fix 3.5)', () => {
+    // The dual double-count: a local surplus already flows out to cover
+    // remote deficits in the unified pool — charging the battery off the
+    // same wattage would mint energy.
+    const state = makeState({
+      buildings: [
+        { id: 'bb1', defId: 'battery_bank', x: 0, y: 0 },
+        { id: 'wt1', defId: 'wind_turbine', x: 10, y: 0 }, // 100 kW surplus
+      ],
+      batteryStoredWs: 0,
+    });
+    advanceIsland(state, 100_000, {
+      cableComponent: {
+        unified: true,
+        producedTotal: 200,
+        consumedTotal: 200, // remote islands consume the local surplus
+        cableCapacityTotal: 1000,
+        requiredTransmission: 100,
+      },
+    });
+    expect(state.batteryStoredWs).toBe(0);
+  });
 });
 
 describe('power (§5.1)', () => {
