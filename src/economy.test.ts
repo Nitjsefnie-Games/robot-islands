@@ -50,7 +50,7 @@ import { RESOURCE_BASE_CAP, RESOURCE_STORAGE_CATEGORY, defaultCapForCategory, st
 import { aggregateStorageCaps } from './world.js';
 import type { TerrainKind } from './island.js';
 import type { Graph } from './skilltree-graph.js';
-import { effectiveSkillMultipliers, type SkillMultipliers, type NodeId, type SkillNode } from './skilltree.js';
+import { DEFAULT_GRAPH, effectiveSkillMultipliers, type SkillMultipliers, type NodeId, type SkillNode } from './skilltree.js';
 import * as skilltreeModule from './skilltree.js';
 import { FULL_CATALOG } from './skilltree-catalog.js';
 import { attachTerrainAt, makeInitialIslandState } from './world.js';
@@ -4143,6 +4143,82 @@ describe('conditionalBonus', () => {
     const world = { seed: 'test', islands: [{ id: 'test', cx: 0, cy: 0 }] } as any;
     layerConditionalBonuses(mul, state, world, graph, 3_500_000);
     expect(mul.xpGain).toBe(1.25);
+  });
+
+  // §15.3 clock-domain regression (fix 3.1): conditional bonuses must be
+  // evaluated in the WALL-clock domain (the during-night condition calls
+  // realPhaseName, which is astronomically anchored to the Date.now epoch),
+  // not the perf-clock domain of `nowMs` / `t`. The catalog has no
+  // during-night conditional, so these tests temporarily graft a synthetic
+  // node into DEFAULT_GRAPH (computeRates / advanceIsland layer conditionals
+  // against DEFAULT_GRAPH specifically) and remove it in `finally`.
+  const NIGHT_EXTRACT_NODE: SkillNode = {
+    id: 'test.cond.nightExtractWall' as NodeId,
+    subPath: 'mining',
+    depth: 1,
+    cost: 1,
+    magnitude: 0.25,
+    effect: {
+      kind: 'conditionalBonus',
+      multiplier: 0.25,
+      appliesTo: 'extraction',
+      condition: { kind: 'during-night' },
+    },
+    description: 'test — night extraction bonus',
+  };
+
+  it('computeRates evaluates during-night conditionals in the wall-clock domain', () => {
+    (DEFAULT_GRAPH.nodes as SkillNode[]).push(NIGHT_EXTRACT_NODE);
+    try {
+      const world = { ...dayWorld(), playerLat: 49.20, playerLon: 16.61 }; // Brno
+      const mk = (): IslandState =>
+        makeState({ buildings: [MINE], unlockedNodes: new Set([NIGHT_EXTRACT_NODE.id]) });
+      // Wall-clock anchors: unambiguous deep night / midday in Brno.
+      const nightWall = new Date('2026-05-29T23:30:00Z').getTime();
+      const dayWall = new Date('2026-05-29T10:00:00Z').getTime();
+      // Perf-clock values chosen ADVERSARIALLY: interpreted as wall-clock they
+      // land on the OPPOSITE phase (perf 11h ⇒ 1970-01-01 ~noon Brno ⇒ day;
+      // perf 0 ⇒ 1970-01-01 01:00 Brno ⇒ night), so a wrong-domain
+      // evaluation flips both assertions.
+      const perfDuringDay = 11 * 3600 * 1000;
+      const perfDuringNight = 0;
+      const night = computeRates(mk(), { defs: POWER_FREE, world }, perfDuringDay, nightWall);
+      const day = computeRates(mk(), { defs: POWER_FREE, world }, perfDuringNight, dayWall);
+      expect(day.production.iron_ore ?? 0).toBeGreaterThan(0);
+      expect(night.production.iron_ore ?? 0).toBeCloseTo((day.production.iron_ore ?? 0) * 1.25, 9);
+    } finally {
+      (DEFAULT_GRAPH.nodes as SkillNode[]).pop();
+    }
+  });
+
+  it('advanceIsland applies the during-night bonus per-segment across a real dusk boundary', () => {
+    (DEFAULT_GRAPH.nodes as SkillNode[]).push(NIGHT_EXTRACT_NODE);
+    try {
+      const world = { ...dayWorld(), playerLat: 49.20, playerLon: 16.61 }; // Brno
+      // 3h perf-domain window ending at wall 2026-05-29T20:00:00Z — i.e. wall
+      // 17:00Z → 20:00Z. Civil dusk (sun through −6°, the during-night edge)
+      // falls ~19:30Z, so the window is mostly day with a night tail.
+      const spanMs = 3 * 3600 * 1000;
+      const wallEnd = new Date('2026-05-29T20:00:00Z').getTime();
+      const caps = blankCaps(1_000_000); // keep the Mine un-capped for 3h
+      const boosted = makeState({
+        buildings: [MINE],
+        storageCaps: caps,
+        unlockedNodes: new Set([NIGHT_EXTRACT_NODE.id]),
+      });
+      const baseline = makeState({ buildings: [MINE], storageCaps: caps });
+      advanceIsland(boosted, spanMs, { defs: POWER_FREE, world }, wallEnd);
+      advanceIsland(baseline, spanMs, { defs: POWER_FREE, world }, wallEnd);
+      const ratio = boosted.inventory.iron_ore / baseline.inventory.iron_ore;
+      // Night tail boosted: strictly above 1. Day bulk NOT boosted: strictly
+      // below the full 1.25. A wrong-domain evaluation (perf 0..3h ⇒ 1970
+      // night in Brno) or an end-of-advance evaluation (20:00Z ⇒ night)
+      // boosts the WHOLE window and lands at exactly 1.25.
+      expect(ratio).toBeGreaterThan(1.005);
+      expect(ratio).toBeLessThan(1.24);
+    } finally {
+      (DEFAULT_GRAPH.nodes as SkillNode[]).pop();
+    }
   });
 
 });
