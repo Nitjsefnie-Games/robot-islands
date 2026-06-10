@@ -1454,3 +1454,59 @@ describe('vehicle drag — cubic invariant (rev-16 §6.2)', () => {
     }
   });
 });
+
+// §15.1 wall-anchored vehicle weather (wallOffsetMs threading)
+
+describe('§15.1 wall-anchored vehicle weather', () => {
+  const W = 53 * 60 * 60 * 1000; // 53 h of wall time
+
+  /** Seed whose T1-ship path (0,0)→(30,0) survives the destruction roll
+   *  with offset 0 but is destroyed with offset W — i.e. the wall anchor is
+   *  the only thing separating the two fates. Mirrors tickVehicles' exact
+   *  path construction (speed 0.25, launchTime 0, vehicle id 'vehicle-1'). */
+  function findOffsetFlipSeed(): string {
+    const path = rasterizePath(0, 0, 1, 0, 30, 0.25, 0, 16);
+    for (let i = 0; i < 5000; i++) {
+      const seed = `v-anchor-${i}`;
+      if (rollVehicleDestruction(seed, path, 1.0, 'vehicle-1', 0).destroyed) continue;
+      if (!rollVehicleDestruction(seed, path, 1.0, 'vehicle-1', W).destroyed) continue;
+      return seed;
+    }
+    throw new Error('no offset-flip seed found');
+  }
+
+  function runVoyage(seed: string, wallOffsetMs: number): { lostToWeather: boolean } {
+    _resetVehicleIdCounter();
+    const home = makeIslandSpec({
+      id: 'home',
+      cx: 0,
+      cy: 0,
+      populated: true,
+      discovered: true,
+      buildings: [{ id: 'sy', defId: 'shipyard', x: 0, y: 0 }],
+    });
+    const target = makeIslandSpec({
+      id: 'target',
+      cx: 30,
+      cy: 0,
+      populated: false,
+      discovered: true,
+    });
+    const world: WorldState = { ...freshWorld([home, target]), seed };
+    const homeState = makeIslandState({ id: 'home' });
+    homeState.inventory.biofuel = 100;
+    homeState.inventory.foundation_kit = 1;
+    const islandStates = new Map<string, IslandState>([['home', homeState]]);
+    const r = dispatchVehicle(world, home, homeState, target, 'ship', 1, 60, 1, 0);
+    expect(r.ok).toBe(true);
+    if (!r.ok) throw new Error('dispatch failed');
+    const result = tickVehicles(world, islandStates, r.vehicle.expectedArrivalTime + 1, wallOffsetMs);
+    return { lostToWeather: result.lost.length > 0 };
+  }
+
+  it('destruction roll samples weather at entryMs + wallOffset', () => {
+    const seed = findOffsetFlipSeed();
+    expect(runVoyage(seed, 0).lostToWeather).toBe(false);
+    expect(runVoyage(seed, W).lostToWeather).toBe(true);
+  });
+});

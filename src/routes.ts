@@ -31,6 +31,7 @@ import {
   rasterizeRouteCells,
   sumIslandCo2,
   weather,
+  weatherClockMs,
   WEATHER_ROUTE_LOSS_RATE,
 } from './weather.js';
 import { CELL_SIZE_TILES, type IslandSpec, type WorldState } from './world.js';
@@ -584,6 +585,11 @@ export function deliverArrivals(
   world: WorldState,
   states: Map<string, IslandState>,
   nowMs: number,
+  /** §15.1 wall anchor: in-flight weather-loss samples are taken at
+   *  `dispatchTime + transitFraction × transit + wallOffsetMs` so the
+   *  storm a batch flies through is the one at the WALL-clock moment of
+   *  the crossing, not a perf-domain replay of session start. */
+  wallOffsetMs: number = 0,
 ): Array<{ destIslandId: string; resourceId: ResourceId; amount: number }> {
   const delivered: Array<{ destIslandId: string; resourceId: ResourceId; amount: number }> = [];
 
@@ -611,7 +617,7 @@ export function deliverArrivals(
             world.seed,
             cell.cx,
             cell.cy,
-            b.dispatchTime + cell.transitFraction * transitTimeMs,
+            weatherClockMs(b.dispatchTime + cell.transitFraction * transitTimeMs, wallOffsetMs),
             undefined,
             sumIslandCo2(world),
           );
@@ -687,11 +693,14 @@ export function tickRoutes(
   states: Map<string, IslandState>,
   nowMs: number,
   elapsedSec: number,
+  /** §15.1 wall anchor (see `weatherClockMs`). Threaded into both the
+   *  arrival-loss samples and the dispatch capacity multiplier. */
+  wallOffsetMs: number = 0,
 ): {
   dispatches: Array<{ routeId: string; resourceId: ResourceId; amount: number }>;
   arrivals: Array<{ destIslandId: string; resourceId: ResourceId; amount: number }>;
 } {
-  const arrivals = deliverArrivals(world, states, nowMs);
+  const arrivals = deliverArrivals(world, states, nowMs, wallOffsetMs);
   // Prune draining routes whose in-flight cargo has fully landed (soft
   // delete — see `Route.draining`). Done after `deliverArrivals` so a route
   // is removed the same tick its last batch is delivered. Routes with no
@@ -700,7 +709,7 @@ export function tickRoutes(
     const r = world.routes[i];
     if (r && r.draining && r.inFlight.length === 0) world.routes.splice(i, 1);
   }
-  const dispatches = dispatchPhase(world, states, nowMs, elapsedSec);
+  const dispatches = dispatchPhase(world, states, nowMs, elapsedSec, wallOffsetMs);
   return { dispatches, arrivals };
 }
 
@@ -711,6 +720,7 @@ function dispatchPhase(
   states: Map<string, IslandState>,
   nowMs: number,
   elapsedSec: number,
+  wallOffsetMs: number = 0,
 ): Array<{ routeId: string; resourceId: ResourceId; amount: number }> {
   if (elapsedSec <= 0) return [];
 
@@ -747,6 +757,7 @@ function dispatchPhase(
             toSpec.cy,
             nowMs,
             CELL_SIZE_TILES,
+            wallOffsetMs,
           )
         : 1;
 
@@ -872,7 +883,12 @@ function dispatchPhase(
         }
       }
     } else {
-      const batchId = `${d.route.id}_${nowMs}_${d.route.inFlight.length}`;
+      // §15.1: the batch id seeds the per-cell loss RNG in deliverArrivals,
+      // so it must be epoch-independent — embed the WALL-clock dispatch time
+      // (identical to `nowMs` when wallOffsetMs = 0) so two sessions whose
+      // perf clocks started at different epochs but dispatch at the same
+      // wall instant produce the same batch id ⇒ the same loss rolls.
+      const batchId = `${d.route.id}_${weatherClockMs(nowMs, wallOffsetMs)}_${d.route.inFlight.length}`;
       d.route.inFlight.push({
         resourceId: d.resourceId,
         amount,

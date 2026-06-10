@@ -318,6 +318,26 @@ function rasterizeWaypointPathForWeather(
   return result;
 }
 
+/** §15.1 wall-clock anchor for drone weather sampling.
+ *
+ *  Drone fate rolls happen at TWO call sites: `dispatchDrone` (invoked by
+ *  the launch UI with a perf-domain `nowMs` — a call path that cannot
+ *  thread a per-call offset without dragging the wall clock through every
+ *  UI layer) and the legacy return-time fallback in `tickDrones` (old
+ *  saves without `doomedAtMs`). The two MUST roll on the SAME clock or a
+ *  save written between dispatch and return would flip the drone's fate.
+ *  A single module-level anchor — set ONCE at boot by `main.ts` from
+ *  `Date.now() - performance.now()` — is the shared point that makes the
+ *  lockstep structural rather than convention.
+ *
+ *  Defaults to 0 so pure-logic tests sample the perf domain unchanged;
+ *  tests exercising the anchor use the setter and reset it afterwards. */
+let droneWeatherWallOffsetMs = 0;
+
+export function setDroneWeatherWallOffsetMs(offsetMs: number): void {
+  droneWeatherWallOffsetMs = offsetMs;
+}
+
 /** Build the §2.6 weather-roll path for a drone flight: the T5 waypoint
  *  polyline when `waypoints` has ≥ 2 points, otherwise the straight-line
  *  outbound + return legs concatenated with exact (cell, time) dedup so
@@ -490,7 +510,10 @@ export function dispatchDrone(
   let doomedAtMs: number | undefined;
   {
     const dispatchPath = buildWeatherPath(originX, originY, ux, uy, outboundTiles, speed, nowMs, waypoints);
-    const roll = rollVehicleDestruction(world.seed, dispatchPath, multiplier, droneId);
+    // §15.1: weather samples are wall-anchored via the module anchor; the
+    // path's entryMs stay perf-domain so doomedAtMs remains comparable to
+    // the tick loop's perf-domain segEndMs clamp.
+    const roll = rollVehicleDestruction(world.seed, dispatchPath, multiplier, droneId, droneWeatherWallOffsetMs);
     if (roll.destroyed && roll.atCellIndex !== null) {
       doomedAtMs = dispatchPath[roll.atCellIndex]!.entryMs;
     }
@@ -832,7 +855,9 @@ export function tickDrones(
         d.originX, d.originY, d.dirX, d.dirY, d.outboundTiles, droneSpeed(d), d.launchTime, d.waypoints,
       );
       const multiplier = DRONE_TIER_MULTIPLIERS[d.tier];
-      const roll = rollVehicleDestruction(world.seed, path, multiplier, d.id);
+      // §15.1: same module wall anchor as the dispatch-time roll — the two
+      // sites MUST stay in lockstep (see `setDroneWeatherWallOffsetMs`).
+      const roll = rollVehicleDestruction(world.seed, path, multiplier, d.id, droneWeatherWallOffsetMs);
       willBeDestroyed = roll.destroyed;
     }
 

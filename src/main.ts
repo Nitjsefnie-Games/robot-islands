@@ -82,7 +82,7 @@ import {
   type WorldState,
 } from './world.js';
 import { mountDronesUi } from './drones-ui.js';
-import { tickDrones } from './drones.js';
+import { setDroneWeatherWallOffsetMs, tickDrones } from './drones.js';
 import {
   tickTradeOffers,
   applyOffer,
@@ -112,7 +112,7 @@ import { computeLatticeActive, crossIslandNeighbors, latticeInventory, latticeSt
 import { mountSettlementUi } from './settlement-ui.js';
 import { mountOrbitalUi } from './orbital-ui.js';
 import { mountWeatherOverlay } from './weather-overlay.js';
-import { computeWeatherVisionSources } from './weather.js';
+import { computeWeatherVisionSources, weatherClockMs } from './weather.js';
 import { mountAntennaOverlay } from './antenna-overlay.js';
 import { mountHoverTooltip } from './hover-tooltip.js';
 import { mountToastSurface } from './toast.js';
@@ -166,6 +166,16 @@ async function main(): Promise<void> {
   // demo-seed path (makeInitialWorld + per-spec makeInitialIslandState).
   const restored = await loadWorld();
   const worldState: WorldState = restored ? restored.world : makeInitialWorld(performance.now());
+  // §15.1 / §2.6 wall-clock anchor for WEATHER sampling. Captured ONCE per
+  // session: every production `weather()` consumer samples at
+  // `perfTs + weatherWallOffsetMs` (see `weatherClockMs`) so the weather
+  // timeline is anchored to real time instead of restarting at the same
+  // dwell states on every page load. Mirrors the §2.7 day-night wall
+  // anchor (`nowWall` in the ticker / `wallClockNowMs` in economy.ts).
+  // The drone subsystem reads a module-level copy because its dispatch
+  // path is invoked from the launch UI (see setDroneWeatherWallOffsetMs).
+  const weatherWallOffsetMs = Date.now() - performance.now();
+  setDroneWeatherWallOffsetMs(weatherWallOffsetMs);
   // Load UI prefs (camera + active-island + open-panel) in parallel with
   // world; applied below after the camera is constructed.
   const restoredPrefs = await loadPrefs();
@@ -788,13 +798,15 @@ async function main(): Promise<void> {
     // on world pixel (n * TILE_PX).
     const tileX = Math.round(wt.x);
     const tileY = Math.round(wt.y);
+    // §15.1: the tooltip's `nowMs` feeds weather sampling only — pass the
+    // wall-anchored clock so the readout matches the overlay + simulation.
     hoverTooltip.setHover(
       worldState,
       tileX,
       tileY,
       p.clientX,
       p.clientY,
-      performance.now(),
+      weatherClockMs(performance.now(), weatherWallOffsetMs),
     );
   };
   const scheduleHoverDrain = (): void => {
@@ -1995,7 +2007,7 @@ async function main(): Promise<void> {
         console.log(`Drone lost: ${d.id}`);
       }
     }
-    tickRoutes(worldState, islandStates, now, elapsedSec);
+    tickRoutes(worldState, islandStates, now, elapsedSec, weatherWallOffsetMs);
 
     // §14 orbital tick chores. Order matters:
     //   1. Movement first (sats arrive / are lost in transit; cell occupancy
@@ -2028,7 +2040,7 @@ async function main(): Promise<void> {
     // Dock / Helipad, and inserts a fresh IslandState into the map. We
     // register the new modifier-multiplier cache entry and rebuild render
     // layers so the colony becomes visible immediately.
-    const vehicleResult = tickVehicles(worldState, islandStates, now);
+    const vehicleResult = tickVehicles(worldState, islandStates, now, weatherWallOffsetMs);
     if (vehicleResult.arrivals.length > 0) {
       for (const arr of vehicleResult.arrivals) {
         const newSpec = islandSpecsById.get(arr.targetIslandId);
@@ -2144,8 +2156,10 @@ async function main(): Promise<void> {
     routesUi.refresh(now);
     settlementUi.refresh(now);
     orbitalUi.refresh();
-    weatherOverlay.refresh(now, () =>
-      computeWeatherVisionSources(worldState.islands.filter((s) => s.populated)),
+    weatherOverlay.refresh(
+      now,
+      () => computeWeatherVisionSources(worldState.islands.filter((s) => s.populated)),
+      weatherWallOffsetMs,
     );
     satelliteOverlay.refresh();
     antennaOverlay.refresh();

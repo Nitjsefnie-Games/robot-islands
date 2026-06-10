@@ -17,6 +17,7 @@ import {
   firePulse,
   pointToSegmentDistSq,
   probabilityBiasForIsland,
+  setDroneWeatherWallOffsetMs,
   tickDrones,
   type Drone,
   DRONE_T5_EFFICIENCY,
@@ -1966,5 +1967,112 @@ describe('Fix 6.5: probabilityBiasForIsland only counts operational buildings', 
       ],
     });
     expect(result).toBe(0.25);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §15.1 wall-anchored drone weather (module anchor)
+// ---------------------------------------------------------------------------
+
+describe('§15.1 wall-anchored drone weather', () => {
+  const W = 53 * 60 * 60 * 1000; // 53 h of wall time
+
+  function freshWorld(seed: string): WorldState {
+    return {
+      islands: [],
+      drones: [],
+      routes: [],
+      vehicles: [],
+      revealedCells: new Set(),
+      satellites: [],
+      repairDrones: [],
+      debrisFields: [],
+      endgameState: { achieved: new Set(), firstAchievedMs: null },
+      latticeActive: false,
+      latticeNodeIslands: [],
+      commPackets: [],
+      totalCo2Kg: 0,
+      playerLat: null,
+      playerLon: null,
+      oceanCells: new Map(),
+      depthRevealedCells: new Set(),
+      seed,
+      recentBuildAttempts: new Set(),
+      recentBuildAttemptTs: new Map(),
+    };
+  }
+
+  /** Dispatch one straight-line drone at perf-time `launchMs` under wall
+   *  anchor `anchorMs`; returns whether the dispatch-time fate roll doomed
+   *  it (`doomedAtMs` set). Resets the anchor to 0 afterwards. */
+  function fateWithAnchor(seed: string, launchMs: number, anchorMs: number): boolean {
+    setDroneWeatherWallOffsetMs(anchorMs);
+    try {
+      const w = freshWorld(seed);
+      const home = makeIslandState();
+      home.inventory.biofuel = 50;
+      _resetDroneIdCounter();
+      const r = dispatchDrone(w, home, 0, 0, 1, 0, 10, launchMs);
+      expect(r.ok).toBe(true);
+      return r.ok ? r.drone.doomedAtMs !== undefined : false;
+    } finally {
+      setDroneWeatherWallOffsetMs(0);
+    }
+  }
+
+  it('anchor W at launch 0 ≡ anchor 0 at launch W (same wall instant, same fate)', () => {
+    for (let i = 0; i < 20; i++) {
+      const seed = `drone-anchor-eq-${i}`;
+      expect(fateWithAnchor(seed, 0, W)).toBe(fateWithAnchor(seed, W, 0));
+    }
+  });
+
+  it('a nonzero anchor flips some fate (the anchor reaches the weather samples)', () => {
+    let flipped = false;
+    for (let i = 0; i < 400 && !flipped; i++) {
+      const seed = `drone-anchor-flip-${i}`;
+      flipped = fateWithAnchor(seed, 0, 0) !== fateWithAnchor(seed, 0, W);
+    }
+    expect(flipped).toBe(true);
+  });
+
+  it('dispatch fate and the legacy return-time fallback agree under a nonzero anchor', () => {
+    // Find one doomed and one surviving seed under anchor W, then replay each
+    // through the legacy old-save path (doomedAtMs stripped) under the SAME
+    // anchor — the fallback re-roll must reproduce the dispatch-time fate.
+    let doomedSeed: string | null = null;
+    let survivorSeed: string | null = null;
+    for (let i = 0; i < 400 && (!doomedSeed || !survivorSeed); i++) {
+      const seed = `drone-anchor-lockstep-${i}`;
+      if (fateWithAnchor(seed, 0, W)) doomedSeed = doomedSeed ?? seed;
+      else survivorSeed = survivorSeed ?? seed;
+    }
+    expect(doomedSeed).not.toBeNull();
+    expect(survivorSeed).not.toBeNull();
+
+    for (const [seed, expectLost] of [
+      [doomedSeed!, true],
+      [survivorSeed!, false],
+    ] as const) {
+      setDroneWeatherWallOffsetMs(W);
+      try {
+        const w = freshWorld(seed);
+        const home = makeIslandState();
+        home.inventory.biofuel = 50;
+        _resetDroneIdCounter();
+        const r = dispatchDrone(w, home, 0, 0, 1, 0, 10, 0);
+        expect(r.ok).toBe(true);
+        if (!r.ok) return;
+        // Simulate an old save: strip the pre-computed fate so tickDrones
+        // takes the legacy re-roll path. (`doomedAtMs` is readonly on the
+        // public type; old saves simply deserialize without it.)
+        (r.drone as { doomedAtMs?: number }).doomedAtMs = undefined;
+        const t = tickDrones(w, 81_000, 0);
+        expect(t.lost).toHaveLength(expectLost ? 1 : 0);
+        expect(t.returned).toHaveLength(expectLost ? 0 : 1);
+      } finally {
+        setDroneWeatherWallOffsetMs(0);
+      }
+    }
   });
 });

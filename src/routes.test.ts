@@ -1737,3 +1737,80 @@ describe('dispatch — all wildcard', () => {
     expect(woodCount).toBe(1);
   });
 });
+
+describe('§15.1 wall-anchored route weather (wallOffsetMs threading)', () => {
+  const W = 3 * 24 * 60 * 60 * 1000; // 3 days of wall time
+
+  /** Cells whose weather is `clear` at perf-domain sample times [0, 2000]
+   *  but a loss-inducing storm class at wall time W. Proves the offset is
+   *  what moves the sample, not the perf timestamp. */
+  function findOffsetFlipCell(seed: string): { cx: number; cy: number } | null {
+    for (let cx = -25; cx <= 25; cx++) {
+      for (let cy = -25; cy <= 25; cy++) {
+        const base = weather(seed, cx, cy, 0).state;
+        if (base !== 'clear') continue;
+        const wall = weather(seed, cx, cy, W).state;
+        if (wall === 'storm' || wall === 'severe_storm') return { cx, cy };
+      }
+    }
+    return null;
+  }
+
+  function runSession(
+    cell: { cx: number; cy: number },
+    perfDispatchMs: number,
+    wallOffsetMs: number,
+  ): { dispatched: number; delivered: number } {
+    _resetRouteIdCounter();
+    const fromX = cell.cx * CELL_SIZE_TILES;
+    const fromY = cell.cy * CELL_SIZE_TILES + 2;
+    const toX = cell.cx * CELL_SIZE_TILES;
+    const toY = cell.cy * CELL_SIZE_TILES + 14;
+    const src = makeState('a', { inventory: { ...blankInventory(), iron_ore: 100 } });
+    const dst = makeState('b');
+    const world = makeWorld([], [
+      makeIslandSpec('a', fromX, fromY),
+      makeIslandSpec('b', toX, toY),
+    ]);
+    const states = new Map([['a', src], ['b', dst]]);
+    const r = cargoRoute('a', 'b', 'iron_ore', [], 10, 1);
+    world.routes.push(r);
+    const out = tickRoutes(world, states, perfDispatchMs, 1, wallOffsetMs);
+    const dispatched = out.dispatches.reduce((s, d) => s + d.amount, 0);
+    const arr = tickRoutes(world, states, perfDispatchMs + 2000, 0, wallOffsetMs);
+    const delivered = arr.arrivals.reduce((s, a) => s + a.amount, 0);
+    return { dispatched, delivered };
+  }
+
+  it('arrival losses + dispatch capacity sample weather at perfTs + wallOffset', () => {
+    const cell = findOffsetFlipCell('test-seed');
+    expect(cell).not.toBeNull();
+    if (!cell) return;
+
+    // Offset 0: perf-domain samples are clear ⇒ full capacity, no loss.
+    const base = runSession(cell, 0, 0);
+    expect(base.dispatched).toBeCloseTo(10, 9);
+    expect(base.delivered).toBeCloseTo(10, 9);
+
+    // Offset W: same perf timestamps now sample the storm at wall time W ⇒
+    // dispatch capacity is cut AND the in-flight batch takes a loss.
+    const anchored = runSession(cell, 0, W);
+    expect(anchored.dispatched).toBeLessThan(10);
+    expect(anchored.delivered).toBeLessThan(anchored.dispatched);
+  });
+
+  it('same wall times ⇒ same outcomes regardless of the perf-clock epoch', () => {
+    const cell = findOffsetFlipCell('test-seed');
+    expect(cell).not.toBeNull();
+    if (!cell) return;
+
+    // Two "sessions" whose perf clocks started at different epochs but whose
+    // wall anchors line the dispatch up at the same wall instant W.
+    const sessionA = runSession(cell, 1_000, W - 1_000);
+    const sessionB = runSession(cell, 777_000, W - 777_000);
+    expect(sessionA.dispatched).toBeCloseTo(sessionB.dispatched, 9);
+    expect(sessionA.delivered).toBeCloseTo(sessionB.delivered, 9);
+    // And the shared outcome is the weather-affected one, not the clear-sky one.
+    expect(sessionA.dispatched).toBeLessThan(10);
+  });
+});

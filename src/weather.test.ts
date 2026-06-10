@@ -18,6 +18,8 @@ import {
   co2WeatherMultiplier,
   sumIslandCo2,
   rollHeatwave,
+  weatherClockMs,
+  routeCapacityMultiplierForWeather,
 } from './weather.js';
 import type { IslandSpec, WorldState } from './world.js';
 
@@ -689,5 +691,53 @@ describe('rollHeatwave — deterministic + threshold', () => {
   });
   it('same seed + day → same result (replayable)', () => {
     expect(rollHeatwave('s', 42, 50_000)).toEqual(rollHeatwave('s', 42, 50_000));
+  });
+});
+
+describe('§15.1 / §2.6 weatherClockMs — perf→wall domain conversion', () => {
+  it('adds the wall offset to the perf timestamp', () => {
+    expect(weatherClockMs(0, 0)).toBe(0);
+    expect(weatherClockMs(1_000, 5_000)).toBe(6_000);
+    expect(weatherClockMs(2_500, -500)).toBe(2_000);
+  });
+
+  it('offset 0 is the identity (test-compatibility default)', () => {
+    expect(weatherClockMs(123_456, 0)).toBe(123_456);
+  });
+});
+
+describe('§15.1 wall-anchored destruction + capacity sampling', () => {
+  const W = 53 * 60 * 60 * 1000; // 53 h — well past several dwell cycles
+
+  it('rollVehicleDestruction(wallOffsetMs=W) ≡ shifting every entryMs by W', () => {
+    for (let i = 0; i < 25; i++) {
+      const seed = `anchor-${i}`;
+      const path = rasterizePath(0, 0, 1, 0, 60, 0.5, 0, 16);
+      const shifted = path.map((p) => ({ ...p, entryMs: p.entryMs + W }));
+      const a = rollVehicleDestruction(seed, path, 1.5, 'v-1', W);
+      const b = rollVehicleDestruction(seed, shifted, 1.5, 'v-1', 0);
+      expect(a).toEqual(b);
+    }
+  });
+
+  it('a nonzero wallOffset flips some fate (the offset reaches weather())', () => {
+    const path = rasterizePath(0, 0, 1, 0, 60, 0.5, 0, 16);
+    let flipped = false;
+    for (let i = 0; i < 500 && !flipped; i++) {
+      const seed = `anchor-flip-${i}`;
+      const a = rollVehicleDestruction(seed, path, 1.5, 'v-1', 0);
+      const b = rollVehicleDestruction(seed, path, 1.5, 'v-1', W);
+      flipped = a.destroyed !== b.destroyed;
+    }
+    expect(flipped).toBe(true);
+  });
+
+  it('routeCapacityMultiplierForWeather(wallOffsetMs=W) ≡ sampling at nowMs + W', () => {
+    for (let i = 0; i < 25; i++) {
+      const seed = `cap-anchor-${i}`;
+      const a = routeCapacityMultiplierForWeather(seed, 0, 0, 100, 100, 0, 16, W);
+      const b = routeCapacityMultiplierForWeather(seed, 0, 0, 100, 100, W, 16, 0);
+      expect(a).toBe(b);
+    }
   });
 });
