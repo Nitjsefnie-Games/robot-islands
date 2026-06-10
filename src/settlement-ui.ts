@@ -822,11 +822,21 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
   refreshKindButtons();
 
   // ---- Stat / status / button refresh -------------------------------------
+  let lastSelectorSig = '';
+  function selectorSig(): string {
+    let k = '';
+    for (const s of deps.world.islands) {
+      if (s.populated) k += s.id + '=' + s.name + '|';
+    }
+    return k;
+  }
+
   function refresh(_nowMs: number): void {
-    // Rebuild selectors if the populated/discovered set might have changed
-    // (vehicle arrival, drone discovery). Cheap; we just rebuild on every
-    // refresh — the option count is small.
-    rebuildSelectors();
+    const sig = selectorSig();
+    if (sig !== lastSelectorSig) {
+      lastSelectorSig = sig;
+      rebuildSelectors();
+    }
     refreshKindButtons();
     const isAnchor = kind === 'anchor';
 
