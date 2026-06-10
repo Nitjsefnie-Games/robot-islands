@@ -50,6 +50,44 @@ describe('solveSharedFactor', () => {
     // Exact: 10·min(0.5,θ) = 3 → θ = 0.3.
     expect(solveSharedFactor([{ coeff: 10, otherGate: 0.5 }], 3)).toBeCloseTo(0.3, 12);
   });
+
+  it('duplicated otherGate values (zero-width segment)', () => {
+    // Both entries break at 0.5; root in the θ≤0.5 region: 20θ = 6 → 0.3.
+    expect(
+      solveSharedFactor(
+        [{ coeff: 10, otherGate: 0.5 }, { coeff: 10, otherGate: 0.5 }],
+        6,
+      ),
+    ).toBeCloseTo(0.3, 12);
+  });
+
+  it('root lands exactly on a breakpoint', () => {
+    // 10·min(0.5,θ) + 10·min(1,θ) = 10 at θ = 0.5 exactly.
+    expect(
+      solveSharedFactor(
+        [{ coeff: 10, otherGate: 0.5 }, { coeff: 10, otherGate: 1 }],
+        10,
+      ),
+    ).toBeCloseTo(0.5, 12);
+  });
+
+  it('three entries, root in the middle segment', () => {
+    // θ ∈ (0.3, 0.8): 2×0.3 + 4θ + 4θ = 3.8 → θ = 0.4.
+    expect(
+      solveSharedFactor(
+        [
+          { coeff: 2, otherGate: 0.3 },
+          { coeff: 4, otherGate: 0.8 },
+          { coeff: 4, otherGate: 1 },
+        ],
+        3.8,
+      ),
+    ).toBeCloseTo(0.4, 12);
+  });
+
+  it('NaN target fails open at gate 1 (documented contract)', () => {
+    expect(solveSharedFactor([{ coeff: 5, otherGate: 1 }], Number.NaN)).toBe(1);
+  });
 });
 
 describe('solveFlow — trivial cases', () => {
