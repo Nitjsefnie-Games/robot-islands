@@ -1670,6 +1670,59 @@ function isBridgeActive(bridge: BridgeEdge, state: IslandState, graph: Graph): b
   return bridge.threshold.some(({ branch, minSpent }) => spentInBranch(state, branch, graph) >= minSpent);
 }
 
+/** Walk every SP charge recorded in `state` against `graph`, invoking `visit`
+ *  with the charged amount and the node the charge is attributed to.
+ *
+ *  Charge model (mirrors how purchases debit SP):
+ *   - `buyNode` path purchases charge per EDGE (standard edges, bridges, and
+ *     crystal mini-tree edges alike) — every owned edge contributes its edge
+ *     cost, attributed to its destination node.
+ *   - an owned node with NO owned incoming edge was acquired outside the path
+ *     solver (root-fallback buy, legacy `spendPoint`, or `buyKeystone`) and
+ *     contributes its purchase cost: the flat keystone cost for keystones,
+ *     `node.cost` otherwise. Synthetic socket nodes cost 0 by construction.
+ *   - stale ids with no graph entry contribute nothing (defensive — e.g. a
+ *     save referencing a since-removed node).
+ */
+function forEachSpCharge(
+  state: IslandState,
+  graph: Graph,
+  visit: (cost: number, node: SkillNode | undefined) => void,
+): void {
+  const byId = graphById(graph);
+  const edgeById = new Map<string, Edge>();
+  for (const e of graph.edges) edgeById.set(String(e.id), e);
+  for (const b of graph.bridges) edgeById.set(String(b.id), b);
+
+  const nodesWithOwnedIncoming = new Set<string>();
+  for (const edgeId of state.unlockedEdges) {
+    const e = edgeById.get(String(edgeId));
+    if (!e) continue;
+    nodesWithOwnedIncoming.add(String(e.to));
+    visit(e.cost, byId.get(String(e.to)));
+  }
+  for (const nodeId of state.unlockedNodes) {
+    if (nodesWithOwnedIncoming.has(String(nodeId))) continue;
+    const node = byId.get(String(nodeId));
+    if (!node) continue;
+    const ks = keystonePrereqFor(nodeId as NodeId);
+    visit(ks ? ks.cost : node.cost, node);
+  }
+}
+
+/** Total SP the island has spent into the tree, computed from owned
+ *  nodes/edges under the charge model in `forEachSpCharge`. §9.7 tier reset
+ *  refunds exactly this. Pass `effectiveGraph(state)` (the default) so bound
+ *  crystal mini-tree charges are included. */
+export function computeSpentSkillPoints(
+  state: IslandState,
+  graph: Graph = effectiveGraph(state),
+): number {
+  let sum = 0;
+  forEachSpCharge(state, graph, (cost) => { sum += cost; });
+  return sum;
+}
+
 function spentInBranch(state: IslandState, branchId: BranchId, graph: Graph): number {
   let sum = 0;
   for (const e of graph.edges) {

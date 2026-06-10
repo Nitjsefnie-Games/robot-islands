@@ -9,7 +9,16 @@ import { describe, expect, it } from 'vitest';
 
 import type { IslandState } from './economy.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
-import { spendPoint } from './skilltree.js';
+import {
+  DEFAULT_GRAPH,
+  bindCrystal,
+  buyKeystone,
+  buyNode,
+  effectiveGraph,
+  spendPoint,
+} from './skilltree.js';
+import { KEYSTONE_PREREQS } from './skilltree-catalog.js';
+import type { CrystalId } from './skilltree-graph.js';
 import {
   TIER_RESET_COOLDOWN_MS,
   canTierReset,
@@ -221,6 +230,43 @@ describe('executeTierReset — clears progression', () => {
     const r = canTierReset(state, 10_000 + 1);
     expect(r.ok).toBe(false);
     if (!r.ok) expect(r.reason).toBe('cooldown-active');
+  });
+});
+
+describe('executeTierReset — refund equals SP actually spent (§9.7)', () => {
+  it('chain + root + notable + bridge + keystone + crystal purchases are refunded exactly', () => {
+    const inv = emptyInv();
+    (inv as Record<string, number>).mining_crystal_t1 = 1;
+    const state = makeState({ level: 50, unspentSkillPoints: 200, inventory: inv });
+    fund(state);
+    const START = state.unspentSkillPoints;
+
+    // Chain: root buy (node cost, no edge) + path buy (edge costs).
+    buyNode(DEFAULT_GRAPH, state, 'mining.recipeRate.1');
+    buyNode(DEFAULT_GRAPH, state, 'mining.recipeRate.3');
+    // Notables (anchor edges) — also the keystone prereqs.
+    buyNode(DEFAULT_GRAPH, state, 'mining.notable.efficientDrills');
+    buyNode(DEFAULT_GRAPH, state, 'mining.yieldBonus.1');
+    buyNode(DEFAULT_GRAPH, state, 'mining.notable.deepVein');
+    // Bridge: extraction spend is past the 8-SP threshold, so the hand-priced
+    // br.ext.mining-forestry bridge (cost 5 ≠ destination node cost 6) is the
+    // cheapest route to forestry.notable.silvicultureHub.
+    buyNode(DEFAULT_GRAPH, state, 'forestry.notable.silvicultureHub');
+    expect(state.unlockedEdges.has('br.ext.mining-forestry' as never)).toBe(true);
+    // Keystone: flat keystone cost via buyKeystone (no edge).
+    const ks = KEYSTONE_PREREQS.find((k) => String(k.targetNode) === 'mining.keystone.deepCore')!;
+    buyKeystone(ks, state);
+    // Crystal mini-tree: bind (socket is a free synthetic node) + path buy.
+    bindCrystal(state, 'gs.ext.mining-1', 'mining_crystal_t1' as CrystalId);
+    buyNode(effectiveGraph(state), state, 'gs.ext.mining-1.mining_crystal_t1.left2');
+
+    const spent = START - state.unspentSkillPoints;
+    expect(spent).toBeGreaterThan(0);
+    executeTierReset(state, 1_000);
+    // §9.7 "All spent skill points refunded as unspent" — exactly, no more, no less.
+    expect(state.unspentSkillPoints).toBe(START);
+    expect(state.unlockedNodes.size).toBe(0);
+    expect(state.unlockedEdges.size).toBe(0);
   });
 });
 

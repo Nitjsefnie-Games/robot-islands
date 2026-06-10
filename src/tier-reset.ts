@@ -38,8 +38,7 @@
 // way it works on any other.
 
 import { inv, type IslandState } from './economy.js';
-import { nodeById } from './skilltree.js';
-import { tierForLevel } from './skilltree.js';
+import { computeSpentSkillPoints, effectiveGraph, tierForLevel } from './skilltree.js';
 
 /** Cooldown between resets on the same island. Placeholder per §9.7. */
 export const TIER_RESET_COOLDOWN_MS = 24 * 60 * 60 * 1000;
@@ -115,8 +114,15 @@ export function canTierReset(state: IslandState, nowMs: number): TierResetResult
  *
  * Steps per §9.7:
  *   1. Deduct cost.
- *   2. Refund spent skill points (sum `node.cost` for every
- *      `unlockedNodes` entry) into `unspentSkillPoints`.
+ *   2. Refund spent skill points into `unspentSkillPoints` — exactly the
+ *      SP that purchases charged (`computeSpentSkillPoints`: owned-edge
+ *      costs incl. bridges and crystal mini-tree edges, plus purchase
+ *      costs for nodes acquired without an owned incoming edge —
+ *      root-fallback buys, legacy spendPoint, keystones at their flat
+ *      cost). Refunding `node.cost` per owned node over/under-refunded:
+ *      bridges are hand-priced ≠ destination node cost, root buys charge
+ *      node cost with no edge, and crystal mini-tree nodes aren't in the
+ *      static catalog at all (refunded 0 — SP destroyed).
  *   3. Clear `unlockedNodes`, `unlockedEdges`, `declaredAt`.
  *   4. Reset `level → 1`, `xp → 0`.
  *   5. Stamp `lastResetAt = nowMs` for the cooldown.
@@ -133,14 +139,11 @@ export function executeTierReset(state: IslandState, nowMs: number): void {
   state.inventory.steel = (state.inventory.steel ?? 0) - cost.steel;
   state.inventory.gear = (state.inventory.gear ?? 0) - cost.gear;
 
-  // Refund every spent point. A missing catalog entry (e.g. a save that
-  // referenced a since-removed node) refunds 0 — defensive, not an expected path.
-  let refund = 0;
-  for (const nodeId of state.unlockedNodes) {
-    const node = nodeById(nodeId);
-    if (node) refund += node.cost;
-  }
-  state.unspentSkillPoints += refund;
+  // Refund every spent point, under the same charge model the purchases used
+  // (§9.7 "All spent skill points refunded as unspent"). effectiveGraph so
+  // bound crystal mini-tree charges refund too. Stale ids with no graph entry
+  // refund 0 — defensive, not an expected path.
+  state.unspentSkillPoints += computeSpentSkillPoints(state, effectiveGraph(state));
   state.unlockedNodes.clear();
   state.unlockedEdges.clear();
   state.auraAmpVersion++;
