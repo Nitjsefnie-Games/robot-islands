@@ -416,6 +416,37 @@ describe('heat — brownout below MIN_HEAT_FACTOR', () => {
     expect(result.hasHeat.get('bf-1')).toBe(true);
   });
 
+  it('brownouted consumers stop billing their furnace (§5.2 served-count)', () => {
+    // §5.2: fuel consumption multiplies by the number of consumers SERVED.
+    // Furnace cf-ok serves one coke_oven (demand 60 kW vs 830 kW supply →
+    // ratio 1, served). Furnace cf-starved is mobbed by three blast_furnaces
+    // (demand 9000 kW vs 830 kW → ratio ≈ 0.092 < MIN_HEAT_FACTOR), so the
+    // throttle pass flips all three to hasHeat=false — none are served, and
+    // the furnace must not be billed for them.
+    //
+    // Geometry: coke_oven 2×2 at (10,10)..(11,11); cf-ok at (12,10) on its
+    // east border. cf-starved at (20,20) with BFs west (17,19), north
+    // (20,17), east (21,20) — each 3×3 footprint touches one of the
+    // furnace's four border tiles, none overlap.
+    const buildings: PlacedBuilding[] = [
+      { id: 'co', defId: 'coke_oven', x: 10, y: 10 },
+      { id: 'cf-ok', defId: 'coal_furnace', x: 12, y: 10 },
+      { id: 'cf-starved', defId: 'coal_furnace', x: 20, y: 20 },
+      { id: 'bf-w', defId: 'blast_furnace', x: 17, y: 19 },
+      { id: 'bf-n', defId: 'blast_furnace', x: 20, y: 17 },
+      { id: 'bf-e', defId: 'blast_furnace', x: 21, y: 20 },
+    ];
+    const res = resolveHeatAssignments(buildings);
+    // Sanity: the BFs browned out, the coke oven is served.
+    expect(res.hasHeat.get('co')).toBe(true);
+    for (const id of ['bf-w', 'bf-n', 'bf-e']) {
+      expect(res.hasHeat.get(id)).toBe(false);
+    }
+    // Billing reflects SERVED consumers only: cf-ok bills 1, cf-starved 0.
+    expect(res.coalConsumersByFurnace.get('cf-ok')).toBe(1);
+    expect(res.coalConsumersByFurnace.has('cf-starved')).toBe(false);
+  });
+
   it('coal_furnace + 5 blast_furnaces brownouts (below threshold)', () => {
     // Uses a 4×4 mock source (thermalKW 830) so 5 adjacent 3×3 BFs fit.
     const buildings: PlacedBuilding[] = [
