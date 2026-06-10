@@ -21,6 +21,7 @@ import {
 } from './building-defs.js';
 import { SHAPES, shapeHeight, shapeWidth } from './shape-mask.js';
 import { RECIPES, RESOURCE_META } from './recipes.js';
+import { buildingForRecipe } from './recipe-density.js';
 import type { IslandSpec } from './world.js';
 
 // Hand-mirrored list of every id in the union. If a new id is added to
@@ -902,6 +903,71 @@ describe('unlockedDefs', () => {
     // T1-T4 still listed.
     expect(list).toContain('fusion_core');
     expect(list).toContain('mine');
+  });
+});
+
+describe('dead-def guard: every recipe-implying category has a recipe or power output', () => {
+  // Categories that imply a building should have a recipe (or be power-producing).
+  const RECIPE_CATEGORIES = new Set([
+    'extraction', 'smelting', 'chemistry', 'manufacturing', 'electronics', 'production',
+  ]);
+
+  // Legitimate defs that have no recipe today. Storage, logistics, special
+  // infrastructure, and passive power sources are allowed.
+  const NO_RECIPE_ALLOWLIST: ReadonlyArray<BuildingDefId> = [
+    // storage
+    'crate', 'silo', 'tank', 'cold_storage', 'component_warehouse', 'vault',
+    'battery_bank', 'capacitor_bank', 'flywheel_array',
+    // logistics
+    'dock', 'dronepad', 'shipyard', 'helipad', 'patron_hub',
+    'airship_dock', 'teleporter_pad', 'spacetime_anchor', 'power_substation',
+    'signal_exchange',
+    // special / infrastructure (no recipe by design)
+    'land_reclamation_hub', 'launch_tower', 'platform_constructor',
+    'time_lock', 'genesis_chamber', 'universe_editor', 'lattice_node',
+    'terrain_modifier', 'sonar_buoy', 'spaceport', 'orbital_tracking_station',
+    'path_drone_foundry', 'probability_engine',
+    // heat sources (passive adjacency enablers, not recipe buildings)
+    'coal_furnace', 'geothermal_vent', 'plasma_heater',
+    // lighthouses (vision tiers, no recipe)
+    'lighthouse_t1', 'lighthouse_t2', 'lighthouse_t3',
+    'lighthouse_t4', 'lighthouse_t5', 'lighthouse_t6',
+    // antennas (telemetry, no recipe)
+    'antenna_t1', 'antenna_t2', 'antenna_t3',
+    'antenna_t4', 'antenna_t5', 'antenna_t6',
+    // weather stations (no recipe)
+    'weather_station_t2', 'advanced_weather_station_t3',
+    // cooling / treatment (no recipe)
+    'cooling_tower', 'wastewater_treatment', 'exhaust_scrubber',
+    // passive power sources (power.produces only, no recipe)
+    'solar', 'geothermal_vent_generator', 'newcomen_engine',
+    'water_wheel', 'wind_turbine', 'windmill_t0',
+    // active power sources that DO have recipes are NOT here.
+    // T4 biome-locked power (no recipe)
+    'mass_driver', 'sunspire', 'tidal_array',
+    // T5 power buffer (no recipe)
+    'singularity_battery',
+  ];
+
+  it('every manufacturing/extraction/etc. def either has a recipe, produces power, or is allowlisted', () => {
+    const allowSet = new Set(NO_RECIPE_ALLOWLIST);
+    const violations: string[] = [];
+    for (const id of ALL_BUILDING_DEF_IDS) {
+      const def = BUILDING_DEFS[id];
+      if (!def) continue;
+      if (!RECIPE_CATEGORIES.has(def.category)) continue;
+      if (allowSet.has(id)) continue;
+      if ((def.power?.produces ?? 0) > 0) continue;
+
+      const hasDirectRecipe = (RECIPES as any)[id] !== undefined;
+      const hasVariantRecipe = Object.keys(RECIPES).some(
+        (rk) => buildingForRecipe(rk) === id,
+      );
+      if (!hasDirectRecipe && !hasVariantRecipe) {
+        violations.push(id);
+      }
+    }
+    expect(violations).toEqual([]);
   });
 });
 
