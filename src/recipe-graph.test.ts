@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest';
 import { RECIPES } from './recipes.js';
 import { BUILDING_DEFS } from './building-defs.js';
 import { buildRecipeTableRows } from './recipe-graph.js';
-import { buildingForRecipe } from './recipe-density.js';
 
 describe('buildRecipeTableRows', () => {
   const rows = buildRecipeTableRows();
@@ -79,8 +78,8 @@ describe('buildRecipeTableRows', () => {
       const tierGate = row.gates.find((g) => g.kind === 'tier');
       expect(tierGate).toBeDefined();
       const def = BUILDING_DEFS[row.buildingId]!;
-      const expected = { 2: 'L≥5', 3: 'L≥15', 4: 'L≥30' }[def.tier];
-      expect(tierGate!.label).toBe(expected);
+      const expected = { 2: 'L≥5', 3: 'L≥15', 4: 'L≥30' } as Record<number, string>;
+      expect(tierGate!.label).toBe(expected[def.tier]);
     }
   });
 });
