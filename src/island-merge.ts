@@ -168,6 +168,8 @@ export function performMerge(
       id: newId,
       x: newX,
       y: newY,
+      anchorIslandId:
+        b.anchorIslandId === absorbed.id ? absorber.id : b.anchorIslandId,
     });
   }
 

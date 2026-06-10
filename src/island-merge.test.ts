@@ -463,6 +463,27 @@ describe('performMerge', () => {
     expect(route).toBeDefined();
     expect(route!.sourceBuildingId).toBe('placed-20,0');
   });
+
+  it('re-anchors absorbed ocean platforms to the absorber island', () => {
+    const a = makeSpec({ id: 'a', cx: 0, cy: 0 });
+    const b = makeSpec({
+      id: 'b',
+      cx: 20,
+      cy: 0,
+      buildings: [
+        { id: 'buoy-1', defId: 'sonar_buoy', x: 0, y: 0, anchorIslandId: 'b' },
+      ],
+    });
+    const world = makeWorld([a, b]);
+    const states = new Map<string, IslandState>([
+      ['a', makeState({ id: 'a' })],
+      ['b', makeState({ id: 'b' })],
+    ]);
+    performMerge(world, states, a, b);
+    const buoy = a.buildings.find((b) => b.defId === 'sonar_buoy');
+    expect(buoy).toBeDefined();
+    expect(buoy!.anchorIslandId).toBe('a');
+  });
 });
 
 describe('findNextMerge', () => {
