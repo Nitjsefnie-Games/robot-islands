@@ -1694,6 +1694,10 @@ export function computeRates(
  *
  * `ctx.defs` is consulted for per-building tier lookups; defaults to
  * `BUILDING_DEFS` to keep the bare-arity signature for legacy callers.
+ *
+ * `utilById` maps building id → segment-constant duty cycle (§4.7 net-flow);
+ * absent ⇒ 1 (assume full wear so maintenance boundaries aren't skipped —
+ * keeps the bare-arity signature working for direct test callers).
  */
 export function findNextCapEvent(
   state: IslandState,
@@ -1755,6 +1759,10 @@ export function findNextCapEvent(
     const boundary = nextMaintenanceBoundaryMs(b, def, thresholdMul);
     if (boundary === null) continue;
     const operating = b.operatingMs ?? 0;
+    // Missing entry defaults to 1 here (vs `?? 0` in the wear loop): a
+    // boundary walker that can't see a duty cycle stays conservative and
+    // still emits the boundary, while the wear accrual treats no-evidence
+    // as no duty (don't wear without proof).
     const u = utilById?.get(b.id) ?? 1;
     if (u <= 0) continue; // not wearing — no future boundary this segment
     const eventMs = tMs + (boundary - operating) / u;
