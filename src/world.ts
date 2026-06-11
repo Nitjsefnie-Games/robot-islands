@@ -786,12 +786,14 @@ export const WORLD_SEED = 'rio-2026';
  *  outward as drones / satellites enter new cells via
  *  `ensureCellGenerated` (lazy, infinite).
  *
- *  Density 0.08, single island per cell (no multi-island fan-out): tuned
- *  via the V3 sweep of the §2.1 density study to bias toward "stranded
- *  but reachable" — most cells stay empty ocean; the cells that do roll
- *  an island sit far enough apart that the next neighbour is always a
- *  drone-hop away but rarely the next cell over. Paired with
- *  `OVERLAP_BUFFER_TILES = 16` so cross-cell placements never crowd. */
+ *  Density 0.02, single island per cell (no multi-island fan-out): biases
+ *  toward "stranded but reachable" — most cells stay empty ocean; the cells
+ *  that do roll an island sit far enough apart that the next neighbour is
+ *  always a drone-hop away but rarely the next cell over. Paired with
+ *  `OVERLAP_BUFFER_TILES = 16` so cross-cell placements never crowd. Lowered
+ *  from 0.08 (2026-06-11): the old value read ~3× too dense in play. Because
+ *  overlap rejection makes island count sub-linear in density, 0.02 thins the
+ *  realized count ~3× (not the ~4× a linear reading of the ratio implies). */
 export const DEFAULT_GEN_OPTS: {
   readonly seed: string;
   readonly halfExtentCells: number;
@@ -801,7 +803,7 @@ export const DEFAULT_GEN_OPTS: {
   seed: WORLD_SEED,
   halfExtentCells: 10,
   cellSizeTiles: CELL_SIZE_TILES,
-  density: 0.08,
+  density: 0.02,
 };
 
 /**
