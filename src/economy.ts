@@ -1860,7 +1860,11 @@ export function computeRates(
   // ≤ 1 — the recursed pass bills no coal, so its net.coal cannot re-trigger
   // the gate (and `coalStarvedFurnaces !== undefined` hard-stops re-entry).
   if (coalStarvedFurnaces === undefined) {
-    const coalStock = (ctx?.inventory ?? state.inventory).coal ?? 0;
+    // Per-key fallback (NOT whole-object `(ctx?.inventory ?? state.inventory)`):
+    // a lattice/shared-network ctx.inventory is a PARTIAL pooled override, so a
+    // missing coal key must fall back to the island's own coal — else the gate
+    // reads coal=0 and spuriously starves the furnace despite real coal on hand.
+    const coalStock = ctx?.inventory?.coal ?? state.inventory.coal ?? 0;
     // -1e-12 guard: float residue when live coal production exactly
     // balances the burn must not spuriously starve the furnaces.
     if (coalStock <= 0 && (net.coal ?? 0) < -1e-12) {
