@@ -88,14 +88,37 @@ import type { FlowBuildingSpec } from './flow-solver.js';
 interface PoolingConfig {
   readonly resources: ReadonlySet<ResourceId> | null;
   readonly capOverride: ReadonlyMap<ResourceId, number> | null;
+  /**
+   * Per-resource POOLING MEMBERSHIP (D-02 node-holder rule). For shared
+   * resource `r`, `holders.get(r)` is the set of island ids that hold a
+   * `sharedInventory` node covering `r`; ONLY those islands pool `r` (sum +
+   * cap-proportional redistribute). An island NOT in the set keeps its `r`
+   * strictly LOCAL even though `r` is a network-shared resource. Membership is
+   * per-(resource, island): `isPooledForIsland`. `null` ⇒ every member pools
+   * every pooled resource (the D-01 lattice path, POOL_ALL).
+   */
+  readonly holders: ReadonlyMap<ResourceId, ReadonlySet<string>> | null;
 }
 
 /** Pool everything (D-01). */
-const POOL_ALL: PoolingConfig = { resources: null, capOverride: null };
+const POOL_ALL: PoolingConfig = { resources: null, capOverride: null, holders: null };
 
-/** Is resource `r` pooled under this config? */
+/** Is resource `r` a shared/pooled resource at all under this config?
+ *  (Resource-level gate, island-independent — used to decide whether `r`
+ *  belongs to the pooled regime vs the strictly-local regime.) */
 function isPooled(cfg: PoolingConfig, r: ResourceId): boolean {
   return cfg.resources === null || cfg.resources.has(r);
+}
+
+/** Does island `islandId` pool resource `r` under this config? POOL_ALL ⇒
+ *  always (lattice). Partial ⇒ `r` is shared AND `islandId` holds a node for
+ *  `r`. An island that is networked but lacks the node for `r` keeps `r` local. */
+function isPooledForIsland(cfg: PoolingConfig, r: ResourceId, islandId: string): boolean {
+  if (cfg.resources === null) return true; // POOL_ALL — D-01 lattice
+  if (!cfg.resources.has(r)) return false;
+  if (cfg.holders === null) return true; // no membership table ⇒ all share
+  const set = cfg.holders.get(r);
+  return set !== undefined && set.has(islandId);
 }
 
 /** Build the pooled (Σ over members) inventory map, restricted to pooled
@@ -109,7 +132,9 @@ function pooledInventory(
   const out = {} as Record<ResourceId, number>;
   for (const st of states) {
     for (const [r, amt] of Object.entries(st.inventory)) {
-      if (!isPooled(cfg, r as ResourceId)) continue;
+      // Only sum r from islands that POOL r (node-holders). A networked
+      // participant without r's node keeps r local — not summed here.
+      if (!isPooledForIsland(cfg, r as ResourceId, st.id)) continue;
       out[r as ResourceId] = (out[r as ResourceId] ?? 0) + (amt ?? 0);
     }
   }
@@ -117,7 +142,12 @@ function pooledInventory(
 }
 
 /** Build the pooled (Σ over members) storage-cap map, restricted to pooled
- *  resources, applying the per-resource Σcap override where provided. */
+ *  resources × node-holders, applying the per-resource Σcap override where
+ *  provided. NB: only node-holders' caps count toward Σcaps (redistribution
+ *  divisor); a non-holder's local r-cap is irrelevant to r's pool. The
+ *  `capOverride` (D-02 sharedStorageCap) replaces the summed value for its
+ *  resources — those Σ-caps are already node-holder-scoped at the source
+ *  (`network.ts` sums only node-holders into `sharedStorageCap`). */
 function pooledCapsMap(
   states: ReadonlyArray<IslandState>,
   cfg: PoolingConfig,
@@ -125,7 +155,7 @@ function pooledCapsMap(
   const out = {} as Record<ResourceId, number>;
   for (const st of states) {
     for (const [r, amt] of Object.entries(st.storageCaps)) {
-      if (!isPooled(cfg, r as ResourceId)) continue;
+      if (!isPooledForIsland(cfg, r as ResourceId, st.id)) continue;
       out[r as ResourceId] = (out[r as ResourceId] ?? 0) + (amt ?? 0);
     }
   }
@@ -157,10 +187,25 @@ function distributePooled(
   }
 
   for (const r of resources) {
-    const totalCap = pooledCaps[r] ?? 0;
+    // Redistribute r ONLY to its node-holders, by their caps. The divisor is
+    // the Σ of HOLDERS' local caps (not pooledCaps[r], which may fold a
+    // sharedStorageCap override over a DIFFERENT — cap-node — holder set);
+    // using the actual distributed set's cap sum keeps redistribution exactly
+    // mass-conserving. For POOL_ALL every member is a holder, so the divisor
+    // equals Σ member caps and this is byte-identical to the D-01 path
+    // (pooledCaps[r] == Σ member caps when capOverride is null).
+    let totalCap = 0;
+    for (const st of states) {
+      if (!isPooledForIsland(cfg, r, st.id)) continue;
+      totalCap += st.storageCaps[r] ?? 0;
+    }
+    // POOL_ALL fast path / parity: when no cap override, pooledCaps[r] already
+    // equals this sum; reading it keeps the exact float the D-01 path used.
+    if (cfg.capOverride === null) totalCap = pooledCaps[r] ?? 0;
     if (totalCap <= 0) continue; // Σcaps = 0 — freeze, leave local stocks be.
     const pooledQty = pool[r] ?? 0;
     for (const st of states) {
+      if (!isPooledForIsland(cfg, r, st.id)) continue; // non-holders untouched
       const share = (st.storageCaps[r] ?? 0) / totalCap;
       st.inventory[r] = pooledQty * share;
     }
@@ -236,7 +281,10 @@ function advanceGroup(
     const pooledCaps = pooledCapsMap(states, cfg);
 
     // ---- Round 1: each member computes its OWN flow specs at the pooled
-    // regime (only `flowSpecs` is read).
+    // regime (only `flowSpecs` is read). The inventory/caps override is
+    // PER-ISLAND: it carries pooled values only for resources THIS island
+    // pools (node-holder for r); resources it doesn't pool are omitted, so the
+    // economy's per-key fallback reads them from local state.
     const ownSpecs = new Map<string, ReadonlyArray<FlowBuildingSpec>>();
     for (const st of states) {
       const base = ctxFor(st);
@@ -244,8 +292,8 @@ function advanceGroup(
         ...base,
         accelerationMul: st.accelerationRemainingMin > 0 ? 3 : 1,
         baseMult: baseMultByIsland.get(st.id),
-        inventory: pool,
-        caps: pooledCaps,
+        inventory: islandPooledView(st, pool, cfg),
+        caps: islandPooledView(st, pooledCaps, cfg),
       };
       const res = computeRates(st, ctx, t, t + wallOffset);
       ownSpecs.set(st.id, res.flowSpecs);
@@ -264,7 +312,11 @@ function advanceGroup(
         const s = ownSpecs.get(other.id);
         if (!s) continue;
         for (const e of s) {
-          const filtered = filterSpecToPooled(e, cfg);
+          // A sibling flow on `other` only unions across islands for the
+          // resources `other` POOLS (node-holder). A resource `other` keeps
+          // local must not appear in the union — it never throttles against
+          // anyone else's stock. Filter by `other`'s membership.
+          const filtered = filterSpecToPooled(e, cfg, other.id);
           if (filtered) siblings.push(filtered);
         }
       }
@@ -272,8 +324,8 @@ function advanceGroup(
         ...base,
         accelerationMul: st.accelerationRemainingMin > 0 ? 3 : 1,
         baseMult: baseMultByIsland.get(st.id),
-        inventory: pool,
-        caps: pooledCaps,
+        inventory: islandPooledView(st, pool, cfg),
+        caps: islandPooledView(st, pooledCaps, cfg),
         flowSiblings: siblings,
       };
       const res = computeRates(st, localCtx, t, t + wallOffset);
@@ -305,11 +357,13 @@ function advanceGroup(
       });
     }
 
-    // ---- Pooled net flow = Σ member nets, restricted to pooled resources.
+    // ---- Pooled net flow = Σ member nets, restricted to each member's POOLED
+    // resources (node-holders). A non-holder's net for r is NOT summed here —
+    // it integrates locally below.
     const pooledNet = {} as Record<ResourceId, number>;
     for (const seg of segs) {
       for (const [r, rate] of Object.entries(seg.net)) {
-        if (!isPooled(cfg, r as ResourceId)) continue;
+        if (!isPooledForIsland(cfg, r as ResourceId, seg.state.id)) continue;
         pooledNet[r as ResourceId] = (pooledNet[r as ResourceId] ?? 0) + (rate ?? 0);
       }
     }
@@ -323,11 +377,11 @@ function advanceGroup(
       const st = seg.state;
       const base = ctxFor(st);
 
-      // Combined inventory + net: pooled values for pooled resources, this
-      // member's own local values for the rest. For POOL_ALL this is exactly
+      // Combined inventory + net: pooled values for the resources THIS member
+      // pools, its own local values for the rest. For POOL_ALL this is exactly
       // `pool` / `pooledNet` (byte-identical D-01 path).
       const combinedInv = combinedInventoryFor(st, pool, cfg);
-      const combinedNet = combinedNetFor(seg.net, pooledNet, cfg);
+      const combinedNet = combinedNetFor(seg.state.id, seg.net, pooledNet, cfg);
 
       const memberEvent = findNextCapEvent(
         st,
@@ -404,7 +458,7 @@ function advanceGroup(
       // every net entry is pooled, so `localNet` is empty and this is a no-op
       // (byte-identical D-01 path).
       for (const seg of segs) {
-        const localNet = localNetFor(seg.net, cfg);
+        const localNet = localNetFor(seg.state.id, seg.net, cfg);
         if (Object.keys(localNet).length > 0) {
           applyRates(seg.state, localNet, dtSec, undefined, baseMultByIsland.get(seg.state.id));
         }
@@ -464,25 +518,48 @@ function advanceGroup(
   for (const st of states) st.lastTick = nowMs;
 }
 
-/** Filter a member's flow spec to its pooled-resource entries only. Returns
- *  null if nothing pooled remains (the building's cross-island contribution is
- *  entirely non-shared). For POOL_ALL the spec passes through unchanged. */
-function filterSpecToPooled(spec: FlowBuildingSpec, cfg: PoolingConfig): FlowBuildingSpec | null {
+/** Per-island pooled override for `computeRates`: pooled values only for the
+ *  resources `st` POOLS (node-holder for r); resources it keeps local are
+ *  OMITTED so the economy's per-key fallback (`ctx.x?.[r] ?? local`) reads
+ *  them from `st`. For POOL_ALL this returns `source` directly (every resource
+ *  pooled — byte-identical D-01 path). */
+function islandPooledView(
+  st: IslandState,
+  source: Record<ResourceId, number>,
+  cfg: PoolingConfig,
+): Record<ResourceId, number> {
+  if (cfg.resources === null) return source; // POOL_ALL — D-01
+  const out = {} as Record<ResourceId, number>;
+  for (const [r, v] of Object.entries(source)) {
+    if (isPooledForIsland(cfg, r as ResourceId, st.id)) out[r as ResourceId] = v ?? 0;
+  }
+  return out;
+}
+
+/** Filter a member's flow spec to the entries `islandId` POOLS. Returns null if
+ *  nothing pooled remains (the building's cross-island contribution is entirely
+ *  local to its island). For POOL_ALL the spec passes through unchanged. */
+function filterSpecToPooled(
+  spec: FlowBuildingSpec,
+  cfg: PoolingConfig,
+  islandId: string,
+): FlowBuildingSpec | null {
   if (cfg.resources === null) return spec; // pool-all: identity (D-01)
   const produces: Record<string, number> = {};
   const consumes: Record<string, number> = {};
   let any = false;
   for (const [r, v] of Object.entries(spec.produces)) {
-    if (cfg.resources.has(r as ResourceId)) { produces[r] = v; any = true; }
+    if (isPooledForIsland(cfg, r as ResourceId, islandId)) { produces[r] = v; any = true; }
   }
   for (const [r, v] of Object.entries(spec.consumes)) {
-    if (cfg.resources.has(r as ResourceId)) { consumes[r] = v; any = true; }
+    if (isPooledForIsland(cfg, r as ResourceId, islandId)) { consumes[r] = v; any = true; }
   }
   return any ? { produces, consumes } : null;
 }
 
-/** Member's view of inventory for the boundary scan: pooled value for pooled
- *  resources, local value for the rest. POOL_ALL ⇒ exactly `pool`. */
+/** Member's view of inventory for the boundary scan: pooled value for the
+ *  resources this member pools, local value for the rest. POOL_ALL ⇒ exactly
+ *  `pool`. */
 function combinedInventoryFor(
   st: IslandState,
   pool: Record<ResourceId, number>,
@@ -491,15 +568,21 @@ function combinedInventoryFor(
   if (cfg.resources === null) return pool;
   const out = {} as Record<ResourceId, number>;
   for (const [r, v] of Object.entries(st.inventory)) {
-    out[r as ResourceId] = isPooled(cfg, r as ResourceId) ? (pool[r as ResourceId] ?? 0) : (v ?? 0);
+    out[r as ResourceId] = isPooledForIsland(cfg, r as ResourceId, st.id)
+      ? (pool[r as ResourceId] ?? 0)
+      : (v ?? 0);
   }
-  for (const [r, v] of Object.entries(pool)) out[r as ResourceId] = v; // pooled keys may not be in local inv
+  // Pooled keys this member holds may be absent from its local inventory.
+  for (const [r, v] of Object.entries(pool)) {
+    if (isPooledForIsland(cfg, r as ResourceId, st.id)) out[r as ResourceId] = v;
+  }
   return out;
 }
 
-/** Combined net for the boundary scan: pooled net for pooled resources, this
- *  member's own net for the rest. POOL_ALL ⇒ exactly `pooledNet`. */
+/** Combined net for the boundary scan: pooled net for the resources this
+ *  member pools, its own net for the rest. POOL_ALL ⇒ exactly `pooledNet`. */
 function combinedNetFor(
+  islandId: string,
   memberNet: Record<ResourceId, number>,
   pooledNet: Record<ResourceId, number>,
   cfg: PoolingConfig,
@@ -507,22 +590,25 @@ function combinedNetFor(
   if (cfg.resources === null) return pooledNet;
   const out = {} as Record<ResourceId, number>;
   for (const [r, v] of Object.entries(memberNet)) {
-    if (!isPooled(cfg, r as ResourceId)) out[r as ResourceId] = v ?? 0;
+    if (!isPooledForIsland(cfg, r as ResourceId, islandId)) out[r as ResourceId] = v ?? 0;
   }
-  for (const [r, v] of Object.entries(pooledNet)) out[r as ResourceId] = v ?? 0;
+  for (const [r, v] of Object.entries(pooledNet)) {
+    if (isPooledForIsland(cfg, r as ResourceId, islandId)) out[r as ResourceId] = v ?? 0;
+  }
   return out;
 }
 
-/** This member's net restricted to NON-pooled resources (integrated locally).
- *  POOL_ALL ⇒ empty. */
+/** This member's net restricted to the resources it does NOT pool (integrated
+ *  locally). POOL_ALL ⇒ empty. */
 function localNetFor(
+  islandId: string,
   memberNet: Record<ResourceId, number>,
   cfg: PoolingConfig,
 ): Record<ResourceId, number> {
   const out = {} as Record<ResourceId, number>;
   if (cfg.resources === null) return out;
   for (const [r, v] of Object.entries(memberNet)) {
-    if (!isPooled(cfg, r as ResourceId)) out[r as ResourceId] = v ?? 0;
+    if (!isPooledForIsland(cfg, r as ResourceId, islandId)) out[r as ResourceId] = v ?? 0;
   }
   return out;
 }
@@ -555,6 +641,10 @@ export function advanceLatticeGroup(
  * @param sharedResources  resources behind the active `crossIslandShared`
  *                         skill nodes (sharedInventory ∪ sharedStorageCap).
  * @param sharedCaps       Σ-cap override from `sharedStorageCap` (per resource).
+ * @param holders          per-resource POOLING MEMBERSHIP — `holders.get(r)`
+ *                         is the set of island ids that hold a `sharedInventory`
+ *                         node for `r`. ONLY those islands pool `r`; others keep
+ *                         `r` strictly local (D-02 node-holder rule).
  */
 export function advanceSharedGroup(
   states: ReadonlyArray<IslandState>,
@@ -562,13 +652,14 @@ export function advanceSharedGroup(
   ctxFor: (state: IslandState) => RatesContext,
   sharedResources: ReadonlySet<ResourceId>,
   sharedCaps: ReadonlyMap<ResourceId, number>,
+  holders: ReadonlyMap<ResourceId, ReadonlySet<string>>,
   wallClockNowMs?: number,
 ): void {
   advanceGroup(
     states,
     nowMs,
     ctxFor,
-    { resources: sharedResources, capOverride: sharedCaps },
+    { resources: sharedResources, capOverride: sharedCaps, holders },
     wallClockNowMs,
   );
 }

@@ -1999,6 +1999,7 @@ async function main(): Promise<void> {
           latticeMemberBaseCtx,
           sharedSet,
           sharedNetwork.sharedStorageCap,
+          sharedNetwork.inventoryHolders,
           nowWall,
         );
       }

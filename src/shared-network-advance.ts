@@ -41,11 +41,13 @@ export function sharedResourceSet(net: SharedNetworkState): Set<ResourceId> {
 
 /**
  * Advance a non-lattice shared-network participant group to `nowMs` as ONE
- * unit, pooling ONLY the shared-resource subset (`sharedResources`). Caps for
- * pooled resources use `sharedCaps` (the Σ of participant nominal caps from
- * `sharedStorageCap`) where present, else Σ member local caps. NON-shared
- * resources stay strictly local. Delegates to the shared `advanceSharedGroup`
- * core in lattice-advance.ts.
+ * unit, pooling ONLY the shared-resource subset (`sharedResources`) AND only
+ * across each resource's NODE-HOLDERS (`holders` — the D-02 node-holder rule:
+ * an island that never bought the sharing skill for `r` keeps its `r` strictly
+ * local). Caps for pooled resources use `sharedCaps` (Σ of participant nominal
+ * caps from `sharedStorageCap`) where present, else Σ node-holder local caps.
+ * NON-shared resources, and shared resources on non-holder islands, stay
+ * strictly local. Delegates to `advanceSharedGroup` (lattice-advance.ts).
  */
 export function advanceSharedNetworkGroup(
   states: ReadonlyArray<IslandState>,
@@ -53,7 +55,8 @@ export function advanceSharedNetworkGroup(
   ctxFor: (state: IslandState) => RatesContext,
   sharedResources: ReadonlySet<ResourceId>,
   sharedCaps: ReadonlyMap<ResourceId, number>,
+  holders: ReadonlyMap<ResourceId, ReadonlySet<string>>,
   wallClockNowMs?: number,
 ): void {
-  advanceSharedGroup(states, nowMs, ctxFor, sharedResources, sharedCaps, wallClockNowMs);
+  advanceSharedGroup(states, nowMs, ctxFor, sharedResources, sharedCaps, holders, wallClockNowMs);
 }
