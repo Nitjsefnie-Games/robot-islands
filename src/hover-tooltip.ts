@@ -40,7 +40,14 @@ import { buildingAtTile, findOceanBuildingAt } from './placement.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
 import { visibleCellsFromVision } from './vision-source.js';
 import { findPopulatedIslandAt, type WorldState } from './world.js';
-import { biomeForCell, sumIslandCo2, weather, type WeatherState, WEATHER_FORECAST_LOOKAHEAD_MS } from './weather.js';
+import {
+  biomeForCell,
+  computeWeatherVisionSources,
+  sumIslandCo2,
+  weather,
+  type WeatherState,
+  WEATHER_FORECAST_LOOKAHEAD_MS,
+} from './weather.js';
 
 /** Player-facing label per ocean terrain id. The bulk terrains (shallows,
  *  deep) also surface; rare terrains read the same here and add cluster
@@ -253,14 +260,18 @@ function formatDuration(ms: number): string {
   return `~${h}h`;
 }
 
-/** Build the weather summary for a cell. Always returned (per the spec:
- *  "Weather (universal, both ocean and land)"). The forecast line uses
- *  the next-state change inside the §2.6 lookahead window. */
+/** Build the weather summary for a cell. The current state is always
+ *  returned (per the spec: "Weather (universal, both ocean and land)").
+ *  The forecast line is the Advanced Weather Station's gift (§2.6): it is
+ *  emitted only when `canForecast` is true — i.e. the cell is within a
+ *  forecast-capable station's range. Without that, the player sees the
+ *  current state but not the next-cycle lookahead. */
 function weatherInfoForCell(
   world: Pick<WorldState, 'seed' | 'islands' | 'islandStates'>,
   cellX: number,
   cellY: number,
   nowMs: number,
+  canForecast: boolean,
 ): WeatherInfo {
   const biome = biomeForCell(world, cellX, cellY);
   const totalCo2Kg = sumIslandCo2(world);
@@ -269,7 +280,7 @@ function weatherInfoForCell(
   // Next cycle: query just after `untilMs` to see what state follows.
   let forecastText: string | null = null;
   const remainingMs = cur.untilMs - nowMs;
-  if (remainingMs > 0 && remainingMs <= WEATHER_FORECAST_LOOKAHEAD_MS) {
+  if (canForecast && remainingMs > 0 && remainingMs <= WEATHER_FORECAST_LOOKAHEAD_MS) {
     const next = weather(world.seed, cellX, cellY, cur.untilMs + 1, biome, totalCo2Kg);
     if (next.state !== cur.state) {
       forecastText = `→ ${WEATHER_STATE_LABEL[next.state]} in ${formatDuration(remainingMs)}`;
@@ -349,7 +360,13 @@ export function tileInfoForHover(
     const fogText = world.revealedCells.has(cellKey) ? 'Discovered' : 'Unknown';
     return { kind: 'ocean-unrevealed', text: fogText, weather: null };
   }
-  const weatherInfo = weatherInfoForCell(world, cellX, cellY, nowMs);
+  // Forecast lookahead is gated on the §2.6 forecast-vision sources — the
+  // same per-island forecast circles the weather overlay paints, emitted
+  // only for islands carrying an Advanced Weather Station. A cell outside
+  // every forecast circle shows current weather but no next-cycle line.
+  const forecastCells = visibleCellsFromVision(computeWeatherVisionSources(populated).forecast);
+  const canForecast = forecastCells.has(cellKey);
+  const weatherInfo = weatherInfoForCell(world, cellX, cellY, nowMs, canForecast);
 
   // ---- Land path: a populated island covers the exact hovered tile.
   // Use tile-granular `findPopulatedIslandAt` rather than cell centre so

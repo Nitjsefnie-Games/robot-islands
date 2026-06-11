@@ -303,6 +303,36 @@ describe('§6 tileInfoForHover — weather + vision gating', () => {
     expect(info.weather!.state).toMatch(/Clear|Light fog|Storm|Severe storm|Catastrophic/);
   });
 
+  it('suppresses the forecast line when the island has no forecast station (§2.6)', () => {
+    // Cell (0,0) at this seed/time has a weather transition inside the 2 h
+    // lookahead window (cur=clear, rem≈86 m) — so the *current* state shows,
+    // but the next-cycle forecast is the Advanced Weather Station's gift.
+    // With no station the player must not see the lookahead.
+    const home = makePopulatedHome({ buildings: [], terrainAt: () => 'iron_ore' });
+    const world = makeWorld({ islands: [home] });
+    const info = tileInfoForHover(world, 8, 8, NOW);
+    expect(info.weather).not.toBeNull();
+    expect(info.weather!.state).toBe('Clear');
+    expect(info.weather!.forecastText).toBeNull();
+  });
+
+  it('surfaces the forecast line when an Advanced Weather Station is present and the cell is in forecast range', () => {
+    const station = {
+      id: 'aws',
+      defId: 'advanced_weather_station_t3',
+      x: 0,
+      y: 0,
+      rotation: 0,
+      lastTickMs: 0,
+    } as unknown as PlacedBuilding;
+    const home = makePopulatedHome({ buildings: [station], terrainAt: () => 'iron_ore' });
+    const world = makeWorld({ islands: [home] });
+    const info = tileInfoForHover(world, 8, 8, NOW);
+    expect(info.weather).not.toBeNull();
+    expect(info.weather!.forecastText).not.toBeNull();
+    expect(info.weather!.forecastText).toContain('→');
+  });
+
   it('returns weather: null on an unrevealed ocean tile (outside vision)', () => {
     // No populated islands → no vision sources → the hovered tile is
     // out-of-vision. Weather must NOT surface.
