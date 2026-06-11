@@ -346,6 +346,14 @@ export function advanceLatticeGroup(
       // ---- Pooled integration: integrate the pooled inventory by the pooled
       // net over dt, clamped to pooled caps. We model the pool as a synthetic
       // state so we can reuse `applyRates`' exact clamp semantics.
+      // NB (storage-category catMul): `applyRates` clamps via
+      // `cap(poolState, r, pooledCaps, …, baseMult₀)`, which applies ISLAND-0's
+      // storage-category skill multiplier to the summed raw caps. With
+      // heterogeneous member storage-category skills the pooled clamp is thus
+      // `Σcaps × catMul₀`, not Σ(caps_i × catMul_i). This is deliberate — it
+      // matches the `latticeStorageCaps` raw-sum eligibility convention the
+      // pool's cap/zero regimes are already computed against, so the integrate
+      // bound and the eligibility regime stay consistent.
       const poolState: IslandState = { ...segs[0]!.state, inventory: { ...pool }, storageCaps: pooledCaps };
       applyRates(poolState, pooledNet, dtSec, pooledCaps, baseMultByIsland.get(segs[0]!.state.id));
 
@@ -374,6 +382,10 @@ export function advanceLatticeGroup(
       }
     }
 
+    // Segment-start time, captured BEFORE the timeline advances — the accel
+    // boundary below is anchored here exactly as advanceIsland anchors its
+    // `nextAccelMs` at the segment-prep `t` (economy.ts).
+    const segStartMs = t;
     // Advance the shared timeline.
     if (segEndMs <= t) {
       t = nowMs;
@@ -386,9 +398,17 @@ export function advanceLatticeGroup(
     for (const seg of segs) {
       const st = seg.state;
       if (st.accelerationRemainingMin > 0) {
+        // §13.3 accel boundary, computed from the START-of-segment remaining
+        // (matches advanceIsland's `nextAccelMs = t + remaining*60_000` taken
+        // at segment-prep, before the decrement below).
+        const nextAccelMs = segStartMs + st.accelerationRemainingMin * 60 * 1000;
         const consumedMin = dtSec / 60;
         st.accelerationRemainingMin -= consumedMin;
-        if (st.accelerationRemainingMin <= 0) {
+        // Mirror advanceIsland's FULL pop condition exactly: pop on the
+        // remaining-minutes drain OR when the segment landed on/after the
+        // accel boundary (the `nextAccelMs <= segEndMs` disjunct guards the
+        // float-residue case where subtraction leaves a sub-epsilon sliver).
+        if (st.accelerationRemainingMin <= 0 || nextAccelMs <= segEndMs) {
           st.accelerationRemainingMin = 0;
           const next = st.accelerationQueue.shift();
           if (next) st.accelerationRemainingMin = next.durationMin;
