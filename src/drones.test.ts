@@ -1461,10 +1461,12 @@ describe('firePulse (§11.5 T4 omnidirectional pulse)', () => {
     origin.inventory.cryogenic_hydrogen = 50;
     // Place an undiscovered island within the disk and one outside.
     world.islands.push({
-      id: 'near', cx: 30, cy: 0, discovered: false, populated: false,
+      id: 'near', cx: 30, cy: 0, majorRadius: 5, minorRadius: 5,
+      discovered: false, populated: false, buildings: [], modifiers: [],
     } as any);
     world.islands.push({
-      id: 'far', cx: 100, cy: 0, discovered: false, populated: false,
+      id: 'far', cx: 100, cy: 0, majorRadius: 5, minorRadius: 5,
+      discovered: false, populated: false, buildings: [], modifiers: [],
     } as any);
     const r = firePulse(world, origin, 0);
     expect(r.ok).toBe(true);
@@ -1473,6 +1475,28 @@ describe('firePulse (§11.5 T4 omnidirectional pulse)', () => {
     expect(world.islands.find((i) => i.id === 'near')!.discovered).toBe(true);
     expect(world.islands.find((i) => i.id === 'far')!.discovered).toBe(false);
     expect(origin.inventory.cryogenic_hydrogen).toBe(50 - T4_PULSE_FUEL_COST);
+  });
+
+  it('discovers a large island that OVERLAPS the disk even when its centre is outside the radius (§11.5 disk scan covers the disk)', () => {
+    const world = makeTinyWorld();
+    const origin = world.islandStates!.get('home')!;
+    origin.buildings.push({
+      id: 'b_lt', defId: 'launch_tower', x: 0, y: 0, rotation: 0,
+    } as any);
+    origin.level = 30;
+    origin.inventory.cryogenic_hydrogen = 50;
+    // Centre at x=70 is OUTSIDE the 48-tile disk, but radius 30 puts the
+    // island's western tiles at x≈40 — well inside the disk. A "disk scan"
+    // that covers the disk must discover it; the old centre-only test missed
+    // every island straddling the disk edge.
+    world.islands.push({
+      id: 'straddle', name: 'straddle', biome: 'plains',
+      cx: 70, cy: 0, majorRadius: 30, minorRadius: 30,
+      discovered: false, populated: false, buildings: [], modifiers: [],
+    } as any);
+    const r = firePulse(world, origin, 0);
+    expect(r.discoveredIslandIds).toContain('straddle');
+    expect(world.islands.find((i) => i.id === 'straddle')!.discovered).toBe(true);
   });
 });
 

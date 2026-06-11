@@ -23,6 +23,7 @@ import { inv } from './economy.js';
 import { fuelForTier, type ResourceId } from './recipes.js';
 
 import { effectiveSkillMultipliers, tierForLevel } from './skilltree.js';
+import { visibleCellsFromVision } from './vision-source.js';
 import { biomeForCell, rasterizePath, rollVehicleDestruction, sumIslandCo2 } from './weather.js';
 import { CELL_SIZE_TILES, ensureCellGenerated } from './world.js';
 import type { WorldState } from './world.js';
@@ -167,8 +168,10 @@ export function pointToSegmentDistSq(
   return ex * ex + ey * ey;
 }
 
-/** §11.5 T4 omnidirectional pulse: reveals every undiscovered island whose
- *  centre is within `T4_PULSE_RADIUS_TILES` of `origin` in a single instant.
+/** §11.5 T4 omnidirectional pulse: reveals every undiscovered island the
+ *  `T4_PULSE_RADIUS_TILES` disk centred on `origin` OVERLAPS, in a single
+ *  instant (any-cell overlap, matching corridor discovery — not a centre
+ *  test, so islands straddling the disk edge are found).
  *  Distinct from `dispatchDrone` — no flight path, no travel time, no
  *  return event, no corridor capsule. Pure mutation: flips `discovered`
  *  on matching islands, deducts `T4_PULSE_FUEL_COST` of tier-4 fuel
@@ -207,15 +210,20 @@ export function firePulse(
   if (!originSpec) {
     return { ok: false, reason: 'no-origin-spec', discoveredIslandIds: [] };
   }
-  // Reveal every undiscovered island within the disk. `populated` islands
-  // are already discovered by definition; we still flip `discovered` for
-  // the unflagged ones (mirrors how dispatchDrone treats discovery).
+  // Reveal every undiscovered island the disk OVERLAPS — not merely those
+  // whose centre lies inside it. The pulse is a "disk scan" that covers a
+  // 3-cell-radius disk (§11.5), so an island straddling the disk edge is
+  // covered over part of its area and must be found. Reuse the same any-cell
+  // predicate the normal drone scan uses (`islandHasRevealedCell`), fed the
+  // set of cells the disk covers — pulse and corridor discovery share one
+  // overlap rule.
+  const pulseCells = visibleCellsFromVision([
+    { kind: 'circle', cx: originSpec.cx, cy: originSpec.cy, radius: T4_PULSE_RADIUS_TILES },
+  ]);
   const discovered: string[] = [];
   for (const isl of world.islands) {
     if (isl.discovered) continue;
-    const dx = isl.cx - originSpec.cx;
-    const dy = isl.cy - originSpec.cy;
-    if (dx * dx + dy * dy <= T4_PULSE_RADIUS_TILES * T4_PULSE_RADIUS_TILES) {
+    if (islandHasRevealedCell(isl, pulseCells)) {
       isl.discovered = true;
       discovered.push(isl.id);
     }
