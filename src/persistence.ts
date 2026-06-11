@@ -37,7 +37,9 @@
 import { del, get, set } from 'idb-keyval';
 
 
-import { islandCells, tileToCell } from './discovery.js';
+import { islandCells, islandIntersectsCells, tileToCell } from './discovery.js';
+import { generateCellIslands } from './world-gen.js';
+import { CELL_SIZE_TILES } from './constants.js';
 import type { IslandState } from './economy.js';
 import type { Drone } from './drones.js';
 import { _seedConstructionCounter } from './construction-ui.js';
@@ -73,7 +75,7 @@ export const STORAGE_KEY_DISPLAY = 'robot-islands:save';
 
 /** Current schema version. `loadWorld` rejects (returns null) any
  *  snapshot whose `v` is not strictly equal to this. */
-export const SCHEMA_VERSION = 22 as const;
+export const SCHEMA_VERSION = 23 as const;
 
 /** Versions that loadWorld accepts. The walker (loadWorld) chains
  *  migrateV<N>toV<N+1> functions from the lowest known version up to
@@ -81,7 +83,7 @@ export const SCHEMA_VERSION = 22 as const;
  *
  *  See AGENTS.md → "Persistence migrations" for the full "bump = migrate"
  *  policy from v7 onward. */
-export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22]);
+export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]);
 
 // ---------------------------------------------------------------------------
 // Serialized shapes
@@ -605,13 +607,71 @@ export function migrateV20toV21(s: SerializedSnapshotV20): SerializedSnapshotV21
   } as unknown as SerializedSnapshotV21;
 }
 
+export type SerializedSnapshotV22 = Omit<SaveSnapshot, 'v'> & { readonly v: 22 };
+
 /** v21 -> v22: §9.9 active-play production bonus shipped. A v21 save lacks
  *  `world.activeBonusMs`; seed 0 (no accrued bonus). */
-export function migrateV21toV22(s: SerializedSnapshotV21): SaveSnapshot {
+export function migrateV21toV22(s: SerializedSnapshotV21): SerializedSnapshotV22 {
   return {
     ...s,
     v: 22 as const,
     world: { ...s.world, activeBonusMs: 0 },
+  } as unknown as SerializedSnapshotV22;
+}
+
+/** Density pinned for the v22→v23 regeneration. A FIXED historical transform —
+ *  intentionally NOT `DEFAULT_GEN_OPTS.density`, so replaying the migration on
+ *  an old save always yields the same world regardless of later density tweaks. */
+const V23_REGEN_DENSITY = 0.02;
+
+/** Re-roll the procedural (unpopulated) islands at the v23 density. Populated
+ *  islands are kept verbatim and seed the overlap context; their cells are not
+ *  re-rolled. Every other generated cell (∪ cells that currently hold an
+ *  island, as a trimmed-`generatedCells` safety net) is regenerated in (cy, cx)
+ *  order — mirroring `generateWorld` — so the result is self-consistent and
+ *  matches a fresh 0.02 world in those cells. A regenerated island is
+ *  discovered iff it overlaps an already-revealed cell; vision-halo discovery
+ *  is applied live by the per-tick sweep after load. */
+function regenerateProceduralIslandsV23(world: SerializedWorld): SerializedIslandSpec[] {
+  const seed = world.seed ?? WORLD_SEED;
+  const revealed = new Set<string>(world.revealedCells ?? []);
+  const populated = world.islands.filter((i) => i.populated);
+  // A serialized spec is an IslandSpec minus the terrainAt closure; overlap
+  // math never calls terrainAt, so the cast is safe for neighbour context.
+  const placed: IslandSpec[] = populated.map((i) => i as unknown as IslandSpec);
+  const cellKeyOf = (cx: number, cy: number) => {
+    const c = tileToCell(cx, cy);
+    return `${c.cellX},${c.cellY}`;
+  };
+  const populatedCells = new Set(populated.map((i) => cellKeyOf(i.cx, i.cy)));
+  const cellSet = new Set<string>(world.generatedCells ?? []);
+  for (const i of world.islands) cellSet.add(cellKeyOf(i.cx, i.cy));
+  const cells = [...cellSet]
+    .map((k) => k.split(',').map(Number) as [number, number])
+    .filter(([cx, cy]) => !(cx === 0 && cy === 0) && !populatedCells.has(`${cx},${cy}`))
+    .sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+  const regen: SerializedIslandSpec[] = [];
+  for (const [cx, cy] of cells) {
+    for (const isl of generateCellIslands(seed, cx, cy, CELL_SIZE_TILES, V23_REGEN_DENSITY, placed)) {
+      isl.discovered = islandIntersectsCells(isl, revealed);
+      placed.push(isl);
+      const { terrainAt: _t, ...ser } = isl as IslandSpec & { terrainAt: unknown };
+      regen.push(ser as SerializedIslandSpec);
+    }
+  }
+  return [...populated, ...regen];
+}
+
+/** v22 -> v23: §2.1 island density lowered 0.08 → 0.02 (the world read ~3× too
+ *  dense). Saves serialize the full procedural island list, so they keep the
+ *  old dense set until regenerated here. Populated islands + their state are
+ *  kept verbatim; procedural islands are re-rolled at 0.02; revealed/generated
+ *  cells are untouched. See `regenerateProceduralIslandsV23`. */
+export function migrateV22toV23(s: SerializedSnapshotV22): SaveSnapshot {
+  return {
+    ...s,
+    v: 23 as const,
+    world: { ...s.world, islands: regenerateProceduralIslandsV23(s.world) },
   } as unknown as SaveSnapshot;
 }
 
@@ -809,7 +869,10 @@ export function deserializeWorld(
     snapshot = migrateV20toV21(snapshot as unknown as SerializedSnapshotV20) as unknown as SaveSnapshot;
   }
   if ((snapshot as unknown as { v: number }).v === 21) {
-    snapshot = migrateV21toV22(snapshot as unknown as SerializedSnapshotV21);
+    snapshot = migrateV21toV22(snapshot as unknown as SerializedSnapshotV21) as unknown as SaveSnapshot;
+  }
+  if ((snapshot as unknown as { v: number }).v === 22) {
+    snapshot = migrateV22toV23(snapshot as unknown as SerializedSnapshotV22);
   }
 
   if (snapshot.v !== SCHEMA_VERSION) {
