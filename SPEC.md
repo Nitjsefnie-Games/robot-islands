@@ -107,6 +107,8 @@ Drones discover islands but cannot settle them. A discovered island appears on t
 
 Drones travel in real time. They scan for islands within a corridor along their path (corridor width determined by drone tier and scan radius). On return, they report all islands discovered.
 
+**Vision also discovers.** Beyond drones, satellites (§14), and the T4 pulse (§11.5), any island that an active *vision source* overlaps is discovered automatically — no sortie required. Vision sources are a populated island's padded vision halo and a Lighthouse's vision circle (radius by Lighthouse tier). Discovery uses the same any-cell overlap rule as drone scans: an island is found the moment any of its footprint cells lands inside any vision source, and discovery is monotonic — once found it stays found even after vision recedes (it then renders on the steel-blue "discovered" tier). A high-tier Lighthouse therefore reveals every island within its radius at once; drones and satellites remain the tools for reaching islands beyond any vision source. Vision-discovery flips only the island's discovered flag — the surrounding seabed terrain still requires a drone or depth scan to read.
+
 Drones can fail and never return. Failure modes (per §11.4): fuel exhaustion mid-journey, or destruction by weather (per-cell roll, see §2.6). Fuel is a real game resource produced by infrastructure on the launching island; fuel grade matches the launching island's tier per §11.7.
 
 **Drone tiers.** Drone Pad (T2) gates drone launches; once built, the player can launch any drone tier from T1 up to the launching island's current tier. T1 drones are the entry option (biofuel-fueled, short range); higher tiers cost richer fuel grades but fly farther and are more weather-rugged:
