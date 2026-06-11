@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 import {
   cellIntersectsVision,
   visibleCellsFromVision,
+  visionSourcesSignature,
   type VisionSource,
 } from './vision-source.js';
 
@@ -113,5 +114,39 @@ describe('visibleCellsFromVision', () => {
     // Tile coord 1000 → cell coord Math.floor(1000/16) = 62.
     expect(cells.has(`${Math.floor(1000 / CELL)},${Math.floor(1000 / CELL)}`)).toBe(true);
     expect(cells.size).toBe(2);
+  });
+});
+
+describe('visionSourcesSignature — cheap change detection for layer rebuilds', () => {
+  const circle = (cx: number, cy: number, radius: number): VisionSource => ({ kind: 'circle', cx, cy, radius });
+
+  it('is stable for the same set of sources', () => {
+    const a = [circle(0, 0, 50), circle(100, 0, 80)];
+    const b = [circle(0, 0, 50), circle(100, 0, 80)];
+    expect(visionSourcesSignature(a)).toBe(visionSourcesSignature(b));
+  });
+
+  it('changes when a source is added (a Lighthouse comes online)', () => {
+    const before = [circle(0, 0, 50)];
+    const after = [circle(0, 0, 50), circle(100, 0, 80)];
+    expect(visionSourcesSignature(after)).not.toBe(visionSourcesSignature(before));
+  });
+
+  it("changes when a source's radius changes (a Lighthouse upgrade)", () => {
+    expect(visionSourcesSignature([circle(0, 0, 50)])).not.toBe(
+      visionSourcesSignature([circle(0, 0, 120)]),
+    );
+  });
+
+  it("changes when a source moves (a Lighthouse relocates)", () => {
+    expect(visionSourcesSignature([circle(0, 0, 50)])).not.toBe(
+      visionSourcesSignature([circle(40, 0, 50)]),
+    );
+  });
+
+  it('is order-independent (source list order is irrelevant)', () => {
+    const a = [circle(0, 0, 50), circle(100, 0, 80)];
+    const b = [circle(100, 0, 80), circle(0, 0, 50)];
+    expect(visionSourcesSignature(a)).toBe(visionSourcesSignature(b));
   });
 });

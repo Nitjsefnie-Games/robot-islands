@@ -142,3 +142,20 @@ export function visibleCellsFromVision(
   }
   return out;
 }
+
+/** Deterministic, order-independent fingerprint of a vision-source set.
+ *  Lets the renderer rebuild the cached ocean/fog layers only when sources
+ *  actually change — a Lighthouse coming online (construction completes),
+ *  upgrading, relocating, or an island being populated all shift the
+ *  fingerprint; an idle frame does not. Pure. */
+export function visionSourcesSignature(
+  sources: ReadonlyArray<VisionSource>,
+): string {
+  const keys = sources.map((s) =>
+    s.kind === 'circle'
+      ? `c:${s.cx},${s.cy},${s.radius}`
+      : `e:${s.cx},${s.cy},${s.major},${s.minor},${s.offsetX},${s.offsetY}`,
+  );
+  keys.sort();
+  return keys.join('|');
+}
