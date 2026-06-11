@@ -221,7 +221,7 @@ function rollBiome(rng: () => number): Biome {
 /** Cross-cell minimum-spacing buffer in tiles. Spec §2.1 calls for
  *  "stranded but reachable" feel — tuned alongside
  *  `DEFAULT_GEN_OPTS.density` in `world.ts`. The current pairing
- *  (density 0.08, buffer 16; single island per cell) keeps neighbour
+ *  (density 0.02, buffer 16; single island per cell) keeps neighbour
  *  islands at least one cell apart in practice. Raise to bias toward
  *  stranded; lower to bias toward dense. */
 export const OVERLAP_BUFFER_TILES = 16;
