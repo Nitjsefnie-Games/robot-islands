@@ -43,6 +43,7 @@ import {
 import { resetUiLayout } from './window-manager.js';
 import { islandInscribedAny, TILE_PX } from './island.js';
 import { computeVisionSources } from './lighthouse.js';
+import { discoverIslandsInVision } from './vision-discovery.js';
 import { mountFeatureGlyphs, renderOcean, renderOceanFogOverlay } from './ocean.js';
 import {
   clampSaveIntervalSec,
@@ -2066,6 +2067,14 @@ async function main(): Promise<void> {
       lastEconomyTickMs = now;
       forceEconomyTick = false;
       advanceEconomy(now, nowWall);
+      // §2.2 vision discovers islands: flip `discovered` for any island a
+      // vision source (populated halo or Lighthouse circle) overlaps, live.
+      // Rebuild render layers so the newly-revealed island appears this tick
+      // rather than on next reload. Cheap; short-circuits when all islands
+      // are already discovered.
+      if (discoverIslandsInVision(worldState).length > 0) {
+        rebuildWorldLayers();
+      }
     }
     // Trade offer lifecycle. Online = tab visible (visibilityState === 'visible').
     // hasFocus() was previously also required but dropped on owner request 2026-06-10

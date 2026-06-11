@@ -17,7 +17,7 @@
 
 import { computeSignalRanges, pointInSignalRange } from './antenna.js';
 import { hasOperationalBuilding, isOperationalBuilding } from './buildings.js';
-import { corridorCells, islandCells, parseCellKey } from './discovery.js';
+import { corridorCells, islandIntersectsCells, parseCellKey } from './discovery.js';
 import type { IslandState } from './economy.js';
 import { inv } from './economy.js';
 import { fuelForTier, type ResourceId } from './recipes.js';
@@ -214,7 +214,7 @@ export function firePulse(
   // whose centre lies inside it. The pulse is a "disk scan" that covers a
   // 3-cell-radius disk (§11.5), so an island straddling the disk edge is
   // covered over part of its area and must be found. Reuse the same any-cell
-  // predicate the normal drone scan uses (`islandHasRevealedCell`), fed the
+  // predicate the normal drone scan uses (`islandIntersectsCells`), fed the
   // set of cells the disk covers — pulse and corridor discovery share one
   // overlap rule.
   const pulseCells = visibleCellsFromVision([
@@ -223,7 +223,7 @@ export function firePulse(
   const discovered: string[] = [];
   for (const isl of world.islands) {
     if (isl.discovered) continue;
-    if (islandHasRevealedCell(isl, pulseCells)) {
+    if (islandIntersectsCells(isl, pulseCells)) {
       isl.discovered = true;
       discovered.push(isl.id);
     }
@@ -616,7 +616,7 @@ function islandsInCells(
   for (const isl of islands) {
     if (isl.populated) continue;
     if (isl.discovered) continue;
-    if (islandHasRevealedCell(isl, cells)) {
+    if (islandIntersectsCells(isl, cells)) {
       if (!seen.has(isl.id)) {
         seen.add(isl.id);
         out.push({ islandId: isl.id });
@@ -643,7 +643,7 @@ function discoverRareIslands(
     if (isl.populated) continue;
     if (isl.discovered) continue;
     if (!isRareIsland(isl)) continue;
-    if (islandHasRevealedCell(isl, expandedCells)) {
+    if (islandIntersectsCells(isl, expandedCells)) {
       isl.discovered = true;
       outIds.push(isl.id);
     }
@@ -902,7 +902,7 @@ export function tickDrones(
     for (const isl of world.islands) {
       if (isl.populated) continue;
       if (isl.discovered) continue;
-      if (islandHasRevealedCell(isl, world.revealedCells)) {
+      if (islandIntersectsCells(isl, world.revealedCells)) {
         isl.discovered = true;
         newlyDiscoveredIslandIds.push(isl.id);
       }
@@ -921,20 +921,6 @@ export function tickDrones(
   };
 }
 
-/** Whether any cell touched by `spec`'s footprint sits in `revealedCells`.
- *  Delegates to `islandCells` (discovery.ts) for footprint enumeration —
- *  walks every constituent (primary + extraEllipses) so merged islands
- *  flip discovered the moment any one of their absorbed lobes is touched.
- *  Pure. */
-function islandHasRevealedCell(
-  spec: import('./world.js').IslandSpec,
-  revealedCells: ReadonlySet<string>,
-): boolean {
-  for (const k of islandCells(spec)) {
-    if (revealedCells.has(k)) return true;
-  }
-  return false;
-}
 
 /**
  * Current world-tile position of a drone given the wall-clock time. Used by
