@@ -166,6 +166,17 @@ export interface RatesContext {
    *  `cap()` reads from this map instead of the local island storageCaps,
    *  enabling summed caps across the Lattice network. */
   readonly caps?: Record<ResourceId, number>;
+  /** §13.3 Omniscient Lattice union flow solve (D-01). Flow coefficients
+   *  (gate-1 produces/consumes, units/sec) of the buildings on the OTHER
+   *  lattice members. Pass 2.5 appends these to this island's own
+   *  `flowBuildings` before `solveFlow`, so the solver throttles producers
+   *  and consumers across islands against each other (shared θ/φ + min rule)
+   *  exactly as it does same-island flows. Indexed ≥ `tentative.length`, so
+   *  passes 3–4 never read their gates back — they exist purely to shape the
+   *  shared factors. Pre-computed by `advanceLatticeGroup` (lattice-advance.ts)
+   *  from the union of member flow specs. Undefined ⇒ no union (non-lattice
+   *  path byte-identical). */
+  readonly flowSiblings?: ReadonlyArray<FlowBuildingSpec>;
   /** Pre-computed base SkillMultipliers for this advanceIsland call.
    *  Read-only. Populated by advanceIsland at the top of the call;
    *  threaded into cap() (and its inner-loop callers) so we don't
@@ -1011,6 +1022,14 @@ export function computeRates(
    *  gate + per-furnace coal multiplier within `computeRates`, and is
    *  surfaced for the inspector UI's heat readout. */
   heat: HeatAssignments;
+  /** §13.3 D-01 union flow solve: the gate-1 flow coefficients of THIS
+   *  island's operating buildings (the `flowBuildings` array assembled in
+   *  pass 2.5, EXCLUDING the synthetic furnace-coal entries and any injected
+   *  `ctx.flowSiblings`). `advanceLatticeGroup` collects these across members
+   *  to build each member's `flowSiblings` union for the next computeRates
+   *  call. Same order/length as `byBuilding`'s producing entries' `tentative`
+   *  index — but treated as an opaque coefficient bag by the orchestrator. */
+  flowSpecs: ReadonlyArray<FlowBuildingSpec>;
 } {
   const {
     modifierMul = IDENTITY_MODIFIER_MULTIPLIERS,
@@ -1481,6 +1500,23 @@ export function computeRates(
     }
     return { produces, consumes };
   });
+  // §13.3 D-01: snapshot THIS island's own flow specs before any synthetic
+  // coal entries or injected sibling entries are appended — the orchestrator
+  // unions these (one island's `flowSpecs` becomes another's `flowSiblings`).
+  const ownFlowSpecs: FlowBuildingSpec[] = flowBuildings.map((fb) => ({
+    produces: { ...fb.produces },
+    consumes: { ...fb.consumes },
+  }));
+  // §13.3 D-01 union solve: append the OTHER lattice members' flow specs so
+  // the solve spans the whole component. These sit at indices ≥
+  // tentative.length (alongside the synthetic coal entries below) and are
+  // never read back by passes 3–4 — they exist purely to shape the shared
+  // θ/φ factors so cross-island producers/consumers throttle against each
+  // other. The cap/zero regime scan below runs over the FULL union so every
+  // member computes an IDENTICAL constraint set (and thus identical gates).
+  if (ctx?.flowSiblings && ctx.flowSiblings.length > 0) {
+    for (const sib of ctx.flowSiblings) flowBuildings.push(sib);
+  }
   const capConstrained = new Set<string>();
   const zeroConstrained = new Set<string>();
   for (const fb of flowBuildings) {
@@ -1850,6 +1886,7 @@ export function computeRates(
     net,
     power: { produced: powerProduced, consumed: powerConsumed, factor: powerFactor, rawProduced, rawConsumed },
     heat,
+    flowSpecs: ownFlowSpecs,
   };
 }
 
@@ -1889,12 +1926,20 @@ export function findNextCapEvent(
   nowMs: number,
   ctx?: RatesContext,
   utilById?: ReadonlyMap<string, number>,
+  /** §13.3 D-01 lattice lockstep: when provided, the resource-boundary scan
+   *  reads stock from this POOLED inventory (Σ member inventories) instead of
+   *  the local `state.inventory`. `net` is then expected to be the POOLED net
+   *  flow and `ctx.caps` the POOLED caps, so a resource hits its boundary
+   *  when the whole pool fills/drains — not when one member's slice does. The
+   *  maintenance / construction boundaries below stay per-island (this is
+   *  called once per member by the orchestrator, which takes the min). */
+  pooledInv?: Record<ResourceId, number>,
 ): number {
   let best = nowMs;
   for (const r of Object.keys(net) as ResourceId[]) {
     const rate = net[r] ?? 0;
     if (rate === 0) continue;
-    const current = inv(state, r);
+    const current = pooledInv ? (pooledInv[r] ?? 0) : inv(state, r);
     let timeToEventSec: number;
     if (rate > 0) {
       // Heading toward cap. At/over cap already (headroom <= 0): no FUTURE
@@ -1972,7 +2017,7 @@ export function findNextCapEvent(
  * integration segment ends exactly when the boundary is hit, but the
  * clamp guarantees no NaN-cascade if a rate calculation drifts.
  */
-function applyRates(
+export function applyRates(
   state: IslandState,
   net: Record<ResourceId, number>,
   dtSec: number,
@@ -2139,6 +2184,200 @@ export function spendTimeLock(
  * so the loop is O(resources²) in the worst case. The safety counter is
  * paranoia for floating-point edge cases.
  */
+/**
+ * Per-segment side effects applied AFTER a segment's inventory deltas land
+ * (core-flip detection, tutorial flags, §10 CO₂ accrual + sink drain, XP,
+ * §13.3 battery charge/discharge, level-up, terrain-shot fire, §4.7 wear +
+ * construction tick + storage-cap credit, FIFO queue promotion). Extracted
+ * from `advanceIsland`'s segment loop so the §13.3 grouped lattice advance
+ * (`lattice-advance.ts`) shares the SAME per-island side-effect application
+ * after its pooled inventory integration + distribution. Computes `dtMs`
+ * from `segEndMs - t`. Does NOT touch inventory (the caller integrates the
+ * net flow — locally via `applyRates`, or pooled-then-distributed for a
+ * lattice group) — this keeps the two integration regimes the single point
+ * of divergence and everything downstream identical.
+ */
+export function applySegmentSideEffects(
+  state: IslandState,
+  byBuilding: ReadonlyArray<BuildingRate>,
+  production: Record<ResourceId, number>,
+  consumption: Record<ResourceId, number>,
+  dtSec: number,
+  segEndMs: number,
+  t: number,
+  ctx: RatesContext | undefined,
+  skillMul: SkillMultipliers,
+  batteryIsLocal: boolean,
+  rawBalance: number,
+  maxCap: number,
+  utilById: ReadonlyMap<string, number>,
+): void {
+  // §13 auto-flip: first local production of ai_core / ascendant_core.
+  // Inside the dtSec > 0 branch deliberately — a zero-length forced
+  // segment integrates nothing, and a positive rate over zero seconds
+  // must not grant T5/T6 access (fix 3.2).
+  if (!state.aiCoreCrafted && (production.ai_core ?? 0) > 0) {
+    state.aiCoreCrafted = true;
+  }
+  if (!state.ascendantCoreCrafted && (production.ascendant_core ?? 0) > 0) {
+    state.ascendantCoreCrafted = true;
+  }
+  // Tutorial-objective flip: first local production of lubricant / bolts.
+  // Tracked as "ever produced" because §4.7 maintenance auto-consumes
+  // both, making an inventory-stockpile objective unwinnable.
+  if (!state.lubricantProduced && (production.lubricant ?? 0) > 0) {
+    state.lubricantProduced = true;
+  }
+  if (!state.boltProduced && (production.bolt ?? 0) > 0) {
+    state.boltProduced = true;
+  }
+  // §10 CO₂ accrual — Phase 2 hook
+  // Path 1: co2 produced as a regular recipe output
+  state.co2Kg += (production.co2 ?? 0) * dtSec;
+  // Path 2: exogenous fuel-combustion CO₂ (not in outputs ledger)
+  for (const br of byBuilding) {
+    if (br.recipe.exogenousFlow === 'fuel-combustion-CO₂' && br.recipe.exogenousFlowKg) {
+      state.co2Kg += br.recipe.exogenousFlowKg * br.effectiveRate * dtSec;
+    }
+  }
+  // §si-units rev-16 §7.4: CO₂ sink drain — accrual fires before, drain after.
+  const rateById = new Map<string, number>();
+  for (const br of byBuilding) {
+    rateById.set(br.building.id, br.effectiveRate);
+  }
+  for (const b of state.buildings) {
+    const def = BUILDING_DEFS[b.defId];
+    const capture = def.co2CaptureKgPerCycle ?? 0;
+    if (capture <= 0) continue;
+
+    // Adjacency gate — exhaust_scrubber requires adjacency to a CO₂ emitter.
+    if (def.co2CaptureAdjacency) {
+      const has = hasNeighborWithAnyDefId(b, state.buildings, def.co2CaptureAdjacency);
+      if (!has) continue;
+    }
+
+    const recipe = resolveRecipe(def, b, ctx?.terrainAt, ctx?.inventory ?? state.inventory);
+    const cyclesThisSegment = recipe
+      ? (rateById.get(b.id) ?? 0) * dtSec
+      : dtSec / 60;
+    const drainKg = capture * cyclesThisSegment;
+    state.co2Kg = Math.max(0, state.co2Kg - drainKg);
+  }
+  accrueXp(state, production, consumption, dtSec, 1, skillMul.xpGain);
+  // §13.3 Battery buffer — apply charge/discharge over the segment.
+  // Skipped entirely under a unified cable component (fix 3.5, see
+  // `batteryIsLocal` above).
+  if (!batteryIsLocal) {
+    // unified — battery inert this segment
+  } else if (rawBalance > 0 && maxCap > 0) {
+    const chargeWs = rawBalance * dtSec;
+    const charge = Math.min(chargeWs, maxCap - state.batteryStoredWs);
+    state.batteryStoredWs += charge;
+  } else if (rawBalance < 0 && state.batteryStoredWs > 0) {
+    if (state.batteryStoredWs < BATTERY_EMPTY_THRESHOLD_WS) {
+      // Sub-1-Ws float residue: treated as empty everywhere else this
+      // call (no cover, no depletion boundary) — flush it so it can't
+      // re-trigger the freeze path on a later call (fix 3.4).
+      state.batteryStoredWs = 0;
+    } else {
+      const deficitWs = -rawBalance * dtSec;
+      const discharge = Math.min(deficitWs, state.batteryStoredWs);
+      state.batteryStoredWs -= discharge;
+      if (state.batteryStoredWs < BATTERY_EMPTY_THRESHOLD_WS) state.batteryStoredWs = 0;
+    }
+  }
+  levelUpIfReady(state);
+  // terrain_modifier v5 — decrement and fire. After the segment integrates,
+  // every modifier's counter loses (segEndMs - t) ms. Counters that reach
+  // ≤ 0 fire the shot. We collect fires and dispatch after the loop because
+  // resolveShot mutates state.buildings (splicing the modifier out).
+  // NOTE: resolveShot may splice state.buildings during the callback;
+  // subsequent loops over state.buildings must not assume length stability.
+  const dtMs = segEndMs - t;
+  if (dtSec > 0 && ctx?.onTerrainShotFire) {
+    const toFire: string[] = [];
+    for (const b of state.buildings) {
+      const rem = b.terrainShotRemainingMs;
+      if (rem === undefined) continue;
+      const next = rem - dtMs;
+      (b as { terrainShotRemainingMs?: number }).terrainShotRemainingMs = Math.max(0, next);
+      if (rem > 0 && next <= 0) toFire.push(b.id);
+    }
+    for (const id of toFire) ctx.onTerrainShotFire(id);
+  }
+  // §4.7 net-flow: wear accrues in utilization-scaled operating time —
+  // duty cycle, not wall clock. A building idling against a full bin
+  // (u=0) no longer wears; this deliberately inverts the old "can't
+  // escape maintenance pressure by capping output" stance (owner
+  // decision, see docs/superpowers/specs/2026-06-10-net-flow-economy-design.md).
+  // Done AFTER applyRates so the maintenance factor used inside
+  // computeRates was computed at the start-of-segment operatingMs,
+  // matching §15.3's piecewise-constant-rate invariant.
+  for (const b of state.buildings) {
+    // §9.3 construction: tick down remaining time; operating-time
+    // only accrues once the build is complete (the spec's "Idle
+    // buildings ... accrue maintenance time" intent covers placed
+    // buildings, not still-under-construction shells).
+    const wasUnderConstruction = (b.constructionRemainingMs ?? 0) > 0;
+    if (wasUnderConstruction) {
+      const justCompleted = tickConstruction(b, dtMs);
+      // §storage-timing: storage caps are granted at construction
+      // COMPLETION, not at placement/upgrade commit. The tick the build
+      // crosses to operational, credit its cap, discriminating by the
+      // building's floorLevel at that moment:
+      //   - floorLevel 0 → a FRESH placement → credit the base
+      //     floorScaledCapacity (== base multiplier at L0).
+      //   - floorLevel >= 1 → an UPGRADE → credit the flat per-level
+      //     delta storage.capacity (= floorScaledCapacity(L) −
+      //     floorScaledCapacity(L−1)).
+      // The value is a percentage MULTIPLIER; creditStorageCaps expands it
+      // to `mult × storageBaseFor(r)` per affected resource (§4.6).
+      // The same loop runs each segment, so offline-catchup builds that
+      // complete mid-advance are credited correctly. Mirrors the amounts
+      // placeBuilding/applyUpgrade used to grant at commit, just deferred.
+      if (justCompleted) {
+        const cdef = BUILDING_DEFS[b.defId];
+        const storage = cdef.storage;
+        if (storage) {
+          const mult =
+            floorLevel(b) === 0
+              ? floorScaledCapacity(b, storage.capacity)
+              : storage.capacity;
+          creditStorageCaps(state, b, cdef, mult);
+        }
+      }
+      continue;
+    }
+    // §NEW building-disable: player-disabled buildings freeze in place —
+    // no operatingMs accrual, no maintenance degradation. Re-enable
+    // resumes accrual at the frozen operatingMs value.
+    if (b.disabled === true) continue;
+    // Fix 4.4: invalid buildings are non-operational the same way
+    // (mirrors isOperationalBuilding, buildings.ts) — they produce
+    // nothing in computeRates, so they must not accrue wear either.
+    if (b.invalid === true) continue;
+    // §4.7 maintenance interpretation: skip accrual for buildings
+    // with no productive recipe outputs. The maintenanceFactor is
+    // only multiplied into recipe `effectiveRate`; a building whose
+    // contribution is power / storage / signal-range / vehicle
+    // dispatch (Solar, Crate, Antenna, Drone Pad, Shipyard, etc.)
+    // sees zero gameplay change from degrading, so burning materials
+    // to keep it "maintained" is pointless. Resource-producing
+    // recipes (Mine, Smelter, Reactor, …) accrue and need
+    // maintenance as before. Coal Gen / similar recipes with empty
+    // outputs are treated as non-productive (their output is
+    // electricity, modelled outside `recipe.outputs`).
+    const recipe = resolveRecipe(BUILDING_DEFS[b.defId], b, ctx?.terrainAt);
+    if (!recipe) continue;
+    if (Object.keys(recipe.outputs).length === 0) continue;
+    accrueOperatingTime(b, dtMs * (utilById.get(b.id) ?? 0));
+  }
+  // §queue: after construction ticks, a running slot may have just
+  // freed up (build completed). Promote the FIFO queue head so it
+  // begins ticking within the same advance call.
+  promoteQueuedBuilds(state);
+}
+
 export function advanceIsland(
   state: IslandState,
   nowMs: number,
@@ -2332,170 +2571,21 @@ export function advanceIsland(
     const dtSec = (segEndMs - t) / 1000;
     if (dtSec > 0) {
       applyRates(state, net, dtSec, ctx?.caps, baseMult);
-      // §13 auto-flip: first local production of ai_core / ascendant_core.
-      // Inside the dtSec > 0 branch deliberately — a zero-length forced
-      // segment integrates nothing, and a positive rate over zero seconds
-      // must not grant T5/T6 access (fix 3.2).
-      if (!state.aiCoreCrafted && (production.ai_core ?? 0) > 0) {
-        state.aiCoreCrafted = true;
-      }
-      if (!state.ascendantCoreCrafted && (production.ascendant_core ?? 0) > 0) {
-        state.ascendantCoreCrafted = true;
-      }
-      // Tutorial-objective flip: first local production of lubricant / bolts.
-      // Tracked as "ever produced" because §4.7 maintenance auto-consumes
-      // both, making an inventory-stockpile objective unwinnable.
-      if (!state.lubricantProduced && (production.lubricant ?? 0) > 0) {
-        state.lubricantProduced = true;
-      }
-      if (!state.boltProduced && (production.bolt ?? 0) > 0) {
-        state.boltProduced = true;
-      }
-      // §10 CO₂ accrual — Phase 2 hook
-      // Path 1: co2 produced as a regular recipe output
-      state.co2Kg += (production.co2 ?? 0) * dtSec;
-      // Path 2: exogenous fuel-combustion CO₂ (not in outputs ledger)
-      for (const br of byBuilding) {
-        if (br.recipe.exogenousFlow === 'fuel-combustion-CO₂' && br.recipe.exogenousFlowKg) {
-          state.co2Kg += br.recipe.exogenousFlowKg * br.effectiveRate * dtSec;
-        }
-      }
-      // §si-units rev-16 §7.4: CO₂ sink drain — accrual fires before, drain after.
-      const rateById = new Map<string, number>();
-      for (const br of byBuilding) {
-        rateById.set(br.building.id, br.effectiveRate);
-      }
-      for (const b of state.buildings) {
-        const def = BUILDING_DEFS[b.defId];
-        const capture = def.co2CaptureKgPerCycle ?? 0;
-        if (capture <= 0) continue;
-
-        // Adjacency gate — exhaust_scrubber requires adjacency to a CO₂ emitter.
-        if (def.co2CaptureAdjacency) {
-          const has = hasNeighborWithAnyDefId(b, state.buildings, def.co2CaptureAdjacency);
-          if (!has) continue;
-        }
-
-        const recipe = resolveRecipe(def, b, ctx?.terrainAt, ctx?.inventory ?? state.inventory);
-        const cyclesThisSegment = recipe
-          ? (rateById.get(b.id) ?? 0) * dtSec
-          : dtSec / 60;
-        const drainKg = capture * cyclesThisSegment;
-        state.co2Kg = Math.max(0, state.co2Kg - drainKg);
-      }
-      accrueXp(state, production, consumption, dtSec, 1, skillMul.xpGain);
-      // §13.3 Battery buffer — apply charge/discharge over the segment.
-      // Skipped entirely under a unified cable component (fix 3.5, see
-      // `batteryIsLocal` above).
-      if (!batteryIsLocal) {
-        // unified — battery inert this segment
-      } else if (rawBalance > 0 && maxCap > 0) {
-        const chargeWs = rawBalance * dtSec;
-        const charge = Math.min(chargeWs, maxCap - state.batteryStoredWs);
-        state.batteryStoredWs += charge;
-      } else if (rawBalance < 0 && state.batteryStoredWs > 0) {
-        if (state.batteryStoredWs < BATTERY_EMPTY_THRESHOLD_WS) {
-          // Sub-1-Ws float residue: treated as empty everywhere else this
-          // call (no cover, no depletion boundary) — flush it so it can't
-          // re-trigger the freeze path on a later call (fix 3.4).
-          state.batteryStoredWs = 0;
-        } else {
-          const deficitWs = -rawBalance * dtSec;
-          const discharge = Math.min(deficitWs, state.batteryStoredWs);
-          state.batteryStoredWs -= discharge;
-          if (state.batteryStoredWs < BATTERY_EMPTY_THRESHOLD_WS) state.batteryStoredWs = 0;
-        }
-      }
-      levelUpIfReady(state);
-      // terrain_modifier v5 — decrement and fire. After the segment integrates,
-      // every modifier's counter loses (segEndMs - t) ms. Counters that reach
-      // ≤ 0 fire the shot. We collect fires and dispatch after the loop because
-      // resolveShot mutates state.buildings (splicing the modifier out).
-      // NOTE: resolveShot may splice state.buildings during the callback;
-      // subsequent loops over state.buildings must not assume length stability.
-      const dtMs = segEndMs - t;
-      if (dtSec > 0 && ctx?.onTerrainShotFire) {
-        const toFire: string[] = [];
-        for (const b of state.buildings) {
-          const rem = b.terrainShotRemainingMs;
-          if (rem === undefined) continue;
-          const next = rem - dtMs;
-          (b as { terrainShotRemainingMs?: number }).terrainShotRemainingMs = Math.max(0, next);
-          if (rem > 0 && next <= 0) toFire.push(b.id);
-        }
-        for (const id of toFire) ctx.onTerrainShotFire(id);
-      }
-      // §4.7 net-flow: wear accrues in utilization-scaled operating time —
-      // duty cycle, not wall clock. A building idling against a full bin
-      // (u=0) no longer wears; this deliberately inverts the old "can't
-      // escape maintenance pressure by capping output" stance (owner
-      // decision, see docs/superpowers/specs/2026-06-10-net-flow-economy-design.md).
-      // Done AFTER applyRates so the maintenance factor used inside
-      // computeRates was computed at the start-of-segment operatingMs,
-      // matching §15.3's piecewise-constant-rate invariant.
-      for (const b of state.buildings) {
-        // §9.3 construction: tick down remaining time; operating-time
-        // only accrues once the build is complete (the spec's "Idle
-        // buildings ... accrue maintenance time" intent covers placed
-        // buildings, not still-under-construction shells).
-        const wasUnderConstruction = (b.constructionRemainingMs ?? 0) > 0;
-        if (wasUnderConstruction) {
-          const justCompleted = tickConstruction(b, dtMs);
-          // §storage-timing: storage caps are granted at construction
-          // COMPLETION, not at placement/upgrade commit. The tick the build
-          // crosses to operational, credit its cap, discriminating by the
-          // building's floorLevel at that moment:
-          //   - floorLevel 0 → a FRESH placement → credit the base
-          //     floorScaledCapacity (== base multiplier at L0).
-          //   - floorLevel >= 1 → an UPGRADE → credit the flat per-level
-          //     delta storage.capacity (= floorScaledCapacity(L) −
-          //     floorScaledCapacity(L−1)).
-          // The value is a percentage MULTIPLIER; creditStorageCaps expands it
-          // to `mult × storageBaseFor(r)` per affected resource (§4.6).
-          // The same loop runs each segment, so offline-catchup builds that
-          // complete mid-advance are credited correctly. Mirrors the amounts
-          // placeBuilding/applyUpgrade used to grant at commit, just deferred.
-          if (justCompleted) {
-            const cdef = BUILDING_DEFS[b.defId];
-            const storage = cdef.storage;
-            if (storage) {
-              const mult =
-                floorLevel(b) === 0
-                  ? floorScaledCapacity(b, storage.capacity)
-                  : storage.capacity;
-              creditStorageCaps(state, b, cdef, mult);
-            }
-          }
-          continue;
-        }
-        // §NEW building-disable: player-disabled buildings freeze in place —
-        // no operatingMs accrual, no maintenance degradation. Re-enable
-        // resumes accrual at the frozen operatingMs value.
-        if (b.disabled === true) continue;
-        // Fix 4.4: invalid buildings are non-operational the same way
-        // (mirrors isOperationalBuilding, buildings.ts) — they produce
-        // nothing in computeRates, so they must not accrue wear either.
-        if (b.invalid === true) continue;
-        // §4.7 maintenance interpretation: skip accrual for buildings
-        // with no productive recipe outputs. The maintenanceFactor is
-        // only multiplied into recipe `effectiveRate`; a building whose
-        // contribution is power / storage / signal-range / vehicle
-        // dispatch (Solar, Crate, Antenna, Drone Pad, Shipyard, etc.)
-        // sees zero gameplay change from degrading, so burning materials
-        // to keep it "maintained" is pointless. Resource-producing
-        // recipes (Mine, Smelter, Reactor, …) accrue and need
-        // maintenance as before. Coal Gen / similar recipes with empty
-        // outputs are treated as non-productive (their output is
-        // electricity, modelled outside `recipe.outputs`).
-        const recipe = resolveRecipe(BUILDING_DEFS[b.defId], b, ctx?.terrainAt);
-        if (!recipe) continue;
-        if (Object.keys(recipe.outputs).length === 0) continue;
-        accrueOperatingTime(b, dtMs * (utilById.get(b.id) ?? 0));
-      }
-      // §queue: after construction ticks, a running slot may have just
-      // freed up (build completed). Promote the FIFO queue head so it
-      // begins ticking within the same advance call.
-      promoteQueuedBuilds(state);
+      applySegmentSideEffects(
+        state,
+        byBuilding,
+        production,
+        consumption,
+        dtSec,
+        segEndMs,
+        t,
+        ctx,
+        skillMul,
+        batteryIsLocal,
+        rawBalance,
+        maxCap,
+        utilById,
+      );
     }
     // Advance t. If no progress was made (dt = 0 and segEnd === t) but we
     // haven't reached nowMs, force advance to avoid an infinite loop. This
