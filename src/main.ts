@@ -113,6 +113,7 @@ import { RouteRenderer } from './routes-renderer.js';
 import { computeCableNetworkBalance, drainRoutesForBuilding, tickRoutes } from './routes.js';
 import { computeLatticeActive, crossIslandNeighbors, latticeInventory, latticeStorageCaps } from './lattice.js';
 import { advanceLatticeGroup } from './lattice-advance.js';
+import { advanceSharedNetworkGroup, sharedResourceSet } from './shared-network-advance.js';
 import { mountSettlementUi } from './settlement-ui.js';
 import { mountOrbitalUi } from './orbital-ui.js';
 import { mountWeatherOverlay } from './weather-overlay.js';
@@ -1975,6 +1976,34 @@ async function main(): Promise<void> {
       }
     }
 
+    // D-02: advance the non-lattice cross-island shared-network participant
+    // group as ONE net-flow problem, pooling ONLY the shared-resource subset
+    // (mass-conserving; no within-tick double-spend). Lattice members are
+    // excluded — they already advanced above and `sharedNetwork` is
+    // mutually-exclusive with the Lattice (`!isLatticeIsland` gate). The base
+    // ctx reuses `latticeMemberBaseCtx` (same per-island modifiers/terrain/
+    // cross-island/cable/solar/world/worldSeed/terrain-shot fields); the
+    // grouped advance INJECTS the partial pooled inventory/caps/flowSiblings.
+    const sharedSet = sharedResourceSet(sharedNetwork);
+    if (sharedSet.size > 0) {
+      const participantStates: IslandState[] = [];
+      for (const id of sharedNetwork.participantIds) {
+        if (isLatticeMember(id)) continue; // lattice path owns these
+        const st = islandStates.get(id);
+        if (st) participantStates.push(st);
+      }
+      if (participantStates.length > 0) {
+        advanceSharedNetworkGroup(
+          participantStates,
+          now,
+          latticeMemberBaseCtx,
+          sharedSet,
+          sharedNetwork.sharedStorageCap,
+          nowWall,
+        );
+      }
+    }
+
     for (const s of islandStates.values()) {
       // Thread the spec's `terrainAt` closure so `resolveRecipe` (recipes.ts)
       // can branch Mine output on the tile under each footprint (§8.1).
@@ -2014,10 +2043,13 @@ async function main(): Promise<void> {
         solarBoost: solarBoostByIsland.get(s.id),
         world: worldState,
       });
-      // §13.3 D-01: lattice members were already advanced together above; only
-      // non-members advance per-island here. Members still get their snapshot
-      // + retained net/power below (with the pooled overrides) for the HUD.
-      if (!isLatticeIsland) {
+      // §13.3 D-01 / D-02: lattice members AND non-lattice shared-network
+      // participants were already advanced together above (grouped, mass-
+      // conserving). Only islands on neither grouped path advance per-island
+      // here. The grouped islands still get their snapshot + retained net/power
+      // below (with the partial pooled overrides) for the HUD.
+      const isSharedParticipant = isNetParticipant && !isLatticeIsland && sharedSet.size > 0;
+      if (!isLatticeIsland && !isSharedParticipant) {
         advanceIsland(s, now, {
           ...buildIslandRatesContext(),
           worldSeed: worldState.seed,
