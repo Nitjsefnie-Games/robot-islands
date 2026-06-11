@@ -33,6 +33,7 @@ import {
   cap,
   clearDerivationsMemoForTests,
   computeRates,
+  type RatesContext,
   fledglingRecipeMul,
   findNextCapEvent,
   setGenesisTarget,
@@ -2307,6 +2308,29 @@ describe('§5.2 — heat adjacency in computeRates/advanceIsland', () => {
     expect(state.inventory.pig_iron).toBe(0);
     expect(state.inventory.iron_ingot).toBe(100);
     expect(state.inventory.coke).toBe(100);
+  });
+
+  it('coal furnace still serves heat when ctx.inventory is a partial pool override lacking coal (real coal in state)', () => {
+    // Regression: the lattice/shared-network economy path hands an island a
+    // PARTIAL pooled-inventory override as ctx.inventory. The coal-starvation
+    // gate must read coal PER-KEY (ctx.inventory?.coal ?? state.inventory.coal),
+    // not whole-object (ctx.inventory ?? state.inventory).coal — else a pool
+    // override with no coal key reads coal=0 and spuriously starves the furnace
+    // even though the island holds plenty of real coal. (The slag/coal-furnace
+    // "0 consumers / no heat source adjacent" bug.)
+    const CF: PlacedBuilding = { id: 'cf', defId: 'coal_furnace', x: 0, y: 0 };
+    const LK: PlacedBuilding = { id: 'lk', defId: 'limekiln', x: 1, y: 0 }; // square2 → border touches (0,0)
+    const state = makeState({
+      buildings: [CF, LK],
+      inventory: { ...blankInventory(), coal: 1000 },
+      storageCaps: blankCaps(10_000),
+      level: 10,
+    });
+    // Partial pooled override WITHOUT a coal key (mirrors a non-coal-sharing
+    // network participant's ctx.inventory).
+    const res = computeRates(state, { inventory: {} } as unknown as RatesContext, 0, 0);
+    expect(res.heat.coalConsumersByFurnace.get('cf') ?? 0).toBe(1);
+    expect(res.heat.hasHeat.get('lk')).toBe(true);
   });
 
   it('coal furnace stops serving heat when coal depletes — consumer stalls (fix 4.1, §5.1/§5.2)', () => {
