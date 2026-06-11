@@ -54,6 +54,7 @@ import {
   migrateV19toV20,
   migrateV20toV21,
   migrateV21toV22,
+  migrateV22toV23,
   serializeWorld,
   type SaveSnapshot,
   type SerializedSnapshotV7,
@@ -74,6 +75,9 @@ import {
   makeInitialWorld,
   type IslandSpec,
 } from './world.js';
+import { generateCellIslands } from './world-gen.js';
+import { islandCells } from './discovery.js';
+import { CELL_SIZE_TILES } from './constants.js';
 
 // ---------------------------------------------------------------------------
 // Helpers (mirror the fixtures used by drones/routes tests so the shapes
@@ -151,7 +155,7 @@ describe('serializeWorld', () => {
     const states = new Map<string, IslandState>();
     const snap = serializeWorld(world, states, /* savedAt */ 1_234_567);
     expect(snap.v).toBe(SCHEMA_VERSION);
-    expect(snap.v).toBe(22);
+    expect(snap.v).toBe(23);
     expect(snap.savedAt).toBe(1_234_567);
   });
 
@@ -1650,7 +1654,7 @@ describe('persistence — tileOverrides round-trip (schema 7)', () => {
     const states = new Map<string, IslandState>();
     states.set('home', makeInitialIslandState(homeSpec!, 0));
     const snap = serializeWorld(world, states, 1_700_000_000_000, 0);
-    expect(snap.v).toBe(22);
+    expect(snap.v).toBe(23);
     const { world: rehydrated } = deserializeWorld(snap, 1_700_000_000_000, 0);
     const rh = rehydrated.islands.find((s) => s.id === 'home');
     expect(rh?.tileOverrides).toEqual({
@@ -2354,7 +2358,7 @@ describe('v17 -> v18 migration', () => {
     const states = new Map<string, IslandState>([['home', homeState]]);
     const snap = serializeWorld(world, states, 0, 0);
     // The snapshot must be at v22 (SCHEMA_VERSION).
-    expect(snap.v).toBe(22);
+    expect(snap.v).toBe(23);
     const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
     const { world: restored, islandStates: restoredStates } = deserializeWorld(json, 0, 0);
     const rSpec = restored.islands.find((s) => s.id === 'home')!;
@@ -2379,8 +2383,8 @@ describe('v17 -> v18 migration', () => {
 });
 
 describe('v18 -> v19 migration (everProduced seen-set)', () => {
-  it('SCHEMA_VERSION is 22', () => {
-    expect(SCHEMA_VERSION).toBe(22);
+  it('SCHEMA_VERSION is 23', () => {
+    expect(SCHEMA_VERSION).toBe(23);
   });
 
   it('migrateV18toV19 backfills everProduced only from POSITIVE-stock resources', () => {
@@ -2424,7 +2428,7 @@ describe('v18 -> v19 migration (everProduced seen-set)', () => {
     homeState.everProduced = new Set(['bolt', 'iron_ingot']);
     const states = new Map<string, IslandState>([['home', homeState]]);
     const snap = serializeWorld(world, states, 0, 0);
-    expect(snap.v).toBe(22);
+    expect(snap.v).toBe(23);
     const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
     const { islandStates: restored } = deserializeWorld(json, 0, 0);
     const rState = restored.get('home')!;
@@ -2468,7 +2472,7 @@ describe('v20 -> v21 tutorial xpBumpClaimed migration', () => {
     } as unknown as Parameters<typeof migrateV20toV21>[0];
     const out = migrateV20toV21(v20);
     expect(out.v).toBe(21);
-    expect(SCHEMA_VERSION).toBe(22);
+    expect(SCHEMA_VERSION).toBe(23);
     expect((out.world.tutorialState as unknown as { xpBumpClaimed: string[] }).xpBumpClaimed)
       .toEqual(['a', 'b']);
   });
@@ -2519,7 +2523,7 @@ describe('schema v22 — activeBonusMs (§9.9)', () => {
     const world = makeInitialWorld(0);
     world.activeBonusMs = 600_000; // 10 focused minutes banked
     const snap = serializeWorld(world, new Map(), 1_000_000, 500);
-    expect(snap.v).toBe(22);
+    expect(snap.v).toBe(23);
     expect(snap.world.activeBonusMs).toBe(600_000);
     // Reload 1 minute of wall-clock later: decay 3 × 60_000.
     const { world: loaded } = deserializeWorld(snap, 1_000_000 + 60_000, 9_999);
@@ -2545,5 +2549,99 @@ describe('schema v22 — activeBonusMs (§9.9)', () => {
     } as unknown as SaveSnapshot;
     const { world: loaded } = deserializeWorld(v21, 1_000_000, 9_999);
     expect(loaded.activeBonusMs).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// v22 → v23 — island-density regeneration (§2.1; density lowered to 0.02)
+// ---------------------------------------------------------------------------
+describe('migrateV22toV23 — regenerates procedural islands at density 0.02', () => {
+  const SEED = 'density-mig-seed';
+  const cs = CELL_SIZE_TILES;
+
+  function genCellList(): string[] {
+    const out: string[] = [];
+    // Large enough that density 0.02 reliably rolls several islands.
+    for (let cy = 1; cy <= 30; cy++) for (let cx = 1; cx <= 30; cx++) out.push(`${cx},${cy}`);
+    return out;
+  }
+
+  // Independent recomputation of the expected 0.02 regeneration, in the
+  // (cy, cx) order the migration uses.
+  function regenExpected(populated: IslandSpec[]): IslandSpec[] {
+    const placed: IslandSpec[] = [...populated];
+    const out: IslandSpec[] = [];
+    const cells = genCellList()
+      .map((k) => k.split(',').map(Number) as [number, number])
+      .sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+    for (const [cx, cy] of cells) {
+      for (const i of generateCellIslands(SEED, cx, cy, cs, 0.02, placed)) {
+        placed.push(i);
+        out.push(i);
+      }
+    }
+    return out;
+  }
+
+  function homeIsland(): IslandSpec {
+    return attachTerrainAt({
+      id: 'home', name: 'Home', biome: 'plains', cx: 0, cy: 0,
+      majorRadius: 8, minorRadius: 8, populated: true, discovered: true,
+      buildings: [], modifiers: [],
+    });
+  }
+
+  function makeV22(islands: IslandSpec[], revealed: string[]): SaveSnapshot {
+    const base = serializeWorld(makeInitialWorld(0), new Map(), 0);
+    return {
+      ...base,
+      v: 22,
+      world: {
+        ...base.world,
+        seed: SEED,
+        // strip terrainAt; the migration discards procedural geometry anyway
+        islands: islands.map(({ terrainAt: _t, ...s }) => s),
+        generatedCells: genCellList(),
+        revealedCells: revealed,
+      },
+    } as unknown as SaveSnapshot;
+  }
+
+  it('keeps populated islands and regenerates procedural ones at 0.02', () => {
+    const home = homeIsland();
+    // Seed the v22 blob with bogus "dense" procedural islands — they must be
+    // discarded and replaced by the deterministic 0.02 regeneration.
+    const bogus: IslandSpec[] = genCellList().map((k) => {
+      const [cx, cy] = k.split(',').map(Number) as [number, number];
+      return attachTerrainAt({
+        id: `old-${k}`, name: k, biome: 'forest', cx: cx * cs + 8, cy: cy * cs + 8,
+        majorRadius: 5, minorRadius: 5, populated: false, discovered: false,
+        buildings: [], modifiers: [],
+      });
+    });
+    const out = migrateV22toV23(makeV22([home, ...bogus], []) as never);
+    expect(out.v).toBe(23);
+    const ids = out.world.islands.map((i) => i.id);
+    expect(ids).toContain('home');
+    expect(ids.some((i) => i.startsWith('old-'))).toBe(false); // bogus discarded
+    const expected = regenExpected([home]);
+    const proc = out.world.islands.filter((i) => !i.populated);
+    expect(proc.map((i) => i.id).sort()).toEqual(expected.map((i) => i.id).sort());
+    expect(proc.length).toBeGreaterThan(0);
+    expect(proc.length).toBeLessThan(bogus.length); // sparser than the old per-cell set
+  });
+
+  it('preserves revealedCells and discovers regenerated islands within them', () => {
+    const home = homeIsland();
+    const expected = regenExpected([home]);
+    expect(expected.length).toBeGreaterThan(1);
+    const inside = expected[0]!;
+    const insideCells = islandCells(inside);
+    const out = migrateV22toV23(makeV22([home], insideCells) as never);
+    expect(out.world.revealedCells).toEqual(insideCells); // untouched
+    expect(out.world.islands.find((i) => i.id === inside.id)!.discovered).toBe(true);
+    const outsider = expected.find((i) => islandCells(i).every((c) => !insideCells.includes(c)));
+    expect(outsider).toBeDefined();
+    expect(out.world.islands.find((i) => i.id === outsider!.id)!.discovered).toBe(false);
   });
 });
