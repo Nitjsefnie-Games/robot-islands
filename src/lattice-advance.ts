@@ -567,12 +567,15 @@ function combinedInventoryFor(
 ): Record<ResourceId, number> {
   if (cfg.resources === null) return pool;
   const out = {} as Record<ResourceId, number>;
+  // Loop 1: emit ONLY the resources this member does NOT pool (its local
+  // values). The pooled resources are filled by loop 2 below — emitting them
+  // here too would be a dead write (loop 2 overwrites, and a held pooled key
+  // may be absent from local inventory anyway).
   for (const [r, v] of Object.entries(st.inventory)) {
-    out[r as ResourceId] = isPooledForIsland(cfg, r as ResourceId, st.id)
-      ? (pool[r as ResourceId] ?? 0)
-      : (v ?? 0);
+    if (!isPooledForIsland(cfg, r as ResourceId, st.id)) out[r as ResourceId] = v ?? 0;
   }
-  // Pooled keys this member holds may be absent from its local inventory.
+  // Loop 2: overlay all pooled keys this member holds (the authoritative
+  // pooled value).
   for (const [r, v] of Object.entries(pool)) {
     if (isPooledForIsland(cfg, r as ResourceId, st.id)) out[r as ResourceId] = v;
   }
