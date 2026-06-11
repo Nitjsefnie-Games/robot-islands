@@ -1,37 +1,52 @@
-// §13.3 D-01 — Omniscient Lattice grouped lockstep advance.
+// §13.3 D-01 / D-02 — grouped lockstep advance for cross-island shared flow.
 //
 // Design: docs/superpowers/specs/2026-06-10-lattice-shared-flow-design.md
 //
 // Pure layer: no PixiJS, no DOM. Imports the economy integrator's exported
 // primitives (computeRates / findNextCapEvent / applyRates /
 // applySegmentSideEffects) plus the segment-boundary helpers, and orchestrates
-// them across a SET of lattice member islands as ONE net-flow problem.
+// them across a SET of member islands as ONE net-flow problem.
 //
-// Why this exists (the D-01 bug): with the Lattice active, members' economy
-// reads use the unified pool (ctx.inventory / ctx.caps overrides), but the
-// per-island `applyRates` decremented only the LOCAL island — a member with
-// zero local stock ran forever off a partner's stock that never shrank
-// (matter from nothing). The fix:
+// TWO callers share the core `advanceGroup` below:
+//
+//   • `advanceLatticeGroup` (D-01) — the Omniscient Lattice. Pools ALL
+//     resources across members (`pooledResources = null` ⇒ pool everything).
+//     Byte-identical to the original D-01 implementation.
+//
+//   • `advanceSharedNetworkGroup` (D-02, shared-network-advance.ts) — the
+//     non-lattice `crossIslandShared` skill network. Pools ONLY the
+//     shared-resource SUBSET (`pooledResources = the shared set`); every
+//     NON-shared resource stays strictly local (its own inventory/caps, no
+//     cross-island throttle/drain). It delegates to `advanceGroup` with the
+//     shared set + the Σ-cap override from `sharedStorageCap`.
+//
+// Why this exists (the D-01/D-02 bug): with cross-island sharing active,
+// members' economy reads use the shared pool (ctx.inventory / ctx.caps
+// overrides), but the per-island `applyRates` decremented only the LOCAL
+// island — a member with zero local stock ran forever off a partner's stock
+// that never shrank (matter from nothing). The fix:
 //
 //   1. UNION SOLVE — each member's pass-2.5 flow solve is fed the union of all
 //      members' flow coefficients (via `ctx.flowSiblings`), with cap/zero
 //      regimes computed from POOLED inventory vs POOLED caps. Cross-island
 //      producers/consumers throttle against each other exactly like
-//      same-island flows. The flow solver itself is unchanged.
-//   2. POOLED INTEGRATION — the segment's net flows are summed across members
-//      and integrated ONCE against the pooled inventory (clamped to pooled
-//      caps), so mass is conserved by construction.
+//      same-island flows. The flow solver itself is unchanged. For PARTIAL
+//      pooling the sibling specs are RESOURCE-FILTERED to the pooled set, so a
+//      building consuming a NON-shared resource never unions across islands.
+//   2. POOLED INTEGRATION — the pooled (shared-resource) net flows are summed
+//      across members and integrated ONCE against the pooled inventory
+//      (clamped to pooled caps), so mass is conserved by construction. Each
+//      member's NON-pooled net is integrated LOCALLY via `applyRates`.
 //   3. CAP-PROPORTIONAL DISTRIBUTION — after each segment the pooled quantity
-//      of each resource is written back to members as
+//      of each pooled resource is written back to members as
 //      `local_i = pooled × cap_i / Σcaps`; resources with `Σcaps = 0` keep
-//      their local stocks untouched. No persistence schema bump — saves
-//      already store the distributed per-island inventories.
+//      their local stocks untouched. No persistence schema bump.
 //   4. PER-ISLAND ATTRIBUTION UNCHANGED — XP, wear, maintenance, CO₂, battery,
 //      construction all run per-member on that member's own
 //      production/byBuilding via the shared `applySegmentSideEffects`.
 //
-// Non-lattice islands are untouched: they advance via `advanceIsland` exactly
-// as before. This module is only invoked for the active-lattice member group.
+// Non-member / non-participant islands are untouched: they advance via
+// `advanceIsland` exactly as before.
 
 import {
   applyRates,
@@ -60,46 +75,89 @@ import {
 } from './skilltree.js';
 import type { FlowBuildingSpec } from './flow-solver.js';
 
-/** Build the pooled (Σ over members) inventory map. */
-function pooledInventory(states: ReadonlyArray<IslandState>): Record<ResourceId, number> {
+/**
+ * Pooling configuration for `advanceGroup`.
+ *   - `resources === null`  ⇒ pool EVERY resource (the D-01 lattice path).
+ *   - `resources` a Set     ⇒ pool ONLY those resources (the D-02 shared-
+ *                             network path); everything else stays local.
+ *   - `capOverride`         ⇒ per-resource Σcap override for pooled resources
+ *                             (D-02 uses `sharedStorageCap`; resources absent
+ *                             from the map fall back to Σ member local caps).
+ *                             `null` ⇒ always Σ member local caps (D-01).
+ */
+interface PoolingConfig {
+  readonly resources: ReadonlySet<ResourceId> | null;
+  readonly capOverride: ReadonlyMap<ResourceId, number> | null;
+}
+
+/** Pool everything (D-01). */
+const POOL_ALL: PoolingConfig = { resources: null, capOverride: null };
+
+/** Is resource `r` pooled under this config? */
+function isPooled(cfg: PoolingConfig, r: ResourceId): boolean {
+  return cfg.resources === null || cfg.resources.has(r);
+}
+
+/** Build the pooled (Σ over members) inventory map, restricted to pooled
+ *  resources. Non-pooled resources are absent from the returned map, so the
+ *  economy's per-key fallback (`ctx.inventory?.[r] ?? state.inventory[r]`)
+ *  reads them LOCALLY. */
+function pooledInventory(
+  states: ReadonlyArray<IslandState>,
+  cfg: PoolingConfig,
+): Record<ResourceId, number> {
   const out = {} as Record<ResourceId, number>;
   for (const st of states) {
     for (const [r, amt] of Object.entries(st.inventory)) {
+      if (!isPooled(cfg, r as ResourceId)) continue;
       out[r as ResourceId] = (out[r as ResourceId] ?? 0) + (amt ?? 0);
     }
   }
   return out;
 }
 
-/** Build the pooled (Σ over members) storage-cap map. */
-function pooledCapsMap(states: ReadonlyArray<IslandState>): Record<ResourceId, number> {
+/** Build the pooled (Σ over members) storage-cap map, restricted to pooled
+ *  resources, applying the per-resource Σcap override where provided. */
+function pooledCapsMap(
+  states: ReadonlyArray<IslandState>,
+  cfg: PoolingConfig,
+): Record<ResourceId, number> {
   const out = {} as Record<ResourceId, number>;
   for (const st of states) {
     for (const [r, amt] of Object.entries(st.storageCaps)) {
+      if (!isPooled(cfg, r as ResourceId)) continue;
       out[r as ResourceId] = (out[r as ResourceId] ?? 0) + (amt ?? 0);
     }
+  }
+  // Apply explicit Σcap overrides (D-02 sharedStorageCap nodes raise the cap).
+  if (cfg.capOverride) {
+    for (const [r, v] of cfg.capOverride) out[r] = v;
   }
   return out;
 }
 
 /**
- * §13.3 D-01 cap-proportional distribution. Write the pooled quantity of each
+ * Cap-proportional distribution. Write the pooled quantity of each POOLED
  * resource back to member inventories as `local_i = pooled × cap_i / Σcaps`.
  * Resources where `Σcaps = 0` keep their existing local stocks untouched (the
- * design's freeze case — pooled stock has no cap home to land in).
+ * design's freeze case — pooled stock has no cap home to land in). Σcaps is
+ * read from `pooledCaps` (which already folded the cap override) so the
+ * distribution share matches the integrate clamp. NON-pooled resources are
+ * never touched here.
  */
 function distributePooled(
   states: ReadonlyArray<IslandState>,
   pool: Record<ResourceId, number>,
+  pooledCaps: Record<ResourceId, number>,
+  cfg: PoolingConfig,
 ): void {
-  // Resource universe: every key present in the pool OR in any member's caps.
   const resources = new Set<ResourceId>();
-  for (const r of Object.keys(pool)) resources.add(r as ResourceId);
-  for (const st of states) for (const r of Object.keys(st.storageCaps)) resources.add(r as ResourceId);
+  for (const r of Object.keys(pool)) {
+    if (isPooled(cfg, r as ResourceId)) resources.add(r as ResourceId);
+  }
 
   for (const r of resources) {
-    let totalCap = 0;
-    for (const st of states) totalCap += st.storageCaps[r] ?? 0;
+    const totalCap = pooledCaps[r] ?? 0;
     if (totalCap <= 0) continue; // Σcaps = 0 — freeze, leave local stocks be.
     const pooledQty = pool[r] ?? 0;
     for (const st of states) {
@@ -125,31 +183,22 @@ interface MemberSegment {
 }
 
 /**
- * Advance a group of active-lattice member islands to `nowMs` as ONE unit.
- *
- * @param states  the member island states (≥ 1). Single-member groups behave
- *                like a normal advance (pool = the one island).
- * @param nowMs   perf-domain target time (all members advance to this).
- * @param ctxFor  per-member base RatesContext (modifierMul / terrainAt /
- *                crossIsland / geothermal / solarBoost / cableComponent /
- *                world / worldSeed / onTerrainShotFire …). This function
- *                INJECTS `inventory` (pooled), `caps` (pooled), `baseMult`,
- *                `accelerationMul`, and `flowSiblings` (the union) on top.
- * @param wallClockNowMs  §2.7 wall-clock anchor for `nowMs` (Date.now()
- *                domain). Omitted ⇒ falls back to `nowMs` (the test
- *                convention).
+ * Advance a group of member islands to `nowMs` as ONE unit. Parameterized by
+ * the pooling config: `POOL_ALL` reproduces the D-01 lattice path exactly;
+ * a partial config pools only the named resource subset (D-02).
  */
-export function advanceLatticeGroup(
+function advanceGroup(
   states: ReadonlyArray<IslandState>,
   nowMs: number,
   ctxFor: (state: IslandState) => RatesContext,
+  cfg: PoolingConfig,
   wallClockNowMs?: number,
 ): void {
   if (states.length === 0) return;
   const wallOffset = (wallClockNowMs ?? nowMs) - nowMs;
 
   // Per-member base skill multiplier (frozen) — the same value advanceIsland
-  // reads off its derivations memo (memo.baseSkillMul === effectiveSkillMultipliers).
+  // reads off its derivations memo.
   const baseMultByIsland = new Map<string, ReturnType<typeof cloneSkillMultipliers>>();
   for (const st of states) {
     const bm = cloneSkillMultipliers(effectiveSkillMultipliers(st));
@@ -170,11 +219,7 @@ export function advanceLatticeGroup(
     }
   }
 
-  // Lockstep timeline starts at the EARLIEST member lastTick. Members tick
-  // together in production, so these are equal; the min keeps a stray
-  // earlier-stamped member from being skipped, and the per-member
-  // `t >= st.lastTick` guard below stops a later-stamped member from
-  // integrating before it came online.
+  // Lockstep timeline starts at the EARLIEST member lastTick.
   let t = Infinity;
   for (const st of states) t = Math.min(t, st.lastTick);
   if (t >= nowMs) {
@@ -185,14 +230,13 @@ export function advanceLatticeGroup(
   for (let safety = 0; safety < 100_000; safety++) {
     if (t >= nowMs) break;
 
-    // Pooled regime for THIS segment — rebuilt each segment because the
-    // previous segment's integrate+distribute changed member inventories.
-    const pool = pooledInventory(states);
-    const pooledCaps = pooledCapsMap(states);
+    // Pooled regime for THIS segment (restricted to pooled resources; non-
+    // pooled resources are absent ⇒ economy reads them locally per-key).
+    const pool = pooledInventory(states, cfg);
+    const pooledCaps = pooledCapsMap(states, cfg);
 
     // ---- Round 1: each member computes its OWN flow specs at the pooled
-    // regime (gate-1 coefficients are independent of the solve, so round-1
-    // gates don't matter — only `flowSpecs` is read).
+    // regime (only `flowSpecs` is read).
     const ownSpecs = new Map<string, ReadonlyArray<FlowBuildingSpec>>();
     for (const st of states) {
       const base = ctxFor(st);
@@ -208,16 +252,21 @@ export function advanceLatticeGroup(
     }
 
     // ---- Round 2: each member solves with the UNION (its own buildings +
-    // every OTHER member's flow specs as `flowSiblings`).
+    // every OTHER member's flow specs as `flowSiblings`). Under PARTIAL
+    // pooling the sibling specs are RESOURCE-FILTERED to the pooled set so a
+    // building consuming a NON-shared resource never throttles cross-island.
     const segs: MemberSegment[] = [];
     for (const st of states) {
       const base = ctxFor(st);
-      // Union of siblings = all members' own specs except this one's.
       const siblings: FlowBuildingSpec[] = [];
       for (const other of states) {
         if (other.id === st.id) continue;
         const s = ownSpecs.get(other.id);
-        if (s) for (const e of s) siblings.push(e);
+        if (!s) continue;
+        for (const e of s) {
+          const filtered = filterSpecToPooled(e, cfg);
+          if (filtered) siblings.push(filtered);
+        }
       }
       const localCtx: RatesContext = {
         ...base,
@@ -229,8 +278,6 @@ export function advanceLatticeGroup(
       };
       const res = computeRates(st, localCtx, t, t + wallOffset);
 
-      // Per-member battery + skill-mul (mirrors advanceIsland's per-segment
-      // recompute). Battery is inert under a unified cable component.
       const skillMul = cloneSkillMultipliers(effectiveSkillMultipliers(st));
       layerConditionalBonuses(skillMul, st, base.world, DEFAULT_GRAPH, t + wallOffset);
       const maxCap = batteryCapacityWs(st, skillMul);
@@ -240,7 +287,6 @@ export function advanceLatticeGroup(
       const utilById = new Map<string, number>();
       for (const br of res.byBuilding) utilById.set(br.building.id, br.utilization);
 
-      // A member not yet online in this timeline contributes no flow.
       const online = t >= st.lastTick - 1e-9;
       const net = online ? res.net : ({} as Record<ResourceId, number>);
 
@@ -259,32 +305,38 @@ export function advanceLatticeGroup(
       });
     }
 
-    // ---- Pooled net flow = Σ member nets.
+    // ---- Pooled net flow = Σ member nets, restricted to pooled resources.
     const pooledNet = {} as Record<ResourceId, number>;
     for (const seg of segs) {
       for (const [r, rate] of Object.entries(seg.net)) {
+        if (!isPooled(cfg, r as ResourceId)) continue;
         pooledNet[r as ResourceId] = (pooledNet[r as ResourceId] ?? 0) + (rate ?? 0);
       }
     }
 
-    // ---- Segment end = min over all members of (pooled resource event,
-    // that member's own maintenance/construction boundaries, battery, phase,
-    // solar, accel, rotation, shot) and nowMs.
+    // ---- Segment end = min over members of (resource event over the
+    // per-member COMBINED view — pooled stock+net for pooled resources, local
+    // stock+net for the rest — plus that member's maintenance/construction/
+    // battery/phase/solar/accel/rotation/shot boundaries) and nowMs.
     let segEndMs = nowMs;
     for (const seg of segs) {
       const st = seg.state;
       const base = ctxFor(st);
-      // Resource events over the POOLED inventory + pooled caps; the
-      // per-member maintenance/construction boundaries are folded in by
-      // findNextCapEvent itself (it walks st.buildings).
+
+      // Combined inventory + net: pooled values for pooled resources, this
+      // member's own local values for the rest. For POOL_ALL this is exactly
+      // `pool` / `pooledNet` (byte-identical D-01 path).
+      const combinedInv = combinedInventoryFor(st, pool, cfg);
+      const combinedNet = combinedNetFor(seg.net, pooledNet, cfg);
+
       const memberEvent = findNextCapEvent(
         st,
-        pooledNet,
+        combinedNet,
         t,
         nowMs,
         seg.localCtx,
         seg.utilById,
-        pool, // pooled-inventory view for the resource-boundary scan
+        combinedInv,
       );
       if (memberEvent < segEndMs) segEndMs = memberEvent;
 
@@ -340,26 +392,25 @@ export function advanceLatticeGroup(
 
     const dtSec = (segEndMs - t) / 1000;
     if (dtSec > 0) {
-      // ---- Pooled integration: integrate the pooled inventory by the pooled
-      // net over dt, clamped to pooled caps. We model the pool as a synthetic
-      // state so we can reuse `applyRates`' exact clamp semantics.
-      // NB (storage-category catMul): `applyRates` clamps via
-      // `cap(poolState, r, pooledCaps, …, baseMult₀)`, which applies ISLAND-0's
-      // storage-category skill multiplier to the summed raw caps. With
-      // heterogeneous member storage-category skills the pooled clamp is thus
-      // `Σcaps × catMul₀`, not Σ(caps_i × catMul_i). This is deliberate — it
-      // matches the `latticeStorageCaps` raw-sum eligibility convention the
-      // pool's cap/zero regimes are already computed against, so the integrate
-      // bound and the eligibility regime stay consistent.
+      // ---- Pooled integration (pooled resources): integrate the pooled
+      // inventory by the pooled net over dt, clamped to pooled caps, via a
+      // synthetic state so we reuse `applyRates`' exact clamp semantics.
       const poolState: IslandState = { ...segs[0]!.state, inventory: { ...pool }, storageCaps: pooledCaps };
       applyRates(poolState, pooledNet, dtSec, pooledCaps, baseMultByIsland.get(segs[0]!.state.id));
+      distributePooled(states, poolState.inventory, pooledCaps, cfg);
 
-      // ---- Cap-proportional distribution back to members.
-      distributePooled(states, poolState.inventory);
+      // ---- Local integration (NON-pooled resources): each member integrates
+      // its own non-pooled net against its OWN inventory + caps. For POOL_ALL
+      // every net entry is pooled, so `localNet` is empty and this is a no-op
+      // (byte-identical D-01 path).
+      for (const seg of segs) {
+        const localNet = localNetFor(seg.net, cfg);
+        if (Object.keys(localNet).length > 0) {
+          applyRates(seg.state, localNet, dtSec, undefined, baseMultByIsland.get(seg.state.id));
+        }
+      }
 
-      // ---- Per-member side effects (XP / wear / CO₂ / battery / construction
-      // / level-up / terrain shots) on that member's OWN production. These do
-      // NOT touch inventory (the pool already integrated + distributed).
+      // ---- Per-member side effects on that member's OWN production.
       for (const seg of segs) {
         applySegmentSideEffects(
           seg.state,
@@ -379,11 +430,7 @@ export function advanceLatticeGroup(
       }
     }
 
-    // Segment-start time, captured BEFORE the timeline advances — the accel
-    // boundary below is anchored here exactly as advanceIsland anchors its
-    // `nextAccelMs` at the segment-prep `t` (economy.ts).
     const segStartMs = t;
-    // Advance the shared timeline.
     if (segEndMs <= t) {
       t = nowMs;
     } else {
@@ -395,16 +442,9 @@ export function advanceLatticeGroup(
     for (const seg of segs) {
       const st = seg.state;
       if (st.accelerationRemainingMin > 0) {
-        // §13.3 accel boundary, computed from the START-of-segment remaining
-        // (matches advanceIsland's `nextAccelMs = t + remaining*60_000` taken
-        // at segment-prep, before the decrement below).
         const nextAccelMs = segStartMs + st.accelerationRemainingMin * 60 * 1000;
         const consumedMin = dtSec / 60;
         st.accelerationRemainingMin -= consumedMin;
-        // Mirror advanceIsland's FULL pop condition exactly: pop on the
-        // remaining-minutes drain OR when the segment landed on/after the
-        // accel boundary (the `nextAccelMs <= segEndMs` disjunct guards the
-        // float-residue case where subtraction leaves a sub-epsilon sliver).
         if (st.accelerationRemainingMin <= 0 || nextAccelMs <= segEndMs) {
           st.accelerationRemainingMin = 0;
           const next = st.accelerationQueue.shift();
@@ -422,4 +462,113 @@ export function advanceLatticeGroup(
   }
 
   for (const st of states) st.lastTick = nowMs;
+}
+
+/** Filter a member's flow spec to its pooled-resource entries only. Returns
+ *  null if nothing pooled remains (the building's cross-island contribution is
+ *  entirely non-shared). For POOL_ALL the spec passes through unchanged. */
+function filterSpecToPooled(spec: FlowBuildingSpec, cfg: PoolingConfig): FlowBuildingSpec | null {
+  if (cfg.resources === null) return spec; // pool-all: identity (D-01)
+  const produces: Record<string, number> = {};
+  const consumes: Record<string, number> = {};
+  let any = false;
+  for (const [r, v] of Object.entries(spec.produces)) {
+    if (cfg.resources.has(r as ResourceId)) { produces[r] = v; any = true; }
+  }
+  for (const [r, v] of Object.entries(spec.consumes)) {
+    if (cfg.resources.has(r as ResourceId)) { consumes[r] = v; any = true; }
+  }
+  return any ? { produces, consumes } : null;
+}
+
+/** Member's view of inventory for the boundary scan: pooled value for pooled
+ *  resources, local value for the rest. POOL_ALL ⇒ exactly `pool`. */
+function combinedInventoryFor(
+  st: IslandState,
+  pool: Record<ResourceId, number>,
+  cfg: PoolingConfig,
+): Record<ResourceId, number> {
+  if (cfg.resources === null) return pool;
+  const out = {} as Record<ResourceId, number>;
+  for (const [r, v] of Object.entries(st.inventory)) {
+    out[r as ResourceId] = isPooled(cfg, r as ResourceId) ? (pool[r as ResourceId] ?? 0) : (v ?? 0);
+  }
+  for (const [r, v] of Object.entries(pool)) out[r as ResourceId] = v; // pooled keys may not be in local inv
+  return out;
+}
+
+/** Combined net for the boundary scan: pooled net for pooled resources, this
+ *  member's own net for the rest. POOL_ALL ⇒ exactly `pooledNet`. */
+function combinedNetFor(
+  memberNet: Record<ResourceId, number>,
+  pooledNet: Record<ResourceId, number>,
+  cfg: PoolingConfig,
+): Record<ResourceId, number> {
+  if (cfg.resources === null) return pooledNet;
+  const out = {} as Record<ResourceId, number>;
+  for (const [r, v] of Object.entries(memberNet)) {
+    if (!isPooled(cfg, r as ResourceId)) out[r as ResourceId] = v ?? 0;
+  }
+  for (const [r, v] of Object.entries(pooledNet)) out[r as ResourceId] = v ?? 0;
+  return out;
+}
+
+/** This member's net restricted to NON-pooled resources (integrated locally).
+ *  POOL_ALL ⇒ empty. */
+function localNetFor(
+  memberNet: Record<ResourceId, number>,
+  cfg: PoolingConfig,
+): Record<ResourceId, number> {
+  const out = {} as Record<ResourceId, number>;
+  if (cfg.resources === null) return out;
+  for (const [r, v] of Object.entries(memberNet)) {
+    if (!isPooled(cfg, r as ResourceId)) out[r as ResourceId] = v ?? 0;
+  }
+  return out;
+}
+
+/**
+ * Advance a group of active-lattice member islands to `nowMs` as ONE unit
+ * (D-01). Pools ALL resources across members. See module header.
+ *
+ * @param states  the member island states (≥ 1).
+ * @param nowMs   perf-domain target time.
+ * @param ctxFor  per-member base RatesContext (this function INJECTS
+ *                `inventory`/`caps`/`baseMult`/`accelerationMul`/`flowSiblings`).
+ * @param wallClockNowMs  §2.7 wall-clock anchor for `nowMs`.
+ */
+export function advanceLatticeGroup(
+  states: ReadonlyArray<IslandState>,
+  nowMs: number,
+  ctxFor: (state: IslandState) => RatesContext,
+  wallClockNowMs?: number,
+): void {
+  advanceGroup(states, nowMs, ctxFor, POOL_ALL, wallClockNowMs);
+}
+
+/**
+ * D-02 — advance a non-lattice cross-island shared-network participant group
+ * to `nowMs` as ONE unit, pooling ONLY the shared-resource subset. Every
+ * NON-shared resource stays strictly local. See module header + shared-network-
+ * advance.ts (this is exported there as `advanceSharedNetworkGroup`).
+ *
+ * @param sharedResources  resources behind the active `crossIslandShared`
+ *                         skill nodes (sharedInventory ∪ sharedStorageCap).
+ * @param sharedCaps       Σ-cap override from `sharedStorageCap` (per resource).
+ */
+export function advanceSharedGroup(
+  states: ReadonlyArray<IslandState>,
+  nowMs: number,
+  ctxFor: (state: IslandState) => RatesContext,
+  sharedResources: ReadonlySet<ResourceId>,
+  sharedCaps: ReadonlyMap<ResourceId, number>,
+  wallClockNowMs?: number,
+): void {
+  advanceGroup(
+    states,
+    nowMs,
+    ctxFor,
+    { resources: sharedResources, capOverride: sharedCaps },
+    wallClockNowMs,
+  );
 }
