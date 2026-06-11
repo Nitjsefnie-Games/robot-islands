@@ -106,11 +106,6 @@ function pooled(states: IslandState[], r: ResourceId): number {
   return s;
 }
 
-/** Total mass across ALL resources and members (conservation probe over the
- *  closed sub-system: every recipe in DEFS used here is 1:1 mass-balanced —
- *  workshop turns 1 iron_ore + 1 coal into 1 bolt — so total units are NOT
- *  invariant; instead we track a specific conserved quantity per test). */
-
 const ctxFor =
   (defs: DefCatalog) =>
   (_state: IslandState): RatesContext => ({ defs });

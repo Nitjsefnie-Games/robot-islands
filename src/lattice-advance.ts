@@ -277,15 +277,12 @@ export function advanceLatticeGroup(
       // Resource events over the POOLED inventory + pooled caps; the
       // per-member maintenance/construction boundaries are folded in by
       // findNextCapEvent itself (it walks st.buildings).
-      const evCtx: RatesContext = {
-        ...seg.localCtx,
-      };
       const memberEvent = findNextCapEvent(
         st,
         pooledNet,
         t,
         nowMs,
-        evCtx,
+        seg.localCtx,
         seg.utilById,
         pool, // pooled-inventory view for the resource-boundary scan
       );
