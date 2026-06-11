@@ -357,15 +357,27 @@ describe('offer lifecycle (online-time cooldown)', () => {
     expect(s.tradeCooldownMs).toBeGreaterThan(DEFAULT_TRADE_TUNING.cadenceMs - 100);
   });
 
-  it('a higher accept count shortens the post-expiry cooldown (compounding)', () => {
+  it('expiry (timeout) resets tradeAcceptCount to 0 — lapsing loses the speedup', () => {
     const s = ready();
     s.tradeAcceptCount = 100;
     const rt: TradeRuntime = { offers: [] };
     const states = new Map([[s.id, s]]);
     tickTradeOffers(rt, states, 'test-seed', TUNE, 0, 16);
     tickTradeOffers(rt, states, 'test-seed', TUNE, 6 * 60 * 1000, 16);
+    expect(s.tradeAcceptCount).toBe(0);
+  });
+
+  it('post-expiry cooldown is the base cadence regardless of prior accept count', () => {
+    const s = ready();
+    s.tradeAcceptCount = 100;
+    const rt: TradeRuntime = { offers: [] };
+    const states = new Map([[s.id, s]]);
+    tickTradeOffers(rt, states, 'test-seed', TUNE, 0, 16);
+    tickTradeOffers(rt, states, 'test-seed', TUNE, 6 * 60 * 1000, 16);
+    // Count was reset to 0 by the timeout, so the post-expiry wait is the full
+    // base cadence — the accumulated 0.99^count speedup is gone.
     expect(s.tradeCooldownMs).toBe(
-      effectiveCadenceMs(100, DEFAULT_TRADE_TUNING.cadenceMs),
+      effectiveCadenceMs(0, DEFAULT_TRADE_TUNING.cadenceMs),
     );
   });
 

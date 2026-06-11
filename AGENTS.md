@@ -28,6 +28,7 @@ A systemd unit `robot-islands-dev.service` runs `vite preview --host 0.0.0.0 --p
 ## Source of truth
 
 - `SPEC.md` (~1800 lines) is the locked specification — iterated under `hypothesize-prove-loop` before implementation. When adding or changing a mechanic, find the relevant § and align with it. The build order is §15.7.
+- **Every change that alters behavior must update `SPEC.md` in the same change** — code and spec move together. SPEC.md is the source of truth, so any divergence is a bug: if a "fix" makes the code contradict its §, you are either fixing the code to match the spec or revising the spec to match an intended design change (surface which, and edit the relevant § accordingly). Never leave code and SPEC.md out of sync; never silently let code win over an unrevised spec.
 - `CONTRIBUTING.md` defines **two integration tracks** plus a **linear history**: quick fixes (small, low-risk, self-contained) commit directly to `master`; full new features and massive/risky fixes go on a feature branch cut from `master`, reviewed via PR, then rebased and fast-forwarded. Either way `master` stays green and linear — integrate by rebasing and fast-forwarding, never merge commits. Repo-local git config has `pull.rebase=true` and `merge.ff=only`.
 
 ## Architecture

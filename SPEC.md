@@ -1287,13 +1287,13 @@ Each island carries a `tradeAcceptCount`. Every accepted trade or manual reject 
 effective\_cadence\_ms = max(FLOOR\_MS, base\_cadence\_ms \* 0.99^tradeAcceptCount)
 ```
 
-so every timely reaction (accept or manual reject) makes that island's next offer arrive ≈1% sooner — "every trade you react to on time makes the next one come a little faster." `base\_cadence\_ms` is the per-island base spawn interval (placeholder 2 hours of online time, already folded with the frequency skill of §9.8.6). The result is floored at `FLOOR\_MS` (placeholder ~1 minute) so an enthusiastic trader cannot drive cadence toward zero and re-open the farm by another route. The accept counter is per-island, matching the per-island Signal Exchange / cadence / state. Silent expiry resets the cooldown without compounding.
+so every timely reaction (accept or manual reject) makes that island's next offer arrive ≈1% sooner — "every trade you react to on time makes the next one come a little faster." `base\_cadence\_ms` is the per-island base spawn interval (placeholder 2 hours of online time, already folded with the frequency skill of §9.8.6). The result is floored at `FLOOR\_MS` (placeholder ~1 minute) so an enthusiastic trader cannot drive cadence toward zero and re-open the farm by another route. The accept counter is per-island, matching the per-island Signal Exchange / cadence / state. **Silent expiry (timeout) is a lapse, not a reaction: it resets `tradeAcceptCount` to 0**, forfeiting the accumulated speedup, then resets the cooldown to the (now base) cadence to start the next wait. Only a timely reaction compounds; letting an offer lapse sends the next offer's interval all the way back to base.
 
 #### 9.8.5 Persistence
 
 `tradeCooldownMs` and `tradeAcceptCount` persist per island (schema v20; backfilled to 0 for pre-v20 saves via `migrateV19toV20`). Active offers do **not** persist — they are regenerated fresh after load once the cooldown elapses. Offers are, however, deterministic per `(worldSeed, islandId, tradeAcceptCount)` so a reload cannot re-roll the terms.
 
-Both fields are **preserved across Tier Reset (§9.7)** — `tradeAcceptCount` is a permanent per-island accumulator and is never cleared; the §9.7 preserve-set extends to it.
+Both fields are **preserved across Tier Reset (§9.7)** — a Tier Reset does not clear `tradeAcceptCount`; the §9.7 preserve-set extends to it. (Tier-Reset preservation and the §9.8.4 timeout-reset are independent concerns: a Tier Reset leaves the accumulator intact, whereas letting an offer lapse resets it to 0.)
 
 #### 9.8.6 Skill tuning
 
