@@ -111,9 +111,10 @@ export function generateOffer(
 ): TradeOffer | null {
   // Deterministic per-offer seeding:
   //   seed = `${worldSeed}_trade_${islandId}_${reactionCount}`
-  // Refresh mid-offer → same seed + same persisted count → same offer regenerates.
-  // Timeout → count unchanged → same offer returns next cycle, deterministically.
-  // Accept or manual reject → count bumps → genuinely new offer.
+  // Refresh mid-offer → same seed + same persisted count → same offer regenerates
+  // (the count is only ever changed at resolution, never while an offer is live).
+  // Accept or manual reject → count bumps → genuinely new offer next cycle.
+  // Timeout → count resets to 0 → next offer regenerates from the base-count seed.
   // Live inventory / everProduced still influence the give/get pool, so extreme
   // inventory drift can still alter terms. The offer's expiresAt/spawnedAt stay
   // runtime (a reload restarts the 5-minute window — acceptable).
@@ -213,9 +214,11 @@ export function tickTradeOffers(
   nowMs: number,
   onlineDtMs: number,
 ): void {
-  // 1. prune expired offers; an expiry is a resolution, so it resets that
-  //    island's cooldown to its (compounded) effective cadence — exactly like
-  //    an accept does, starting the next wait. Track which islands just expired
+  // 1. prune expired offers. A timeout is a LAPSE, not a reaction: it resets the
+  //    island's compounding `tradeAcceptCount` to 0 (the accumulated 0.99^count
+  //    speedup is forfeited), then resets the cooldown to the now-base cadence to
+  //    start the next wait. (Accept/manual-reject, by contrast, INCREMENT the
+  //    count — that lives in the UI handlers.) Track which islands just expired
   //    so step 2 doesn't also decrement their freshly-reset cooldown this tick.
   const live: TradeOffer[] = [];
   const justExpired = new Set<string>();
@@ -223,6 +226,7 @@ export function tickTradeOffers(
     if (o.expiresAt > nowMs) { live.push(o); continue; }
     const st = islandStates.get(o.islandId);
     if (st) {
+      st.tradeAcceptCount = 0;
       st.tradeCooldownMs = effectiveCadenceMs(st.tradeAcceptCount, tuningFor(st).cadenceMs);
       justExpired.add(o.islandId);
     }
