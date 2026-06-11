@@ -20,10 +20,17 @@
 // pooled integration that actually drains + redistributes, and a single
 // shared timeline so consumers throttle against each other.
 
-import type { IslandState, RatesContext } from './economy.js';
-import { advanceSharedGroup } from './lattice-advance.js';
 import type { ResourceId } from './recipes.js';
 import type { SharedNetworkState } from './network.js';
+
+// The grouped advance itself lives in lattice-advance.ts as `advanceSharedGroup`
+// (the partial-pooling generalization of the D-01 lattice core). This module's
+// `advanceSharedNetworkGroup` was a zero-derivation forwarder, so it is a plain
+// re-export under the call-site name — pooling ONLY the shared-resource subset
+// AND only across each resource's NODE-HOLDERS (the D-02 node-holder rule: an
+// island that never bought the sharing skill for `r` keeps its `r` strictly
+// local). See `advanceSharedGroup`'s doc comment for the full contract.
+export { advanceSharedGroup as advanceSharedNetworkGroup } from './lattice-advance.js';
 
 /**
  * The set of resources pooled across the shared network = the union of the
@@ -37,26 +44,4 @@ export function sharedResourceSet(net: SharedNetworkState): Set<ResourceId> {
   for (const r of net.sharedInventory.keys()) set.add(r);
   for (const r of net.sharedStorageCap.keys()) set.add(r);
   return set;
-}
-
-/**
- * Advance a non-lattice shared-network participant group to `nowMs` as ONE
- * unit, pooling ONLY the shared-resource subset (`sharedResources`) AND only
- * across each resource's NODE-HOLDERS (`holders` — the D-02 node-holder rule:
- * an island that never bought the sharing skill for `r` keeps its `r` strictly
- * local). Caps for pooled resources use `sharedCaps` (Σ of participant nominal
- * caps from `sharedStorageCap`) where present, else Σ node-holder local caps.
- * NON-shared resources, and shared resources on non-holder islands, stay
- * strictly local. Delegates to `advanceSharedGroup` (lattice-advance.ts).
- */
-export function advanceSharedNetworkGroup(
-  states: ReadonlyArray<IslandState>,
-  nowMs: number,
-  ctxFor: (state: IslandState) => RatesContext,
-  sharedResources: ReadonlySet<ResourceId>,
-  sharedCaps: ReadonlyMap<ResourceId, number>,
-  holders: ReadonlyMap<ResourceId, ReadonlySet<string>>,
-  wallClockNowMs?: number,
-): void {
-  advanceSharedGroup(states, nowMs, ctxFor, sharedResources, sharedCaps, holders, wallClockNowMs);
 }
