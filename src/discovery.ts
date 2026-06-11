@@ -265,3 +265,20 @@ export function islandIntersectsCells(
   }
   return false;
 }
+
+/** Mark `spec` discovered and reveal its FULL footprint — every cell the
+ *  island occupies enters `revealedCells`, so no part renders as fog no
+ *  matter which source found it or how much of it the source touched.
+ *  Discovery is whole-island: a drone corridor or vision halo clipping one
+ *  edge still reveals the whole thing. Upholds the world-init / persistence
+ *  invariant "a discovered island has all its cells revealed". Idempotent —
+ *  returns false (no-op) if already discovered. */
+export function markIslandDiscovered(
+  spec: IslandSpec,
+  revealedCells: Set<string>,
+): boolean {
+  if (spec.discovered) return false;
+  spec.discovered = true;
+  for (const k of islandCells(spec)) revealedCells.add(k);
+  return true;
+}
