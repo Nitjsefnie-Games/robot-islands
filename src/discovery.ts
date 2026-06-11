@@ -251,3 +251,17 @@ export function islandCells(spec: IslandSpec): string[] {
   }
   return [...seen];
 }
+
+/** Does the island occupy any cell in `cells`? The shared overlap predicate
+ *  for discovery: an island is "covered" by a cell set (a drone's revealed
+ *  cells, the T4 pulse disk, a vision-source halo) the moment any of its own
+ *  footprint cells lands in that set. Pure. */
+export function islandIntersectsCells(
+  spec: IslandSpec,
+  cells: ReadonlySet<string>,
+): boolean {
+  for (const k of islandCells(spec)) {
+    if (cells.has(k)) return true;
+  }
+  return false;
+}
