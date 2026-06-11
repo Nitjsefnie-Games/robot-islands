@@ -44,6 +44,7 @@ import { resetUiLayout } from './window-manager.js';
 import { islandInscribedAny, TILE_PX } from './island.js';
 import { computeVisionSources } from './lighthouse.js';
 import { discoverIslandsInVision } from './vision-discovery.js';
+import { visionSourcesSignature } from './vision-source.js';
 import { mountFeatureGlyphs, renderOcean, renderOceanFogOverlay } from './ocean.js';
 import {
   clampSaveIntervalSec,
@@ -1826,6 +1827,14 @@ async function main(): Promise<void> {
   // retained maps never miss an island a consumer can select.
   let lastEconomyTickMs: number | null = null;
   let forceEconomyTick = false;
+  // §2.2 vision-layer change detection: fingerprint of the current vision
+  // sources. When it shifts (Lighthouse online / upgraded / relocated, island
+  // populated) the cached ocean/fog layers are stale and must repaint, even
+  // with no new discovery. Seeded from the initial state so the first tick
+  // doesn't rebuild spuriously.
+  let lastVisionSig = visionSourcesSignature(
+    computeVisionSources(worldState.islands.filter((s) => s.populated)),
+  );
   let lastNcState = computeNcState(worldState);
   const islandPower = new Map<string, PowerBalance>();
   const islandNets = new Map<string, Record<ResourceId, number>>();
@@ -2067,12 +2076,18 @@ async function main(): Promise<void> {
       lastEconomyTickMs = now;
       forceEconomyTick = false;
       advanceEconomy(now, nowWall);
-      // §2.2 vision discovers islands: flip `discovered` for any island a
-      // vision source (populated halo or Lighthouse circle) overlaps, live.
-      // Rebuild render layers so the newly-revealed island appears this tick
-      // rather than on next reload. Cheap; short-circuits when all islands
-      // are already discovered.
-      if (discoverIslandsInVision(worldState).length > 0) {
+      // §2.2 vision discovers islands live (vision-discovery.ts), AND the
+      // cached ocean/fog layers must repaint whenever the vision-source set
+      // changes — a Lighthouse finishing construction / upgrading / relocating
+      // extends the halo over already-known territory with no new discovery,
+      // which the discovery signal alone misses. Rebuild on either signal.
+      const newlyDiscovered = discoverIslandsInVision(worldState);
+      const visionSig = visionSourcesSignature(
+        computeVisionSources(worldState.islands.filter((s) => s.populated)),
+      );
+      const visionChanged = visionSig !== lastVisionSig;
+      lastVisionSig = visionSig;
+      if (newlyDiscovered.length > 0 || visionChanged) {
         rebuildWorldLayers();
       }
     }
