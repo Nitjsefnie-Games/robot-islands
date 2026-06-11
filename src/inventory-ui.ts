@@ -454,9 +454,10 @@ export function mountInventoryUi(
         return chip;
       }
 
-      // 'misc' has no UI chip.
+      // Every category in RESOURCE_FILTER_ORDER gets a chip — including
+      // 'misc'. Its resources (slag, scrap, mill_scale) otherwise show only
+      // under "All", so the category chips wouldn't union to the full list.
       for (const c of RESOURCE_FILTER_ORDER) {
-        if (c === 'misc') continue;
         filters.appendChild(makeChip(c));
       }
 

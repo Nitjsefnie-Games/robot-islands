@@ -21,6 +21,18 @@ describe('RESOURCE_CATEGORY', () => {
     }
   });
 
+  it('places every resource in a FILTERABLE category (RESOURCE_FILTER_ORDER covers all buckets)', () => {
+    // Data-level guard: every RESOURCE_CATEGORY value must be a category in
+    // RESOURCE_FILTER_ORDER, so no resource is orphaned into a bucket with no
+    // chip (the slag/'misc' bug — misc had a chip suppressed). The chip loop
+    // renders all of RESOURCE_FILTER_ORDER, so this keeps the category chips
+    // unioning to the full resource list as new categories are added.
+    const filterable = new Set(RESOURCE_FILTER_ORDER.filter((c) => c !== 'all'));
+    for (const r of ALL_RESOURCES) {
+      expect(filterable.has(RESOURCE_CATEGORY[r])).toBe(true);
+    }
+  });
+
   it('places T0 raws in the Raw bucket', () => {
     expect(RESOURCE_CATEGORY.wood).toBe('raw');
     expect(RESOURCE_CATEGORY.iron_ore).toBe('raw');
