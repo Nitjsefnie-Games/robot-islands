@@ -11,6 +11,20 @@ export interface SharedNetworkState {
   readonly sharedStorageCap: Map<ResourceId, number>;
   readonly sharedRouteCapacityBonus: number;
   readonly participantIds: ReadonlySet<string>;
+  /**
+   * Per-resource POOLING MEMBERSHIP: for each shared resource `r`, the set of
+   * island ids that hold a `sharedInventory` (`crossIslandShared`) node
+   * covering `r`. ONLY these islands pool `r` — they contribute their `r` to
+   * the pooled sum AND receive `r` back in the cap-proportional
+   * redistribution. A networked T3+ participant WITHOUT a node for `r` keeps
+   * its `r` strictly LOCAL (not summed, not redistributed). Membership is
+   * per-resource: an island may share coal but not iron. The grouped advance
+   * (`advanceSharedNetworkGroup`) drives r's pool over this set. Mirrors the
+   * `sharedInventory` aggregation exactly — same iterate-`unlockedNodes`,
+   * `sharedInventory`-shape path — so the summed pool and its membership can
+   * never drift.
+   */
+  readonly inventoryHolders: Map<ResourceId, ReadonlySet<string>>;
 }
 
 export function computeSharedNetworkState(
@@ -20,6 +34,7 @@ export function computeSharedNetworkState(
   const networked = networkedIslandIds(world);
   const sharedInventory = new Map<ResourceId, number>();
   const sharedStorageCap = new Map<ResourceId, number>();
+  const inventoryHolders = new Map<ResourceId, Set<string>>();
   let sharedRouteCapacityBonus = 0;
   const participantIds = new Set<string>();
 
@@ -39,9 +54,20 @@ export function computeSharedNetworkState(
       switch (shape.kind) {
         case 'sharedInventory': {
           for (const r of shape.resources) {
-            const amount = state.inventory[r as ResourceId] ?? 0;
-            const prev = sharedInventory.get(r as ResourceId) ?? 0;
-            sharedInventory.set(r as ResourceId, prev + amount);
+            const id = r as ResourceId;
+            const amount = state.inventory[id] ?? 0;
+            const prev = sharedInventory.get(id) ?? 0;
+            sharedInventory.set(id, prev + amount);
+            // Record THIS island as a node-holder for r's pool. Tracked even
+            // when its current stock is 0 — membership is by node ownership,
+            // not by stock, so the island still RECEIVES a redistribution
+            // share (by cap) of the pooled r.
+            let holders = inventoryHolders.get(id);
+            if (!holders) {
+              holders = new Set<string>();
+              inventoryHolders.set(id, holders);
+            }
+            holders.add(island.id);
           }
           break;
         }
@@ -66,5 +92,6 @@ export function computeSharedNetworkState(
     sharedStorageCap,
     sharedRouteCapacityBonus,
     participantIds,
+    inventoryHolders,
   };
 }

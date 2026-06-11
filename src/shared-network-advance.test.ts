@@ -117,6 +117,17 @@ function sumCaps(states: IslandState[], shared: ReadonlySet<ResourceId>): Map<Re
   return m;
 }
 
+/** Membership table where EVERY state holds a node for EVERY shared resource
+ *  (the broad-membership case the (a)-(g) drain/double-spend/local tests use). */
+function allHolders(
+  states: IslandState[],
+  shared: ReadonlySet<ResourceId>,
+): Map<ResourceId, ReadonlySet<string>> {
+  const m = new Map<ResourceId, ReadonlySet<string>>();
+  for (const r of shared) m.set(r, new Set(states.map((s) => s.id)));
+  return m;
+}
+
 describe('advanceSharedNetworkGroup — D-02 partial pooling', () => {
   it('(a) consumer on A with zero local shared stock DRAINS the pool; B share shrinks; mass conserved', () => {
     // Share iron_ore ONLY. Workshop on A (no local iron_ore) consumes
@@ -131,7 +142,7 @@ describe('advanceSharedNetworkGroup — D-02 partial pooling', () => {
     const startIron = pooled([a, b], 'iron_ore');
     const startBolt = pooled([a, b], 'bolt');
 
-    advanceSharedNetworkGroup([a, b], 600_000, ctxFor(DEFS), shared, sumCaps([a, b], shared));
+    advanceSharedNetworkGroup([a, b], 600_000, ctxFor(DEFS), shared, sumCaps([a, b], shared), allHolders([a, b], shared));
 
     const endIron = pooled([a, b], 'iron_ore');
     const endBolt = pooled([a, b], 'bolt');
@@ -163,7 +174,7 @@ describe('advanceSharedNetworkGroup — D-02 partial pooling', () => {
     b.inventory.iron_ore = 0.05; // tiny finite shared pool, no producer
 
     const startIron = pooled([a, b, c], 'iron_ore');
-    advanceSharedNetworkGroup([a, b, c], 36_000_000, ctxFor(DEFS), shared, sumCaps([a, b, c], shared)); // 10h
+    advanceSharedNetworkGroup([a, b, c], 36_000_000, ctxFor(DEFS), shared, sumCaps([a, b, c], shared), allHolders([a, b, c], shared)); // 10h
 
     const endIron = pooled([a, b, c], 'iron_ore');
     const bolts = pooled([a, b, c], 'bolt');
@@ -188,7 +199,7 @@ describe('advanceSharedNetworkGroup — D-02 partial pooling', () => {
     b.inventory.coal = 1_000_000; // NON-shared, only on B
     a.inventory.coal = 0; // A has no local coal
 
-    advanceSharedNetworkGroup([a, b], 600_000, ctxFor(DEFS), shared, sumCaps([a, b], shared));
+    advanceSharedNetworkGroup([a, b], 600_000, ctxFor(DEFS), shared, sumCaps([a, b], shared), allHolders([a, b], shared));
 
     // No bolts: A's workshop is starved of coal (a non-shared input), which it
     // can only source locally. B's coal is untouched.
@@ -205,7 +216,7 @@ describe('advanceSharedNetworkGroup — D-02 partial pooling', () => {
     a.storageCaps.iron_ore = 100; // 1/3
     b.storageCaps.iron_ore = 200; // 2/3
 
-    advanceSharedNetworkGroup([a, b], 1000, ctxFor(DEFS), shared, sumCaps([a, b], shared));
+    advanceSharedNetworkGroup([a, b], 1000, ctxFor(DEFS), shared, sumCaps([a, b], shared), allHolders([a, b], shared));
     expect(a.inventory.iron_ore).toBeCloseTo(100, 6);
     expect(b.inventory.iron_ore).toBeCloseTo(200, 6);
 
@@ -216,7 +227,7 @@ describe('advanceSharedNetworkGroup — D-02 partial pooling', () => {
     d.inventory.coal = 0;
     c.storageCaps.coal = 100;
     d.storageCaps.coal = 100;
-    advanceSharedNetworkGroup([c, d], 1000, ctxFor(DEFS), new Set<ResourceId>(['iron_ore']), new Map());
+    advanceSharedNetworkGroup([c, d], 1000, ctxFor(DEFS), new Set<ResourceId>(['iron_ore']), new Map(), allHolders([c, d], new Set<ResourceId>(['iron_ore'])));
     // coal is NOT shared -> stays where it was, no redistribution.
     expect(c.inventory.coal).toBeCloseTo(60, 6);
     expect(d.inventory.coal).toBeCloseTo(0, 6);
@@ -229,7 +240,7 @@ describe('advanceSharedNetworkGroup — D-02 partial pooling', () => {
     a.inventory.coal = 1_000_000;
     b.inventory.iron_ore = 1000;
 
-    advanceSharedNetworkGroup([a, b], 300_000, ctxFor(DEFS), shared, sumCaps([a, b], shared));
+    advanceSharedNetworkGroup([a, b], 300_000, ctxFor(DEFS), shared, sumCaps([a, b], shared), allHolders([a, b], shared));
 
     const aIronFrozen = a.inventory.iron_ore;
     const bIronFrozen = b.inventory.iron_ore;
@@ -256,7 +267,7 @@ describe('advanceSharedNetworkGroup — D-02 partial pooling', () => {
     b1.inventory.iron_ore = 5000;
     const startCoalA = a1.inventory.coal;
 
-    advanceSharedNetworkGroup([a1, b1], longGap, ctxFor(DEFS), shared, sumCaps([a1, b1], shared));
+    advanceSharedNetworkGroup([a1, b1], longGap, ctxFor(DEFS), shared, sumCaps([a1, b1], shared), allHolders([a1, b1], shared));
     const bigBolt = pooled([a1, b1], 'bolt');
     // Coal (local, non-shared) drained by exactly bolts on A.
     expect(startCoalA - a1.inventory.coal).toBeCloseTo(bigBolt, 5);
@@ -267,7 +278,7 @@ describe('advanceSharedNetworkGroup — D-02 partial pooling', () => {
     b2.inventory.iron_ore = 5000;
     const step = 60 * 60 * 1000;
     for (let t = step; t <= longGap; t += step) {
-      advanceSharedNetworkGroup([a2, b2], t, ctxFor(DEFS), shared, sumCaps([a2, b2], shared));
+      advanceSharedNetworkGroup([a2, b2], t, ctxFor(DEFS), shared, sumCaps([a2, b2], shared), allHolders([a2, b2], shared));
     }
     expect(pooled([a2, b2], 'bolt')).toBeCloseTo(bigBolt, 1);
     expect(pooled([a2, b2], 'iron_ore')).toBeCloseTo(pooled([a1, b1], 'iron_ore'), 1);
@@ -282,11 +293,73 @@ describe('advanceSharedNetworkGroup — D-02 partial pooling', () => {
     ref.inventory.iron_ore = 100;
     ref.inventory.coal = 1_000_000;
 
-    advanceSharedNetworkGroup([solo], 600_000, ctxFor(DEFS), shared, sumCaps([solo], shared));
+    advanceSharedNetworkGroup([solo], 600_000, ctxFor(DEFS), shared, sumCaps([solo], shared), allHolders([solo], shared));
     advanceIsland(ref, 600_000, { defs: DEFS });
 
     expect(solo.inventory.iron_ore).toBeCloseTo(ref.inventory.iron_ore, 4);
     expect(solo.inventory.bolt).toBeCloseTo(ref.inventory.bolt, 4);
     expect(solo.inventory.coal).toBeCloseTo(ref.inventory.coal, 4);
+  });
+
+  it('(h) per-resource node-holder membership: a networked island WITHOUT the node for r keeps r strictly local', () => {
+    // Owner decision: pooling membership is node-holders ONLY, per resource.
+    // A holds a sharedInventory node for coal; B is networked T3+ and HAS coal
+    // but holds NO coal-sharing node. After advance B's coal must be untouched
+    // (strictly local — not summed into the pool, not redistributed); only A's
+    // coal participates. No production: this isolates pool membership.
+    const shared = new Set<ResourceId>(['coal']);
+    const a = makeState('A', { buildings: [] });
+    const b = makeState('B', { buildings: [] });
+    a.inventory.coal = 40;
+    b.inventory.coal = 60;
+    // Equal caps so, IF B were wrongly pooled, the 100 pooled coal would split
+    // 50/50 and B would drop to 50 — the regression we guard against.
+    a.storageCaps.coal = 100;
+    b.storageCaps.coal = 100;
+
+    // Membership: ONLY A holds coal's node. (sumCaps over holders = A's cap.)
+    const holders = new Map<ResourceId, ReadonlySet<string>>([['coal', new Set(['A'])]]);
+    const caps = new Map<ResourceId, number>([['coal', a.storageCaps.coal]]);
+
+    advanceSharedNetworkGroup([a, b], 1000, ctxFor(DEFS), shared, caps, holders);
+
+    // A is the sole holder: its coal pool (just A's 40) redistributes back to A
+    // alone -> 40 unchanged. B is NOT a holder: its 60 coal is strictly local,
+    // never pooled, never redistributed.
+    expect(a.inventory.coal).toBeCloseTo(40, 6);
+    expect(b.inventory.coal).toBeCloseTo(60, 6); // untouched — the key assertion
+    // Total mass intact.
+    expect(pooled([a, b], 'coal')).toBeCloseTo(100, 6);
+  });
+
+  it('(h2) node-holder drain stays among holders; a non-holder producer is NOT pooled', () => {
+    // Share iron_ore. Holders = {A, B}. C is networked but holds no iron node.
+    // A: workshop consuming iron_ore (+local coal). B: holds iron stock (holder).
+    // C: a MINE producing iron_ore but NOT a holder -> C's iron accrues LOCALLY
+    // and must NOT feed A's workshop via the pool.
+    const shared = new Set<ResourceId>(['iron_ore']);
+    const a = makeState('A', { buildings: [WORKSHOP('w')] });
+    const b = makeState('B', { buildings: [] });
+    const c = makeState('C', { buildings: [MINE('m')] });
+    a.inventory.coal = 1_000_000;
+    b.inventory.iron_ore = 30; // shared pool (A+B holders)
+    c.inventory.iron_ore = 0;
+
+    const holders = new Map<ResourceId, ReadonlySet<string>>([['iron_ore', new Set(['A', 'B'])]]);
+    const caps = new Map<ResourceId, number>([['iron_ore', (a.storageCaps.iron_ore ?? 0) + (b.storageCaps.iron_ore ?? 0)]]);
+
+    advanceSharedNetworkGroup([a, b, c], 600_000, ctxFor(DEFS), shared, caps, holders);
+
+    const bolts = pooled([a, b, c], 'bolt');
+    // The workshop drew from the A+B pool (30 units of iron available there).
+    expect(bolts).toBeGreaterThan(0);
+    // C is a non-holder: its mine output accrued to C's OWN inventory and was
+    // never pooled. The pool (A+B) only ever had 30 iron, so bolts <= 30 — C's
+    // production did NOT subsidize A through the pool.
+    expect(bolts).toBeLessThanOrEqual(30 + 1e-6);
+    expect(c.inventory.iron_ore).toBeGreaterThan(0); // C accumulated locally
+    // A+B pooled-iron mass balance: started 30, consumed `bolts`.
+    const poolIronAB = (a.inventory.iron_ore ?? 0) + (b.inventory.iron_ore ?? 0);
+    expect(poolIronAB).toBeCloseTo(30 - bolts, 6);
   });
 });
