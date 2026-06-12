@@ -28,6 +28,9 @@ import {
 } from './routes.js';
 import { ALL_RESOURCES, XP_WEIGHT, type ResourceId } from './recipes.js';
 import type { CargoMode } from './route-cargo.js';
+import { solveBrownoutFactor } from './flow-power-fixpoint.js';
+import { BUILDING_DEFS, type BuildingDef, type BuildingDefId } from './building-defs.js';
+import { computeRates, type DefCatalog, type RatesContext } from './economy.js';
 
 import type { IslandState } from './economy.js';
 import { CELL_SIZE_TILES, type WorldState } from './world.js';
@@ -948,6 +951,109 @@ describe('computeCableNetworkBalance (§5.3 binary-gated unified pool)', () => {
     expect(balances.get('a')).not.toBe(balances.get('b'));
     expect(balances.get('a')!.cableCapacityTotal).toBe(0);
     expect(balances.get('b')!.cableCapacityTotal).toBe(0);
+  });
+});
+
+describe('§5.3 unified cable component — shared brownout co-solved with member gates', () => {
+  // The gate-passing decision stays on NOMINAL per-island surplus/deficit, but
+  // a unified component IN DEFICIT now reports stored totals whose implied
+  // factor min(1, producedTotal/consumedTotal) is the per-tick FIXPOINT over
+  // the one shared scalar (member gates solved against it), not the nominal
+  // ratio. This matters whenever a member's realized draw scales with pf — here
+  // Q's power-drawing Mines feed a cap-pinned iron_ore bin that a non-power
+  // Workshop drains, so as pf falls the Mines' iron output coefficient shrinks
+  // and their gate (hence power draw) rises. The fixpoint pf therefore sits far
+  // below the nominal ratio.
+  const NOON_LOCAL = NOON;
+
+  // Tiny generator (water_wheel with shrunk power.produces) sizes P's surplus
+  // below Q's nominal deficit so the component is in genuine deficit (pf < 1).
+  // Workshop stripped of its power draw so it's the pf-independent drain on the
+  // cap-pinned bin (mirrors the §15.3 cap-pinned-output fixture in economy.ts).
+  const defsFor = (genW: number): DefCatalog => {
+    const base = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
+    const { power: _wp, ...workshopNoPower } = base.workshop;
+    base.workshop = workshopNoPower as BuildingDef;
+    base.water_wheel = { ...base.water_wheel, power: { produces: genW } } as BuildingDef;
+    return base;
+  };
+
+  it('unified deficit component: stored totals reproduce the self-consistent fixpoint, equal for both members, < 1', () => {
+    const defs = defsFor(0.3);
+    // P: one tiny generator (0.3 W produced) → surplus 0.3 W (no consumers).
+    const p = makeState('p', { buildings: [{ id: 'gen', defId: 'water_wheel', x: 0, y: 0 }], lastTick: NOON_LOCAL });
+    // Q: 4 power-drawing Mines producing iron_ore into a cap-pinned bin
+    // (iron_ore at cap=100) that 4 non-power Workshops drain. Nominal draw is
+    // small (Mines throttled to the Workshop drain) but rises sharply as pf
+    // falls. Coal stocked so Workshops aren't fuel-starved.
+    const qMines = Array.from({ length: 4 }, (_, i) => ({ id: `qmn${i}`, defId: 'mine' as const, x: i * 2, y: 0 }));
+    const qWorkshops = Array.from({ length: 4 }, (_, i) => ({ id: `qws${i}`, defId: 'workshop' as const, x: i * 2, y: 4 }));
+    const q = makeState('q', {
+      buildings: [...qMines, ...qWorkshops],
+      inventory: { ...blankInventory(), iron_ore: 100, coal: 100000 },
+      lastTick: NOON_LOCAL,
+    });
+    // Cable capacity well above the nominal required transmission so the §5.3
+    // gate PASSES (unified). Nominal: P surplus 0.3, Q deficit ≈ 0.465 ⇒
+    // required = min ≈ 0.3 ≪ 100.
+    const world = makeWorld([cableRoute('p', 'q', 100)]);
+    const states = new Map<string, IslandState>([['p', p], ['q', q]]);
+
+    const ctxFor = (_id: string): RatesContext => ({ world, defs });
+    const balances = computeCableNetworkBalance(world, states, ctxFor);
+    const balP = balances.get('p')!;
+    const balQ = balances.get('q')!;
+
+    // Both members share one component balance and the gate passed.
+    expect(balP).toBe(balQ);
+    expect(balP.unified).toBe(true);
+
+    // Implied shared brownout scalar from the stored totals.
+    const impliedFactor = balP.consumedTotal === 0
+      ? 1
+      : Math.min(1, balP.producedTotal / balP.consumedTotal);
+    // Real brownout (deficit component) — strictly below 1.
+    expect(impliedFactor).toBeLessThan(1);
+    expect(impliedFactor).toBeGreaterThan(0);
+
+    // The stored factor must be the SELF-CONSISTENT fixpoint: re-deriving each
+    // member's draw at that pf reproduces the stored ratio. Recompute the
+    // component fixpoint independently from the same member states.
+    const evalAtPf = (pf: number) => {
+      let producedW = 0;
+      let consumedW = 0;
+      for (const st of [p, q]) {
+        // At-pf realized draw (the same sample computeIslandLocalPower returns
+        // from its fixedPf probe).
+        const { power } = computeRates(st, { world, defs, fixedPowerFactor: pf });
+        producedW += power.produced;
+        consumedW += power.consumed;
+      }
+      return { producedW, consumedW };
+    };
+    const fixpointPf = solveBrownoutFactor(evalAtPf).powerFactor;
+    // Stored implied factor equals the converged fixpoint pf, within the
+    // solver's own convergence epsilon (BROWNOUT_FIXPOINT_EPSILON = 1e-6): the
+    // stored ratio is `pfOf(evalComponent(pf*))`, which the damped iteration
+    // brings to within ~epsilon of pf* itself. Self-consistency is at the
+    // documented solver precision, not sub-epsilon.
+    expect(impliedFactor).toBeCloseTo(fixpointPf, 5);
+
+    // ADVANCE-TIME REPRODUCTION (the load-bearing invariant): the advance loop
+    // reads fixedPf = min(1, producedTotal/consumedTotal) = impliedFactor and
+    // re-solves the member gates at it. Re-evaluating the component at exactly
+    // that stored pf must reproduce the stored ratio — i.e. impliedFactor is a
+    // stable fixpoint of pf ↦ pfOf(evalComponent(pf)), so advance does not
+    // drift away from the stored brownout.
+    const reEval = evalAtPf(impliedFactor);
+    const reImplied = Math.min(1, reEval.producedW / reEval.consumedW);
+    expect(reImplied).toBeCloseTo(impliedFactor, 5);
+
+    // And the fixpoint genuinely DIVERGES from the nominal ratio (proving the
+    // co-solve is doing work — the old nominal-ratio store would be wrong).
+    const nom = evalAtPf(1);
+    const nominalRatio = Math.min(1, nom.producedW / nom.consumedW);
+    expect(Math.abs(fixpointPf - nominalRatio)).toBeGreaterThan(0.1);
   });
 });
 
