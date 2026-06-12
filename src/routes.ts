@@ -24,6 +24,7 @@ import {
   type RatesContext,
 } from './economy.js';
 import { makeSeededRng } from './rng.js';
+import { solveBrownoutFactor } from './flow-power-fixpoint.js';
 import { XP_WEIGHT, type ResourceId } from './recipes.js';
 import { effectiveSkillMultipliers } from './skilltree.js';
 import {
@@ -267,11 +268,30 @@ export function computeIslandLocalPower(
    *  cable gate's local-power probe read the SAME wall-anchored field the
    *  advance loop uses — not a perf-domain replay of session start. */
   solarClockMs?: number,
+  /** §5.3 fixpoint probe: when set, solve this island's member gates against
+   *  THIS brownout factor and return the AT-pf REALIZED draw, not the nominal.
+   *  Threaded into `computeRates` as `fixedPowerFactor`. Used by the unified
+   *  cable-component shared-brownout fixpoint to sample a member's draw at a
+   *  candidate shared pf. When omitted (the §5.3 gate-decision call), the
+   *  NOMINAL raw draw is returned — today's behaviour, on which `unified` and
+   *  per-island surplus/deficit are decided. */
+  fixedPf?: number,
 ): { producedW: number; consumedW: number } {
-  // Explicitly clear cableComponent so we measure pure local power.
-  const localCtx: RatesContext = { ...ctx, cableComponent: undefined };
+  // Explicitly clear cableComponent so we measure pure local power. When a
+  // probe pf is supplied, also pin `fixedPowerFactor` so computeRates solves
+  // the gates against it (single solve, no local fixpoint).
+  const localCtx: RatesContext =
+    fixedPf === undefined
+      ? { ...ctx, cableComponent: undefined }
+      : { ...ctx, cableComponent: undefined, fixedPowerFactor: fixedPf };
   const { power } = computeRates(state, localCtx, nowMs, solarClockMs);
-  return { producedW: power.rawProduced, consumedW: power.rawConsumed };
+  // Gate-decision call (fixedPf undefined): NOMINAL pre-brownout draw — the
+  // §5.3 surplus/deficit and gate-pass test are nominal. Fixpoint probe
+  // (fixedPf set): the AT-pf realized draw, so the component fixpoint converges
+  // to a pf the advance loop's `min(1, producedTotal/consumedTotal)` reproduces.
+  return fixedPf === undefined
+    ? { producedW: power.rawProduced, consumedW: power.rawConsumed }
+    : { producedW: power.produced, consumedW: power.consumed };
 }
 
 /**
@@ -402,10 +422,46 @@ export function computeCableNetworkBalance(
       // power link is still legitimately unified — the link exists, no
       // transmission is needed, brownout = component balance = local balance.
       const unified = hasPowerLink && capacityTotal >= required;
+      // §5.3 shared-brownout fixpoint. The gate-passing decision above stays on
+      // NOMINAL per-island surplus/deficit (`produced`/`consumed`/`required`).
+      // For a unified component in GENUINE deficit, the shared brownout scalar
+      // must be self-consistent with the member gates solved against it (the
+      // per-island fixpoint, lifted to the one shared component scalar) — not
+      // the nominal ratio. So co-solve pf over the component and OVERWRITE the
+      // stored totals with the AT-pf realized draw, so the advance-time
+      // `min(1, producedTotal/consumedTotal)` reproduces the converged pf.
+      //
+      // Surplus / balanced components (produced >= consumed) keep nominal
+      // totals: their fixpoint is pf=1 (no brownout), and `evalComponent(1)`'s
+      // at-pf draw equals the nominal draw, so the fast path is a no-op — we
+      // skip it to avoid re-solving every member's gates needlessly.
+      let producedTotal = produced;
+      let consumedTotal = consumed;
+      if (unified && consumed > produced && produced >= 0) {
+        const evalComponent = (pf: number): { producedW: number; consumedW: number } => {
+          let p = 0;
+          let c = 0;
+          for (const m of members) {
+            const mst = islandStates.get(m);
+            if (!mst) continue;
+            const lp = computeIslandLocalPower(mst, localPowerCtxFor?.(m), nowMs, solarClockMs, pf);
+            p += lp.producedW;
+            c += lp.consumedW;
+          }
+          return { producedW: p, consumedW: c };
+        };
+        const pf = solveBrownoutFactor(evalComponent).powerFactor;
+        const final = evalComponent(pf); // totals AT the converged pf
+        producedTotal = final.producedW;
+        consumedTotal = final.consumedW;
+        // Invariant: min(1, producedTotal/consumedTotal) ≈ pf (the fixpoint's
+        // own definition), so advance-time `fixedPf` reproduces the converged
+        // pf. Verified in src/routes.test.ts.
+      }
       bal = {
         unified,
-        producedTotal: produced,
-        consumedTotal: consumed,
+        producedTotal,
+        consumedTotal,
         cableCapacityTotal: capacityTotal,
         requiredTransmission: required,
       };
