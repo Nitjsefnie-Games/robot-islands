@@ -281,4 +281,19 @@ describe('clusterBonusMul — §4.5 per-cluster bonus', () => {
     }
     expect(map.get('a')).toBeCloseTo(1.1, 9);
   });
+
+  it('floor-weighted: a taller neighbour raises others’ bonus; own bonus excludes own capacity', () => {
+    // a = floor-1 (c=1), b = floor-3 (floorLevel 2 → c=3), adjacent. K = 4.
+    // mul_a = 1 + 0.05×(4−1) = 1.15 ; mul_b = 1 + 0.05×(4−3) = 1.05
+    const a = place('a', 'mine', 0, 0);
+    const b = { ...place('b', 'mine', 2, 0), floorLevel: 2 };
+    expect(clusterBonusMul(a, [a, b])).toBeCloseTo(1.15, 9);
+    expect(clusterBonusMul(b, [a, b])).toBeCloseTo(1.05, 9);
+  });
+
+  it('floor-weighted: a lone tall building gets NO self-bonus (×1.0)', () => {
+    // floorLevel 4 → c=5, K=5, 1 + 0.05×(5−5) = 1.0
+    const a = { ...place('a', 'mine', 0, 0), floorLevel: 4 };
+    expect(clusterBonusMul(a, [a])).toBe(1);
+  });
 });
