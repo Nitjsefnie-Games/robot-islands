@@ -1,0 +1,603 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Net-flow ⇄ power-brownout joint fixpoint — design spec</title>
+  <style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--ivory);
+      color: var(--gray-700);
+      line-height: 1.58;
+      padding: 56px 32px 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { margin: 0 auto; max-width: 920px; }
+
+    /* ---------- header ---------- */
+    header.page-head { margin-bottom: 40px; max-width: 840px; }
+    .eyebrow {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--gray-500);
+      margin-bottom: 12px;
+    }
+    h1 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 38px;
+      line-height: 1.14;
+      color: var(--slate);
+      margin-bottom: 18px;
+      letter-spacing: -0.01em;
+    }
+    .context-box {
+      background: var(--gray-150);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      font-size: 14.5px;
+      color: var(--gray-700);
+    }
+    .context-box .label {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    /* ---------- summary strip ---------- */
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 56px;
+    }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+    }
+    .summary .k {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      margin-bottom: 6px;
+    }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent  { color: var(--clay); }
+    .summary .v.ok      { color: var(--olive); }
+
+    /* ---------- decision banner ---------- */
+    .decision {
+      background: var(--white);
+      border: var(--border);
+      border-left: 4px solid var(--clay);
+      border-radius: var(--radius);
+      padding: 22px 26px;
+      margin-bottom: 56px;
+    }
+    .decision .d-tag {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--clay);
+      margin-bottom: 8px;
+    }
+    .decision .d-head {
+      font-family: var(--serif);
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--slate);
+      margin-bottom: 10px;
+      letter-spacing: -0.01em;
+    }
+    .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 760px; }
+    .decision .d-body + .d-body { margin-top: 8px; }
+
+    /* ---------- section chrome ---------- */
+    section { margin-bottom: 60px; }
+    .sec-head {
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+      margin-bottom: 8px;
+    }
+    .sec-head .num {
+      font-family: var(--mono);
+      font-size: 12px;
+      background: var(--oat);
+      color: var(--slate);
+      padding: 3px 9px;
+      border-radius: 8px;
+    }
+    .sec-head h2 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 26px;
+      color: var(--slate);
+      letter-spacing: -0.01em;
+    }
+    .sec-intro {
+      font-size: 14.5px;
+      color: var(--gray-500);
+      max-width: 740px;
+      margin-bottom: 24px;
+    }
+    p.body { font-size: 14.5px; max-width: 760px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+    ul.body { font-size: 14.5px; max-width: 760px; margin: 0 0 14px 22px; }
+    ul.body li { margin: 6px 0; }
+    ul.body strong { color: var(--slate); }
+    code {
+      font-family: var(--mono);
+      font-size: 0.88em;
+      background: var(--gray-150);
+      border: 1px solid var(--gray-300);
+      border-radius: 5px;
+      padding: 1px 5px;
+      color: #C9B98A;
+    }
+    pre {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      line-height: 1.5;
+      background: var(--gray-150);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      overflow-x: auto;
+      color: var(--gray-700);
+      max-width: 840px;
+      margin-bottom: 18px;
+    }
+    pre .c { color: var(--gray-500); }
+    blockquote {
+      border-left: 3px solid var(--gray-500);
+      padding: 4px 18px;
+      margin: 0 0 16px 0;
+      max-width: 760px;
+      color: var(--gray-500);
+      font-style: italic;
+      font-size: 14px;
+    }
+    blockquote cite { display: block; font-style: normal; font-size: 12px; margin-top: 6px; color: var(--gray-500); }
+
+    /* ---------- generic data table ---------- */
+    .tbl {
+      width: 100%;
+      border: var(--border);
+      border-radius: var(--radius);
+      border-collapse: separate;
+      border-spacing: 0;
+      overflow: hidden;
+      font-size: 13.5px;
+    }
+    .tbl th, .tbl td {
+      text-align: left;
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--gray-300);
+      vertical-align: top;
+    }
+    .tbl th {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--gray-500);
+      background: var(--gray-150);
+      font-weight: 600;
+    }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+
+    /* ---------- comparison ("X vs Y") cards ---------- */
+    .compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 820px) { .compare { grid-template-columns: 1fr; } }
+    .compare .col {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .compare .col-head {
+      padding: 12px 18px;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      border-bottom: var(--border);
+    }
+    .compare .col.bad  .col-head { background: #2E211C; color: var(--rust); }
+    .compare .col.good .col-head { background: #232A1C; color: var(--olive); }
+    .compare .col-body { padding: 16px 18px; font-size: 13.5px; }
+    .compare .col-body ul { list-style: none; }
+    .compare .col-body li { margin: 7px 0; padding-left: 18px; position: relative; }
+    .compare .col.bad  li:before { content: '\2715'; position: absolute; left: 0; color: var(--rust); }
+    .compare .col.good li:before { content: '\2713'; position: absolute; left: 0; color: var(--olive); }
+
+    /* ---------- change inventory ---------- */
+    .changes { display: flex; flex-direction: column; gap: 12px; }
+    .change {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      gap: 4px 24px;
+    }
+    @media (max-width: 720px) { .change { grid-template-columns: 1fr; } }
+    .change .file {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      color: var(--clay);
+      word-break: break-all;
+    }
+    .change .what { font-size: 14px; color: var(--gray-700); }
+    .change .what .lead { color: var(--slate); font-weight: 600; }
+
+    /* ---------- checklist ---------- */
+    .checklist { display: flex; flex-direction: column; gap: 10px; max-width: 760px; }
+    .check {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      background: var(--white);
+      border: var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+    }
+    .check .box {
+      width: 18px; height: 18px;
+      border-radius: 5px;
+      border: 2px solid var(--gray-500);
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .check .ck-text { font-size: 14px; color: var(--gray-700); }
+    .check .ck-text strong { color: var(--slate); }
+
+    /* ---------- risk table ---------- */
+    .risks {
+      border: var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--white);
+    }
+    .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: var(--border); }
+    .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: var(--border); }
+    @media (max-width: 780px) {
+      .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); }
+    }
+    .risks .head {
+      background: var(--gray-150);
+      font-weight: 600;
+      color: var(--slate);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .sev {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-weight: 600;
+    }
+    .sev.high { background: #4A2A1C; color: #F0B79C; }
+    .sev.med  { background: var(--oat);  color: var(--slate); }
+    .sev.low  { background: #2D3A24; color: #B6CC96; }
+
+    /* ---------- deferred / out-of-scope cards ---------- */
+    .deferred { display: flex; flex-direction: column; gap: 14px; max-width: 840px; }
+    .defer {
+      background: var(--white);
+      border: var(--border);
+      border-left: 4px solid var(--gray-500);
+      border-radius: 10px;
+      padding: 16px 20px;
+    }
+    .defer .dt { font-weight: 600; font-size: 15px; color: var(--slate); margin-bottom: 4px; }
+    .defer .dd { font-size: 13.5px; color: var(--gray-500); }
+
+    .footer {
+      color: var(--gray-500);
+      font-size: 13px;
+      margin-top: 64px;
+      padding-top: 22px;
+      border-top: 1px solid var(--gray-300);
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Design spec · robot-islands · economy</div>
+      <h1>Net-flow ⇄ power-brownout joint fixpoint</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        The §15.3 net-flow solver was built to kill the <code>+0/+0.0x</code>
+        rate flicker by gating producers/consumers so a pinned bin runs at net
+        exactly 0. But brownout (<code>powerFactor</code>) is computed
+        <em>after</em> the solve and applied only to power-consumers, so it
+        perturbs the solver's balance asymmetrically and the flicker returns
+        through the power side. This spec replaces that documented one-segment
+        lag with a joint <code>g&nbsp;⇄&nbsp;pf</code> per-pool fixpoint.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Correctness target</div><div class="v accent">Full joint fixpoint</div></div>
+      <div class="cell"><div class="k">Scope</div><div class="v">All topologies</div></div>
+      <div class="cell"><div class="k">pf granularity</div><div class="v">Per-tick</div></div>
+      <div class="cell"><div class="k">Risk</div><div class="v">Hot-path; gated</div></div>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision</div>
+      <div class="d-head">Solve the net-flow gate <code>g</code> and the brownout scalar <code>pf</code> as one damped per-pool fixpoint, so pinned bins net to 0 under the <em>realized</em> brownout-scaled flows.</div>
+      <div class="d-body">A "power pool" shares <strong>one</strong> brownout scalar
+        (a unified §5.3 cable component, or a single island). The fix is one shape
+        regardless of topology: pre-scale each power-consumer's flow coefficients by
+        <code>pf</code>, solve <code>g</code>, recompute <code>pf</code> from the
+        <code>g</code>-scaled draws, iterate. Because pass&nbsp;4 realizes
+        <code>base × g × pf</code>, the solver then balances exactly what pass&nbsp;4
+        produces — pinned bins net to 0, no drift, no flicker.</div>
+      <div class="d-body">A <strong>no-brownout early-out</strong> keeps the common
+        case (<code>ΣP ≥ ΣC</code> ⇒ <code>pf = 1</code>) byte-identical to today at
+        one <code>solveFlow</code> call. Cross-island convergence is
+        <strong>per-tick</strong>, not per-segment — the shared scalar means no
+        lockstep-per-segment machinery is needed.</div>
+    </div>
+
+    <section>
+      <div class="sec-head"><span class="num">01</span><h2>Problem</h2></div>
+      <p class="sec-intro">Why the solver's pinned-bin guarantee breaks under brownout, and why this is a spec contradiction rather than only a code bug.</p>
+      <p class="body">The solver computes <code>g</code> on <strong>nominal (gate-1)
+        coefficients</strong> with no knowledge of power. Brownout is computed after
+        the solve (pass 3) and applied in pass 4 (<code>economy.ts:1747</code>)
+        <strong>only to power-consuming buildings</strong>
+        (<code>consumesPower ? powerFactor : 1</code>), faithful to §5.1.</p>
+      <p class="body">When a pinned resource's producers and consumers
+        <strong>differ in power-dependence</strong>, <code>powerFactor</code> scales
+        the two sides of that bin <strong>asymmetrically</strong>, so realized net at
+        the pinned bin is no longer 0. The bin drifts off its boundary, the next
+        segment's constraint set flips, and <code>g</code>/<code>pf</code> swing —
+        the <code>+0/+0.0x</code> flicker the solver was built to remove, reborn
+        through the power side. The introducing design doc named this an accepted
+        approximation:</p>
+      <blockquote>
+        Documented approximation: <code>powerFactor</code> computed after the solve;
+        brownout-reduced draw <strong>re-throttles suppliers next segment</strong>
+        (clamps pin the bin meanwhile). <strong>Same lag as today.</strong>
+        <cite>— 2026-06-10-net-flow-economy-design.md:109-111</cite>
+      </blockquote>
+      <p class="body">A one-segment-delayed negative-feedback loop is the textbook
+        recipe for oscillation. "Same lag as today" was the error: the solver removed
+        the storage-side flicker but left the power-side lag, assuming it benign.</p>
+      <div class="compare">
+        <div class="col bad">
+          <div class="col-head">Spec as written — contradictory</div>
+          <div class="col-body"><ul>
+            <li>§15.3 (<code>SPEC.md:2050</code>): a pinned bin runs at net <em>exactly 0</em>, emits no cap event.</li>
+            <li>§5.1 (<code>SPEC.md:607</code>): <code>power_factor</code> multiplies the rate of <em>every consumer</em> — asymmetric across a bin's participants.</li>
+            <li>Both cannot hold under active brownout.</li>
+          </ul></div>
+        </div>
+        <div class="col good">
+          <div class="col-head">After this spec</div>
+          <div class="col-body"><ul>
+            <li>Pinned bin nets to 0 under the <em>realized</em> (brownout-scaled) flows.</li>
+            <li><code>g</code> and <code>pf</code> co-solved per pool — consumer-only scaling no longer breaks the §15.3 invariant.</li>
+            <li>No flicker; O(1) segments at a brownout-pinned steady state.</li>
+          </ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">02</span><h2>Core insight — a power pool shares one brownout scalar</h2></div>
+      <p class="sec-intro">The cross-island story collapses: within a unified component the brownout factor is a single shared scalar, so there is no per-segment lockstep machinery to build.</p>
+      <p class="body">Within a unified §5.3 cable component the brownout factor is a
+        <strong>single shared scalar</strong> — <code>min(1, producedTotal /
+        consumedTotal)</code> over the aggregate, applied identically to every
+        member's power-consumers (<code>economy.ts:1721-1725</code>). Define a
+        <strong>power pool</strong> = the set of buildings sharing one brownout scalar
+        this tick: a unified cable component, or a single island (no cables, or its
+        component's gate fails and it falls back to local, <code>economy.ts:1726</code>).</p>
+      <p class="body">Regardless of topology the fix is <strong>one shape</strong> — a
+        joint fixpoint over <code>(g vector, pf scalar)</code> per pool:</p>
+      <pre><span class="c">// per power pool, iterate to mutual consistency:</span>
+pf := min(1, ΣproducesW / Σ(consumesW_i × throughputFrac_i(g)))   <span class="c">// one scalar over the pool</span>
+g  := solveFlow(...)  with each power-consumer's flow coefficients pre-scaled by pf
+      <span class="c">// pass 4 realizes base × g × pf, so the solver balances exactly the realized flows</span>
+repeat until ‖Δg‖∞ &lt; ε and |Δpf| &lt; ε   <span class="c">// damped; MAX_ITERS cap → fail open</span></pre>
+      <p class="body"><code>throughputFrac_i(g)</code> is the existing §5.1
+        throughput-scaled draw (<code>effectiveMul × g × heat</code>), so <code>pf</code>
+        stays consistent with the realized <code>g</code>. <strong>Resource pooling is
+        orthogonal:</strong> §13.3 lattice and §15.1 shared-network shape the
+        <code>solveFlow</code> input (the <code>flowSiblings</code> union / pooled
+        inventory) but not the power story — the same fixpoint wraps whatever flow
+        problem they hand it. "Everything in one pass" is one mechanism with a wider
+        aggregation set, not three reworks.</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">03</span><h2>Architecture</h2></div>
+      <p class="sec-intro">A new pure leaf module owns the fixpoint; existing callers swap their <code>solveFlow</code> call for it.</p>
+      <p class="body"><strong>New <code>src/flow-power-fixpoint.ts</code></strong> — sits
+        one level above <code>flow-solver.ts</code>; no PixiJS, no DOM, no
+        <code>economy.ts</code> import (same leaf discipline). Given a pool's flow
+        problem(s) + per-building power spec (<code>producesW</code>,
+        <code>consumesW</code>, the <code>throughputFrac</code> rule) + cap/zero
+        constraints, returns <code>{ gates, powerFactor, converged }</code>. It is a
+        thin <strong>damped outer loop</strong> over a low-dimensional scalar; the
+        inner exact solve is <code>flow-solver.ts</code>, reused unchanged.</p>
+      <ul class="body">
+        <li><strong>No-brownout early-out:</strong> if the first solve
+          (<code>pf = 1</code>) leaves the pool at <code>ΣP ≥ ΣC</code>, that is
+          already the fixpoint — return after one iteration. Common case costs the
+          same as today and yields <strong>byte-identical</strong> gates.</li>
+        <li><strong>Convergence:</strong> iterate until <code>‖Δg‖∞</code> and
+          <code>|Δpf|</code> are below <code>ε</code>, or <code>MAX_ITERS</code> →
+          <code>converged = false</code>, return the last clamped iterate
+          (<strong>fail open</strong>, mirroring <code>flow-solver.ts</code>'s
+          <code>FLOW_MAX_SWEEPS</code> + post-100 damping). The <code>g→pf</code> map
+          is a contraction-flavoured negative feedback, so it settles in a handful of
+          iterations.</li>
+        <li><strong>Cable component:</strong> <code>N</code> independent per-island
+          flow blocks (resources don't cross cables) sharing <strong>one</strong>
+          <code>pf</code> aggregated over the union of member buildings; each outer
+          iteration solves the blocks against the current shared <code>pf</code>, then
+          re-aggregates. Solo / lattice-union / shared-net-union are a single block.</li>
+      </ul>
+      <table class="tbl">
+        <thead><tr><th>Caller</th><th>Today</th><th>After</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">Solo island</td><td><code>solveFlow</code> in pass 2.5; <code>pf</code> in pass 3</td><td>fixpoint inside <code>computeRates</code>; passes 3/4 consume returned <code>(g, pf)</code></td></tr>
+          <tr><td class="slate">Cable component (§5.3)</td><td><code>computeCableNetworkBalance</code> single-shot draw estimate</td><td>union fixpoint → component scalar + member gates, frozen per tick</td></tr>
+          <tr><td class="slate">Lattice (§13.3) / shared-net (§15.1)</td><td>group solve calls <code>solveFlow</code></td><td>group solve calls the fixpoint; pooled flow problem unchanged</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">04</span><h2>Change inventory</h2></div>
+      <p class="sec-intro">Every file the implementation touches.</p>
+      <div class="changes">
+        <div class="change">
+          <div class="file">src/flow-power-fixpoint.ts <em>(new)</em></div>
+          <div class="what"><span class="lead">The g ⇄ pf damped fixpoint.</span> Pure leaf; reuses <code>flow-solver.ts</code> as the inner exact solve. No-brownout early-out, MAX_ITERS + fail-open.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/flow-power-fixpoint.test.ts <em>(new)</em></div>
+          <div class="what"><span class="lead">Worked cases + property test.</span> Regression guard (pf=1 ⇒ identical gates), asymmetric-power pinned-bin cases, convergence/fail-open, randomized net-0 property.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/economy.ts · computeRates</div>
+          <div class="what"><span class="lead">Solo path calls the fixpoint.</span> Pass 3/4 consume the returned <code>(g, pf)</code> pair instead of solving <code>g</code> and <code>pf</code> separately.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/economy.ts · computeCableNetworkBalance</div>
+          <div class="what"><span class="lead">Component-pf estimate → union fixpoint.</span> Produces the one component scalar + member gates, frozen per tick.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/shared-network-advance.ts · lattice advance</div>
+          <div class="what"><span class="lead">Group solves swap solveFlow → fixpoint.</span> Pooled (union) flow problem passes through unchanged.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/economy.test.ts, mass-balance.test.ts</div>
+          <div class="what"><span class="lead">Flicker / no-conjure regressions.</span> Steady-state-at-pinned-bin under brownout: constant rate across segments; no conjure at zero-pin, no discard at cap-pin.</div>
+        </div>
+        <div class="change">
+          <div class="file">SPEC.md §15.3, §5.1</div>
+          <div class="what"><span class="lead">Resolve the inconsistency.</span> Pinned bin nets to 0 "under realized brownout-scaled flows"; <code>g</code>/<code>pf</code> are a joint per-pool fixpoint; mark the lag note superseded.</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">05</span><h2>Verification</h2></div>
+      <p class="sec-intro">Concrete, runnable checks — the failing tests come first (TDD).</p>
+      <div class="checklist">
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>No-brownout regression.</strong> <code>ΣP ≥ ΣC</code> ⇒ one iteration, <code>pf = 1</code>, gates identical to <code>solveFlow</code>.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Asymmetric-power pinned bin.</strong> Power-consuming producer + non-power consumer at a zero-pinned input; power-consuming consumer + non-power producer at a cap-pinned output — realized net = 0 under returned <code>(g, pf)</code>.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Convergence / fail-open.</strong> <code>converged = true</code> within <code>MAX_ITERS</code> for worked cases; pathological pool returns clamped <code>[0,1]</code> iterate, no NaN, no throw.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Flicker regression (economy.test.ts).</strong> Steady-state rate/<code>utilization</code> constant across many segments under brownout; 1 h advance at a brownout-pinned bin = O(1) segments.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Mass balance.</strong> No conjuring at a zero-pinned input, no silent discard at a cap-pinned output, under brownout.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Cross-island.</strong> Two-island cable component in brownout converges to one shared <code>pf</code>; member gates balance local pinned bins under it.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Full suite green.</strong> <code>npm test</code> and <code>npm run build</code> clean under strict TS.</div></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">06</span><h2>Risks</h2></div>
+      <div class="risks">
+        <div class="row">
+          <div class="cell head">Risk</div>
+          <div class="cell head">Sev</div>
+          <div class="cell head">Mitigation</div>
+        </div>
+        <div class="row">
+          <div class="cell">Touches the hottest path — per-tick solve, every populated island.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">No-brownout early-out: only brownout-active pools iterate; the iteration is a low-dimensional scalar fixpoint over the already-paid <code>solveFlow</code>.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Behavioural drift vs. the large existing economy test corpus.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Non-brownout results are byte-identical to today, so the bulk of the corpus is an automatic regression guard.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Fixpoint fails to converge for a pathological pool.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell"><code>MAX_ITERS</code> + fail-open: worst case degrades to the current approximation for that pool, that tick — never hangs, never NaN-cascades.</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">07</span><h2>Out of scope</h2></div>
+      <p class="sec-intro">Explicitly deferred — considered, not missed.</p>
+      <div class="deferred">
+        <div class="defer">
+          <div class="dt">Per-segment component-pf convergence</div>
+          <div class="dd">Re-converging the component scalar at every integration-segment boundary would require lockstep grouped advancement of cable components. Ruled out: the shared scalar + per-tick convergence already removes the 5 Hz-visible flicker; per-segment is strictly-more-correct but invented complexity here.</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <p>Design spec · 2026-06-12 · robot-islands · supersedes the "next-segment re-throttle" approximation in 2026-06-10-net-flow-economy-design.md:109-111</p>
+    </div>
+
+  </div>
+</body>
+</html>
