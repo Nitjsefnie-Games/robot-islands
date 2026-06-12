@@ -904,6 +904,40 @@ describe('demolishBuilding', () => {
     expect(state.storageCaps.bolt).toBe((before.bolt ?? 0) + 100);
   });
 
+  it('relabel clamps old-resource inventory to the reduced cap, preserving stock below cap', () => {
+    // Regression for #30: force-clear used to zero the entire old resource.
+    // Now only the excess above the post-relabel cap is destroyed.
+    const spec = makeSpec({
+      buildings: [{ id: 'p-crate', defId: 'crate', x: 0, y: 0, cargoLabel: 'iron_ore' }],
+    });
+    const state = makeState(spec);
+    const baselineIronCap = makeState(makeSpec()).storageCaps.iron_ore ?? 0;
+    // Crate contribution gives +500; cap before relabel = baseline + 500.
+    expect(state.storageCaps.iron_ore).toBe(baselineIronCap + 500);
+
+    const b = spec.buildings[0]!;
+
+    // Case 1: held stock is below the reduced cap — it must survive.
+    state.inventory.iron_ore = 50;
+    applyRelabelStorageCap(state, b, BUILDING_DEFS.crate, 'iron_ore', 'bolt');
+    expect(state.storageCaps.iron_ore).toBe(baselineIronCap);
+    expect(state.inventory.iron_ore).toBe(50);
+  });
+
+  it('relabel destroys only the excess when old-resource stock is above the reduced cap', () => {
+    const spec = makeSpec({
+      buildings: [{ id: 'p-crate', defId: 'crate', x: 0, y: 0, cargoLabel: 'iron_ore' }],
+    });
+    const state = makeState(spec);
+    const baselineIronCap = makeState(makeSpec()).storageCaps.iron_ore ?? 0;
+    const b = spec.buildings[0]!;
+
+    state.inventory.iron_ore = baselineIronCap + 200;
+    applyRelabelStorageCap(state, b, BUILDING_DEFS.crate, 'iron_ore', 'bolt');
+    expect(state.storageCaps.iron_ore).toBe(baselineIronCap);
+    expect(state.inventory.iron_ore).toBe(baselineIronCap);
+  });
+
   it('leaves storage caps untouched when a non-storage def is demolished', () => {
     const spec = makeSpec();
     const state = makeState(spec);
