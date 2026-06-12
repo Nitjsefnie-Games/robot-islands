@@ -30,6 +30,8 @@ Legend: **L** = live · **P** = partial · **N** = not implemented.
 | §4.5 Adjacency effects | L | Heat (§5.2), reactor toxicity, §8.7 Exhaust Scrubber (soft-gate on coke_oven / naphtha_cracker / lubricant_refinery / diesel_refinery), and §8.7 Wastewater Treatment (soft-gate on sulfuric_acid_plant / hcl_plant / chlor_alkali_plant). Crystal Lab building absent, so the Cooling Tower → Crystal Lab gate has no consumers. |
 | §4.6 Storage caps | L | Specialized + generic storage, per-resource caps, destruction clamping. |
 | §4.7 Maintenance | P | Operating-time accrual, threshold + 4h linear degrade, auto-maintain materials check, atomic recipe consumption, most-degraded targeting policy. Only buildings with productive recipe outputs accrue operating time — power producers / storage / antennas / drone pads / shipyards skip accrual since their maintenance factor has no effect on output. Eternal Servitor flag is honoured; Servitor Conversion Kit + Reality Forge mechanic (`convertToServitor` in `buildings.ts`, inspector UI button) is L. |
+| §4.8 Construction queue | L | Running slots + queue depth, enqueue when full, FIFO promotion on completion, cancel refund, level badge. |
+| §4.9 Floor upgrades | L | Floors 2–10 cost `ceil(0.8 × placementCost)`; floors >10 use `ceil(0.08 × 1.15^(L−10) × placementCost)`, unbounded. Effect scaling clamps at floor 10. |
 | §5.1 Electrical grid | L | Per-island brownout factor, active-only summing, gating predicate. |
 | §5.2 Heat adjacency | L | N:1 source assignment, free-source priority, fuel-burn scaling with served count. |
 | §5.3 Inter-island power | L | Per-component binary-gated unified pool: gate passes iff Σ cable capacity ≥ min(Σ per-island surplus, Σ per-island deficit). Unified component shares one brownout `min(1, ΣP/ΣC)`; gate fail = cables inert that tick. T5 Spacetime Anchor route counts as infinite-capacity (always passes). |
@@ -586,7 +588,24 @@ The player's responsibility is to keep maintenance supplies flowing — plant Wo
 
 **Cancel.** An in-progress build (running OR queued) can be cancelled for a **100% material refund**. This is distinct from §6.7 demolish (~30% Scrap recovery) and from relocate (half-fee). For a fresh placement (`floorLevel === 0`), cancel removes the building entirely; for an in-progress upgrade it reverts the building to `floorLevel − 1` and clears the construction timer. Because storage caps are granted only at construction completion (§4.6), an unfinished build holds no cap and cancel strips none — it touches only the building/level and the material refund. Cancel is only valid while `constructionRemainingMs > 0`.
 
-**Level badge.** Every placed building shows its current floor level (displayed as `floorLevel + 1`, range 1–10) as a persistent badge in the bottom-right corner of its tile footprint, rendered via the building-alerts overlay regardless of construction state.
+**Level badge.** Every placed building shows its current floor level (displayed as `floorLevel + 1`) as a persistent badge in the bottom-right corner of its tile footprint, rendered via the building-alerts overlay regardless of construction state.
+
+### 4.9 Floor Upgrades
+
+A building starts at floor 1 (`floorLevel === 0`). Each floor upgrade raises the displayed floor by one and, once construction completes, improves the building's throughput, power output, and storage contribution.
+
+**No hard cap.** Buildings can be upgraded to floor 11, 12, and beyond indefinitely.
+
+**Pricing.** For an upgrade *into* displayed floor level `L`:
+
+* `2 ≤ L ≤ 10`: each resource costs `ceil(0.8 × placementCost[r])` — unchanged from the legacy per-floor rate.
+* `L > 10`: each resource costs `ceil(0.08 × 1.15^(L − 10) × placementCost[r])`.
+
+The L>10 curve starts at 8% of a fresh build and grows 15% per subsequent floor (floor 11 ≈ 9.2%, floor 12 ≈ 10.6%, floor 15 ≈ 16.1%, floor 20 ≈ 32.4%, etc.). It uses the same resource basket as the base placement cost; only the scalar changes.
+
+**Effect scaling** remains clamped at floor 10: throughput, power output, and storage scale as `×(1 + L)` with `L` clamped to `[0,9]`. Floor upgrades beyond 10 are a prestige/capacity sink, not a further power multiplier. Consumer power draw scales as `×(1 + 0.5 × L)`, also clamped at floor 10.
+
+**Relocate / demolish.** `totalInvestedCost` is `placementCost` plus the sum of every completed upgrade's cost, so refund and move-fee calculations automatically include the exponential floors.
 
 \---
 
@@ -675,7 +694,7 @@ Slag (from smelting), Ash (from combustion), Waste heat, Exhaust gas, Wastewater
 
 **Demolition recovery.** Demolishing any T1+ placed building produces Scrap proportional to its build cost (placeholder recovery rate: ~30% of the building's recipe ingredients, expressed as Scrap rather than the original components). Scrap is a T1 resource in the dry-goods storage category. Steel recipes accept Scrap as a substitute for fresh Pig iron at a 2:1 ratio (2 Scrap = 1 Pig iron's worth of steel input). This makes layout redesign less wasteful: demolishing a building isn't pure loss but a partial credit toward future builds.
 
-**Implementation note — demolish also refunds 50% of invested materials.** In addition to the scrap credit, `demolishBuilding` returns `floor(totalInvestedCost[r] / 2)` of each original placement resource (`stone`, `wood`, etc.) directly to inventory, clamped per-resource to the post-demolish storage cap (excess is lost, per §4.6). `totalInvestedCost` = base `placementCost` + `floorLevel × ceil(0.8 × placementCost)`, so upgraded buildings refund proportionally more. This 50% in-kind refund is distinct from the scrap recovery: both fire on every demolish of a completed building. Source of truth: `demolishBuilding` in `src/placement.ts`, `DemolishResult.refunded` field.
+**Implementation note — demolish also refunds 50% of invested materials.** In addition to the scrap credit, `demolishBuilding` returns `floor(totalInvestedCost[r] / 2)` of each original placement resource (`stone`, `wood`, etc.) directly to inventory, clamped per-resource to the post-demolish storage cap (excess is lost, per §4.6). `totalInvestedCost` = base `placementCost` + the sum of every completed upgrade's cost (legacy `ceil(0.8 × placementCost)` for floors 2–10, exponential `ceil(0.08 × 1.15^(L−10) × placementCost)` for floor L > 10), so upgraded buildings refund proportionally more. This 50% in-kind refund is distinct from the scrap recovery: both fire on every demolish of a completed building. Source of truth: `demolishBuilding` in `src/placement.ts`, `DemolishResult.refunded` field.
 
 **Construction cancel (distinct from demolish).** A building currently under construction (running OR queued, i.e. `constructionRemainingMs > 0`) can be cancelled for a **100% material refund** — no Scrap penalty. For a fresh placement (`floorLevel 0`) the building is removed entirely; for an in-progress upgrade the building reverts to the previous floor level. Demolish (~30% Scrap) applies only to completed buildings; relocate (half-fee) is a third distinct action. See §4.8 for queue/cancel mechanics.
 
@@ -1873,7 +1892,7 @@ interface PlacedBuilding {
   defId: BuildingDefId;
   x: number; y: number;
   rotation: 0 | 1 | 2 | 3;
-  floorLevel?: number;          // 0-indexed upgrade depth (0 = fresh, 9 = max); displayed as floorLevel+1 (1..10)
+  floorLevel?: number;          // 0-indexed upgrade depth (0 = fresh); displayed as floorLevel+1; no hard maximum
   constructionRemainingMs?: number;  // ms remaining until construction completes; 0 = fully built
   queued?: boolean;             // true while waiting in the build queue (not yet occupying a running slot)
   queueSeq?: number;            // FIFO stamp assigned at enqueue; lower = promoted first
