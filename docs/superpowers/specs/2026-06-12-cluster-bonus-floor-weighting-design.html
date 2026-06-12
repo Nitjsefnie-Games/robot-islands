@@ -1,0 +1,570 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Design spec — Cluster Bonus: Floor-Weighted Capacity</title>
+  <style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--ivory);
+      color: var(--gray-700);
+      line-height: 1.58;
+      padding: 56px 32px 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { margin: 0 auto; max-width: 1080px; }
+
+    header.page-head { margin-bottom: 40px; max-width: 840px; }
+    .eyebrow {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--gray-500);
+      margin-bottom: 12px;
+    }
+    h1 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 38px;
+      line-height: 1.14;
+      color: var(--slate);
+      margin-bottom: 18px;
+      letter-spacing: -0.01em;
+    }
+    .context-box {
+      background: var(--gray-150);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      font-size: 14.5px;
+      color: var(--gray-700);
+    }
+    .context-box .label {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 56px;
+    }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+    }
+    .summary .k {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      margin-bottom: 6px;
+    }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent  { color: var(--clay); }
+    .summary .v.ok      { color: var(--olive); }
+
+    .decision {
+      background: var(--white);
+      border: var(--border);
+      border-left: 4px solid var(--clay);
+      border-radius: var(--radius);
+      padding: 22px 26px;
+      margin-bottom: 56px;
+    }
+    .decision .d-tag {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--clay);
+      margin-bottom: 8px;
+    }
+    .decision .d-head {
+      font-family: var(--serif);
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--slate);
+      margin-bottom: 10px;
+      letter-spacing: -0.01em;
+    }
+    .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 820px; }
+    .decision .d-body + .d-body { margin-top: 8px; }
+    .decision code { font-family: var(--mono); font-size: 0.9em; color: #C9B98A; }
+
+    section { margin-bottom: 60px; }
+    .sec-head {
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+      margin-bottom: 8px;
+    }
+    .sec-head .num {
+      font-family: var(--mono);
+      font-size: 12px;
+      background: var(--oat);
+      color: var(--slate);
+      padding: 3px 9px;
+      border-radius: 8px;
+    }
+    .sec-head h2 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 26px;
+      color: var(--slate);
+      letter-spacing: -0.01em;
+    }
+    .sec-intro {
+      font-size: 14.5px;
+      color: var(--gray-500);
+      max-width: 820px;
+      margin-bottom: 24px;
+    }
+    p.body { font-size: 14.5px; max-width: 820px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+    code {
+      font-family: var(--mono);
+      font-size: 0.88em;
+      background: var(--gray-150);
+      border: 1px solid var(--gray-300);
+      border-radius: 5px;
+      padding: 1px 5px;
+      color: #C9B98A;
+    }
+    pre.formula {
+      background: var(--gray-150);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 18px 22px;
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--gray-700);
+      overflow-x: auto;
+      max-width: 820px;
+      margin-bottom: 18px;
+      line-height: 1.6;
+    }
+    pre.formula b { color: var(--clay); font-weight: 600; }
+
+    .tbl {
+      width: 100%;
+      border: var(--border);
+      border-radius: var(--radius);
+      border-collapse: separate;
+      border-spacing: 0;
+      overflow: hidden;
+      font-size: 13.5px;
+      margin-bottom: 18px;
+    }
+    .tbl th, .tbl td {
+      text-align: left;
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--gray-300);
+      vertical-align: top;
+    }
+    .tbl th {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--gray-500);
+      background: var(--gray-150);
+      font-weight: 600;
+    }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl td.num { font-family: var(--mono); }
+    .tbl td.up { color: var(--olive); font-weight: 600; }
+    .tbl td.dn { color: var(--rust); font-weight: 600; }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+
+    .compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 820px) { .compare { grid-template-columns: 1fr; } }
+    .compare .col {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .compare .col-head {
+      padding: 12px 18px;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      border-bottom: var(--border);
+    }
+    .compare .col.bad  .col-head { background: #2E211C; color: var(--rust); }
+    .compare .col.good .col-head { background: #232A1C; color: var(--olive); }
+    .compare .col-body { padding: 16px 18px; font-size: 13.5px; }
+    .compare .col-body ul { list-style: none; }
+    .compare .col-body li { margin: 7px 0; padding-left: 18px; position: relative; }
+    .compare .col.bad  li:before { content: '\2715'; position: absolute; left: 0; color: var(--rust); }
+    .compare .col.good li:before { content: '\2713'; position: absolute; left: 0; color: var(--olive); }
+    .compare code { font-family: var(--mono); font-size: 0.9em; color: #C9B98A; background: none; border: none; padding: 0; }
+
+    .changes { display: flex; flex-direction: column; gap: 12px; }
+    .change {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 4px 24px;
+    }
+    @media (max-width: 720px) { .change { grid-template-columns: 1fr; } }
+    .change .file {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      color: var(--clay);
+      word-break: break-all;
+    }
+    .change .what { font-size: 14px; color: var(--gray-700); }
+    .change .what .lead { color: var(--slate); font-weight: 600; }
+
+    .checklist { display: flex; flex-direction: column; gap: 10px; max-width: 820px; }
+    .check {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      background: var(--white);
+      border: var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+    }
+    .check .box {
+      width: 18px; height: 18px;
+      border-radius: 5px;
+      border: 2px solid var(--gray-500);
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .check .ck-text { font-size: 14px; color: var(--gray-700); }
+    .check .ck-text strong { color: var(--slate); }
+
+    .risks {
+      border: var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--white);
+    }
+    .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: var(--border); }
+    .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: var(--border); }
+    @media (max-width: 780px) {
+      .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); }
+    }
+    .risks .head {
+      background: var(--gray-150);
+      font-weight: 600;
+      color: var(--slate);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .sev {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-weight: 600;
+    }
+    .sev.high { background: #4A2A1C; color: #F0B79C; }
+    .sev.med  { background: var(--oat);  color: var(--slate); }
+    .sev.low  { background: #2D3A24; color: #B6CC96; }
+
+    .deferred { display: flex; flex-direction: column; gap: 14px; max-width: 840px; }
+    .defer {
+      background: var(--white);
+      border: var(--border);
+      border-left: 4px solid var(--gray-500);
+      border-radius: 10px;
+      padding: 16px 20px;
+    }
+    .defer .dt { font-weight: 600; font-size: 15px; color: var(--slate); margin-bottom: 4px; }
+    .defer .dd { font-size: 13.5px; color: var(--gray-500); }
+
+    .footer {
+      color: var(--gray-500);
+      font-size: 13px;
+      margin-top: 64px;
+      padding-top: 22px;
+      border-top: 1px solid var(--gray-300);
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Design spec · Robot Islands · §4.5</div>
+      <h1>Cluster bonus — floor-weighted capacity</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        The §4.5 cluster bonus rewards a raw building <em>head-count</em>, blind
+        to floor level. That makes wide-spreading scale superlinearly while
+        floor-upgrades stay a space-only fallback — the two systems fight, and
+        the bonus is too strong. This spec rebases cluster size on
+        <em>floor-capacity</em> and cuts the rate, so floor-upgraded buildings
+        are rewarded and wide-spam is tamed.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Change</div><div class="v accent">Formula + rate</div></div>
+      <div class="cell"><div class="k">Files touched</div><div class="v">3 + spec</div></div>
+      <div class="cell"><div class="k">Risk</div><div class="v ok">Low</div></div>
+      <div class="cell"><div class="k">Persistence</div><div class="v ok">No migration</div></div>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision</div>
+      <div class="d-head">Cluster size counts neighbors' floor-capacity, not heads — linear, uncapped, at half the rate.</div>
+      <div class="d-body">Building <code>i</code>'s multiplier becomes
+        <code>1 + r·(K − c_i)</code> where <code>c_i = 1 + floorLevel_i</code> and
+        <code>K = Σ c_j</code> over the same-category component, with
+        <code>r</code> cut <code>0.10 → 0.05</code>. Upgrade beats add-wide on
+        material at every cluster size (and costs zero tiles), so floors become
+        the better long-term investment; wide stays viable for raw output when
+        space is free.</div>
+      <div class="d-body">Deliberately <em>not</em> capped or curved — the
+        magnitude is controlled by the rate cut alone. A building's own height
+        is excluded from its own bonus, so a lone tall building gets <em>no</em>
+        self-cluster bonus (identical to today).</div>
+    </div>
+
+    <section>
+      <div class="sec-head"><span class="num">01</span><h2>Problem &amp; root cause</h2></div>
+      <p class="sec-intro">Both symptoms — "floors aren't rewarded" and "cluster is too strong" — trace to one line.</p>
+      <p class="body">In <code>adjacency.ts</code> <code>clusterBonusMuls</code>,
+        cluster size is a raw head-count (<code>compSize += 1</code> per building,
+        blind to <code>floorLevel</code>), and every member receives
+        <code>1 + (k − 1) · 0.10</code>.</p>
+      <p class="body"><strong>Floors aren't rewarded:</strong> a floor-10 building
+        (×10 output, 1 tile) adds the same <code>+1</code> to <code>k</code> as a
+        floor-1 shack, and going tall to save space <em>shrinks</em> head-count,
+        shrinking the bonus. Marginal "add a base building vs upgrade one"
+        (Δoutput / Δmaterial) shows adding wide beats upgrading at every cluster
+        size. <strong>Cluster is too strong:</strong>
+        <code>1 + (k − 1)·0.10</code> is uncapped — a k=9 spam-cluster already
+        gives ×1.8 to every member and keeps climbing.</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">02</span><h2>Before vs. after</h2></div>
+      <div class="compare">
+        <div class="col bad">
+          <div class="col-head">Head-count (today)</div>
+          <div class="col-body"><ul>
+            <li>Cluster size = number of buildings; floors invisible.</li>
+            <li><code>mul = 1 + (k − 1)·0.10</code>, uniform across the cluster.</li>
+            <li>Adding wide always beats upgrading per material.</li>
+            <li>Uncapped superlinear growth in head-count.</li>
+            <li>Floor upgrades = space-only fallback.</li>
+          </ul></div>
+        </div>
+        <div class="col good">
+          <div class="col-head">Floor-weighted, neighbors-only (proposed)</div>
+          <div class="col-body"><ul>
+            <li>Cluster size = sum of neighbors' floor-capacity.</li>
+            <li><code>mul_i = 1 + 0.05·(K − c_i)</code>, per-building by floor.</li>
+            <li>Upgrade beats add-wide per material at every k; 0 tiles.</li>
+            <li>Wide tamed by the rate cut; floors carry the scaling.</li>
+            <li>Lone tall building gets no self-bonus (unchanged).</li>
+          </ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">03</span><h2>The model</h2></div>
+      <p class="sec-intro">Per-building multiplier; same connectivity/component rule as §4.4, only the size→multiplier step changes.</p>
+      <pre class="formula"><b>mul_i = 1 + r · (K − c_i)</b>
+
+  c_i = 1 + floorLevel_i        (the building's own capacity == floorEffectMul)
+  K   = Σ c_j  over the same-category 4-connected component
+  r   = CATEGORY_ADJACENCY_RATE[category]   (0.10 → 0.05)
+
+Applies to recipe rate and generator power OUTPUT (consumption excluded), as today.</pre>
+      <p class="body"><strong>Key property — floor-1 baseline is unchanged but
+        for the rate.</strong> When every member is floor-1, <code>c_j = 1</code>,
+        so <code>K − c_i = (k − 1)</code> and the formula collapses to the old
+        <code>1 + (k − 1)·r</code>. The only change at the all-floor-1 baseline is
+        the rate cut; divergence appears strictly once floors &gt; 1 exist.</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">04</span><h2>Validated numbers</h2></div>
+      <p class="sec-intro">Throughput at r=0.05 vs the current rule. Costs: placement P=1, upgrade 0.8·P/floor, 1 tile/building, consumer draw 1+0.5L.</p>
+      <table class="tbl">
+        <thead><tr><th>Scenario</th><th>CUR out</th><th>New out</th><th>New /tile</th><th>New /mat</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">4× floor-1 (k4)</td><td class="num">5.20</td><td class="num dn">4.60</td><td class="num">1.15</td><td class="num">1.15</td></tr>
+          <tr><td class="slate">1× floor-4 lone</td><td class="num">4.00</td><td class="num">4.00</td><td class="num">4.00</td><td class="num">1.18</td></tr>
+          <tr><td class="slate">floor-4 + 3× floor-1 (k4)</td><td class="num">9.10</td><td class="num">8.50</td><td class="num">2.13</td><td class="num">1.33</td></tr>
+          <tr><td class="slate">4× floor-4 (k4)</td><td class="num">20.80</td><td class="num up">25.60</td><td class="num">6.40</td><td class="num">1.88</td></tr>
+          <tr><td class="slate">1× floor-10 lone</td><td class="num">10.00</td><td class="num">10.00</td><td class="num">10.00</td><td class="num">1.22</td></tr>
+          <tr><td class="slate">9× floor-1 (k9)</td><td class="num">16.20</td><td class="num dn">12.60</td><td class="num">1.40</td><td class="num">1.40</td></tr>
+        </tbody>
+      </table>
+      <p class="sec-intro">Marginal "add wide vs upgrade", per material, at r=0.05 — upgrade wins at every cluster size (and costs 0 tiles).</p>
+      <table class="tbl">
+        <thead><tr><th>k</th><th>add-wide /mat</th><th>upgrade /mat</th><th>Winner</th></tr></thead>
+        <tbody>
+          <tr><td class="num">2</td><td class="num">1.200</td><td class="num">1.375</td><td class="up">UPGRADE</td></tr>
+          <tr><td class="num">4</td><td class="num">1.400</td><td class="num">1.625</td><td class="up">UPGRADE</td></tr>
+          <tr><td class="num">10</td><td class="num">2.000</td><td class="num">2.375</td><td class="up">UPGRADE</td></tr>
+          <tr><td class="num">20</td><td class="num">3.000</td><td class="num">3.625</td><td class="up">UPGRADE</td></tr>
+        </tbody>
+      </table>
+      <p class="body">Raw Δoutput still slightly favors add-wide (k=4: add Δ1.40
+        vs upgrade Δ1.30), so wide remains a valid "max output if you have spare
+        space + materials" play — no single-strategy degeneracy. Wide also keeps
+        its non-throughput edges: parallel build slots, no upgrade-construction
+        downtime, spreading load across power networks.</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">05</span><h2>Change inventory</h2></div>
+      <div class="changes">
+        <div class="change">
+          <div class="file">src/adjacency.ts</div>
+          <div class="what"><span class="lead">Rebase size→multiplier step.</span>
+            Keep union-find component labelling; per component compute
+            <code>K = Σ (1 + floorLevel)</code>, set each member's value to
+            <code>1 + r·(K − (1 + floorLevel_i))</code> via the existing
+            <code>floorLevel(b)</code> helper. The returned
+            <code>Map&lt;string,number&gt;</code> already carries per-building values,
+            so <code>computeBuffStack</code> and the generator-power path need no
+            signature change.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/building-defs.ts</div>
+          <div class="what"><span class="lead">Rate cut.</span>
+            <code>CATEGORY_ADJACENCY_RATE</code> values 0.10 → 0.05, all
+            categories (table structure kept for future per-category tuning).</div>
+        </div>
+        <div class="change">
+          <div class="file">SPEC.md §4.5</div>
+          <div class="what"><span class="lead">Rewrite buff-adjacency paragraph.</span>
+            Drop "uniform across every member" (now per-building by floor); state
+            the floor-weighted neighbor-capacity formula and the 0.05 seed; note
+            the floor-1 collapse property.</div>
+        </div>
+        <div class="change">
+          <div class="file">persistence</div>
+          <div class="what"><span class="lead">None.</span> Cluster bonus is
+            computed live each tick; <code>floorLevel</code> is already persisted.
+            No schema bump, no migration.</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">06</span><h2>Verification</h2></div>
+      <div class="checklist">
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Floor-1 collapse parity.</strong> An all-floor-1 cluster of size k yields <code>1 + (k − 1)·0.05</code> for every member.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Per-building self-exclusion.</strong> In a mixed cluster, each member's multiplier excludes its own <code>1 + floorLevel</code>; a taller neighbor raises others' multipliers but not its own.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>No self-bonus.</strong> A lone building (any floor) → multiplier 1.0.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Generator power path.</strong> Per-building cluster mul flows into power output (not consumption) for clustered generators.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Economy/power tests updated.</strong> Old <code>1 + (k−1)·0.10</code> expected values rebased to 0.05 + floor-weighted results.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Green build.</strong> <code>npm run build</code> + <code>vitest run</code> pass.</div></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">07</span><h2>Risks</h2></div>
+      <div class="risks">
+        <div class="row">
+          <div class="cell head">Risk</div>
+          <div class="cell head">Sev</div>
+          <div class="cell head">Mitigation</div>
+        </div>
+        <div class="row">
+          <div class="cell">Existing economy/power tests assert old cluster numbers and break.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Expected — rebase the asserted values; the floor-1 collapse property makes most all-floor-1 fixtures change by the rate factor only.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Uncapped/linear lets a huge floor-weighted cluster grow large.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Accepted by design (no cap chosen). Rate cut to 0.05 plus sublinear/finite real layouts keep magnitudes in line with today's k-clusters.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Per-building (non-uniform) values surprise UI/inspector readouts that assumed one cluster value.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Map is already per-id; readouts call per building. Verify inspector tooltip reads the building's own entry.</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">08</span><h2>Out of scope</h2></div>
+      <div class="deferred">
+        <div class="defer">
+          <div class="dt">Caps / diminishing curves</div>
+          <div class="dd">Explicitly rejected — linear, uncapped chosen. Magnitude is controlled by the rate alone.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Per-category rate differentiation</div>
+          <div class="dd">All categories stay at 0.05 for now; the per-category table is retained so values can diverge later without code changes.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Upgrade cost / time / power-draw scaling</div>
+          <div class="dd">Unchanged. This spec only rebalances the cluster term.</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <p>Design spec · 2026-06-12 · Robot Islands §4.5 · paired with 2026-06-12-cluster-bonus-floor-weighting-design.md</p>
+    </div>
+
+  </div>
+</body>
+</html>
