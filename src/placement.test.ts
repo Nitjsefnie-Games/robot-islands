@@ -1185,6 +1185,16 @@ describe('totalInvestedCost', () => {
     const b = { id: 'm', defId: 'mine', x: 0, y: 0 } as never;
     expect(totalInvestedCost(b, mineDef)).toEqual({ stone: 200, wood: 80 });
   });
+
+  it('sums the exponential curve for floors beyond 10', () => {
+    // floorLevel 10 → displayed 11; 9 legacy upgrades (floors 2..10) plus one exponential upgrade (floor 11).
+    const b = { id: 'm', defId: 'mine', x: 0, y: 0, floorLevel: 10 } as never;
+    const expected = {
+      stone: 200 + 9 * 160 + upgradeCost(mineDef, 11).stone!,
+      wood: 80 + 9 * 64 + upgradeCost(mineDef, 11).wood!,
+    };
+    expect(totalInvestedCost(b, mineDef)).toEqual(expected);
+  });
 });
 
 describe('§3 ocean building footprint validation', () => {
@@ -1746,6 +1756,43 @@ describe('upgradeCost', () => {
     const def = { ...BUILDING_DEFS.mine, placementCost: { wood: 2 } };
     expect(upgradeCost(def)).toEqual({ wood: 2 }); // Math.ceil(2 * 0.8) = Math.ceil(1.6) = 2
   });
+
+  it('keeps floors 2..10 priced at the legacy 0.8× rate', () => {
+    const mine = BUILDING_DEFS.mine;
+    for (let L = 2; L <= 10; L++) {
+      expect(upgradeCost(mine, L)).toEqual({ stone: 160, wood: 64 });
+    }
+  });
+
+  it('prices floor 11, 12, 15 with the exponential formula', () => {
+    const mine = BUILDING_DEFS.mine; // { stone: 200, wood: 80 }
+    const factor = (L: number) => 0.08 * (1.15 ** (L - 10));
+    const expected = (L: number) => ({
+      stone: Math.ceil(200 * factor(L)),
+      wood: Math.ceil(80 * factor(L)),
+    });
+    expect(upgradeCost(mine, 11)).toEqual(expected(11));
+    expect(upgradeCost(mine, 12)).toEqual(expected(12));
+    expect(upgradeCost(mine, 15)).toEqual(expected(15));
+    // Sanity-check the prompt's approximate fractions.
+    const stone11 = upgradeCost(mine, 11).stone!;
+    const stone20 = upgradeCost(mine, 20).stone!;
+    expect(stone11 / 200).toBeCloseTo(0.092, 2);
+    expect(upgradeCost(mine, 15).stone! / 200).toBeCloseTo(0.161, 2);
+    expect(stone20 / 200).toBeCloseTo(0.324, 2);
+  });
+
+  it('cost keeps growing without a cap', () => {
+    const mine = BUILDING_DEFS.mine;
+    const costs: number[] = [];
+    for (let L = 11; L <= 100; L++) {
+      costs.push(upgradeCost(mine, L).stone!);
+    }
+    for (let i = 1; i < costs.length; i++) {
+      expect(costs[i]!).toBeGreaterThanOrEqual(costs[i - 1]!);
+    }
+    expect(costs[costs.length - 1]!).toBeGreaterThan(costs[0]!);
+  });
 });
 
 describe('upgradeConstructionMs', () => {
@@ -1763,14 +1810,30 @@ describe('upgradeConstructionMs', () => {
 });
 
 describe('applyUpgrade', () => {
-  it('rejects when floorLevel is already 9 (max)', () => {
+  it('allows upgrading past floor 9 with no hard cap', () => {
     const spec = makeSpec();
     const state = makeState(spec);
     const b: PlacedBuilding = { id: 'b1', defId: 'mine', x: 0, y: 0, floorLevel: 9 };
     spec.buildings.push(b);
     const r = applyUpgrade(spec, state, 'b1');
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.reason).toBe('max-floor');
+    expect(r.ok).toBe(true);
+    expect(b.floorLevel).toBe(10);
+  });
+
+  it('deducts the exponential cost when upgrading into floor 11', () => {
+    const spec = makeSpec();
+    const state = makeState(spec);
+    state.inventory.stone = 10000;
+    state.inventory.wood = 10000;
+    const b: PlacedBuilding = { id: 'b1', defId: 'mine', x: 0, y: 0, floorLevel: 9 };
+    spec.buildings.push(b);
+    const before = { ...state.inventory };
+    const r = applyUpgrade(spec, state, 'b1');
+    expect(r.ok).toBe(true);
+    expect(b.floorLevel).toBe(10);
+    const expectedCost = upgradeCost(BUILDING_DEFS.mine, 11);
+    expect(before.stone - state.inventory.stone).toBe(expectedCost.stone!);
+    expect(before.wood - state.inventory.wood).toBe(expectedCost.wood!);
   });
 
   it('rejects with not-found when the buildingId is absent', () => {

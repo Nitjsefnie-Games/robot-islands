@@ -30,7 +30,7 @@ import {
   footprintTiles,
 } from './shape-mask.js';
 export { rotateShape, type ShapeMask };
-import { floorLevel, floorScaledCapacity, hasOperationalBuilding, type PlacedBuilding } from './buildings.js';
+import { floorScaledCapacity, hasOperationalBuilding, rawFloorLevel, type PlacedBuilding } from './buildings.js';
 import { constructionTimeFor, upgradeConstructionMs } from './construction.js';
 import type { IslandState } from './economy.js';
 import { islandInscribedAny } from './island.js';
@@ -109,36 +109,51 @@ export function placementCostFor(
   return def.placementCost ?? {};
 }
 
-/** Pure: compute the upgrade-cost basket for raising a building one floor.
- *  Flat 0.8× the def's placementCost (NOT L-scaled). Empty if the def has
- *  no placementCost. */
+/** Pure: compute the upgrade-cost basket for raising a building INTO the
+ *  displayed floor level `targetLevel` (1 = fresh, 2..10 = legacy floors,
+ *  11+ = exponential). Undefined or ≤10 keeps the legacy 0.8× placementCost;
+ *  >10 uses `0.08 × 1.15^(targetLevel − 10) × placementCost`, rounded up per
+ *  resource. Empty if the def has no placementCost. */
 export function upgradeCost(
   def: BuildingDef,
+  targetLevel?: number,
 ): Partial<Record<ResourceId, number>> {
   const base = placementCostFor(def);
   const cost: Partial<Record<ResourceId, number>> = {};
+  const factor =
+    targetLevel === undefined || targetLevel <= 10
+      ? 0.8
+      : 0.08 * (1.15 ** (targetLevel - 10));
   for (const [r, n] of Object.entries(base) as Array<[ResourceId, number]>) {
-    if (n > 0) cost[r] = Math.ceil(n * 0.8);
+    if (n > 0) cost[r] = Math.ceil(n * factor);
   }
   return cost;
 }
 
 /** Pure: a building's TOTAL invested resources = base placementCost plus the
- *  per-floor upgrade cost (`ceil(0.8 × base)`) times its floor level. Shared
+ *  sum of per-floor upgrade costs for every completed floor upgrade. Shared
  *  by relocate (half this is the move fee) and demolish (refund/scrap are
- *  fractions of this). Floor 0 ⇒ just the base cost. */
+ *  fractions of this). Floor 0 ⇒ just the base cost. Mirrors the per-level
+ *  `upgradeCost(def, targetLevel)` curve, including the L>10 exponential. */
 export function totalInvestedCost(
   b: { readonly floorLevel?: number },
   def: BuildingDef,
 ): Partial<Record<ResourceId, number>> {
   const base = placementCostFor(def);
-  const up = upgradeCost(def);
-  const L = floorLevel(b);
+  const rawL = rawFloorLevel(b);
+  const displayed = rawL + 1;
   const out: Partial<Record<ResourceId, number>> = {};
   for (const [r, n] of Object.entries(base) as Array<[ResourceId, number]>) {
-    // up[r] is absent when base[r] <= 0 (upgradeCost skips non-positive
-    // entries), so `?? 0` keeps a zero-cost base resource at 0 here.
-    out[r] = n + L * (up[r] ?? 0);
+    if (n <= 0) {
+      out[r] = n;
+      continue;
+    }
+    let invested = n;
+    // Each upgrade raises the displayed floor from 2 up to `displayed`.
+    for (let target = 2; target <= displayed; target++) {
+      invested += upgradeCost(def, target)[r] ?? 0;
+    }
+    out[r] = invested;
   }
   return out;
 }
@@ -877,7 +892,6 @@ export type UpgradeResult =
       readonly ok: false;
       readonly reason:
         | 'not-found'
-        | 'max-floor'
         | 'already-building'
         | 'queue-full'
         | 'insufficient-resources';
@@ -890,8 +904,7 @@ export type UpgradeResult =
 /** Apply one floor-upgrade to an existing building.
  *
  *  Pinned behaviour (lead decisions):
- *  - Rejects when current floorLevel === 9 (already at max).
- *  - Rejects when inventory can't afford `upgradeCost(def)`.
+ *  - Rejects when inventory can't afford `upgradeCost(def, targetLevel)`.
  *  - On success: deducts cost, increments floorLevel by 1, sets
  *    constructionRemainingMs = upgradeConstructionMs(def, newL). It does NOT
  *    credit storageCaps — the +storage.capacity delta is granted by the
@@ -899,6 +912,8 @@ export type UpgradeResult =
  *    becomes operational (§storage-timing), matching the deferred-cap
  *    treatment of a fresh placement.
  *  - The building pauses during construction (existing isOperational gating).
+ *  - Floor upgrades are uncapped: a building can be upgraded past floor 10,
+ *    with costs following the §4.9 exponential curve for targetLevel > 10.
  */
 export function applyUpgrade(
   spec: IslandSpec,
@@ -908,8 +923,7 @@ export function applyUpgrade(
   const b = spec.buildings.find((bb) => bb.id === buildingId);
   if (!b) return { ok: false, reason: 'not-found' };
   const def = BUILDING_DEFS[b.defId];
-  const L = floorLevel(b);
-  if (L === 9) return { ok: false, reason: 'max-floor' };
+  const L = rawFloorLevel(b);
   // An upgrade IS a construction job (§9.3): it can't stack on a building that
   // is already building/upgrading, and it consumes a parallel-build slot just
   // like a placement — mirror `placeBuilding`'s gate so upgrades can't bypass
@@ -921,7 +935,8 @@ export function applyUpgrade(
   if (mustQueue && queuedBuildCount(state) >= queuedBuildSlots(state)) {
     return { ok: false, reason: 'queue-full', inProgress, slots };
   }
-  const cost = upgradeCost(def);
+  const targetLevel = L + 2; // displayed floor we are upgrading INTO
+  const cost = upgradeCost(def, targetLevel);
   const missing = affordabilityShortfall(state.inventory, cost);
   if (Object.keys(missing).length > 0) {
     return { ok: false, reason: 'insufficient-resources', missing };
@@ -1096,7 +1111,7 @@ export function cancelConstruction(
     return { ok: false, refunded: {}, reason: 'not-building' };
   }
   const def = BUILDING_DEFS[b.defId];
-  const L = floorLevel(b);
+  const L = rawFloorLevel(b);
 
   // Helper: credit resources back into inventory, clamped to storageCaps.
   // Returns the actually-credited amounts (what actually landed in inventory).
@@ -1133,7 +1148,7 @@ export function cancelConstruction(
   }
 
   // In-progress upgrade cancel: revert to floorLevel-1, clear timer + queued,
-  // refund the upgrade cost.
+  // refund the upgrade cost that was paid for the displayed level L+1.
   const newL = L - 1;
   b.floorLevel = newL;
   b.constructionRemainingMs = 0;
@@ -1141,7 +1156,7 @@ export function cancelConstruction(
   // §storage-timing: no storage strip. The +storage.capacity delta was never
   // credited while the upgrade was under construction (it lands only at
   // completion), so reverting the level is all that's needed.
-  return { ok: true, refunded: creditRefund(upgradeCost(def)) };
+  return { ok: true, refunded: creditRefund(upgradeCost(def, L + 1)) };
 }
 
 // ---------------------------------------------------------------------------
