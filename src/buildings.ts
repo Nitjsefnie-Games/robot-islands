@@ -202,16 +202,15 @@ export function findOperationalBuilding(
   return undefined;
 }
 
-/** Effective floor level, clamped to the valid [0,9] range (1..10 floors).
- *  Use this for throughput / power / storage *effects*; for cost, badges, and
- *  display use `rawFloorLevel` / `displayedFloorLevel`. */
+/** Effective floor level for throughput / power / storage effects.
+ *  Unbounded on the high end; floors below 0 are treated as 0. */
 export function floorLevel(b: { floorLevel?: number }): number {
-  return Math.max(0, Math.min(9, b.floorLevel ?? 0));
+  return Math.max(0, b.floorLevel ?? 0);
 }
 
-/** Raw stored floor level without effect clamping. */
+/** Raw stored floor level (same as `floorLevel` now that effects are unbounded). */
 export function rawFloorLevel(b: { floorLevel?: number }): number {
-  return Math.max(0, b.floorLevel ?? 0);
+  return floorLevel(b);
 }
 
 /** Player-facing floor count: raw floor level + 1 (1 = fresh building). */
