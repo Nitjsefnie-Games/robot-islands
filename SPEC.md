@@ -2062,6 +2062,32 @@ PixiJS, like `ocean-gen.ts` in §2.1) holds the exact solve; `computeRates` feed
 it in a pass-2.5 and consumes the gate in passes 3–4. Full design and worked
 examples: `docs/superpowers/specs/2026-06-10-net-flow-economy-design.md`.
 
+**Joint net-flow ⇄ brownout fixpoint (§5.1 × §15.3).** The brownout factor `pf`
+and the net-flow gate `g` are mutually dependent: `pf` scales every grid-power
+consumer's *whole* realized recipe (both produces and consumes), and `g` is then
+solved against those `pf`-scaled flows; in turn `pf = min(1, producedW /
+consumedW)` is evaluated at the gates `pf` itself produced. `computeRates`
+converges the pair with a damped scalar fixpoint (`src/flow-power-fixpoint.ts`,
+pure leaf — no PixiJS/DOM/economy import) so a *pinned bin nets to exactly 0
+under the realized brownout-scaled flows*, even when the bin's producers and
+consumers differ in power-dependence (e.g. a power-drawing producer feeding a
+power-free consumer at a zero-pinned bin). Previously `pf` was applied only in
+pass 4, scaling one side of such a bin but not the other — the bin drifted off 0
+(conjuring at a zero-pin, discarding at a cap-pin) and flickered. A pool already
+in power surplus is the fixpoint's fast path: one gate solve at `pf = 1`,
+byte-identical to the pre-fixpoint common path (no perf cost for the no-brownout
+case, which is the overwhelming majority of pools). The §5.2 coal-burn sinks and
+the §13.3 lattice-union sibling flows are `pf`-independent (a fixed fuel sink /
+pre-scaled cross-island flows) and stay outside the per-`pf` rescale. The §5.3
+unified-cable case does **not** run the local fixpoint: the component owns one
+shared `pf` (`min(1, componentProduced / componentConsumed)`), against which each
+member solves its gates once; a local Singularity-Battery that fully covers the
+`pf = 1` deficit likewise short-circuits to `pf = 1` (single solve, no brownout).
+The `RatesContext.fixedPowerFactor` seam lets the §5.3 cable pre-pass probe a
+member's draw at a candidate shared `pf` (gates solved against it, reported
+verbatim). Generator wattage remains outside the solver throughout (the gate
+throttles resource flows only).
+
 Construction completions are also event boundaries: when `constructionRemainingMs` reaches zero during a segment, the loop iterates there. At that completion point a storage building's capacity multiplier is credited to the island's caps (§4.6, expanded to `multiplier × storage_base(r)` per affected resource) — the base multiplier for a fresh placement (floorLevel 0), the flat per-level multiplier increment for a completed floor upgrade (floorLevel ≥ 1); the same loop runs every segment, so a build completing mid-offline-catchup is credited correctly. Immediately after each segment `promoteQueuedBuilds` promotes the FIFO head of the build queue (lowest `queueSeq`) into any newly freed running slot, so queued builds start ticking within the same advance/offline-catchup call (§4.8).
 
 ### 15.4 Inter-Island Flow Resolution

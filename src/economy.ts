@@ -42,6 +42,7 @@ import { makeSeededRng } from './rng.js';
 import { nextRotateOutputBoundaryMs, resolveRecipe, resolveRotatingOutput, XP_WEIGHT, type Recipe, type ResourceId } from './recipes.js';
 import { cloneSkillMultipliers, effectiveSkillMultipliers, skillPointsForLevelUp, type NodeId, effectiveTierShift, tierForLevel, skillUnlockedAdjacencyRules, type SkillMultipliers, DEFAULT_GRAPH, type ConditionalEffectCondition, type ExoticAdjacencyRule } from './skilltree.js';
 import { solveFlow, type FlowBuildingSpec } from './flow-solver.js';
+import { solveBrownoutFactor, type PowerSample } from './flow-power-fixpoint.js';
 import type { CrystalId, EdgeId, Graph } from './skilltree-graph.js';
 import { networkedIslandIds } from './network-consciousness.js';
 
@@ -217,6 +218,13 @@ export interface RatesContext {
    *  rebuildWorldLayers() call. The callback fires INSIDE advanceIsland so
    *  multi-segment catch-up resolves shots in simulated-time order. */
   readonly onTerrainShotFire?: (buildingId: string) => void;
+  /** §5.3 cable pre-pass seam: when set, computeRates solves the net-flow
+   *  gates against THIS brownout factor (no local pf fixpoint) and reports it
+   *  verbatim as `power`. Used by computeCableNetworkBalance's component
+   *  fixpoint to probe a member's draw at a candidate shared pf. Distinct from
+   *  cableComponent.unified (the FINAL frozen component pf consumed during
+   *  advance); fixedPowerFactor takes precedence when both are present. */
+  readonly fixedPowerFactor?: number;
 }
 
 /**
@@ -1484,47 +1492,77 @@ export function computeRates(
   // perBuildingMul, inputs ÷ recipeInputDiv. Island-uniform factors (accel,
   // variance) cancel in the ratios; powerFactor stays post-applied (pass 4)
   // with the documented one-segment lag.
-  const flowBuildings: FlowBuildingSpec[] = tentative.map((te) => {
-    if (te.baseRate <= 0) return { produces: {}, consumes: {} };
-    const produces: Record<string, number> = {};
-    const outs = resolveRotatingOutput(te.recipe, t);
-    for (const [r, yld] of Object.entries(outs)) {
-      const flow = (yld ?? 0) * te.baseRate * te.perBuildingMul;
-      if (flow > 0) produces[r] = flow;
-    }
-    const consumes: Record<string, number> = {};
-    for (const [r, need] of Object.entries(te.recipe.inputs)) {
-      if (te.recipe.exogenousFlow === 'atmosphere' && r === 'air') continue;
-      const flow = ((need ?? 0) / recipeInputDiv) * te.baseRate * te.perBuildingMul;
-      if (flow > 0) consumes[r] = flow;
-    }
-    return { produces, consumes };
-  });
-  // §13.3 D-01: snapshot THIS island's own flow specs before any synthetic
-  // coal entries or injected sibling entries are appended — the orchestrator
-  // unions these (one island's `flowSpecs` becomes another's `flowSiblings`).
-  const ownFlowSpecs: FlowBuildingSpec[] = flowBuildings.map((fb) => ({
+  // §5.1 × §15.3 joint fixpoint (see flow-power-fixpoint.ts): a building that
+  // draws grid power has its WHOLE realized recipe (both produces and
+  // consumes) scaled by the brownout factor pf — the gate g is then solved
+  // against those pf-scaled flows so a pinned bin nets to 0 under the realized
+  // throughput, even when its producers and consumers differ in power-
+  // dependence. `consumesPowerByIdx` is pf-independent (a static def property),
+  // so we capture it once and re-scale the coefficients per probed pf.
+  const consumesPowerByIdx: boolean[] = tentative.map(
+    (te) => (defs[te.building.defId].power?.consumes ?? 0) > 0,
+  );
+  // Build THIS island's own pf-scaled flow coefficients. pf === 1 reproduces
+  // the pre-fixpoint nominal coefficients byte-identically (scale = 1 for
+  // every building), so the no-brownout common path is unchanged.
+  const buildFlowBuildings = (pf: number): FlowBuildingSpec[] =>
+    tentative.map((te, i) => {
+      if (te.baseRate <= 0) return { produces: {}, consumes: {} };
+      const scale = consumesPowerByIdx[i] ? pf : 1;
+      const produces: Record<string, number> = {};
+      const outs = resolveRotatingOutput(te.recipe, t);
+      for (const [r, yld] of Object.entries(outs)) {
+        const flow = (yld ?? 0) * te.baseRate * te.perBuildingMul * scale;
+        if (flow > 0) produces[r] = flow;
+      }
+      const consumes: Record<string, number> = {};
+      for (const [r, need] of Object.entries(te.recipe.inputs)) {
+        if (te.recipe.exogenousFlow === 'atmosphere' && r === 'air') continue;
+        const flow = ((need ?? 0) / recipeInputDiv) * te.baseRate * te.perBuildingMul * scale;
+        if (flow > 0) consumes[r] = flow;
+      }
+      return { produces, consumes };
+    });
+  // §13.3 D-01: snapshot THIS island's own (nominal, pf=1) flow specs — the
+  // orchestrator unions these (one island's `flowSpecs` becomes another's
+  // `flowSiblings`). Siblings arrive PRE-SCALED from their own island's solve,
+  // so the union flows are consistent; this island reports its pf=1 specs.
+  const ownFlowSpecs: FlowBuildingSpec[] = buildFlowBuildings(1).map((fb) => ({
     produces: { ...fb.produces },
     consumes: { ...fb.consumes },
   }));
-  // §13.3 D-01 union solve: append the OTHER lattice members' flow specs so
-  // the solve spans the whole component. These sit at indices ≥
-  // tentative.length (alongside the synthetic coal entries below) and are
-  // never read back by passes 3–4 — they exist purely to shape the shared
-  // θ/φ factors so cross-island producers/consumers throttle against each
-  // other. The cap/zero regime scan below runs over the FULL union so every
-  // member computes an IDENTICAL constraint set (and thus identical gates).
-  if (ctx?.flowSiblings && ctx.flowSiblings.length > 0) {
-    for (const sib of ctx.flowSiblings) flowBuildings.push(sib);
-  }
+  // §5.2 synthetic coal-burn sinks: pf-INDEPENDENT (a fixed fuel sink, not a
+  // power-scaled recipe). SKIPPED when coal is zero-constrained — the binary
+  // fuel-starvation recompute (Fix 4.1 below) owns that regime. Computed once.
+  const coalBurnSinks: FlowBuildingSpec[] = [];
+  // §13.3 D-01 union: the OTHER lattice members' (pre-scaled) flow specs.
+  const siblingSpecs: FlowBuildingSpec[] = ctx?.flowSiblings ? [...ctx.flowSiblings] : [];
+  // Append the pf-independent synthetics (siblings + coal sinks) after the
+  // pf-scaled own entries. These sit at indices ≥ tentative.length; passes 3–4
+  // index flowGates only by tentative index, so they are never read back —
+  // they exist purely to shape the shared θ/φ factors.
+  const withSynthetics = (arr: FlowBuildingSpec[]): FlowBuildingSpec[] => {
+    const out = arr.slice();
+    for (const sib of siblingSpecs) out.push(sib);
+    for (const sink of coalBurnSinks) out.push(sink);
+    return out;
+  };
+  // Cap/zero regime is determined by inventory stock — pf-INDEPENDENT — and
+  // scanned once over the FULL union at pf=1 so every lattice member computes
+  // an IDENTICAL constraint set (and thus identical gates). pf scaling never
+  // changes which resources a building touches (scale > 0 preserves the keys).
   const capConstrained = new Set<string>();
   const zeroConstrained = new Set<string>();
-  for (const fb of flowBuildings) {
-    for (const r of [...Object.keys(fb.produces), ...Object.keys(fb.consumes)]) {
-      const id = r as ResourceId;
-      const stock = ctx?.inventory?.[id] ?? state.inventory[id] ?? 0;
-      if (stock <= 0) zeroConstrained.add(r);
-      if (stock >= cap(state, id, ctx?.caps, undefined, ctx?.baseMult)) capConstrained.add(r);
+  // NOTE: coalBurnSinks is intentionally still empty at this point — coal participates in the constraint set via recipe entries, not the synthetic sink (sinks are populated below). Do not reorder.
+  {
+    const regimeScan = withSynthetics(buildFlowBuildings(1));
+    for (const fb of regimeScan) {
+      for (const r of [...Object.keys(fb.produces), ...Object.keys(fb.consumes)]) {
+        const id = r as ResourceId;
+        const stock = ctx?.inventory?.[id] ?? state.inventory[id] ?? 0;
+        if (stock <= 0) zeroConstrained.add(r);
+        if (stock >= cap(state, id, ctx?.caps, undefined, ctx?.baseMult)) capConstrained.add(r);
+      }
     }
   }
   // §5.2 furnace coal burn — cap-side demand (owner decision 2026-06-10, see
@@ -1533,12 +1571,9 @@ export function computeRates(
   // throttles to recipe-draw + burn. SKIPPED when coal is zero-constrained —
   // the binary fuel-starvation recompute (Fix 4.1 below) owns that regime,
   // and a synthetic entry would let the solver share fuel proportionally,
-  // contradicting §5.2's all-or-none heat gate. The synthetic entries sit at
-  // indices ≥ tentative.length; passes 3–4 index flowGates only by tentative
-  // index, so they are never read back — they exist purely to shape θ_coal.
-  // (capConstrained/zeroConstrained were scanned from the RECIPE entries
-  // above: if no recipe touches coal, θ_coal has no producers to throttle
-  // and the synthetic entries are inert, which is correct.)
+  // contradicting §5.2's all-or-none heat gate. (capConstrained/zeroConstrained
+  // were scanned above: if no recipe touches coal, θ_coal has no producers to
+  // throttle and the synthetic entries are inert, which is correct.)
   if (!zeroConstrained.has('coal')) {
     for (const [furnaceId, servedCount] of heat.coalConsumersByFurnace) {
       if (servedCount <= 0) continue;
@@ -1546,13 +1581,17 @@ export function computeRates(
       if (!furnace) continue;
       const coalPerCycle = defs[furnace.defId].heatSource?.coalPerCycle ?? 0;
       if (coalPerCycle <= 0) continue;
-      flowBuildings.push({
+      coalBurnSinks.push({
         produces: {},
         consumes: { coal: (coalPerCycle * servedCount) / COAL_CYCLE_SEC },
       });
     }
   }
-  const flowGates = solveFlow(flowBuildings, { capConstrained, zeroConstrained }).gates;
+  // Solve the net-flow gates against the pf-scaled coefficients. The
+  // constraint set is pf-independent (scanned once above). At pf=1 this is the
+  // pre-fixpoint nominal solve.
+  const solveGatesAt = (pf: number): readonly number[] =>
+    solveFlow(withSynthetics(buildFlowBuildings(pf)), { capConstrained, zeroConstrained }).gates;
 
   // Pass 3: power balance. A building is `active` for §5.1 iff:
   //   - it has no recipe (Solar / Dock / Crate / Silo — passively active), OR
@@ -1583,7 +1622,7 @@ export function computeRates(
   // power, no production, no consumption) per §5.1 "active iff all gates
   // pass".
   // Pass-3 power aggregation for a given gate vector; closes over fixed pass-2 state. Called repeatedly by the fixpoint (Task 3) with candidate gates.
-  const aggregatePower = (gatesByTentIdx: readonly number[]): { producedW: number; consumedW: number } => {
+  const aggregatePower = (gatesByTentIdx: readonly number[]): PowerSample => {
     let producedW = 0;
     let consumedW = 0;
     for (const b of validBuildings) {
@@ -1694,44 +1733,86 @@ export function computeRates(
     return { producedW, consumedW };
   };
 
-  let { producedW: powerProduced, consumedW: powerConsumed } = aggregatePower(flowGates);
+  // §5.1 × §15.3 joint fixpoint composition. The brownout factor pf and the
+  // net-flow gate g are mutually dependent (g is solved against pf-scaled
+  // coefficients; pf = produced/consumed at those gates). We resolve pf from
+  // one of three sources, in precedence order:
+  //
+  //   1. `fixedPowerFactor` (cable pre-pass probe): pf is dictated by the
+  //      caller — solve gates once at that pf, report it verbatim.
+  //   2. unified cable component (§5.3): pf is the component-wide scalar — the
+  //      component balances at the network level, so NO local fixpoint and NO
+  //      local battery deficit-cover (fix 3.5).
+  //   3. local pool: run the scalar pf⇄g fixpoint. A local battery that fully
+  //      covers the pf=1 deficit yields pf=1 (no brownout), short-circuiting
+  //      the fixpoint to a single solve (perf parity for the common case).
+  //
+  // Gate solves are memoised by pf so each distinct pf costs exactly one
+  // solveFlow; a non-brownout pool stays at a single solve.
+  // Cache keys are pf values reused VERBATIM (pf=1, fixedPf, or the fixpoint's converged value passed back unchanged) — never a recomputed near-equal, so number-key equality is safe here.
+  const gateCache = new Map<number, readonly number[]>();
+  const sampleCache = new Map<number, PowerSample>();
+  const gatesAt = (pf: number): readonly number[] => {
+    let g = gateCache.get(pf);
+    if (g === undefined) { g = solveGatesAt(pf); gateCache.set(pf, g); }
+    return g;
+  };
+  const sampleAt = (pf: number): PowerSample => {
+    let s = sampleCache.get(pf);
+    if (s === undefined) { s = aggregatePower(gatesAt(pf)); sampleCache.set(pf, s); }
+    return s;
+  };
 
-  // §13.3 Battery buffer — cover deficit from stored energy. Local
-  // only: batteries don't contribute wattage to the §5.3 cable network
-  // pool (the network was analysed pre-battery via `computeIslandLocalPower`).
+  const cableComponent = ctx?.cableComponent;
+  const fixedPf: number | undefined =
+    ctx?.fixedPowerFactor ??
+    (cableComponent?.unified
+      ? (cableComponent.consumedTotal === 0
+          ? 1
+          : Math.min(1, cableComponent.producedTotal / cableComponent.consumedTotal))
+      : undefined);
+
   const batteryCap = batteryCapacityWs(state, skillMul);
-  const rawProduced = powerProduced;
-  const rawConsumed = powerConsumed;
-  // Bypassed when the island's cable component is unified (fix 3.5): a
-  // unified component balances at the network level, not per-island — see
-  // the §5.3 comment below. Without the gate, stored energy "covers" a
-  // deficit the component already covers (and drains with zero effect).
-  if (
-    !(ctx?.cableComponent?.unified) &&
+  // The pf=1 (nominal) sample doubles as the raw pre-battery balance reported
+  // in `power`. Always computed (it is the fast-path eval the fixpoint reuses,
+  // and the battery decision reads it) — at most one solve.
+  const nominalSample = sampleAt(1);
+  const rawProduced = nominalSample.producedW;
+  const rawConsumed = nominalSample.consumedW;
+
+  let powerFactor: number;
+  let flowGates: readonly number[];
+  let powerProduced: number;
+  let powerConsumed: number;
+
+  if (fixedPf !== undefined) {
+    // Sources 1 & 2: pf is owned by the caller / component. Single solve.
+    powerFactor = fixedPf;
+    flowGates = gatesAt(fixedPf);
+    const s = sampleAt(fixedPf);
+    powerProduced = s.producedW;
+    powerConsumed = s.consumedW;
+  } else if (
+    // Source 3a: §13.3 local battery buffer covers the pf=1 deficit ⇒ pf=1.
+    // Local only (batteries don't feed the §5.3 cable pool); the unified-cable
+    // branch above already excludes this via `fixedPf !== undefined`.
     batteryCap > 0 &&
-    powerProduced < powerConsumed &&
+    rawProduced < rawConsumed &&
     state.batteryStoredWs >= BATTERY_EMPTY_THRESHOLD_WS
   ) {
-    powerProduced = powerConsumed; // cover full deficit
-  }
-
-  // §5.3 cable-network unification: when this island's connected-cable
-  // component passes the per-tick gate, every island in the component
-  // shares ONE brownout factor computed from component-wide produced /
-  // consumed. Otherwise, fall back to the local raw balance (above) —
-  // cables are inert for this tick. Binary: no partial flow. The Singularity
-  // Battery's local deficit-cover (just above) is bypassed when unified —
-  // a unified component balances at the network level, not per-island.
-  let powerFactor: number;
-  const cableComponent = ctx?.cableComponent;
-  if (cableComponent !== undefined && cableComponent.unified) {
-    powerFactor =
-      cableComponent.consumedTotal === 0
-        ? 1
-        : Math.min(1, cableComponent.producedTotal / cableComponent.consumedTotal);
+    powerFactor = 1;
+    flowGates = gatesAt(1);
+    powerProduced = rawConsumed; // cover full deficit (matches legacy report)
+    powerConsumed = rawConsumed;
   } else {
-    powerFactor =
-      powerConsumed === 0 ? 1 : Math.min(1, powerProduced / powerConsumed);
+    // Source 3b: local pool — converge the scalar pf⇄g fixpoint. The fast path
+    // re-evaluates at pf=1 (cache hit ⇒ no extra solve) and returns pf=1 for
+    // any surplus pool, byte-identical to the pre-fixpoint common path.
+    powerFactor = solveBrownoutFactor((pf) => sampleAt(pf)).powerFactor;
+    flowGates = gatesAt(powerFactor);
+    const s = sampleAt(powerFactor);
+    powerProduced = s.producedW;
+    powerConsumed = s.consumedW;
   }
 
   // Pass 4: final effective rate. Apply powerFactor only to consumers
