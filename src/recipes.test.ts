@@ -364,6 +364,19 @@ describe('microchip chain', () => {
   });
 });
 
+describe('heavy_logger throughput (§8.1 — balance-pinned)', () => {
+  it('is hand-tweaked 3× (cycleSec 117, pinned out of density derivation)', () => {
+    const r = RECIPES.heavy_logger!;
+    // A lone 2×2 Heavy Logger gets no §4.5 cluster bonus (neighbours-only), so
+    // without help it loses to 4 clustered Loggers in the same footprint at
+    // every floor. It is hand-sped 3× (physics-derived 351 → 117) to win, and
+    // pinned so the density sanity test excludes it from the derivation check.
+    expect(r.cycleSec).toBe(117);
+    expect(r.cycleSecPinned).toBe(true);
+    expect(r.outputs.wood).toBe(1);
+  });
+});
+
 describe('T6 orbital recipes (§14.10)', () => {
   it('scanner_sat_assembly has correct inputs, outputs, and cycleSec', () => {
     const r = RECIPES.scanner_sat_assembly!;

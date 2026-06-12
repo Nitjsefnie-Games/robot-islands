@@ -1668,13 +1668,19 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     exogenousFlow: 'terrain',
     category: 'extraction',
   },
-  // §8.1 T2 Heavy Logger: ~4.0× wood throughput vs T1 Logger (logger cycleSec=1404.1).
+  // §8.1 T2 Heavy Logger: hand-tuned for balance — ~12× T1 Logger throughput
+  // (3× the physics-derived 4× base). Rationale: a single 2×2 Heavy Logger gets
+  // NO §4.5 cluster bonus (the bonus is neighbours-only), so at the density-
+  // derived 351 it loses to 4 Loggers clustered in the same 2×2 footprint at
+  // every floor. The 3× speed-up makes the Heavy Logger the better pick for its
+  // T2 cost + 40 W draw.
   heavy_logger: {
-    cycleSec: 351, // auto-derived (gen-cyclesec): density × footprint × M
+    cycleSec: 117, // hand-tweaked for balance (NOT auto-derived): 351 / 3. cycleSecPinned excludes it from the density sanity test.
     inputs: {},
     outputs: { wood: 1 },
     exogenousFlow: 'terrain',
     category: 'extraction',
+    cycleSecPinned: true,
   },
   // §8.1 T2 Deep Mine: ~1.5× ore throughput vs T1 Mine (mine cycleSec=20). Output is iron_ore
   // (the only ore vein the live game currently surfaces; deeper-vein
