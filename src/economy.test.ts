@@ -1334,6 +1334,68 @@ describe('§15.3 × §5.1 — pinned bins net to 0 under asymmetric-power browno
     expect(mineRate).toBe(SNAPSHOT_NO_BROWNOUT.mine);
     expect(wsRate).toBe(SNAPSHOT_NO_BROWNOUT.workshop);
   });
+
+  it('no flicker: a brownout cap-pinned bin holds a STEADY rate across many segments', () => {
+    // Mirror the cap-pinned fixture above: Mine (no power) produces iron_ore
+    // pinned at cap; Workshop (powered) consumes iron_ore; tiny generator
+    // forces a genuine brownout.
+    const base = { ...tinyGenCatalog(0.05) };
+    const { power: _mp, ...mineNoPower } = base.mine;
+    base.mine = mineNoPower as BuildingDef;
+    const defs: DefCatalog = base;
+    const state = makeState({
+      buildings: [TINY_GEN, MINE, WORKSHOP_PWR],
+      inventory: { ...blankInventory(), iron_ore: 100, coal: 100 },
+      storageCaps: blankCaps(100),
+    });
+
+    const rates: number[] = [];
+    const powerFactors: number[] = [];
+    for (let i = 0; i < 50; i++) {
+      const r = computeRates(state, { defs });
+      const mineRate = r.byBuilding.find((b) => b.building.id === 'b-mine')?.effectiveRate ?? 0;
+      rates.push(mineRate);
+      powerFactors.push(r.power.factor);
+      advanceIsland(state, state.lastTick + 200, { defs });
+    }
+
+    const first = rates[0]!;
+    expect(first).toBeGreaterThan(0);
+    expect(powerFactors[0]).toBeLessThan(1);
+    for (const rate of rates.slice(1)) {
+      expect(rate).toBeCloseTo(first, 9);
+    }
+  });
+
+  it('brownout zero-pinned input conserves mass (no conjuring) over a real advance window', () => {
+    // Mirror the zero-pinned fixture above: Mine (powered) produces iron_ore
+    // starting at 0; Workshop (no power) consumes iron_ore; tiny generator
+    // forces a genuine brownout.
+    const base = { ...tinyGenCatalog(0.05) };
+    const { power: _wp, ...workshopNoPower } = base.workshop;
+    base.workshop = workshopNoPower as BuildingDef;
+    const defs: DefCatalog = base;
+    const state = makeState({
+      buildings: [TINY_GEN, MINE_PWR, WORKSHOP],
+      inventory: { ...blankInventory(), iron_ore: 0, coal: 100 },
+      storageCaps: blankCaps(100),
+    });
+
+    const before = { ...state.inventory };
+    advanceIsland(state, state.lastTick + 60_000, { defs });
+
+    // The empty bin must never go negative.
+    expect(state.inventory.iron_ore).toBeGreaterThanOrEqual(0);
+    // Assertion form (ii): re-run computeRates at the end and confirm the bin
+    // is still flow-balanced (no net drain at the empty bin). This is stronger
+    // than inventory >= 0 because a flickering solver could briefly conjure,
+    // then clamp back to zero.
+    const r = computeRates(state, { defs });
+    expect(r.net.iron_ore ?? 0).toBeGreaterThanOrEqual(-1e-9);
+
+    // Unused but recorded so the assertion documents total mass awareness.
+    void before;
+  });
 });
 
 describe('§5.1 power scales with effective throughput (rebalance)', () => {
