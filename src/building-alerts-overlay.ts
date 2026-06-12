@@ -22,7 +22,7 @@ import { Container, Graphics, Text } from 'pixi.js';
 import { BUILDING_DEFS } from './building-defs.js';
 import type { IslandState } from './economy.js';
 import { constructionProgress } from './construction.js';
-import { floorLevel } from './buildings.js';
+import { displayedFloorLevel, rawFloorLevel } from './buildings.js';
 import { TILE_PX } from './island.js';
 import { maintenanceFactor } from './maintenance.js';
 import { SHOT_DURATION_MS } from './terrain-modifier.js';
@@ -112,7 +112,7 @@ export function mountBuildingAlertsOverlay(
           // — floorLevel(b) is already the in-progress floor, so an upgrade's
           // longer base×(L+1) timer fills from the start instead of sitting
           // empty until `remaining` drops below the placement base.
-          const completed = constructionProgress(remaining, def, floorLevel(b), b.constructionTotalMs);
+          const completed = constructionProgress(remaining, def, rawFloorLevel(b), b.constructionTotalMs);
           const tlPx = (spec.cx + minTx) * TILE_PX - TILE_PX / 2;
           const tlPy = (spec.cy + minTy) * TILE_PX - TILE_PX / 2;
           const radius = 5;
@@ -211,8 +211,7 @@ export function mountBuildingAlertsOverlay(
         }
 
         // Floor-level badge — bottom-right corner, always shown (including L1).
-        // Matches the inspector's `${fl + 1}/10` convention: display is
-        // floorLevel(b) + 1 (range 1..10).
+        // Display is the raw stored floor level + 1; there is no hard maximum.
         {
           const half = TILE_PX / 2;
           const brPx = (spec.cx + maxTx) * TILE_PX + half;  // right edge x
@@ -226,7 +225,7 @@ export function mountBuildingAlertsOverlay(
           gfx.circle(cx, cy, r).fill({ color: LEVEL_BADGE_BG });
           // Number on top — managed in badgeLayer so it's a real glyph.
           const lvText = new Text({
-            text: String(floorLevel(b) + 1),
+            text: String(displayedFloorLevel(b)),
             style: {
               fontFamily: 'ui-monospace, monospace',
               fontSize: 8,
