@@ -404,22 +404,22 @@ export type BuildingDefId =
  * `1 + (k − 1) × CATEGORY_ADJACENCY_RATE[category]` to its recipe rate (and,
  * for generators, its power output), where `k` is the size of the building's
  * same-category 4-connected cluster. Uniform across the cluster, linear,
- * uncapped. Seeded uniform at 0.10 — tune per category here. Categories whose
+ * uncapped. Seeded uniform at 0.05 — tune per category here. Categories whose
  * buildings neither run a recipe nor generate power (storage / logistics /
  * cooling) are no-ops.
  */
 export const CATEGORY_ADJACENCY_RATE: Readonly<Record<BuildingCategory, number>> = {
-  extraction: 0.1,
-  smelting: 0.1,
-  chemistry: 0.1,
-  manufacturing: 0.1,
-  electronics: 0.1,
-  power: 0.1,
-  storage: 0.1,
-  logistics: 0.1,
-  cooling: 0.1,
-  production: 0.1,
-  special: 0.1,
+  extraction: 0.05,
+  smelting: 0.05,
+  chemistry: 0.05,
+  manufacturing: 0.05,
+  electronics: 0.05,
+  power: 0.05,
+  storage: 0.05,
+  logistics: 0.05,
+  cooling: 0.05,
+  production: 0.05,
+  special: 0.05,
 };
 
 /**
