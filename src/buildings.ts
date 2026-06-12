@@ -118,8 +118,10 @@ export interface PlacedBuilding {
    *  ≡ no active toxicity period. Forward-compat: legacy saves load with
    *  the field absent and behave normally. */
   toxicityExpiryMs?: number;
-  /** Floor-upgrade level L ∈ [0,9] → 1..10 floors (§ floor-upgrade mechanic). Optional;
-   *  absent ≡ 0 (forward-compat: pre-v16 saves and un-upgraded buildings omit it). */
+  /** Floor-upgrade level L ≥ 0 (0 = fresh, 1+ = upgrades purchased). Optional;
+   *  absent ≡ 0 (forward-compat: pre-v16 saves and un-upgraded buildings omit it).
+   *  There is no hard maximum; effect scaling clamps at L = 9 (10 floors) per
+   *  §4.9, while cost and display follow the raw value. */
   floorLevel?: number;
   /** True if the building's footprint no longer matches terrain after biome change. */
   invalid?: boolean;
@@ -200,9 +202,21 @@ export function findOperationalBuilding(
   return undefined;
 }
 
-/** Effective floor level, clamped to the valid [0,9] range (1..10 floors). */
+/** Effective floor level, clamped to the valid [0,9] range (1..10 floors).
+ *  Use this for throughput / power / storage *effects*; for cost, badges, and
+ *  display use `rawFloorLevel` / `displayedFloorLevel`. */
 export function floorLevel(b: { floorLevel?: number }): number {
   return Math.max(0, Math.min(9, b.floorLevel ?? 0));
+}
+
+/** Raw stored floor level without effect clamping. */
+export function rawFloorLevel(b: { floorLevel?: number }): number {
+  return Math.max(0, b.floorLevel ?? 0);
+}
+
+/** Player-facing floor count: raw floor level + 1 (1 = fresh building). */
+export function displayedFloorLevel(b: { floorLevel?: number }): number {
+  return rawFloorLevel(b) + 1;
 }
 
 /** Floor-upgrade multiplier for throughput / power output / storage: ×(1+L). */

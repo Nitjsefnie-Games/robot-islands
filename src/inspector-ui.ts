@@ -35,7 +35,7 @@ import { clusterBonusMul, gateSatisfied } from './adjacency.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
 import { affordabilityShortfall, applyRelabelStorageCap, formatShortfall, inProgressBuildCount, parallelBuildSlots, queuedBuildCount, queuedBuildSlots, relocateFee, totalInvestedCost, upgradeCost } from './placement.js';
 import { upgradeConstructionMs } from './construction.js';
-import { convertToServitor, floorEffectMul, floorLevel, floorScaledCapacity, hasOperationalBuilding, isOperationalBuilding, ratedBuildingPower, type PlacedBuilding } from './buildings.js';
+import { convertToServitor, displayedFloorLevel, floorEffectMul, floorLevel, floorScaledCapacity, hasOperationalBuilding, isOperationalBuilding, rawFloorLevel, ratedBuildingPower, type PlacedBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
 import { activeBonusMul } from './active-bonus.js';
 import { computeRates, fledglingRecipeMul, type RatesContext } from './economy.js';
@@ -1504,18 +1504,17 @@ export function mountInspectorUi(
     }
 
     // Floor-upgrade section paint
-    const fl = floorLevel(building);
-    const nextFl = fl + 1;
-    const maxed = fl === 9;
-    if (maxed) {
-      floorLine.textContent = `${fl + 1} / 10 floors (max)`;
-    } else {
-      floorLine.textContent = `${fl + 1} / 10 floors · next: ×${floorEffectMul(nextFl)} throughput / capacity / power-out`;
-    }
-    const upgradeCostBasket = upgradeCost(def);
+    const rawFl = rawFloorLevel(building);
+    const currentLevel = displayedFloorLevel(building);
+    const nextLevel = currentLevel + 1;
+    // Effect scaling clamps at floor 10; display the multiplier the next
+    // upgrade will actually receive, not the unbounded extrapolation.
+    const nextEffectLevel = floorLevel({ floorLevel: rawFl + 1 });
+    floorLine.textContent = `${currentLevel} floors · next: ×${floorEffectMul(nextEffectLevel)} throughput / capacity / power-out`;
+    const upgradeCostBasket = upgradeCost(def, nextLevel);
     const upgradeShortfall = affordabilityShortfall(state.inventory, upgradeCostBasket);
     const canAffordUpgrade = Object.keys(upgradeShortfall).length === 0;
-    const upgradeMs = upgradeConstructionMs(def, nextFl);
+    const upgradeMs = upgradeConstructionMs(def, rawFl + 1);
     const upgradeCostParts: string[] = [];
     for (const [r, n] of Object.entries(upgradeCostBasket) as Array<[ResourceId, number]>) {
       if (n <= 0) continue;
@@ -1537,10 +1536,7 @@ export function mountInspectorUi(
     const qSlots = queuedBuildSlots(state);
     const hardFull = !selfBuilding && runningFull && qCount >= qSlots;
     const willQueue = !selfBuilding && runningFull && qCount < qSlots;
-    if (maxed) {
-      floorUpgradeBtn.textContent = `MAX (${fl + 1}/10)`;
-      floorUpgradeBtn.disabled = true;
-    } else if (selfBuilding) {
+    if (selfBuilding) {
       floorUpgradeBtn.textContent = 'UPGRADING…';
       floorUpgradeBtn.disabled = true;
     } else if (hardFull) {
