@@ -123,7 +123,7 @@ export function upgradeCost(
   const factor =
     targetLevel === undefined || targetLevel <= 10
       ? 0.8
-      : 0.08 * (1.15 ** (targetLevel - 10));
+      : 0.8 * (1.15 ** (targetLevel - 10));
   for (const [r, n] of Object.entries(base) as Array<[ResourceId, number]>) {
     if (n > 0) cost[r] = Math.ceil(n * factor);
   }

@@ -31,7 +31,7 @@ Legend: **L** = live · **P** = partial · **N** = not implemented.
 | §4.6 Storage caps | L | Specialized + generic storage, per-resource caps, destruction clamping. |
 | §4.7 Maintenance | P | Operating-time accrual, threshold + 4h linear degrade, auto-maintain materials check, atomic recipe consumption, most-degraded targeting policy. Only buildings with productive recipe outputs accrue operating time — power producers / storage / antennas / drone pads / shipyards skip accrual since their maintenance factor has no effect on output. Eternal Servitor flag is honoured; Servitor Conversion Kit + Reality Forge mechanic (`convertToServitor` in `buildings.ts`, inspector UI button) is L. |
 | §4.8 Construction queue | L | Running slots + queue depth, enqueue when full, FIFO promotion on completion, cancel refund, level badge. |
-| §4.9 Floor upgrades | L | Floors 2–10 cost `ceil(0.8 × placementCost)`; floors >10 use `ceil(0.08 × 1.15^(L−10) × placementCost)`, unbounded. Effect scaling `×(1+L)` is also unbounded. |
+| §4.9 Floor upgrades | L | Floors 2–10 cost `ceil(0.8 × placementCost)`; floors >10 use `ceil(0.8 × 1.15^(L−10) × placementCost)`, unbounded. Effect scaling `×(1+L)` is also unbounded. |
 | §5.1 Electrical grid | L | Per-island brownout factor, active-only summing, gating predicate. |
 | §5.2 Heat adjacency | L | N:1 source assignment, free-source priority, fuel-burn scaling with served count. |
 | §5.3 Inter-island power | L | Per-component binary-gated unified pool: gate passes iff Σ cable capacity ≥ min(Σ per-island surplus, Σ per-island deficit). Unified component shares one brownout `min(1, ΣP/ΣC)`; gate fail = cables inert that tick. T5 Spacetime Anchor route counts as infinite-capacity (always passes). |
@@ -599,9 +599,9 @@ A building starts at floor 1 (`floorLevel === 0`). Each floor upgrade raises the
 **Pricing.** For an upgrade *into* displayed floor level `L`:
 
 * `2 ≤ L ≤ 10`: each resource costs `ceil(0.8 × placementCost[r])` — unchanged from the legacy per-floor rate.
-* `L > 10`: each resource costs `ceil(0.08 × 1.15^(L − 10) × placementCost[r])`.
+* `L > 10`: each resource costs `ceil(0.8 × 1.15^(L − 10) × placementCost[r])`.
 
-The L>10 curve starts at 8% of a fresh build and grows 15% per subsequent floor (floor 11 ≈ 9.2%, floor 12 ≈ 10.6%, floor 15 ≈ 16.1%, floor 20 ≈ 32.4%, etc.). It uses the same resource basket as the base placement cost; only the scalar changes.
+The L>10 curve starts at 92% of a fresh build (floor 11 = 0.8 × 1.15) and grows 15% per subsequent floor (floor 12 ≈ 106%, floor 15 ≈ 161%, floor 20 ≈ 324%, etc.). It uses the same resource basket as the base placement cost; only the scalar changes.
 
 **Effect scaling** is unbounded: throughput, power output, and storage scale as `×(1 + L)` where `L` is the raw floor level. Consumer power draw scales as `×(1 + 0.5 × L)`. These multipliers apply to every floor, including floors beyond 10.
 

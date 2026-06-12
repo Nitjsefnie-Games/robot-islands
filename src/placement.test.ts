@@ -1766,7 +1766,7 @@ describe('upgradeCost', () => {
 
   it('prices floor 11, 12, 15 with the exponential formula', () => {
     const mine = BUILDING_DEFS.mine; // { stone: 200, wood: 80 }
-    const factor = (L: number) => 0.08 * (1.15 ** (L - 10));
+    const factor = (L: number) => 0.8 * (1.15 ** (L - 10));
     const expected = (L: number) => ({
       stone: Math.ceil(200 * factor(L)),
       wood: Math.ceil(80 * factor(L)),
@@ -1774,12 +1774,12 @@ describe('upgradeCost', () => {
     expect(upgradeCost(mine, 11)).toEqual(expected(11));
     expect(upgradeCost(mine, 12)).toEqual(expected(12));
     expect(upgradeCost(mine, 15)).toEqual(expected(15));
-    // Sanity-check the prompt's approximate fractions.
+    // Sanity-check the corrected fractions: floor 11 starts at 0.8×1.15 = 0.92.
     const stone11 = upgradeCost(mine, 11).stone!;
     const stone20 = upgradeCost(mine, 20).stone!;
-    expect(stone11 / 200).toBeCloseTo(0.092, 2);
-    expect(upgradeCost(mine, 15).stone! / 200).toBeCloseTo(0.161, 2);
-    expect(stone20 / 200).toBeCloseTo(0.324, 2);
+    expect(stone11 / 200).toBeCloseTo(0.92, 2);
+    expect(upgradeCost(mine, 15).stone! / 200).toBeCloseTo(1.61, 2);
+    expect(stone20 / 200).toBeCloseTo(3.24, 2);
   });
 
   it('cost keeps growing without a cap', () => {
