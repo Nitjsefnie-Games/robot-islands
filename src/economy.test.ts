@@ -833,6 +833,14 @@ function mineHeavyCatalog(): DefCatalog {
 }
 const MINE_HEAVY: DefCatalog = mineHeavyCatalog();
 
+/** Per-building effectiveRate captured from HEAD (pre-fixpoint) computeRates
+ *  for the surplus-power Coal Gen + Mine + Workshop scene — the no-brownout
+ *  common path. The co-solve change must reproduce these exactly. */
+const SNAPSHOT_NO_BROWNOUT = {
+  mine: 1 / 20,     // 0.05 iron_ore/s
+  workshop: 1 / 4300, // ~0.0002326 bolt/s
+} as const;
+
 describe('§5.3 cable network — computeRates honours cableComponent.unified', () => {
   // Under the new binary-gated unified-pool model (replaces the prior
   // cableInflowW "virtual producer" plumbing): when ctx.cableComponent
@@ -1233,6 +1241,98 @@ describe('power (§5.1)', () => {
     const mineB: PlacedBuilding = { id: 'b-mine-b', defId: 'mine', x: 2, y: 0 };
     const state = makeState({ buildings: [mineA, mineB], inventory: blankInventory() });
     expect(computeRates(state).power.consumed).toBe(50);
+  });
+});
+
+describe('§15.3 × §5.1 — pinned bins net to 0 under asymmetric-power brownout', () => {
+  // The joint net-flow ⇄ brownout fixpoint: when a pinned resource's producers
+  // and consumers differ in power-dependence, the brownout factor pf must be
+  // baked into the power-side's flow coefficients BEFORE the gate solve so the
+  // realized flows balance the pin. Pre-fix, pf was applied only in Pass 4 to
+  // power-consumers, scaling the two sides of a pinned bin asymmetrically and
+  // leaving a non-zero realized net (conjuring / discarding).
+
+  // A tiny generator (no fuel) sized to force a deep brownout. requiredTile is
+  // a placement gate, not a runtime one — it stands in the test state without
+  // a terrain map. We override `power.produces` per-test to size the deficit.
+  const tinyGenCatalog = (genW: number): DefCatalog => {
+    const base = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
+    base.water_wheel = { ...base.water_wheel, power: { produces: genW } };
+    return base;
+  };
+  const TINY_GEN: PlacedBuilding = { id: 'b-gen', defId: 'water_wheel', x: 0, y: 0 };
+
+  it('zero-pinned input under brownout does not conjure (producer draws power, consumer does not)', () => {
+    // iron_ore zero-pinned (inv 0). Mine PRODUCES iron_ore and CONSUMES 25 kW.
+    // Workshop CONSUMES iron_ore (+ coal) and draws NO power. Generator makes
+    // 0.05 kW ⇒ pf = 0.05/25 = 0.002, deep enough that pf·(mine output 0.05/s)
+    // = 0.0001/s < the workshop's nominal iron_ore draw 1/4300 ≈ 0.000233/s.
+    //
+    // Pre-fix: solver gates on nominal coeffs (mine 0.05 ≫ workshop 0.000233 ⇒
+    // both run full), then pf scales ONLY the mine in Pass 4 ⇒ realized mine
+    // production 0.0001/s < realized workshop consumption 0.000233/s ⇒ net < 0
+    // (iron_ore conjured from nothing at a zero-pinned bin).
+    // Post-fix: mine's flow coeff is pf-scaled before the solve, so the
+    // zero-constraint throttles the workshop to the realized mine output ⇒ net 0.
+    const base = { ...tinyGenCatalog(0.05) };
+    const { power: _wp, ...workshopNoPower } = base.workshop;
+    base.workshop = workshopNoPower as BuildingDef;
+    const defs: DefCatalog = base;
+    const state = makeState({
+      buildings: [TINY_GEN, MINE_PWR, WORKSHOP],
+      inventory: { ...blankInventory(), iron_ore: 0, coal: 100 },
+      storageCaps: blankCaps(100),
+    });
+    const r = computeRates(state, { defs });
+    expect(r.power.factor).toBeLessThan(1);
+    expect(r.net.iron_ore ?? 0).toBeCloseTo(0, 9);
+    // And specifically: no conjuring — net is not meaningfully negative.
+    expect(r.net.iron_ore ?? 0).toBeGreaterThanOrEqual(-1e-9);
+  });
+
+  it('cap-pinned output under brownout does not over-produce (producer no power, consumer draws power)', () => {
+    // iron_ore cap-pinned (inv = cap = 100). Mine PRODUCES iron_ore, NO power.
+    // Workshop CONSUMES iron_ore (+ coal) and draws 60 kW. Generator makes a
+    // tiny amount ⇒ pf < 1.
+    //
+    // Pre-fix: solver throttles the mine to the workshop's NOMINAL draw, then pf
+    // scales only the workshop in Pass 4 ⇒ realized mine production exceeds
+    // realized workshop consumption ⇒ net > 0 (iron_ore over-produced past cap,
+    // silently discarded by applyRates).
+    // Post-fix: workshop's flow coeff is pf-scaled before the solve, so the
+    // cap-constraint throttles the mine to the realized workshop draw ⇒ net 0.
+    const base = { ...tinyGenCatalog(0.05) };
+    const { power: _mp, ...mineNoPower } = base.mine;
+    base.mine = mineNoPower as BuildingDef;
+    const defs: DefCatalog = base;
+    const state = makeState({
+      buildings: [TINY_GEN, MINE, WORKSHOP_PWR],
+      inventory: { ...blankInventory(), iron_ore: 100, coal: 100 },
+      storageCaps: blankCaps(100),
+    });
+    const r = computeRates(state, { defs });
+    expect(r.power.factor).toBeLessThan(1);
+    expect(r.net.iron_ore ?? 0).toBeCloseTo(0, 9);
+    // And specifically: no over-production — net is not meaningfully positive.
+    expect(r.net.iron_ore ?? 0).toBeLessThanOrEqual(1e-9);
+  });
+
+  it('no-brownout parity: surplus-power island reproduces the pre-fix per-building rates exactly', () => {
+    // A surplus-power island (Coal Gen 5000 kW ≫ 25 + 60 kW demand ⇒ pf = 1).
+    // The co-solve fast path must keep a SINGLE flow solve and produce
+    // byte-identical effectiveRate to the pre-fixpoint common path. The
+    // snapshot values below were captured from HEAD (pre-change) computeRates.
+    const state = makeState({
+      buildings: [COAL_GEN, MINE_PWR, WORKSHOP_PWR],
+      inventory: { ...blankInventory(), coal: 50, iron_ore: 50 },
+    });
+    const { power, byBuilding } = computeRates(state);
+    expect(power.factor).toBe(1);
+    const mineRate = byBuilding.find((r) => r.building === MINE_PWR)?.effectiveRate;
+    const wsRate = byBuilding.find((r) => r.building === WORKSHOP_PWR)?.effectiveRate;
+    // HEAD snapshot: mine 1/20 = 0.05/s, workshop 1/4300/s — full rate, pf=1.
+    expect(mineRate).toBe(SNAPSHOT_NO_BROWNOUT.mine);
+    expect(wsRate).toBe(SNAPSHOT_NO_BROWNOUT.workshop);
   });
 });
 
