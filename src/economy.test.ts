@@ -750,11 +750,11 @@ describe('advanceIsland — magic recipeInputMul reduces input drawdown (real sk
 });
 
 describe('§4.5 — buff adjacency in computeRates / advanceIsland', () => {
-  it('two adjacent mines each gain +10% category adjacency (1 same-category neighbour)', () => {
-    // Mine is category 'extraction', rate 0.10 per same-category neighbour. Two mines
+  it('two adjacent mines each gain +5% category adjacency (1 same-category neighbour)', () => {
+    // Mine is category 'extraction', rate 0.05 per same-category neighbour. Two mines
     // sharing a footprint border (2x2 at (0,0) and (2,0) → mine-A's east
     // border at column 2 intersects mine-B's western column) → each has
-    // one same-category neighbour → rate × 1.10. Base rate 1/50s = 0.02.
+    // one same-category neighbour → rate × 1.05. Base rate 1/20s = 0.05.
     const mineA: PlacedBuilding = { id: 'b-mine-a', defId: 'mine', x: 0, y: 0 };
     const mineB: PlacedBuilding = { id: 'b-mine-b', defId: 'mine', x: 2, y: 0 };
     const state = makeState({
@@ -762,17 +762,17 @@ describe('§4.5 — buff adjacency in computeRates / advanceIsland', () => {
       inventory: blankInventory(),
     });
     const { production, byBuilding } = computeRates(state, { defs: POWER_FREE });
-    // Each mine at 0.02 × 1.10 = 0.022; aggregate iron_ore = 0.044.
-    expect(production.iron_ore).toBeCloseTo(0.11, 9);
+    // Each mine at 0.05 × 1.05 = 0.0525; aggregate iron_ore = 0.105.
+    expect(production.iron_ore).toBeCloseTo(0.105, 9);
     for (const r of byBuilding) {
-      expect(r.effectiveRate).toBeCloseTo(0.055, 9);
+      expect(r.effectiveRate).toBeCloseTo(0.0525, 9);
     }
   });
 
-  it('three mines in a line: whole cluster gets uniform +20% (cluster size 3)', () => {
+  it('three mines in a line: whole cluster gets uniform +10% (cluster size 3)', () => {
     // Three 2x2 mines at x = -2, 0, 2 (all y=0) form one same-category
     // 4-connected cluster of size 3. Per §4.5 the bonus is uniform across the
-    // cluster: 1 + (3 − 1) × 0.10 = ×1.20 for EVERY member (the middle and both
+    // cluster: 1 + (3 − 1) × 0.05 = ×1.10 for EVERY member (the middle and both
     // ends alike) — not the old positional centre-1.20 / ends-1.10 split.
     const west: PlacedBuilding = { id: 'b-w', defId: 'mine', x: -2, y: 0 };
     const mid: PlacedBuilding = { id: 'b-m', defId: 'mine', x: 0, y: 0 };
@@ -785,14 +785,14 @@ describe('§4.5 — buff adjacency in computeRates / advanceIsland', () => {
     const midRate = byBuilding.find((r) => r.building === mid)?.effectiveRate;
     const westRate = byBuilding.find((r) => r.building === west)?.effectiveRate;
     const eastRate = byBuilding.find((r) => r.building === east)?.effectiveRate;
-    expect(midRate).toBeCloseTo(0.06, 9);
-    expect(westRate).toBeCloseTo(0.06, 9);
-    expect(eastRate).toBeCloseTo(0.06, 9);
+    expect(midRate).toBeCloseTo(0.055, 9);
+    expect(westRate).toBeCloseTo(0.055, 9);
+    expect(eastRate).toBeCloseTo(0.055, 9);
   });
 
   it('buff stack is observable in actual production over time', () => {
-    // Two adjacent mines, 100s. Each at 0.022/s → 2 × 0.022 × 100 = 4.4
-    // iron_ore. Without the buff the same setup yields 4.0.
+    // Two adjacent mines, 100s. Each at 0.0525/s → 2 × 0.0525 × 100 = 10.5
+    // iron_ore. Without the buff the same setup yields 10.0.
     const mineA: PlacedBuilding = { id: 'b-mine-a', defId: 'mine', x: 0, y: 0 };
     const mineB: PlacedBuilding = { id: 'b-mine-b', defId: 'mine', x: 2, y: 0 };
     const state = makeState({
@@ -800,7 +800,7 @@ describe('§4.5 — buff adjacency in computeRates / advanceIsland', () => {
       inventory: blankInventory(),
     });
     advanceIsland(state, 100_000, { defs: POWER_FREE });
-    expect(state.inventory.iron_ore).toBeCloseTo(11, 6);
+    expect(state.inventory.iron_ore).toBeCloseTo(10.5, 6);
   });
 });
 
@@ -1201,9 +1201,9 @@ describe('power (§5.1)', () => {
     expect(power.produced).toBeGreaterThan(5000);
   });
 
-  it('clustered generators boost each other output by +10% per same-category neighbour', () => {
+  it('clustered generators boost each other output by +5% per same-category neighbour', () => {
     // Two adjacent Water Wheels (category 'power', 20 kW each, no fuel) → each
-    // has one same-category neighbour → ×1.10 → 22 kW each → 44 kW total.
+    // has one same-category neighbour → ×1.05 → 21 kW each → 42 kW total.
     const wwA: PlacedBuilding = { id: 'b-ww-a', defId: 'water_wheel', x: 0, y: 0 };
     const wwB: PlacedBuilding = { id: 'b-ww-b', defId: 'water_wheel', x: 1, y: 0 };
     const clustered = makeState({ buildings: [wwA, wwB], inventory: blankInventory() });
@@ -1211,7 +1211,7 @@ describe('power (§5.1)', () => {
       buildings: [{ id: 'b-ww', defId: 'water_wheel', x: 0, y: 0 }],
       inventory: blankInventory(),
     });
-    expect(computeRates(clustered).power.produced).toBeCloseTo(44, 5);
+    expect(computeRates(clustered).power.produced).toBeCloseTo(42, 5);
     expect(computeRates(solo).power.produced).toBeCloseTo(20, 5);
   });
 
@@ -3717,9 +3717,9 @@ describe('§4.5 — chemical_reactor toxicity in computeRates', () => {
     const { byBuilding } = computeRates(state, { defs: noPower }, nowMs);
     const rateA = byBuilding.find((r) => r.building.id === 'b-cr-a')!.effectiveRate;
     const rateB = byBuilding.find((r) => r.building.id === 'b-cr-b')!.effectiveRate;
-    // Base rate 1/2345.4 × 1.10 category-adjacency buff: reactorA and reactorB
-    // are adjacent same-category (chemistry) buildings, so each gets +10%.
-    expect(rateB).toBeCloseTo(0.0004690031551121344, 9);
+    // Base rate 1/2345.4 × 1.05 category-adjacency buff: reactorA and reactorB
+    // are adjacent same-category (chemistry) buildings, so each gets +5%.
+    expect(rateB).toBeCloseTo(0.0004476848298797647, 9);
     expect(rateA).toBeCloseTo(rateB * 0.5, 9);
   });
 

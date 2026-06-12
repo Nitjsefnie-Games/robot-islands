@@ -28,18 +28,18 @@ describe('computeBuffStack — category × exotic', () => {
   it('equals the cluster term when no exotic rules apply', () => {
     const a = place('a', 'mine', 0, 0);
     const b = place('b', 'mine', 2, 0);
-    expect(computeBuffStack(a, [a, b])).toBeCloseTo(1.1, 9);
+    expect(computeBuffStack(a, [a, b])).toBeCloseTo(1.05, 9);
   });
 
   it('exotic pair bonus stacks multiplicatively on top of the category term', () => {
-    // Two adjacent mines → category ×1.10. An exotic rule pairing
+    // Two adjacent mines → category ×1.05. An exotic rule pairing
     // mine→smelter with +0.25 fires only when a smelter neighbour exists.
     const a = place('a', 'mine', 0, 0);
     const b = place('b', 'mine', 2, 0);
     const sm = place('sm', 'smelter', 0, 2); // borders a's bottom edge
     const rules = [{ pair: ['mine', 'smelter'] as const, recipeRateBonus: 0.25 }];
     expect(computeBuffStack(a, [a, b, sm], BUILDING_DEFS, undefined, rules))
-      .toBeCloseTo(1.1 * 1.25, 9);
+      .toBeCloseTo(1.05 * 1.25, 9);
   });
 
   it('exotic rule with no matching neighbour leaves the stack at the category term', () => {
@@ -47,7 +47,7 @@ describe('computeBuffStack — category × exotic', () => {
     const b = place('b', 'mine', 2, 0);
     const rules = [{ pair: ['mine', 'smelter'] as const, recipeRateBonus: 0.25 }];
     expect(computeBuffStack(a, [a, b], BUILDING_DEFS, undefined, rules))
-      .toBeCloseTo(1.1, 9);
+      .toBeCloseTo(1.05, 9);
   });
 
   it('multiple exotic rules stack multiplicatively (category term isolated at 1.0)', () => {
@@ -196,41 +196,41 @@ describe('clusterBonusMul — §4.5 per-cluster bonus', () => {
     expect(clusterBonusMul(a, [a])).toBe(1);
   });
 
-  it('pair (cluster size 2) → 1 + 1 × 0.10 = 1.10, both members', () => {
+  it('pair (cluster size 2) → 1 + 1 × 0.05 = 1.05, both members', () => {
     const a = place('a', 'mine', 0, 0);
     const b = place('b', 'mine', 2, 0);
-    expect(clusterBonusMul(a, [a, b])).toBeCloseTo(1.1, 9);
-    expect(clusterBonusMul(b, [a, b])).toBeCloseTo(1.1, 9);
+    expect(clusterBonusMul(a, [a, b])).toBeCloseTo(1.05, 9);
+    expect(clusterBonusMul(b, [a, b])).toBeCloseTo(1.05, 9);
   });
 
-  it('line of 3 → uniform 1.20 (was: centre 1.20, ends 1.10)', () => {
+  it('line of 3 → uniform 1.10 (was: centre 1.20, ends 1.10)', () => {
     const a = place('a', 'mine', 0, 0);
     const b = place('b', 'mine', 2, 0);
     const c = place('c', 'mine', 4, 0);
     const all = [a, b, c];
-    expect(clusterBonusMul(a, all)).toBeCloseTo(1.2, 9);
-    expect(clusterBonusMul(b, all)).toBeCloseTo(1.2, 9);
-    expect(clusterBonusMul(c, all)).toBeCloseTo(1.2, 9);
+    expect(clusterBonusMul(a, all)).toBeCloseTo(1.1, 9);
+    expect(clusterBonusMul(b, all)).toBeCloseTo(1.1, 9);
+    expect(clusterBonusMul(c, all)).toBeCloseTo(1.1, 9);
   });
 
-  it('cross of 5 → uniform 1.40 across centre AND arms (was: arms 1.10)', () => {
+  it('cross of 5 → uniform 1.20 across centre AND arms (was: arms 1.10)', () => {
     const mid = place('mid', 'mine', 0, 0);
     const n = place('n', 'mine', 0, -2);
     const s = place('s', 'mine', 0, 2);
     const e = place('e', 'mine', 2, 0);
     const w = place('w', 'mine', -2, 0);
     const all = [mid, n, s, e, w];
-    for (const b of all) expect(clusterBonusMul(b, all)).toBeCloseTo(1.4, 9);
+    for (const b of all) expect(clusterBonusMul(b, all)).toBeCloseTo(1.2, 9);
   });
 
-  it('ring of 8 around a hole → one cluster of 8, all ×1.70 (R1: hole ignored)', () => {
+  it('ring of 8 around a hole → one cluster of 8, all ×1.35 (R1: hole ignored)', () => {
     // 3×3 block of 2×2 mines at spacing 2, centre tile (2,2) empty.
     const ids = [
       place('p00', 'mine', 0, 0), place('p20', 'mine', 2, 0), place('p40', 'mine', 4, 0),
       place('p02', 'mine', 0, 2),                              place('p42', 'mine', 4, 2),
       place('p04', 'mine', 0, 4), place('p24', 'mine', 2, 4), place('p44', 'mine', 4, 4),
     ];
-    for (const b of ids) expect(clusterBonusMul(b, ids)).toBeCloseTo(1.7, 9);
+    for (const b of ids) expect(clusterBonusMul(b, ids)).toBeCloseTo(1.35, 9);
   });
 
   it('different-category building between two mines does NOT bridge them (M E M)', () => {
@@ -246,16 +246,16 @@ describe('clusterBonusMul — §4.5 per-cluster bonus', () => {
   });
 
   it('two disjoint same-category clusters scale independently', () => {
-    // Cluster A: pair at x=0,2 (size 2 → 1.10). Cluster B: triple at x=10,12,14 (size 3 → 1.20).
+    // Cluster A: pair at x=0,2 (size 2 → 1.05). Cluster B: triple at x=10,12,14 (size 3 → 1.10).
     const a1 = place('a1', 'mine', 0, 0);
     const a2 = place('a2', 'mine', 2, 0);
     const b1 = place('b1', 'mine', 10, 0);
     const b2 = place('b2', 'mine', 12, 0);
     const b3 = place('b3', 'mine', 14, 0);
     const all = [a1, a2, b1, b2, b3];
-    expect(clusterBonusMul(a1, all)).toBeCloseTo(1.1, 9);
-    expect(clusterBonusMul(b1, all)).toBeCloseTo(1.2, 9);
-    expect(clusterBonusMul(b3, all)).toBeCloseTo(1.2, 9);
+    expect(clusterBonusMul(a1, all)).toBeCloseTo(1.05, 9);
+    expect(clusterBonusMul(b1, all)).toBeCloseTo(1.1, 9);
+    expect(clusterBonusMul(b3, all)).toBeCloseTo(1.1, 9);
   });
 
   it('diagonal-only contact does NOT connect (4-adjacency)', () => {
@@ -279,6 +279,6 @@ describe('clusterBonusMul — §4.5 per-cluster bonus', () => {
     for (const x of all) {
       expect(map.get(x.id)).toBeCloseTo(clusterBonusMul(x, all), 9);
     }
-    expect(map.get('a')).toBeCloseTo(1.2, 9);
+    expect(map.get('a')).toBeCloseTo(1.1, 9);
   });
 });
