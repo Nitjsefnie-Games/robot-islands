@@ -401,10 +401,12 @@ export type BuildingDefId =
 
 /**
  * §4.5 universal per-category cluster-bonus rate. Each building gains
- * `1 + (k − 1) × CATEGORY_ADJACENCY_RATE[category]` to its recipe rate (and,
- * for generators, its power output), where `k` is the size of the building's
- * same-category 4-connected cluster. Uniform across the cluster, linear,
- * uncapped. Seeded uniform at 0.05 — tune per category here. Categories whose
+ * `1 + CATEGORY_ADJACENCY_RATE[category] × (K − c_i)` to its recipe rate (and,
+ * for generators, its power output), where `c_i = 1 + floorLevel_i` is the
+ * building's own floor-capacity and `K = Σ c_j` over its same-category
+ * 4-connected cluster (floor-weighted size; a member's own height feeds its
+ * neighbours' bonus, not its own). Linear, uncapped. Seeded uniform at 0.05 —
+ * tune per category here. Categories whose
  * buildings neither run a recipe nor generate power (storage / logistics /
  * cooling) are no-ops.
  */

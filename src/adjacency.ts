@@ -4,8 +4,9 @@
 // building, the adjacent set is the union of tiles bordering any cell of the
 // footprint, minus the footprint itself."
 //
-// SPEC §4.5 (buff form): "every building gains a uniform multiplier from the
-// size of its same-category 4-connected cluster: `1 + (k − 1) × rate`."
+// SPEC §4.5 (buff form): "every building gains a multiplier from the
+// floor-capacity of the REST of its same-category 4-connected cluster:
+// `1 + rate × (K − c_i)`, c = 1 + floorLevel, K = Σ c over the cluster."
 //
 // Pure module — no PixiJS, no DOM. The 4-neighbor footprint walk mirrors
 // `heat.ts`'s pattern (footprintKeySet → borderTiles); we keep the helpers
@@ -19,7 +20,7 @@ import {
   type BuildingDefId,
   type GateRequirement,
 } from './building-defs.js';
-import type { PlacedBuilding } from './buildings.js';
+import { floorLevel, type PlacedBuilding } from './buildings.js';
 import { footprintTiles, type Rotation } from './shape-mask.js';
 
 /** All footprint tiles a building occupies, returned as a Set of "x,y" keys
@@ -80,12 +81,16 @@ export function touchesBorder(
 /**
  * §4.5 per-building cluster-bonus multiplier. A building's *cluster* is the
  * maximal set of same-category buildings connected through 4-neighbour links
- * (the §4.4 border test). Every member of a cluster of size `k` receives the
- * same `1 + (k − 1) × CATEGORY_ADJACENCY_RATE[category]`. Connectivity only:
+ * (the §4.4 border test). The bonus is FLOOR-WEIGHTED and neighbours-only:
+ * each member gets `1 + CATEGORY_ADJACENCY_RATE[category] × (K − c_i)`, where
+ * `c_i = 1 + floorLevel_i` is its own floor-capacity and `K = Σ c_j` over the
+ * cluster — so a member's own height does NOT feed its own bonus, but does
+ * raise its neighbours'. (When every member is floor-1, `K − c_i = k − 1` and
+ * this collapses to the legacy `1 + (k − 1) × rate`.) Connectivity only:
  * enclosed empty tiles do not break a cluster, and a different-category
  * building between two same-category buildings does not bridge them. Physical
  * same-island buildings only — the §13.3 cross-island lattice does NOT feed
- * this term. Returns 1.0 for an isolated building or a rate-0 category.
+ * this term. Returns 1.0 for an isolated building (any floor) or a rate-0 category.
  *
  * Implemented via the batch labeller so single- and whole-island callers agree.
  */
@@ -100,7 +105,9 @@ export function clusterBonusMul(
 /**
  * Batch form: every building's cluster-bonus multiplier in one pass. Groups
  * by category, unions same-category 4-adjacent buildings (union-find), then
- * maps each building to `1 + (size − 1) × rate`. O(N²) over the building set —
+ * sums each component's floor-capacity `K = Σ (1 + floorLevel)`, then maps
+ * each building to `1 + rate × (K − c_i)` (c_i = 1 + its own floorLevel).
+ * O(N²) over the building set —
  * the per-tick hot path (`economy.computeRates`) calls this ONCE per tick and
  * reads per-building values from the returned map, rather than re-deriving a
  * component per building.
@@ -140,18 +147,26 @@ export function clusterBonusMuls(
     }
   }
 
-  const compSize = new Map<number, number>();
+  // §4.5 floor-weighted component capacity: a component's "size" is the sum of
+  // its members' floor-capacity c = 1 + floorLevel (== floorEffectMul), NOT a
+  // raw head-count — so a floor-upgraded building contributes its capacity to
+  // its neighbours' bonus.
+  const compCap = new Map<number, number>();
   for (let i = 0; i < n; i++) {
     const r = find(i);
-    compSize.set(r, (compSize.get(r) ?? 0) + 1);
+    compCap.set(r, (compCap.get(r) ?? 0) + (1 + floorLevel(buildings[i]!)));
   }
 
   const out = new Map<string, number>();
   for (let i = 0; i < n; i++) {
     const b = buildings[i]!;
     const rate = CATEGORY_ADJACENCY_RATE[defs[b.defId].category] ?? 0;
-    const k = compSize.get(find(i)) ?? 1;
-    out.set(b.id, rate === 0 ? 1 : 1 + (k - 1) * rate);
+    if (rate === 0) { out.set(b.id, 1); continue; }
+    // Neighbours-only: exclude this building's own capacity from its own bonus,
+    // so a lone building (any floor) gets ×1.0 and a building's own height
+    // drives only its floor multiplier, not its cluster term.
+    const K = compCap.get(find(i)) ?? 1;
+    out.set(b.id, 1 + rate * (K - (1 + floorLevel(b))));
   }
   return out;
 }
@@ -160,7 +175,7 @@ export function clusterBonusMuls(
  * §4.5 buff-adjacency multiplier for the focal building.
  *
  * Returns `clusterBonusMul × Π(exotic-pair bonuses)`. The cluster term
- * (uniform per same-category 4-connected cluster — see `clusterBonusMul`) uses
+ * (floor-weighted, neighbours-only across the same-category 4-connected cluster — see `clusterBonusMul`) uses
  * physical same-island buildings only. The exotic-pair term carries the
  * skill-tree `pairBoost` rewards (`skillUnlockedAdjacencyRules`) and keeps its
  * original neighbour semantics: physical neighbours plus any `crossIsland`

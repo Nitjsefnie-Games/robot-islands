@@ -802,6 +802,16 @@ describe('§4.5 — buff adjacency in computeRates / advanceIsland', () => {
     advanceIsland(state, 100_000, { defs: POWER_FREE });
     expect(state.inventory.iron_ore).toBeCloseTo(10.5, 6);
   });
+
+  it('floor-weighted generator power: own floor multiplies output; taller neighbour raises the cluster term', () => {
+    // wwA floor-1 (c=1), wwB floor-2 (floorLevel 1 → c=2). K = 3.
+    // wwA = 20 × floorEffectMul(0)=1 × (1 + 0.05×(3−1)=1.10) = 22 kW
+    // wwB = 20 × floorEffectMul(1)=2 × (1 + 0.05×(3−2)=1.05) = 42 kW → total 64 kW
+    const wwA: PlacedBuilding = { id: 'b-ww-a', defId: 'water_wheel', x: 0, y: 0 };
+    const wwB: PlacedBuilding = { id: 'b-ww-b', defId: 'water_wheel', x: 1, y: 0, floorLevel: 1 };
+    const state = makeState({ buildings: [wwA, wwB], inventory: blankInventory() });
+    expect(computeRates(state).power.produced).toBeCloseTo(64, 5);
+  });
 });
 
 // Building fixtures with §5.1 power fields. SOLAR and COAL_GEN inherit
