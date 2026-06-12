@@ -1582,113 +1582,119 @@ export function computeRates(
   // § "Wear, XP, events"). Heat-failed consumers remain fully inactive (no
   // power, no production, no consumption) per §5.1 "active iff all gates
   // pass".
-  let powerProduced = 0;
-  let powerConsumed = 0;
-  for (const b of validBuildings) {
-    const def = defs[b.defId];
-    // §13.3 Genesis Chamber power is handled below with tier-based draw.
-    if (b.defId === 'genesis_chamber') continue;
-    // §4 ocean-layer (Task 10): a paused ocean platform draws no power
-    // (its anchor can't supply it) AND produces no power (its anchor can't
-    // consume it). Pass-1 already set `b.paused` from
-    // `oceanPlatformPausedReason`; we honour the same flag here to keep the
-    // power balance consistent with the pass-1 zero rate.
-    if (b.paused) continue;
-    // §9.7 Tier Reset runtime gate: tier-gated buildings draw no power and
-    // produce no power on a below-tier island (mirrors heat-gate exclusion
-    // below). Without this, a post-reset T2 coal_gen would still push W
-    // into the balance and a T2 consumer that drew on its own input would
-    // still count as a load even though pass-1 zeroed its rate.
-    if (!isBuildingActive(b)) continue;
-    // §5.2: heat-required consumer with no adjacent source is INACTIVE
-    // (zero power draw). Checked before recipe lookup so the gate applies
-    // even if the building's recipe is somehow undefined for the variant.
-    let heatFactorPass3 = 1;
-    if (def.requiresHeat) {
-      const factor = heat.heatThrottleFactor.get(b.id) ?? 0;
-      if (factor < MIN_HEAT_FACTOR) continue; // brownout — no power draw
-      heatFactorPass3 = factor;
-    }
-    // §4.5 gating adjacency: a building with a failed hard gate draws no power.
-    const gateResult = gateFor(b);
-    if (gateResult.effectiveMul === 0) continue;
-    // Same tile-aware resolution as the pass-1 loop. `active` only checks
-    // recipe presence here, so the variant chosen doesn't matter — but we
-    // pipe it through `resolveRecipe` for symmetry with pass 1 (no caller
-    // confusion about which lookup is "the" lookup).
-    const recipe = resolveRecipe(def, b, terrainAt, ctx?.inventory ?? state.inventory);
-    // §5.1 throughput-scaled draw: compose the NOMINAL gates that determine
-    // how much work the building actually does this tick. Running buildings
-    // (baseRate > 0) use the pass-2.5 flow-solver gate g, which subsumes the
-    // old inputAvail × outputAvail pair (§15.3 net-flow rework). Buildings
-    // stalled for non-storage reasons (tile gate, tier gate, …) keep the
-    // probe draw shape: inputAvail × outputAvail.
-    let active: boolean;
-    let nominalThroughputFrac: number;
-    if (!recipe) {
-      active = true;
-      nominalThroughputFrac = 1; // Solar / Dock / Crate / Silo — full passive draw if any.
-    } else {
-      const idx = tentIdxById.get(b.id) ?? -1;
-      const te = idx >= 0 ? tentative[idx] : undefined;
-      if (te && te.baseRate > 0) {
-        const g = flowGates[idx] ?? 0;
-        active = g > 0;
-        nominalThroughputFrac = gateResult.effectiveMul * g;
-        // §15.3 net-flow × §5.1: the solver gate throttles a generator's
-        // RESOURCE side only, never its W output — power is explicitly
-        // outside the solver (design doc §5.1 row: extremes identical).
-        // A power PRODUCER whose recipe output sits at a pinned bin
-        // (g = 0 — e.g. casimir_tap, cryogenic_generator) stays power-
-        // active under the old probe semantics (inputAvail) so its
-        // wattage keeps flowing; its consumer-draw scaling stays on g
-        // (frac is already 0 here, matching the old ia × oa probe at cap).
-        if (!active && (def.power?.produces ?? 0) > 0) {
-          active = (inputAvailByIdx[idx] ?? 0) > 0;
-        }
-      } else {
-        // Probe path — buildings stalled for non-storage reasons (tile gate,
-        // tier gate, …) keep today's draw shape: inputAvail × outputAvail.
-        const ia = idx >= 0 ? (inputAvailByIdx[idx] ?? 0) : 0;
-        active = ia > 0;
-        const oa = outputAvail(state, recipe, t, ctx?.caps, ctx?.baseMult);
-        nominalThroughputFrac = gateResult.effectiveMul * ia * oa;
+  // Pass-3 power aggregation for a given gate vector; closes over fixed pass-2 state. Called repeatedly by the fixpoint (Task 3) with candidate gates.
+  const aggregatePower = (gatesByTentIdx: readonly number[]): { producedW: number; consumedW: number } => {
+    let producedW = 0;
+    let consumedW = 0;
+    for (const b of validBuildings) {
+      const def = defs[b.defId];
+      // §13.3 Genesis Chamber power is handled below with tier-based draw.
+      if (b.defId === 'genesis_chamber') continue;
+      // §4 ocean-layer (Task 10): a paused ocean platform draws no power
+      // (its anchor can't supply it) AND produces no power (its anchor can't
+      // consume it). Pass-1 already set `b.paused` from
+      // `oceanPlatformPausedReason`; we honour the same flag here to keep the
+      // power balance consistent with the pass-1 zero rate.
+      if (b.paused) continue;
+      // §9.7 Tier Reset runtime gate: tier-gated buildings draw no power and
+      // produce no power on a below-tier island (mirrors heat-gate exclusion
+      // below). Without this, a post-reset T2 coal_gen would still push W
+      // into the balance and a T2 consumer that drew on its own input would
+      // still count as a load even though pass-1 zeroed its rate.
+      if (!isBuildingActive(b)) continue;
+      // §5.2: heat-required consumer with no adjacent source is INACTIVE
+      // (zero power draw). Checked before recipe lookup so the gate applies
+      // even if the building's recipe is somehow undefined for the variant.
+      let heatFactorPass3 = 1;
+      if (def.requiresHeat) {
+        const factor = heat.heatThrottleFactor.get(b.id) ?? 0;
+        if (factor < MIN_HEAT_FACTOR) continue; // brownout — no power draw
+        heatFactorPass3 = factor;
       }
+      // §4.5 gating adjacency: a building with a failed hard gate draws no power.
+      const gateResult = gateFor(b);
+      if (gateResult.effectiveMul === 0) continue;
+      // Same tile-aware resolution as the pass-1 loop. `active` only checks
+      // recipe presence here, so the variant chosen doesn't matter — but we
+      // pipe it through `resolveRecipe` for symmetry with pass 1 (no caller
+      // confusion about which lookup is "the" lookup).
+      const recipe = resolveRecipe(def, b, terrainAt, ctx?.inventory ?? state.inventory);
+      // §5.1 throughput-scaled draw: compose the NOMINAL gates that determine
+      // how much work the building actually does this tick. Running buildings
+      // (baseRate > 0) use the pass-2.5 flow-solver gate g, which subsumes the
+      // old inputAvail × outputAvail pair (§15.3 net-flow rework). Buildings
+      // stalled for non-storage reasons (tile gate, tier gate, …) keep the
+      // probe draw shape: inputAvail × outputAvail.
+      let active: boolean;
+      let nominalThroughputFrac: number;
+      if (!recipe) {
+        active = true;
+        nominalThroughputFrac = 1; // Solar / Dock / Crate / Silo — full passive draw if any.
+      } else {
+        const idx = tentIdxById.get(b.id) ?? -1;
+        const te = idx >= 0 ? tentative[idx] : undefined;
+        if (te && te.baseRate > 0) {
+          const g = gatesByTentIdx[idx] ?? 0;
+          active = g > 0;
+          nominalThroughputFrac = gateResult.effectiveMul * g;
+          // §15.3 net-flow × §5.1: the solver gate throttles a generator's
+          // RESOURCE side only, never its W output — power is explicitly
+          // outside the solver (design doc §5.1 row: extremes identical).
+          // A power PRODUCER whose recipe output sits at a pinned bin
+          // (g = 0 — e.g. casimir_tap, cryogenic_generator) stays power-
+          // active under the old probe semantics (inputAvail) so its
+          // wattage keeps flowing; its consumer-draw scaling stays on g
+          // (frac is already 0 here, matching the old ia × oa probe at cap).
+          if (!active && (def.power?.produces ?? 0) > 0) {
+            active = (inputAvailByIdx[idx] ?? 0) > 0;
+          }
+        } else {
+          // Probe path — buildings stalled for non-storage reasons (tile gate,
+          // tier gate, …) keep today's draw shape: inputAvail × outputAvail.
+          const ia = idx >= 0 ? (inputAvailByIdx[idx] ?? 0) : 0;
+          active = ia > 0;
+          const oa = outputAvail(state, recipe, t, ctx?.caps, ctx?.baseMult);
+          nominalThroughputFrac = gateResult.effectiveMul * ia * oa;
+        }
+      }
+      nominalThroughputFrac *= heatFactorPass3;
+      if (!active) continue;
+      const producesBase = def.power?.produces ?? 0;
+      // §2.7: solar-tagged producers scale by the current quadrant's average.
+      // Non-solar producers (Coal Gen, Biomass, Fusion Core, Casimir Tap) are
+      // unaffected — their `solar` flag is undefined / false.
+      const solarFactor = def.power?.solar === true ? solarMul : 1;
+      // §3.5 High Wind: wind-tagged producers (`power.kind === 'wind'`,
+      // currently only `wind_turbine`) get +50% wattage on `high_wind`
+      // islands. Non-wind producers ignore the multiplier (defaults to 1×).
+      const windFactor = def.power?.kind === 'wind' ? modifierMul.windPowerMul : 1;
+      // §4.5: generator output scales by the building's cluster-bonus
+      // multiplier (clustered generators boost each other). Consumption below
+      // is deliberately NOT scaled.
+      const clusterMul = clusterMuls.get(b.id) ?? 1;
+      producedW += producesBase * floorEffectMul(floorLevel(b)) * solarFactor * windFactor * skillMul.powerProduction * clusterMul;
+      // §5.1 rebalance: per-building draw scales by nominal throughput fraction.
+      // powerConsumption is a "reduction" multiplier (>=1 means lower draw),
+      // so we divide. Default 1.0 leaves draw untouched.
+      consumedW += ((def.power?.consumes ?? 0) * floorPowerDrawMul(floorLevel(b)) * nominalThroughputFrac) / skillMul.powerConsumption;
     }
-    nominalThroughputFrac *= heatFactorPass3;
-    if (!active) continue;
-    const producesBase = def.power?.produces ?? 0;
-    // §2.7: solar-tagged producers scale by the current quadrant's average.
-    // Non-solar producers (Coal Gen, Biomass, Fusion Core, Casimir Tap) are
-    // unaffected — their `solar` flag is undefined / false.
-    const solarFactor = def.power?.solar === true ? solarMul : 1;
-    // §3.5 High Wind: wind-tagged producers (`power.kind === 'wind'`,
-    // currently only `wind_turbine`) get +50% wattage on `high_wind`
-    // islands. Non-wind producers ignore the multiplier (defaults to 1×).
-    const windFactor = def.power?.kind === 'wind' ? modifierMul.windPowerMul : 1;
-    // §4.5: generator output scales by the building's cluster-bonus
-    // multiplier (clustered generators boost each other). Consumption below
-    // is deliberately NOT scaled.
-    const clusterMul = clusterMuls.get(b.id) ?? 1;
-    powerProduced += producesBase * floorEffectMul(floorLevel(b)) * solarFactor * windFactor * skillMul.powerProduction * clusterMul;
-    // §5.1 rebalance: per-building draw scales by nominal throughput fraction.
-    // powerConsumption is a "reduction" multiplier (>=1 means lower draw),
-    // so we divide. Default 1.0 leaves draw untouched.
-    powerConsumed += ((def.power?.consumes ?? 0) * floorPowerDrawMul(floorLevel(b)) * nominalThroughputFrac) / skillMul.powerConsumption;
-  }
-  // §13.3 Genesis Chamber tier-based power draw (converted kW → W).
-  for (const b of validBuildings) {
-    if (b.defId !== 'genesis_chamber') continue;
-    if (!isBuildingActive(b)) continue;
-    const gcGateResult = gateFor(b);
-    if (gcGateResult.effectiveMul === 0) continue;
-    if (!state.genesisTarget) continue;
-    const targetTier = tierForResource(state.genesisTarget);
-    if (targetTier < 1 || targetTier > 4) continue;
-    // Output-stalled chambers don't draw power (no production = no load).
-    if (inv(state, state.genesisTarget) >= cap(state, state.genesisTarget, undefined, undefined, ctx?.baseMult)) continue;
-    powerConsumed += (GENESIS_POWER_KW[targetTier]! * 1000 * floorPowerDrawMul(floorLevel(b))) / skillMul.powerConsumption;
-  }
+    // §13.3 Genesis Chamber tier-based power draw (converted kW → W).
+    for (const b of validBuildings) {
+      if (b.defId !== 'genesis_chamber') continue;
+      if (!isBuildingActive(b)) continue;
+      const gcGateResult = gateFor(b);
+      if (gcGateResult.effectiveMul === 0) continue;
+      if (!state.genesisTarget) continue;
+      const targetTier = tierForResource(state.genesisTarget);
+      if (targetTier < 1 || targetTier > 4) continue;
+      // Output-stalled chambers don't draw power (no production = no load).
+      if (inv(state, state.genesisTarget) >= cap(state, state.genesisTarget, undefined, undefined, ctx?.baseMult)) continue;
+      consumedW += (GENESIS_POWER_KW[targetTier]! * 1000 * floorPowerDrawMul(floorLevel(b))) / skillMul.powerConsumption;
+    }
+    return { producedW, consumedW };
+  };
+
+  let { producedW: powerProduced, consumedW: powerConsumed } = aggregatePower(flowGates);
 
   // §13.3 Battery buffer — cover deficit from stored energy. Local
   // only: batteries don't contribute wattage to the §5.3 cable network
