@@ -717,7 +717,7 @@ export function mountInspectorUi(
         'border-radius: 2px',
       ].join(';'),
     );
-    forceClearBtn.textContent = '▼ DESTROY CONTENTS';
+    forceClearBtn.textContent = '▼ DESTROY EXCESS';
     wrap.appendChild(row);
     wrap.appendChild(blockedNote);
     wrap.appendChild(forceClearBtn);
@@ -771,11 +771,10 @@ export function mountInspectorUi(
   cargoLabelControls.forceClearBtn.addEventListener('click', () => {
     if (!target || pendingRelabel === null) return;
     const b = target.building;
-    const oldLabel = b.cargoLabel;
-    if (oldLabel !== undefined) {
-      // §4.6 force-clear: destroy contents.
-      target.state.inventory[oldLabel] = 0;
-    }
+    // §4.6 force-clear: destroy only the excess that would exceed the reduced
+    // cap after the crate's contribution moves to the new label. The normal
+    // relabel path already clamps inventory down to the new cap, so we skip
+    // the old zero-all behaviour here.
     applyRelabel(b, pendingRelabel);
     paint();
   });
@@ -811,7 +810,7 @@ export function mountInspectorUi(
       held > 0
     ) {
       cargoLabelControls.blockedNote.style.display = '';
-      cargoLabelControls.blockedNote.textContent = `${Math.floor(held)} units of ${current} — destroy to relabel`;
+      cargoLabelControls.blockedNote.textContent = `${Math.floor(held)} units of ${current} — excess above cap will be destroyed`;
       cargoLabelControls.forceClearBtn.style.display = '';
     } else {
       cargoLabelControls.blockedNote.style.display = 'none';
