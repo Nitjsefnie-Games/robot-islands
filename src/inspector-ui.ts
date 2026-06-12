@@ -1507,9 +1507,7 @@ export function mountInspectorUi(
     const rawFl = rawFloorLevel(building);
     const currentLevel = displayedFloorLevel(building);
     const nextLevel = currentLevel + 1;
-    // Effect scaling clamps at floor 10; display the multiplier the next
-    // upgrade will actually receive, not the unbounded extrapolation.
-    const nextEffectLevel = floorLevel({ floorLevel: rawFl + 1 });
+    const nextEffectLevel = rawFl + 1;
     floorLine.textContent = `${currentLevel} floors · next: ×${floorEffectMul(nextEffectLevel)} throughput / capacity / power-out`;
     const upgradeCostBasket = upgradeCost(def, nextLevel);
     const upgradeShortfall = affordabilityShortfall(state.inventory, upgradeCostBasket);

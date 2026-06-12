@@ -296,4 +296,13 @@ describe('clusterBonusMul — §4.5 per-cluster bonus', () => {
     const a = { ...place('a', 'mine', 0, 0), floorLevel: 4 };
     expect(clusterBonusMul(a, [a])).toBe(1);
   });
+
+  it('floor-weighted: levels beyond 9 count toward cluster capacity', () => {
+    // floorLevel 10 → c=11. Two adjacent mines: K = 12.
+    // a gets 1 + 0.05×(12 − 11) = 1.05; b gets 1 + 0.05×(12 − 1) = 1.55.
+    const a = { ...place('a', 'mine', 0, 0), floorLevel: 10 };
+    const b = place('b', 'mine', 2, 0);
+    expect(clusterBonusMul(a, [a, b])).toBeCloseTo(1.05, 9);
+    expect(clusterBonusMul(b, [a, b])).toBeCloseTo(1.55, 9);
+  });
 });

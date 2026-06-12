@@ -152,10 +152,13 @@ describe('floorScaledCapacity helper', () => {
     expect(floorScaledCapacity({}, 100)).toBe(100);
   });
 
-  it('clamps out-of-range floorLevel via floorLevel/floorEffectMul', () => {
-    // floorLevel clamps to [0,9]; floorEffectMul(10) would be 11, but
-    // floorLevel({ floorLevel: 10 }) → 9, so effect is ×10.
-    expect(floorScaledCapacity({ floorLevel: 10 }, 100)).toBe(1000);
+  it('scales floorLevel beyond 9 without clamping', () => {
+    // Effects are now unbounded: floorLevel 10 → ×11, floorLevel 11 → ×12.
+    expect(floorScaledCapacity({ floorLevel: 10 }, 100)).toBe(1100);
+    expect(floorScaledCapacity({ floorLevel: 11 }, 100)).toBe(1200);
+  });
+
+  it('floors negative floorLevel to 0', () => {
     expect(floorScaledCapacity({ floorLevel: -1 }, 100)).toBe(100);
   });
 });

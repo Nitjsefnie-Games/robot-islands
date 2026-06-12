@@ -13,7 +13,7 @@
 
 import { BUILDING_DEFS } from './building-defs.js';
 import { constructionProgress } from './construction.js';
-import { floorLevel } from './buildings.js';
+import { rawFloorLevel } from './buildings.js';
 import type { IslandState } from './economy.js';
 import { defineAction, dispatchAction, type InputRegistry } from './input.js';
 import {
@@ -275,7 +275,7 @@ export function mountBuildQueuePanel(
       if (!entry) continue;
       const def = BUILDING_DEFS[b.defId];
       const remaining = b.constructionRemainingMs ?? 0;
-      const pct = Math.round(constructionProgress(remaining, def, floorLevel(b), b.constructionTotalMs) * 100);
+      const pct = Math.round(constructionProgress(remaining, def, rawFloorLevel(b), b.constructionTotalMs) * 100);
       entry.rightSpan.textContent = `${pct}%`;
       entry.rightSpan.dataset.tone = 'success';
     }
