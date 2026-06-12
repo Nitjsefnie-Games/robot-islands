@@ -833,9 +833,9 @@ export function mountHud(
     // ---- Power row --------------------------------------------------------
     const pTone = powerTone(power.factor);
     setPowerVTone(pTone);
-    setPowerV(`${fmtPower(power.produced)} / ${fmtPower(power.consumed)} · ${power.factor.toFixed(2)}×`);
+    setPowerV(`${fmtPower(power.rawProduced)} / ${fmtPower(power.rawConsumed)} · ${power.factor.toFixed(2)}×`);
     setPowerMeterTone(pTone);
-    const powerPct = power.produced > 0 ? Math.min(100, Math.round((power.consumed / power.produced) * 100)) : 0;
+    const powerPct = power.rawProduced > 0 ? Math.min(100, Math.round((power.rawConsumed / power.rawProduced) * 100)) : 0;
     setPowerPct(`${powerPct}%`);
 
     // ---- Network row ------------------------------------------------------
