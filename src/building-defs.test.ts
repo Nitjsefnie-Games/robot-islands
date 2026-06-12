@@ -2497,9 +2497,9 @@ describe('CATEGORY_ADJACENCY_RATE', () => {
     'power', 'storage', 'logistics', 'cooling', 'production', 'special',
   ] as const;
 
-  it('defines a rate for every BuildingCategory, seeded at 0.10', () => {
+  it('defines a rate for every BuildingCategory, seeded at 0.05', () => {
     for (const cat of ALL_CATEGORIES) {
-      expect(CATEGORY_ADJACENCY_RATE[cat]).toBe(0.1);
+      expect(CATEGORY_ADJACENCY_RATE[cat]).toBe(0.05);
     }
   });
 
