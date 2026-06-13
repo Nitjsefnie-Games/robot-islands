@@ -4,6 +4,8 @@ import {
   isOperationalBuilding,
   findOperationalBuilding,
   ratedBuildingPower,
+  activeFloors,
+  activeFloorLevel,
   type PlacedBuilding,
 } from './buildings.js';
 
@@ -150,5 +152,23 @@ describe('queue model fields', () => {
     };
     expect(b.queued).toBe(true);
     expect(b.queueSeq).toBe(3);
+  });
+});
+
+describe('active floors (floor-disable, Part 2)', () => {
+  it('defaults to all built floors active', () => {
+    expect(activeFloors({ floorLevel: 2 })).toBe(3);
+    expect(activeFloorLevel({ floorLevel: 2 })).toBe(2);
+  });
+  it('subtracts disabledFloors from the top', () => {
+    expect(activeFloors({ floorLevel: 2, disabledFloors: 1 })).toBe(2);
+    expect(activeFloorLevel({ floorLevel: 2, disabledFloors: 1 })).toBe(1);
+  });
+  it('fully disabled = 0 active', () => {
+    expect(activeFloors({ floorLevel: 2, disabledFloors: 3 })).toBe(0);
+    expect(activeFloorLevel({ floorLevel: 2, disabledFloors: 3 })).toBe(-1);
+  });
+  it('clamps over-disable to 0 active', () => {
+    expect(activeFloors({ floorLevel: 0, disabledFloors: 9 })).toBe(0);
   });
 });

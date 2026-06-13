@@ -237,6 +237,19 @@ export function displayedFloorLevel(b: { floorLevel?: number }): number {
   return rawFloorLevel(b) + 1;
 }
 
+/** §NEW floor-disable: count of ACTIVE floors ∈ [0, displayedFloorLevel].
+ *  = built floors minus `disabledFloors` (clamped at 0). */
+export function activeFloors(b: { floorLevel?: number; disabledFloors?: number }): number {
+  return Math.max(0, displayedFloorLevel(b) - (b.disabledFloors ?? 0));
+}
+
+/** §NEW floor-disable: 0-based effective floor level for the floor-effect
+ *  multipliers (activeFloors − 1). ≥ 0 for an operational building; −1 when
+ *  fully disabled (never read — the building is then non-operational). */
+export function activeFloorLevel(b: { floorLevel?: number; disabledFloors?: number }): number {
+  return activeFloors(b) - 1;
+}
+
 /** Floor-upgrade multiplier for throughput / power output / storage: ×(1+L). */
 export function floorEffectMul(level: number): number { return 1 + level; }
 
