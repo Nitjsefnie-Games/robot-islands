@@ -1044,6 +1044,9 @@ export function demolishBuilding(
   // same array reference (see `makeInitialIslandState`), so this mutation
   // is visible to the next economy tick without an explicit sync.
   spec.buildings.splice(idx, 1);
+  // Purge any orphan queued upgrade jobs for the removed building (#31) — a
+  // demolished building must leave no dangling BuildJob for a non-existent id.
+  if (state.buildJobs) state.buildJobs = state.buildJobs.filter((j) => j.buildingId !== buildingId);
   // Strip storage contribution if the demolished def was a storage building.
   // §4.6: after the cap reduction, inventory clamps to the new cap (the lost
   // excess models the spec's "excess is lost" rule literally). Categorized
@@ -1130,9 +1133,6 @@ export function cancelConstruction(
   const idx = spec.buildings.findIndex((b) => b.id === buildingId);
   if (idx < 0) return { ok: false, refunded: {}, reason: 'not-found' };
   const b = spec.buildings[idx]!;
-  if ((b.constructionRemainingMs ?? 0) <= 0) {
-    return { ok: false, refunded: {}, reason: 'not-building' };
-  }
   const def = BUILDING_DEFS[b.defId];
   const L = rawFloorLevel(b);
 
@@ -1153,6 +1153,24 @@ export function cancelConstruction(
     }
     return refunded;
   };
+
+  // LIFO queued-upgrade cancel (#31): if this building has queued upgrade jobs,
+  // peel off the NEWEST one before ever touching the running build. A building
+  // that is operational but has queued jobs has constructionRemainingMs === 0,
+  // so this branch must run before the not-building guard below. The cancelled
+  // job's displayed-target floor is rawFloorLevel (incl. any running upgrade's
+  // pre-bump) + the queue depth, so refund tracks the ascending cost charged.
+  const myJobs = (state.buildJobs ?? []).filter((j) => j.buildingId === buildingId);
+  if (myJobs.length > 0) {
+    const newest = myJobs.reduce((a, c) => (c.seq > a.seq ? c : a));
+    const targetDisplayed = rawFloorLevel(b) + myJobs.length + 1;
+    state.buildJobs = (state.buildJobs ?? []).filter((j) => j !== newest);
+    return { ok: true, refunded: creditRefund(upgradeCost(def, targetDisplayed)) };
+  }
+
+  if ((b.constructionRemainingMs ?? 0) <= 0) {
+    return { ok: false, refunded: {}, reason: 'not-building' };
+  }
 
   if (L === 0) {
     // Fresh placement cancel: build the same fullCost basket placeBuilding paid.
