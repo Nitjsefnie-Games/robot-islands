@@ -22,7 +22,7 @@ import {
   type BuildingDef,
   type BuildingDefId,
 } from './building-defs.js';
-import { hasOperationalBuilding, isOperationalBuilding, floorLevel, floorScaledCapacity, floorEffectMul, floorPowerDrawMul, type PlacedBuilding } from './buildings.js';
+import { hasOperationalBuilding, isOperationalBuilding, participatesInCluster, floorLevel, floorScaledCapacity, floorEffectMul, floorPowerDrawMul, type PlacedBuilding } from './buildings.js';
 import type { WorldState } from './world.js';
 import { isOceanTile } from './world.js';
 import { nextRealPhaseBoundaryMs, nextSolarBoundaryMs, realPhaseName, solarMultiplier } from './daynight.js';
@@ -954,11 +954,16 @@ function getDerivationsMemo(
   if (hit !== undefined && hit.signature === signature && hit.defs === defs) {
     return hit;
   }
-  const validBuildings = state.buildings.filter((b) => isOperationalBuilding(b));
+  // §4.5/#35: the cluster set includes UNDER-CONSTRUCTION buildings (excluding
+  // only invalid/disabled) so an in-progress shell still bridges its cluster and
+  // contributes its completed-floor capacity. `clusterFloorCapacity` discounts
+  // the floor being built; the resulting bonus is only ever read for operational
+  // buildings (under-construction ones don't produce), so the wider set is safe.
+  const clusterBuildings = state.buildings.filter((b) => participatesInCluster(b));
   const entry: DerivationsMemo = {
     signature,
     defs,
-    clusterMuls: clusterBonusMuls(validBuildings, defs),
+    clusterMuls: clusterBonusMuls(clusterBuildings, defs),
     exoticRules: skillUnlockedAdjacencyRules(state),
     baseSkillMul: effectiveSkillMultipliers(state),
     buffStack: new Map(),

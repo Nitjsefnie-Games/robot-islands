@@ -306,3 +306,45 @@ describe('clusterBonusMul — §4.5 per-cluster bonus', () => {
     expect(clusterBonusMul(b, [a, b])).toBeCloseTo(1.55, 9);
   });
 });
+
+describe('clusterBonusMul — §4.5 under-construction contributes previous floor (#35)', () => {
+  const place = (id: string, defId: string, x: number, y: number) =>
+    ({ id, defId: defId as never, x, y }) as unknown as PlacedBuilding;
+
+  it('fresh placement under construction contributes 0 (neutral) to a neighbour', () => {
+    // a = operational mine floor-1 (c=1). b = freshly-placed mine (floorLevel 0)
+    // STILL under construction → completed capacity 0. K = 1 + 0 = 1.
+    // mul_a = 1 + 0.05×(1 − 1) = 1.0 — the in-progress shell adds nothing yet.
+    const a = place('a', 'mine', 0, 0);
+    const b = { ...place('b', 'mine', 2, 0), constructionRemainingMs: 5000 };
+    expect(clusterBonusMul(a, [a, b])).toBe(1);
+  });
+
+  it('upgrading to the first extra floor contributes its previous level (1.05 for the neighbour)', () => {
+    // a = operational mine floor-1 (c=1). b = mine upgrading INTO floorLevel 1
+    // (constructionRemainingMs > 0) → completed capacity = previous level c=1.
+    // K = 1 + 1 = 2 → mul_a = 1 + 0.05×(2 − 1) = 1.05 (issue #35 example).
+    const a = place('a', 'mine', 0, 0);
+    const b = { ...place('b', 'mine', 2, 0), floorLevel: 1, constructionRemainingMs: 5000 };
+    expect(clusterBonusMul(a, [a, b])).toBeCloseTo(1.05, 9);
+  });
+
+  it('upgrading to the second extra floor contributes 2 (1.10 for the neighbour)', () => {
+    // b = mine upgrading INTO floorLevel 2 → completed capacity c=2.
+    // K = 1 + 2 = 3 → mul_a = 1 + 0.05×(3 − 1) = 1.10 (issue #35 example).
+    const a = place('a', 'mine', 0, 0);
+    const b = { ...place('b', 'mine', 2, 0), floorLevel: 2, constructionRemainingMs: 5000 };
+    expect(clusterBonusMul(a, [a, b])).toBeCloseTo(1.1, 9);
+  });
+
+  it('a fresh under-construction building still BRIDGES two same-category neighbours', () => {
+    // Chain a — b — c, b freshly under construction (contributes 0 but connects).
+    // K = c_a + 0 + c_c = 1 + 0 + 1 = 2 → mul_a = 1 + 0.05×(2 − 1) = 1.05.
+    // Without bridging, a and c would be isolated singletons (×1.0).
+    const a = place('a', 'mine', 0, 0);
+    const b = { ...place('b', 'mine', 2, 0), constructionRemainingMs: 5000 };
+    const c = place('c', 'mine', 4, 0);
+    expect(clusterBonusMul(a, [a, b, c])).toBeCloseTo(1.05, 9);
+    expect(clusterBonusMul(c, [a, b, c])).toBeCloseTo(1.05, 9);
+  });
+});
