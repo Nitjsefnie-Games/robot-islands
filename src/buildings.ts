@@ -143,20 +143,6 @@ export interface PlacedBuilding {
    *  shouldn't happen in production but the field is optional for forward-
    *  compat with legacy saves). */
   terrainShotRemainingMs?: number;
-  /** Player toggle (spec 2026-05-23-building-disable-design §02). When
-   *  `true`, the building is functionally non-existent for the tick: no
-   *  power flow, no recipe in/out, no gate provisioning, no buff
-   *  adjacency, no `operatingMs` accrual, no drone / satellite / route
-   *  dispatch from it. Toggling either way is free and instantaneous —
-   *  no inventory / xp / construction-progress gain or loss. Disabling
-   *  triggers a one-way `drainRoutesForBuilding` (per
-   *  `p_routes_disabled_source=route_drains_and_removes`): re-enabling
-   *  the building does NOT restore drained routes; the player must
-   *  re-create them. Optional so legacy saves load as `false`
-   *  (enabled) by default — persistence round-trips the field through
-   *  the existing `{...b}` spread at `persistence.ts:329`; no schema
-   *  bump needed. */
-  disabled?: boolean;
   /** §NEW temporary floor-disable: how many of the building's BUILT floors are
    *  switched off, counted from the top. 0 / absent = all built floors active
    *  (full effect); equal to displayedFloorLevel = fully disabled (the old
@@ -177,17 +163,16 @@ export interface PlacedBuilding {
  *  available?" filter (e.g. §NEW disabled toggle) is a single-line edit
  *  here instead of a fan-out across the tree. Pure. */
 export function isOperationalBuilding(
-  b: { invalid?: boolean; constructionRemainingMs?: number; disabled?: boolean; floorLevel?: number; disabledFloors?: number },
+  b: { invalid?: boolean; constructionRemainingMs?: number; floorLevel?: number; disabledFloors?: number },
 ): boolean {
   if (b.invalid === true) return false;
   if ((b.constructionRemainingMs ?? 0) > 0) return false;
-  if (b.disabled === true) return false;           // legacy, removed in a later task
   if (activeFloors(b) <= 0) return false;          // floor-disable
   return true;
 }
 
 export function hasOperationalBuilding(
-  buildings: ReadonlyArray<{ defId: string; invalid?: boolean; constructionRemainingMs?: number; disabled?: boolean; floorLevel?: number; disabledFloors?: number }>,
+  buildings: ReadonlyArray<{ defId: string; invalid?: boolean; constructionRemainingMs?: number; floorLevel?: number; disabledFloors?: number }>,
   defId: BuildingDefId,
 ): boolean {
   for (const b of buildings) {
@@ -205,13 +190,13 @@ export function hasOperationalBuilding(
  *  contributes its previous (completed) floor capacity (the floor being built
  *  is excluded by `clusterFloorCapacity` in `adjacency.ts`). */
 export function participatesInCluster(
-  b: { invalid?: boolean; disabled?: boolean; floorLevel?: number; disabledFloors?: number },
+  b: { invalid?: boolean; floorLevel?: number; disabledFloors?: number },
 ): boolean {
-  return b.invalid !== true && b.disabled !== true && activeFloors(b) > 0;
+  return b.invalid !== true && activeFloors(b) > 0;
 }
 
 export function findOperationalBuilding(
-  buildings: ReadonlyArray<{ defId: string; invalid?: boolean; constructionRemainingMs?: number; disabled?: boolean; floorLevel?: number; disabledFloors?: number }>,
+  buildings: ReadonlyArray<{ defId: string; invalid?: boolean; constructionRemainingMs?: number; floorLevel?: number; disabledFloors?: number }>,
   defId: BuildingDefId,
 ): PlacedBuilding | undefined {
   for (const b of buildings) {

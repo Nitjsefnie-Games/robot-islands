@@ -56,13 +56,13 @@ import {
 } from './persistence.js';
 import { mountSettingsUi } from './settings-ui.js';
 import { BUILDING_DEFS } from './building-defs.js';
-import type { PlacedBuilding } from './buildings.js';
+import { activeFloors, type PlacedBuilding } from './buildings.js';
 import { mountBuildingsUi } from './buildings-ui.js';
 import { mountConstructionUi } from './construction-ui.js';
 import { mountInspectorUi, type InspectorTarget } from './inspector-ui.js';
 import { expandIsland, type Axis } from './land-reclamation.js';
 import { mountInventoryUi } from './inventory-ui.js';
-import { applyUpgrade, buildingAtTile, demolishBuilding, findOceanBuildingAt } from './placement.js';
+import { applyUpgrade, buildingAtTile, demolishBuilding, findOceanBuildingAt, setBuildingActiveFloors } from './placement.js';
 import { footprintTiles, shapeHeight, shapeWidth, type Rotation } from './shape-mask.js';
 import { resolveShot } from './terrain-modifier.js';
 import { mountPlacementUi } from './placement-ui.js';
@@ -1297,7 +1297,7 @@ async function main(): Promise<void> {
     );
   }
 
-  const inspector = mountInspectorUi(document.body, {
+  const inspector = mountInspectorUi(reg, document.body, {
     world: worldState,
     getRatesContext: (islandId: string) => lastIslandCtx.get(islandId),
     onDemolish: (target: InspectorTarget) => {
@@ -1323,17 +1323,17 @@ async function main(): Promise<void> {
       repaintSelection();
       placementUi.beginRelocate(target.building);
     },
-    onToggleDisabled: (target: InspectorTarget) => {
+    onSetActiveFloors: (target: InspectorTarget, newDisabledFloors: number) => {
       const b = target.building;
-      const wasDisabled = b.disabled === true;
-      b.disabled = !wasDisabled;
-      // p_routes_disabled_source=route_drains_and_removes: on the
-      // false→true transition, soft-delete every route owned by this
-      // building. In-flight cargo finishes (tickRoutes prunes the route
-      // once inFlight.length === 0), and re-enabling the building does NOT
-      // restore the routes — the player must reconfigure them. Same
-      // behaviour as demolish (main.ts:1230).
-      if (!wasDisabled) {
+      const before = activeFloors(b);
+      setBuildingActiveFloors(target.spec, target.state, b.id, newDisabledFloors);
+      const after = activeFloors(b);
+      // p_routes_disabled_source=route_drains_and_removes: drain routes ONLY
+      // when active floors cross to fully-off. In-flight cargo finishes
+      // (tickRoutes prunes the route once inFlight.length === 0), and
+      // re-enabling does NOT restore the routes — the player must reconfigure
+      // them. Same behaviour as demolish (main.ts:1230).
+      if (before > 0 && after === 0) {
         drainRoutesForBuilding(worldState, b.id);
       }
       // Rebuild world layers so building-alerts-overlay re-paints the cue.
@@ -1380,29 +1380,6 @@ async function main(): Promise<void> {
       rebuildWorldLayers();
       inspector.refresh();
     },
-  });
-
-  // §NEW building-disable action handler (p_hotkey_binding=unbound).
-  // Mirrors the onToggleDisabled callback logic for keyboard dispatch.
-  defineAction(reg, 'toggle-building-disable', () => {
-    const selectedId = inspector.getSelectedBuildingId();
-    if (selectedId === null) return;
-    // §15.4: scope to the owning island so same-local-coord buildings on
-    // different islands don't misfire (old `placed-X,Y` ids could collide).
-    const selectedIslandId = inspector.getSelectedIslandId();
-    const owningState = selectedIslandId
-      ? worldState.islandStates?.get(selectedIslandId)
-      : undefined;
-    if (!owningState) return;
-    const building = owningState.buildings.find((b: { id: string }) => b.id === selectedId);
-    if (building === undefined) return;
-    if ((building.constructionRemainingMs ?? 0) > 0) return; // no-op while constructing
-    const wasDisabled = building.disabled === true;
-    building.disabled = !wasDisabled;
-    if (!wasDisabled) drainRoutesForBuilding(worldState, building.id);
-    rebuildWorldLayers();
-    buildingAlertsOverlay.invalidate();
-    inspector.refresh();
   });
 
   // Step-11 Construction modal — sister to skill tree + buildings catalog.

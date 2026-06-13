@@ -161,7 +161,7 @@ export function mountBuildingAlertsOverlay(
         // could make a building both disabled AND under construction — show
         // both) and before the maintenance dot (the dot, still reflecting the
         // frozen factor, surfaces on top).
-        if (b.disabled === true || activeFloors(b) < displayedFloorLevel(b)) {
+        if (activeFloors(b) < displayedFloorLevel(b)) {
           const half = TILE_PX / 2;
           const rx = (spec.cx + minTx) * TILE_PX - half;
           const ry = (spec.cy + minTy) * TILE_PX - half;

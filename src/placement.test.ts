@@ -2261,7 +2261,7 @@ describe('formatShortfall', () => {
 
 describe('relocateBuilding', () => {
   it('moves the building, charges floor(0.5 × total), preserves state', () => {
-    const m1 = { id: 'm1', defId: 'mine', x: 0, y: 0, constructionRemainingMs: 5000, disabled: true } as PlacedBuilding;
+    const m1 = { id: 'm1', defId: 'mine', x: 0, y: 0, constructionRemainingMs: 5000, disabledFloors: 1 } as PlacedBuilding;
     const spec = makeSpec({ buildings: [m1] });
     const state = makeState(spec);
     const stone0 = state.inventory.stone;
@@ -2276,7 +2276,7 @@ describe('relocateBuilding', () => {
     expect(m1.y).toBe(0);
     // "just teleport": all other state preserved
     expect(m1.constructionRemainingMs).toBe(5000);
-    expect(m1.disabled).toBe(true);
+    expect(m1.disabledFloors).toBe(1);
     expect(m1.defId).toBe('mine');
   });
 
@@ -2797,13 +2797,15 @@ describe('applyRelabelStorageCap — construction guard', () => {
     expect(state.storageCaps.copper_ore).toBe(BASE_CAP);
   });
 
-  it('DISABLED building (operational but disabled) → cap moves (disable does not strip caps)', () => {
-    // A disabled building HAD its cap credited at construction completion.
-    // Relabeling it must still move the cap (disable = production toggle only).
+  it('fully-active operational building → cap moves on relabel', () => {
+    // applyRelabelStorageCap's guard keys off construction-complete + not-queued
+    // only; an operational (fully-active) building has its cap credited and a
+    // relabel moves the full BASE_CAP. (Floor-disable is no longer a no-op for
+    // caps — setBuildingActiveFloors adjusts storageCaps directly — so the cap
+    // a relabel moves is whatever the building's current ACTIVE floors credited.)
     const { state, building } = relabelState({ iron_ore: BASE_CAP, copper_ore: 0 });
 
-    (building as { disabled?: boolean }).disabled = true;
-    // No constructionRemainingMs → 0 by default.
+    // No disabledFloors, no constructionRemainingMs → fully active, complete.
 
     const result = applyRelabelStorageCap(state, building, CRATE_DEF, 'iron_ore', 'copper_ore');
 
