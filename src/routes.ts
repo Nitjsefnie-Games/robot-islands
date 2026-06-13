@@ -38,7 +38,7 @@ import {
 } from './weather.js';
 import { CELL_SIZE_TILES, type IslandSpec, type WorldState } from './world.js';
 import type { BuildingDefId } from './building-defs.js';
-import { hasOperationalBuilding, type PlacedBuilding } from './buildings.js';
+import { activeFloorLevel, floorEffectMul, hasOperationalBuilding, type PlacedBuilding } from './buildings.js';
 import { planCargo, type ViableEntry } from './route-cargo.js';
 import type { CargoMode, CargoEntry } from './route-cargo.js';
 import { ALL_RESOURCES } from './recipes.js';
@@ -243,6 +243,26 @@ export function _seedRouteIdCounter(value: number): void {
  *  without rebuilding the network analysis path. */
 export function isPowerLink(t: RouteType): boolean {
   return t === 'cable' || t === 'spacetime' || t === 'submarine_cable';
+}
+
+/** §2.4 route-floor scaling — the multiplier a cargo route inherits from its
+ *  owning transport building's ACTIVE floors. The route's stored
+ *  `capacityPerSec` / `transitTimeSec` are tier BASE values; floors on the
+ *  source building scale capacity ×(1+L) and transit SPEED ×(1+L) (i.e. transit
+ *  time ÷(1+L)), where L = the owning building's `activeFloorLevel` — the SAME
+ *  curve production/power/storage use (`floorEffectMul`). Partial floor-disable
+ *  throttles the route toward base; a fully floor-disabled building drains its
+ *  routes elsewhere (`drainRoutesForBuilding`), so the clamp to L ≥ 0 here only
+ *  guards a draining route's display against a 0 multiplier (which would make
+ *  transit time Infinite). Legacy routes with no `sourceBuildingId`, or whose
+ *  owner can't be found (demolished / merged away), get a neutral ×1. */
+export function routeFloorMultiplier(route: Route, world: WorldState): number {
+  if (route.sourceBuildingId === undefined) return 1;
+  const island = world.islands.find((i) => i.id === route.from);
+  if (!island) return 1;
+  const b = island.buildings.find((bb) => bb.id === route.sourceBuildingId);
+  if (!b) return 1;
+  return floorEffectMul(Math.max(0, activeFloorLevel(b)));
 }
 
 /**
@@ -726,6 +746,10 @@ interface RouteDemand {
   readonly desired: number;
   /** Pre-computed weather capacity multiplier (§2.6). */
   readonly weatherMul: number;
+  /** §2.4 route-floor multiplier from the source building's active floors.
+   *  Scales capacity ×floorMul (Phase 1) and transit time ÷floorMul (Phase 3);
+   *  always ≥ 1 so the Phase-3 division is safe. */
+  readonly floorMul: number;
   /** Pre-computed stratification cells crossed by this route (§2.6). */
   readonly crossedCells: ReadonlyArray<{
     readonly cx: number;
@@ -832,7 +856,10 @@ function dispatchPhase(
     const airshipMul = route.type === 'airship'
       ? effectiveSkillMultipliers(srcState).airshipRange
       : 1;
-    const capDemand = route.capacityPerSec * skillCapMul * airshipMul * weatherMul * elapsedSec;
+    // §2.4 route-floor scaling: the source transport building's active floors
+    // scale this route's effective capacity ×(1+L) (and transit speed below).
+    const floorMul = routeFloorMultiplier(route, world);
+    const capDemand = route.capacityPerSec * floorMul * skillCapMul * airshipMul * weatherMul * elapsedSec;
     const crossedCells =
       fromSpec && toSpec
         ? rasterizeRouteCells(
@@ -847,7 +874,7 @@ function dispatchPhase(
     for (const d of planned) {
       // §15.4 fix 7.2: use unclampedDesired so Phase-2 proportional distribution
       // sees capacity-share, not the sourceAvail-clamped amount (waterfall fix).
-      demands.push({ route, resourceId: d.resourceId, desired: d.unclampedDesired, weatherMul, crossedCells });
+      demands.push({ route, resourceId: d.resourceId, desired: d.unclampedDesired, weatherMul, floorMul, crossedCells });
     }
   }
 
@@ -959,7 +986,9 @@ function dispatchPhase(
       d.route.inFlight.push({
         resourceId: d.resourceId,
         amount,
-        arrivalTime: nowMs + d.route.transitTimeSec * 1000,
+        // §2.4 route-floor scaling: speed ×floorMul ⇒ transit time ÷floorMul
+        // (floorMul ≥ 1 always, so this never divides by zero).
+        arrivalTime: nowMs + (d.route.transitTimeSec / d.floorMul) * 1000,
         dispatchTime: nowMs,
         id: batchId,
         crossedCells: d.crossedCells,

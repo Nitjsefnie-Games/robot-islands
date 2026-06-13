@@ -31,7 +31,7 @@ Legend: **L** = live · **P** = partial · **N** = not implemented.
 | §4.6 Storage caps | L | Specialized + generic storage, per-resource caps, destruction clamping. |
 | §4.7 Maintenance | P | Operating-time accrual, threshold + 4h linear degrade, auto-maintain materials check, atomic recipe consumption, most-degraded targeting policy. Only buildings with productive recipe outputs accrue operating time — power producers / storage / antennas / drone pads / shipyards skip accrual since their maintenance factor has no effect on output. Eternal Servitor flag is honoured; Servitor Conversion Kit + Reality Forge mechanic (`convertToServitor` in `buildings.ts`, inspector UI button) is L. |
 | §4.8 Construction queue | L | Running slots + queue depth, enqueue when full, FIFO promotion on completion, cancel refund, level badge. |
-| §4.9 Floor upgrades | L | Floors 2–10 cost `ceil(0.8 × placementCost)`; floors >10 use `ceil(0.8 × 1.15^(L−10) × placementCost)`, unbounded. Effect scaling `×(1+L)` is also unbounded. |
+| §4.9 Floor upgrades | L | Floors 2–10 cost `ceil(0.8 × placementCost)`; floors >10 use `ceil(0.8 × 1.15^(L−10) × placementCost)`, unbounded. Effect scaling `×(1+L)` is also unbounded. Logistics buildings scale their hosted route's capacity & speed `×(1+L)` instead (§2.4). |
 | §5.1 Electrical grid | L | Per-island brownout factor, active-only summing, gating predicate. |
 | §5.2 Heat adjacency | L | N:1 source assignment, free-source priority, fuel-burn scaling with served count. |
 | §5.3 Inter-island power | L | Per-component binary-gated unified pool: gate passes iff Σ cable capacity ≥ min(Σ per-island surplus, Σ per-island deficit). Unified component shares one brownout `min(1, ΣP/ΣC)`; gate fail = cables inert that tick. T5 Spacetime Anchor route counts as infinite-capacity (always passes). |
@@ -192,6 +192,8 @@ In-flight inventory is tracked per-route in the architecture data model (§15.1)
 * T3 airship: very long range, high throughput, fuel + lubricant cost
 * T4 teleporter pad: instant, very high throughput, paired endpoints, high power draw
 * T5 spacetime anchor: links islands as one logical unit, ignores distance entirely
+
+**Floor scaling (logistics buildings).** A cargo route's stored `capacityPerSec` and `transitTimeSec` are the **tier base** from its source transport building's `RouteProfile` (the `dock` / `dronepad` / `airship_dock` / `mass_driver` / `teleporter_pad` it was created on, recorded as `Route.sourceBuildingId`). Floors on that source building scale the route exactly as they scale production: **effective capacity ×(1 + L)** and **transit speed ×(1 + L)** (i.e. **transit time ÷(1 + L)**), where `L = activeFloorLevel` of the owning building — the same `floorEffectMul` curve as §4.9. The multiplier is computed live each dispatch (`routeFloorMultiplier` in `routes.ts`), so it tracks upgrades and the §4.9 floor-disable steppers automatically: a **partially** floor-disabled source throttles its route toward base, and a source at **0 active floors** has already had its routes drained (§4.9 Floor-disable). The clamp `L ≥ 0` keeps the multiplier ≥ 1, so transit time never divides by zero. The scaling stacks multiplicatively with the Transport skill `routeCapacity` / `airshipRange` bonuses and the §2.6 weather multiplier, and the route ledger / new-route preview show the effective (floor-scaled) values. Power-link routes (cable / spacetime / submarine_cable, §5.3) are **not** affected — they carry no cargo and have no owning transport building; their transmission capacity is unchanged. Legacy routes with no `sourceBuildingId` (or whose owner was demolished / merged away) scale at a neutral ×1, so no persistence migration is required.
 
 ### 2.5 Artificial Islands
 
@@ -609,7 +611,7 @@ A building starts at floor 1 (`floorLevel === 0`). Each floor upgrade raises the
 
 The L>10 curve starts at 92% of a fresh build (floor 11 = 0.8 × 1.15) and grows 15% per subsequent floor (floor 12 ≈ 106%, floor 15 ≈ 161%, floor 20 ≈ 324%, etc.). It uses the same resource basket as the base placement cost; only the scalar changes.
 
-**Effect scaling** is unbounded: throughput, power output, and storage scale as `×(1 + L)` where `L` is the raw floor level. Consumer power draw scales as `×(1 + 0.5 × L)`. These multipliers apply to every floor, including floors beyond 10.
+**Effect scaling** is unbounded: throughput, power output, and storage scale as `×(1 + L)` where `L` is the raw floor level. Consumer power draw scales as `×(1 + 0.5 × L)`. These multipliers apply to every floor, including floors beyond 10. A **logistics** (transport) building — `dock` / `dronepad` / `airship_dock` / `mass_driver` / `teleporter_pad`, which has no recipe, storage, or power — instead applies its floors to the **route it hosts**: capacity and transit speed both scale `×(1 + L)` via `routeFloorMultiplier` (see §2.4). Its inspector floor-upgrade preview reads "route capacity & speed" rather than "throughput / capacity / power-out".
 
 **Relocate / demolish.** `totalInvestedCost` is `placementCost` plus the sum of every completed upgrade's cost, so refund and move-fee calculations automatically include the exponential floors.
 

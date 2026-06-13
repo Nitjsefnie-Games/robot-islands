@@ -21,6 +21,7 @@ import {
   MASS_DRIVER_CAPACITY_UNITS_PER_SEC,
   MASS_DRIVER_DIESEL_PER_UNIT,
   nextRouteId,
+  routeFloorMultiplier,
   routeProfileForBuilding,
   reorderPriorityList,
   tickRoutes,
@@ -35,6 +36,7 @@ import { computeRates, type DefCatalog, type RatesContext } from './economy.js';
 import type { IslandState } from './economy.js';
 import { CELL_SIZE_TILES, type WorldState } from './world.js';
 import type { IslandSpec } from './world.js';
+import type { PlacedBuilding } from './buildings.js';
 import { weather, routeCapacityMultiplierForWeather, type WeatherState } from './weather.js';
 
 function blankInventory(): Record<ResourceId, number> {
@@ -2048,5 +2050,70 @@ describe('§2.7 / §15.1 cable-balance local power threads the wall clock', () =
     const MIDNIGHT = NOON + 12 * 60 * 60 * 1000;
     const night = computeCableNetworkBalance(world, states, () => ({ world }), NOON, MIDNIGHT).get('a')!;
     expect(night.producedTotal).toBeLessThan(10);
+  });
+});
+
+describe('routeFloorMultiplier — route scaling from source building active floors', () => {
+  function ownerWorld(b: PlacedBuilding | null): WorldState {
+    const specA: IslandSpec = { ...makeIslandSpec('a', 0, 0), buildings: b ? [b] : [] };
+    const specB: IslandSpec = makeIslandSpec('b', 3, 0);
+    return makeWorld([], [specA, specB]);
+  }
+  function ownedRoute(sourceBuildingId?: string): Route {
+    return { ...cargoRoute('a', 'b', 'iron_ore'), sourceBuildingId };
+  }
+
+  it('returns 1 for a legacy route with no sourceBuildingId', () => {
+    const world = ownerWorld({ id: 'd1', defId: 'dock', x: 0, y: 0, floorLevel: 4 });
+    expect(routeFloorMultiplier(ownedRoute(undefined), world)).toBe(1);
+  });
+  it('returns 1 when the owning island or building cannot be found', () => {
+    expect(routeFloorMultiplier(ownedRoute('d1'), ownerWorld(null))).toBe(1);
+    expect(routeFloorMultiplier(ownedRoute('nope'), ownerWorld({ id: 'd1', defId: 'dock', x: 0, y: 0, floorLevel: 2 }))).toBe(1);
+  });
+  it('scales ×(1+L) by the owning building active-floor level', () => {
+    expect(routeFloorMultiplier(ownedRoute('d1'), ownerWorld({ id: 'd1', defId: 'dock', x: 0, y: 0 }))).toBe(1);
+    expect(routeFloorMultiplier(ownedRoute('d1'), ownerWorld({ id: 'd1', defId: 'dock', x: 0, y: 0, floorLevel: 1 }))).toBe(2);
+    expect(routeFloorMultiplier(ownedRoute('d1'), ownerWorld({ id: 'd1', defId: 'dock', x: 0, y: 0, floorLevel: 2 }))).toBe(3);
+  });
+  it('throttles toward base on partial floor-disable (uses active floors)', () => {
+    // floorLevel 2 = 3 built floors; disable 1 → 2 active → activeFloorLevel 1 → ×2
+    expect(routeFloorMultiplier(ownedRoute('d1'), ownerWorld({ id: 'd1', defId: 'dock', x: 0, y: 0, floorLevel: 2, disabledFloors: 1 }))).toBe(2);
+  });
+  it('clamps to ×1 (never 0) for a fully floor-disabled owner', () => {
+    // 3 built, all 3 off → activeFloors 0 → activeFloorLevel -1 → clamp → ×1 (no Infinity transit)
+    expect(routeFloorMultiplier(ownedRoute('d1'), ownerWorld({ id: 'd1', defId: 'dock', x: 0, y: 0, floorLevel: 2, disabledFloors: 3 }))).toBe(1);
+  });
+});
+
+describe('dispatch — capacity & transit scale with source building floors', () => {
+  function world1(b: PlacedBuilding | null, transitTimeSec = 10) {
+    const specA: IslandSpec = { ...makeIslandSpec('a', 0, 0), buildings: b ? [b] : [] };
+    const specB: IslandSpec = makeIslandSpec('b', 3, 0);
+    const r: Route = { ...cargoRoute('a', 'b', 'iron_ore', [], 0.5, transitTimeSec), sourceBuildingId: b ? b.id : undefined };
+    const src = makeState('a', { inventory: { ...blankInventory(), iron_ore: 100000 } });
+    const dst = makeState('b', { storageCaps: blankCaps(100000) });
+    const world = makeWorld([r], [specA, specB]);
+    const states = new Map([['a', src], ['b', dst]]);
+    return { r, src, dst, world, states };
+  }
+
+  it('capacity: base ×1 with no owner, ×(1+L) with floors', () => {
+    // 0.5/s × 2s = 1.0 base; weather at (0,0)→(3,0) on test-seed is clear (×1).
+    expect(dispatchAttempt(world1(null).world, world1(null).states, 1000, 2)[0]?.amount).toBeCloseTo(1.0, 9);
+    const f0 = world1({ id: 'd1', defId: 'dock', x: 0, y: 0 });
+    expect(dispatchAttempt(f0.world, f0.states, 1000, 2)[0]?.amount).toBeCloseTo(1.0, 9);
+    const f1 = world1({ id: 'd1', defId: 'dock', x: 0, y: 0, floorLevel: 1 });
+    expect(dispatchAttempt(f1.world, f1.states, 1000, 2)[0]?.amount).toBeCloseTo(2.0, 9);
+    const f2 = world1({ id: 'd1', defId: 'dock', x: 0, y: 0, floorLevel: 2 });
+    expect(dispatchAttempt(f2.world, f2.states, 1000, 2)[0]?.amount).toBeCloseTo(3.0, 9);
+  });
+  it('transit: arrival time divides by (1+L)', () => {
+    const base = world1(null);
+    dispatchAttempt(base.world, base.states, 1000, 2);
+    expect(base.r.inFlight[0]?.arrivalTime).toBe(1000 + 10_000);
+    const f1 = world1({ id: 'd1', defId: 'dock', x: 0, y: 0, floorLevel: 1 });
+    dispatchAttempt(f1.world, f1.states, 1000, 2);
+    expect(f1.r.inFlight[0]?.arrivalTime).toBe(1000 + 5_000);
   });
 });
