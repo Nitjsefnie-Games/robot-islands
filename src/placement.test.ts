@@ -14,6 +14,7 @@ import {
   applyUpgrade,
   buildingAtTile,
   cancelConstruction,
+  countQueuedUpgrades,
   creditStorageCaps,
   demolishBuilding,
   findOceanBuildingAt,
@@ -25,6 +26,7 @@ import {
   queuedBuildSlots,
   relocateBuilding,
   sortByFillDesc,
+  topUpgradeLevel,
   totalInvestedCost,
   upgradeCost,
   validatePlacement,
@@ -2599,5 +2601,32 @@ describe('applyRelabelStorageCap — construction guard', () => {
     expect(result).toBe('moved');
     expect(state.storageCaps.iron_ore).toBe(0);
     expect(state.storageCaps.copper_ore).toBe(BASE_CAP);
+  });
+});
+
+describe('queued-upgrade helpers (#31)', () => {
+  it('countQueuedUpgrades counts only this building’s jobs', () => {
+    const state = { buildJobs: [
+      { seq: 1, buildingId: 'a', kind: 'upgrade' as const },
+      { seq: 2, buildingId: 'b', kind: 'upgrade' as const },
+      { seq: 3, buildingId: 'a', kind: 'upgrade' as const },
+    ] } as unknown as import('./economy.js').IslandState;
+    expect(countQueuedUpgrades(state, 'a')).toBe(2);
+    expect(countQueuedUpgrades(state, 'b')).toBe(1);
+    expect(countQueuedUpgrades(state, 'c')).toBe(0);
+  });
+
+  it('countQueuedUpgrades handles missing buildJobs', () => {
+    const state = {} as unknown as import('./economy.js').IslandState;
+    expect(countQueuedUpgrades(state, 'a')).toBe(0);
+  });
+
+  it('topUpgradeLevel = rawFloorLevel + queued upgrade count', () => {
+    const state = { buildJobs: [
+      { seq: 1, buildingId: 'a', kind: 'upgrade' as const },
+      { seq: 3, buildingId: 'a', kind: 'upgrade' as const },
+    ] } as unknown as import('./economy.js').IslandState;
+    expect(topUpgradeLevel(state, { id: 'a', floorLevel: 1 })).toBe(3);
+    expect(topUpgradeLevel(state, { id: 'z', floorLevel: 0 })).toBe(0);
   });
 });
