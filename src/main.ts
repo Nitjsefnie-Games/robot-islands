@@ -1338,6 +1338,15 @@ async function main(): Promise<void> {
       buildingAlertsOverlay.invalidate();
       inspector.refresh();
     },
+    onSetForceRun: (target: InspectorTarget, value: boolean) => {
+      // §4.6 Force Run: keep producing for XP at a full output bin. Pure
+      // per-building flag — no geometry/route/cap change, so no world-layer
+      // rebuild is needed. Store `undefined` when off to keep saves clean
+      // (absent ≡ off). The periodic autosave + visibilitychange save read
+      // live `worldState`, so mutating the building object is enough to persist.
+      target.building.forceRun = value ? true : undefined;
+      inspector.refresh();
+    },
     onUpgradeFloor: (target: InspectorTarget) => {
       const result = applyUpgrade(target.spec, target.state, target.building.id);
       if (!result.ok) return;
