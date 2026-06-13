@@ -599,7 +599,7 @@ export const TUTORIAL_STEPS: ReadonlyArray<TutorialStep> = [
     mechanic: 'Industrial gases',
     triggerCondition: (w) => hasBuilding(w, ['coke_oven']) && !hasBuilding(w, ['air_separator']),
     hint: 'Air → nitrogen + oxygen + argon. Oxygen feeds the steel mill; argon feeds the AI Core; nitrogen feeds cryo coolant.',
-    expectedAction: 'Place an Air Separator (30 stone).',
+    expectedAction: 'Place an Air Separator (concrete + glass + copper + brick).',
     dismissalCondition: (w) => hasBuilding(w, ['air_separator']),
     priority: 'critical',
     targetDefId: 'air_separator',
