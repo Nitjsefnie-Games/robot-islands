@@ -14,7 +14,7 @@
 import { BUILDING_DEFS } from './building-defs.js';
 import { constructionProgress } from './construction.js';
 import { rawFloorLevel } from './buildings.js';
-import type { IslandState } from './economy.js';
+import type { BuildJob, IslandState } from './economy.js';
 import { defineAction, dispatchAction, type InputRegistry } from './input.js';
 import {
   cancelConstruction,
@@ -191,13 +191,45 @@ export function mountBuildQueuePanel(
     const runningBuildings = spec.buildings.filter(
       (b) => (b.constructionRemainingMs ?? 0) > 0 && b.queued !== true,
     );
-    const queuedBuildings = spec.buildings
+    const queuedPlacements = spec.buildings
       .filter((b) => b.queued === true)
       .slice()
       .sort((a, b) => (a.queueSeq ?? 0) - (b.queueSeq ?? 0));
 
-    // Structural signature: which buildings exist and in which section.
-    const sig = `r:${runningBuildings.map((b) => b.id).join(',')}|q:${queuedBuildings.map((b) => b.id).join(',')}`;
+    const jobs = (state.buildJobs ?? []).slice().sort((a, b) => a.seq - b.seq);
+
+    // Compute per-building queue position (k) for upgrade-job labels.
+    const jobsByBuilding = new Map<string, BuildJob[]>();
+    for (const job of jobs) {
+      const arr = jobsByBuilding.get(job.buildingId) ?? [];
+      arr.push(job);
+      jobsByBuilding.set(job.buildingId, arr);
+    }
+
+    interface QueuedItem {
+      readonly kind: 'place' | 'upgrade';
+      readonly key: string;
+      readonly seq: number;
+      readonly b: ReturnType<typeof deps.getSpec>['buildings'][number];
+      readonly job?: BuildJob;
+      readonly k?: number;
+    }
+
+    const queuedItems: QueuedItem[] = [];
+    for (const b of queuedPlacements) {
+      queuedItems.push({ kind: 'place', key: `place:${b.id}`, seq: b.queueSeq ?? 0, b });
+    }
+    for (const job of jobs) {
+      const b = spec.buildings.find((x) => x.id === job.buildingId);
+      if (!b) continue;
+      const myJobs = jobsByBuilding.get(job.buildingId) ?? [];
+      const k = myJobs.indexOf(job) + 1;
+      queuedItems.push({ kind: 'upgrade', key: `job:${job.seq}`, seq: job.seq, b, job, k });
+    }
+    queuedItems.sort((a, b) => a.seq - b.seq);
+
+    // Structural signature: which buildings exist and in which section, plus queued upgrade jobs.
+    const sig = `r:${runningBuildings.map((b) => b.id).join(',')}|q:${queuedPlacements.map((b) => b.id).join(',')};j:${jobs.map((j) => j.seq).join(',')}`;
 
     // Update status text every frame (no interactive elements — safe).
     statusV.textContent = `${running}/${runSlots} run · ${queued}/${queueSlots} queue`;
@@ -214,7 +246,7 @@ export function mountBuildQueuePanel(
         child = next;
       }
 
-      const hasAny = runningBuildings.length > 0 || queuedBuildings.length > 0;
+      const hasAny = runningBuildings.length > 0 || queuedItems.length > 0;
 
       if (!hasAny) {
         const empty = document.createElement('div');
@@ -247,20 +279,26 @@ export function mountBuildQueuePanel(
       }
 
       // Queued section.
-      if (queuedBuildings.length > 0) {
+      if (queuedItems.length > 0) {
         const sectionHead = document.createElement('div');
         sectionHead.classList.add('ri-sectionhead');
         sectionHead.textContent = 'Queued';
         body.appendChild(sectionHead);
 
-        for (const b of queuedBuildings) {
-          let entry = rowCache.get(b.id);
+        for (const item of queuedItems) {
+          const b = item.b;
+          let entry = rowCache.get(item.key);
           if (!entry) {
-            entry = makeCachedRow(BUILDING_DEFS[b.defId].displayName, b.id);
-            rowCache.set(b.id, entry);
+            if (item.kind === 'place') {
+              entry = makeCachedRow(BUILDING_DEFS[b.defId].displayName, b.id);
+            } else {
+              const displayedTarget = rawFloorLevel(b) + (item.k ?? 0) + 1;
+              entry = makeCachedRow(`${BUILDING_DEFS[b.defId].displayName} \u2192 floor ${displayedTarget}`, item.job!.buildingId);
+            }
+            rowCache.set(item.key, entry);
           }
           body.appendChild(entry.row);
-          seen.add(b.id);
+          seen.add(item.key);
         }
       }
 
@@ -280,8 +318,8 @@ export function mountBuildQueuePanel(
       entry.rightSpan.dataset.tone = 'success';
     }
 
-    for (const b of queuedBuildings) {
-      const entry = rowCache.get(b.id);
+    for (const item of queuedItems) {
+      const entry = rowCache.get(item.key);
       if (!entry) continue;
       entry.rightSpan.textContent = 'queued';
       delete entry.rightSpan.dataset.tone;
