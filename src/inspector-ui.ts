@@ -35,7 +35,7 @@ import { clusterBonusMul, gateSatisfied } from './adjacency.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
 import { affordabilityShortfall, applyRelabelStorageCap, formatShortfall, inProgressBuildCount, parallelBuildSlots, queuedBuildCount, queuedBuildSlots, relocateFee, totalInvestedCost, upgradeCost } from './placement.js';
 import { upgradeConstructionMs } from './construction.js';
-import { convertToServitor, displayedFloorLevel, floorEffectMul, floorLevel, floorScaledCapacity, hasOperationalBuilding, isOperationalBuilding, rawFloorLevel, ratedBuildingPower, type PlacedBuilding } from './buildings.js';
+import { convertToServitor, displayedFloorLevel, floorEffectMul, floorLevel, floorScaledCapacity, hasOperationalBuilding, isOperationalBuilding, participatesInCluster, rawFloorLevel, ratedBuildingPower, type PlacedBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
 import { activeBonusMul } from './active-bonus.js';
 import { computeRates, fledglingRecipeMul, type RatesContext } from './economy.js';
@@ -1318,9 +1318,11 @@ export function mountInspectorUi(
     // Recipe (resolveRecipe for Mine tile-aware variant — see §8.1).
     const recipe = resolveRecipe(BUILDING_DEFS[building.defId], building, spec.terrainAt);
     const skillMul: SkillMultipliers = effectiveSkillMultipliers(state);
+    // §4.5/#35: include under-construction buildings (they bridge the cluster
+    // and contribute their completed-floor capacity); exclude only invalid/disabled.
     const clusterMul = clusterBonusMul(
       building,
-      state.buildings.filter(isOperationalBuilding),
+      state.buildings.filter(participatesInCluster),
       BUILDING_DEFS,
     );
     if (!recipe) {
