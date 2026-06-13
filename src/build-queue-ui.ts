@@ -49,8 +49,7 @@ export interface BuildQueueHandle {
 // ── Pending cancel ref ─────────────────────────────────────────────────────
 // Cancel requires a per-item buildingId. dispatchAction has no payload, so
 // the cancel button sets this ref just before dispatching so the registered
-// action handler can read it. Pattern mirrors toggle-building-disable in
-// main.ts (which reads inspector.getSelectedBuildingId() for its target).
+// action handler can read it.
 
 // Single-instance assumption: one build-queue panel is mounted; the cancel-build action + this ref are module-global, so a second mount would clobber the first's handler. Fine while the panel is mounted exactly once in main.ts.
 let _pendingCancelBuildingId: string | null = null;
