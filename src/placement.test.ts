@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 import { BUILDING_DEFS } from './building-defs.js';
 import { SHAPES } from './shape-mask.js';
-import { rawFloorLevel, type PlacedBuilding } from './buildings.js';
+import { activeFloors, rawFloorLevel, type PlacedBuilding } from './buildings.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import { RESOURCE_STORAGE_CATEGORY, storageBaseFor } from './storage-categories.js';
 import {
@@ -26,6 +26,7 @@ import {
   queuedBuildCount,
   queuedBuildSlots,
   relocateBuilding,
+  setBuildingActiveFloors,
   sortByFillDesc,
   topUpgradeLevel,
   totalInvestedCost,
@@ -2836,5 +2837,43 @@ describe('queued-upgrade helpers (#31)', () => {
     ] } as unknown as import('./economy.js').IslandState;
     expect(topUpgradeLevel(state, { id: 'a', floorLevel: 1 })).toBe(3);
     expect(topUpgradeLevel(state, { id: 'z', floorLevel: 0 })).toBe(0);
+  });
+});
+
+describe('setBuildingActiveFloors (floor-disable)', () => {
+  // A labeled crate at floorLevel 1 (2 built floors) whose cap is already
+  // aggregated into state.storageCaps and whose inventory is filled to that cap.
+  function makeStorageScene(): { spec: IslandSpec; state: IslandState; res: ResourceId } {
+    const res: ResourceId = 'iron_ore';
+    const spec = makeSpec({
+      buildings: [{ id: 'c-iron', defId: 'crate', x: 0, y: 0, cargoLabel: res, floorLevel: 1 }],
+    });
+    const state = makeState(spec);
+    state.inventory[res] = state.storageCaps[res]!;
+    return { spec, state, res };
+  }
+
+  it('lowers a storage building’s cap and clamps overflow', () => {
+    const { spec, state, res } = makeStorageScene();
+    const id = spec.buildings[0]!.id;
+    const capBefore = state.storageCaps[res]!;
+    setBuildingActiveFloors(spec, state, id, 2); // disable both floors -> active 0
+    expect(activeFloors(spec.buildings[0]!)).toBe(0);
+    expect(state.storageCaps[res]!).toBeLessThan(capBefore);
+    expect(state.inventory[res]!).toBeLessThanOrEqual(state.storageCaps[res]!); // overflow clamped
+  });
+
+  it('toggling back up restores the cap contribution', () => {
+    const { spec, state, res } = makeStorageScene();
+    const id = spec.buildings[0]!.id;
+    const full = state.storageCaps[res]!;
+    setBuildingActiveFloors(spec, state, id, 2); // off
+    setBuildingActiveFloors(spec, state, id, 0); // full active again
+    expect(state.storageCaps[res]!).toBeCloseTo(full, 6);
+  });
+
+  it('returns not-found for an unknown building id', () => {
+    const { spec, state } = makeStorageScene();
+    expect(setBuildingActiveFloors(spec, state, 'nope', 1)).toEqual({ ok: false, reason: 'not-found' });
   });
 });

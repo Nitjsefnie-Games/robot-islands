@@ -22,7 +22,7 @@ import { Container, Graphics, Text } from 'pixi.js';
 import { BUILDING_DEFS } from './building-defs.js';
 import type { IslandState } from './economy.js';
 import { constructionProgress } from './construction.js';
-import { displayedFloorLevel, rawFloorLevel } from './buildings.js';
+import { activeFloors, displayedFloorLevel, rawFloorLevel } from './buildings.js';
 import { TILE_PX } from './island.js';
 import { maintenanceFactor } from './maintenance.js';
 import { SHOT_DURATION_MS } from './terrain-modifier.js';
@@ -161,7 +161,7 @@ export function mountBuildingAlertsOverlay(
         // could make a building both disabled AND under construction — show
         // both) and before the maintenance dot (the dot, still reflecting the
         // frozen factor, surfaces on top).
-        if (b.disabled === true) {
+        if (b.disabled === true || activeFloors(b) < displayedFloorLevel(b)) {
           const half = TILE_PX / 2;
           const rx = (spec.cx + minTx) * TILE_PX - half;
           const ry = (spec.cy + minTy) * TILE_PX - half;
