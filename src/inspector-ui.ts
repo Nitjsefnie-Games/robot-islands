@@ -33,7 +33,7 @@ import {
 } from './building-defs.js';
 import { clusterBonusMul, gateSatisfied } from './adjacency.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
-import { affordabilityShortfall, applyRelabelStorageCap, formatShortfall, inProgressBuildCount, parallelBuildSlots, queuedBuildCount, queuedBuildSlots, relocateFee, totalInvestedCost, upgradeCost } from './placement.js';
+import { affordabilityShortfall, applyRelabelStorageCap, countQueuedUpgrades, formatShortfall, inProgressBuildCount, parallelBuildSlots, queuedBuildCount, queuedBuildSlots, relocateFee, topUpgradeLevel, totalInvestedCost, upgradeCost } from './placement.js';
 import { upgradeConstructionMs } from './construction.js';
 import { convertToServitor, displayedFloorLevel, floorEffectMul, floorLevel, floorScaledCapacity, hasOperationalBuilding, isOperationalBuilding, participatesInCluster, rawFloorLevel, ratedBuildingPower, type PlacedBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
@@ -1508,13 +1508,17 @@ export function mountInspectorUi(
     // Floor-upgrade section paint
     const rawFl = rawFloorLevel(building);
     const currentLevel = displayedFloorLevel(building);
-    const nextLevel = currentLevel + 1;
     const nextEffectLevel = rawFl + 1;
     floorLine.textContent = `${currentLevel} floors · next: ×${floorEffectMul(nextEffectLevel)} throughput / capacity / power-out`;
-    const upgradeCostBasket = upgradeCost(def, nextLevel);
+    // The preview reflects the NEXT queued upgrade's target: top queued raw
+    // level + 1 (displayed = raw + 2).
+    const topLevel = topUpgradeLevel(state, building);
+    const targetDisplayedLevel = topLevel + 2;
+    const targetRawLevel = topLevel + 1;
+    const upgradeCostBasket = upgradeCost(def, targetDisplayedLevel);
     const upgradeShortfall = affordabilityShortfall(state.inventory, upgradeCostBasket);
     const canAffordUpgrade = Object.keys(upgradeShortfall).length === 0;
-    const upgradeMs = upgradeConstructionMs(def, rawFl + 1);
+    const upgradeMs = upgradeConstructionMs(def, targetRawLevel);
     const upgradeCostParts: string[] = [];
     for (const [r, n] of Object.entries(upgradeCostBasket) as Array<[ResourceId, number]>) {
       if (n <= 0) continue;
@@ -1525,31 +1529,32 @@ export function mountInspectorUi(
     // An upgrade is a construction job: mirrors applyUpgrade's gates so the
     // button can't offer a click it will reject.
     // - selfBuilding: this building is already under construction/upgrade.
+    //   It now queues another upgrade instead of rejecting, so it only blocks
+    //   when the shared queue is full.
     // - runningFull: all parallel build slots are occupied.
     // - hardFull: running slots AND queue are both at capacity — hard block.
-    // - willQueue: running full but queue has room — allow (build is enqueued).
+    // - willQueue: building busy or running full, but queue has room.
     const selfBuilding = (building.constructionRemainingMs ?? 0) > 0;
     const runSlots = parallelBuildSlots(state);
     const runCount = inProgressBuildCount(state);
     const runningFull = runCount >= runSlots;
     const qCount = queuedBuildCount(state);
     const qSlots = queuedBuildSlots(state);
-    const hardFull = !selfBuilding && runningFull && qCount >= qSlots;
-    const willQueue = !selfBuilding && runningFull && qCount < qSlots;
-    if (selfBuilding) {
-      floorUpgradeBtn.textContent = 'UPGRADING…';
-      floorUpgradeBtn.disabled = true;
-    } else if (hardFull) {
+    const hardFull = (selfBuilding || runningFull) && qCount >= qSlots;
+    const willQueue = (selfBuilding || runningFull) && qCount < qSlots;
+    const queuedUpgrades = countQueuedUpgrades(state, building.id);
+    const queuedSuffix = queuedUpgrades > 0 ? ` (${queuedUpgrades} queued)` : '';
+    if (hardFull) {
       floorUpgradeBtn.textContent = `QUEUE FULL (${runCount}/${runSlots} run · ${qCount}/${qSlots} queue)`;
       floorUpgradeBtn.disabled = true;
     } else if (!canAffordUpgrade) {
       floorUpgradeBtn.textContent = `NEED ${formatShortfall(upgradeShortfall)}`;
       floorUpgradeBtn.disabled = true;
     } else if (willQueue) {
-      floorUpgradeBtn.textContent = `QUEUE UPGRADE · ${upgradeCostParts.join(', ')} · ${upgradeDurationStr}`;
+      floorUpgradeBtn.textContent = `QUEUE UPGRADE${queuedSuffix} · ${upgradeCostParts.join(', ')} · ${upgradeDurationStr}`;
       floorUpgradeBtn.disabled = false;
     } else {
-      floorUpgradeBtn.textContent = `UPGRADE · ${upgradeCostParts.join(', ')} · ${upgradeDurationStr}`;
+      floorUpgradeBtn.textContent = `UPGRADE${queuedSuffix} · ${upgradeCostParts.join(', ')} · ${upgradeDurationStr}`;
       floorUpgradeBtn.disabled = false;
     }
     if (floorUpgradeBtn.disabled) {
