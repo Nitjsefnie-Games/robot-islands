@@ -27,6 +27,7 @@ import { rasterizePath, rollVehicleDestruction, weather } from './weather.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import { type IslandSpec, type WorldState } from './world.js';
 import { computeSignalRanges } from './antenna.js';
+import { displayedFloorLevel } from './buildings.js';
 
 function emptyInv(): Record<ResourceId, number> {
   const inv = {} as Record<ResourceId, number>;
@@ -1971,7 +1972,7 @@ describe('Fix 6.5: probabilityBiasForIsland only counts operational buildings', 
 
   it('disabled probability_engine grants no bias', () => {
     const result = probabilityBiasForIsland({
-      buildings: [{ defId: 'probability_engine', disabled: true }],
+      buildings: [{ defId: 'probability_engine', disabledFloors: displayedFloorLevel({ floorLevel: 0 }) }],
     });
     expect(result).toBe(0);
   });

@@ -25,7 +25,7 @@ import {
   type BuildingDef,
   type BuildingDefId,
 } from './building-defs.js';
-import { isOperationalBuilding, rawFloorLevel, type PlacedBuilding } from './buildings.js';
+import { displayedFloorLevel, isOperationalBuilding, rawFloorLevel, type PlacedBuilding } from './buildings.js';
 import { MAINTENANCE_DEGRADE_DURATION_MS, MAINTENANCE_THRESHOLD_MS_BY_TIER, maintenanceFactor } from './maintenance.js';
 import {
   accrueXp,
@@ -3076,7 +3076,7 @@ describe('§4.7 maintenance — integration with advanceIsland', () => {
         {
           ...MINE,
           id: 'mine-disabled',
-          disabled: true,
+          disabledFloors: displayedFloorLevel({ floorLevel: 0 }),
           operatingMs: T1_THRESHOLD + MAINTENANCE_DEGRADE_DURATION_MS + 1000,
           placedAt: 0,
           maintainedAt: 0,
@@ -3786,7 +3786,7 @@ describe('Singularity Battery', () => {
 
   it('disabled batteries contribute 0 capacity to batteryCapacityWs', () => {
     const state = makeState();
-    state.buildings.push({ id: 'sb1', defId: 'singularity_battery', x: 0, y: 0, disabled: true });
+    state.buildings.push({ id: 'sb1', defId: 'singularity_battery', x: 0, y: 0, disabledFloors: displayedFloorLevel({ floorLevel: 0 }) });
     expect(batteryCapacityWs(state, effectiveSkillMultipliers(state))).toBe(0);
   });
 
@@ -4515,7 +4515,7 @@ describe('disabled building contributes 0 to power balance', () => {
     const state = makeState({
       buildings: [
         { id: 'solar', defId: 'solar', x: 0, y: 0 },
-        { id: 'sm', defId: 'smelter', x: 4, y: 0, disabled: true },
+        { id: 'sm', defId: 'smelter', x: 4, y: 0, disabledFloors: displayedFloorLevel({ floorLevel: 0 }) },
       ],
       inventory: { ...blankInventory(), iron_ore: 100, coal: 100 },
     });
@@ -4528,7 +4528,7 @@ describe('disabled building contributes 0 to power balance', () => {
 describe('disabled building does not accrue operatingMs', () => {
   it('operatingMs stays at its pre-disable value across a 1h advance', () => {
     const state = makeState({
-      buildings: [{ id: 'm', defId: 'mine', x: 0, y: 0, disabled: true, operatingMs: 5000 }],
+      buildings: [{ id: 'm', defId: 'mine', x: 0, y: 0, disabledFloors: displayedFloorLevel({ floorLevel: 0 }), operatingMs: 5000 }],
       inventory: blankInventory(),
     });
     advanceIsland(state, 3600 * 1000, { defs: BUILDING_DEFS });
@@ -4554,10 +4554,10 @@ describe('invalid building does not accrue operatingMs (fix 4.4)', () => {
 describe('disabled provider fails downstream gates', () => {
   it('a coke oven stalls when its adjacent coal furnace is disabled', () => {
     const validBuildings = [
-      { id: 'h', defId: 'coal_furnace', x: 2, y: 0, disabled: true } as PlacedBuilding,
+      { id: 'h', defId: 'coal_furnace', x: 2, y: 0, disabledFloors: displayedFloorLevel({ floorLevel: 0 }) } as PlacedBuilding,
       { id: 'c', defId: 'coke_oven', x: 0, y: 0 } as PlacedBuilding,
     ];
-    const filtered = validBuildings.filter((b) => !b.invalid && !b.disabled);
+    const filtered = validBuildings.filter((b) => isOperationalBuilding(b));
     const coke = validBuildings[1]!;
     const gate = checkGates(coke, filtered, BUILDING_DEFS, false, undefined);
     expect(gate.effectiveMul).toBe(0);
@@ -5667,13 +5667,13 @@ describe('computeRates derivations memo — equivalence under mutation', () => {
     // cluster multiplier falls from ×(1 + rate) to ×1 — soloRate =
     // clusteredRate / 1.1. B itself vanishes from byBuilding entirely
     // (disabled ⇒ not operational ⇒ filtered before pass 1).
-    b.disabled = true;
+    b.disabledFloors = displayedFloorLevel({ floorLevel: 0 });
     const solo = computeRates(state, { defs: POWER_FREE });
     expect(rateOf(solo, 'm-a')).toBeCloseTo(clusteredRate / (1 + EXTRACTION_RATE), 12);
     expect(solo.byBuilding.find((br) => br.building.id === 'm-b')).toBeUndefined();
 
     // Re-enable: exact restoration (same inputs ⇒ same derivations).
-    b.disabled = false;
+    b.disabledFloors = 0;
     const restored = computeRates(state, { defs: POWER_FREE });
     expect(rateOf(restored, 'm-a')).toBe(clusteredRate);
     expect(rateOf(restored, 'm-b')).toBe(clusteredRate);

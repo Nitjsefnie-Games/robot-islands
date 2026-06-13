@@ -266,7 +266,7 @@ export function pickMostDegradedTarget(
     // (the caller services exactly one target per check, no fall-through).
     // Disabled buildings also freeze operatingMs accrual, so they can sit
     // degraded indefinitely. Skip both.
-    if (b.disabled === true || activeFloors(b) <= 0 || b.invalid === true) continue;
+    if (activeFloors(b) <= 0 || b.invalid === true) continue;
     const def = defs[b.defId];
     if (!def) continue;
     const f = maintenanceFactor(b, def, thresholdMul);

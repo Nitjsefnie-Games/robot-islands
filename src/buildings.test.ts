@@ -7,6 +7,7 @@ import {
   ratedBuildingPower,
   activeFloors,
   activeFloorLevel,
+  displayedFloorLevel,
   type PlacedBuilding,
 } from './buildings.js';
 
@@ -39,8 +40,8 @@ describe('hasOperationalBuilding', () => {
     expect(hasOperationalBuilding(list, 'spaceport')).toBe(false);
   });
 
-  it('skips disabled buildings (the field is the whole point — checked against future-Task-2)', () => {
-    const list: PlacedBuilding[] = [b({ id: 'a', defId: 'spaceport', disabled: true })];
+  it('skips fully floor-disabled buildings', () => {
+    const list: PlacedBuilding[] = [b({ id: 'a', defId: 'spaceport', disabledFloors: displayedFloorLevel({ floorLevel: 0 }) })];
     expect(hasOperationalBuilding(list, 'spaceport')).toBe(false);
   });
 
@@ -67,8 +68,8 @@ describe('isOperationalBuilding', () => {
     expect(isOperationalBuilding(b({ id: 'a', defId: 'spaceport', constructionRemainingMs: 1000 }))).toBe(false);
   });
 
-  it('returns false for disabled', () => {
-    expect(isOperationalBuilding(b({ id: 'a', defId: 'spaceport', disabled: true }))).toBe(false);
+  it('returns false for fully floor-disabled', () => {
+    expect(isOperationalBuilding(b({ id: 'a', defId: 'spaceport', disabledFloors: displayedFloorLevel({ floorLevel: 0 }) }))).toBe(false);
   });
 });
 
@@ -95,8 +96,8 @@ describe('findOperationalBuilding', () => {
     expect(findOperationalBuilding(list, 'spaceport')).toEqual(list[1]);
   });
 
-  it('skips disabled buildings', () => {
-    const list: PlacedBuilding[] = [b({ id: 'a', defId: 'spaceport', disabled: true })];
+  it('skips fully floor-disabled buildings', () => {
+    const list: PlacedBuilding[] = [b({ id: 'a', defId: 'spaceport', disabledFloors: displayedFloorLevel({ floorLevel: 0 }) })];
     expect(findOperationalBuilding(list, 'spaceport')).toBeUndefined();
   });
 });
@@ -123,25 +124,25 @@ describe('ratedBuildingPower', () => {
   });
 });
 
-// The spec §05 verification row — disabled flag round-trips through
-// the persistence shallow spread without any explicit migration.
-describe('disable is lossless across save round-trip', () => {
-  it('a building with disabled === true survives JSON.parse(JSON.stringify(b))', () => {
+// Floor-disable state round-trips through the persistence shallow spread
+// without any explicit migration.
+describe('floor-disable is lossless across save round-trip', () => {
+  it('a building with disabledFloors survives JSON.parse(JSON.stringify(b))', () => {
     const building: PlacedBuilding = {
       id: 'test-1',
       defId: 'workshop',
       x: 0,
       y: 0,
-      disabled: true,
+      disabledFloors: 1,
     };
     const round = JSON.parse(JSON.stringify(building)) as PlacedBuilding;
-    expect(round.disabled).toBe(true);
+    expect(round.disabledFloors).toBe(1);
   });
 
-  it('a building with disabled === undefined round-trips as undefined', () => {
+  it('a building with disabledFloors === undefined round-trips as undefined', () => {
     const building: PlacedBuilding = { id: 'test-2', defId: 'workshop', x: 0, y: 0 };
     const round = JSON.parse(JSON.stringify(building)) as PlacedBuilding;
-    expect(round.disabled).toBeUndefined();
+    expect(round.disabledFloors).toBeUndefined();
   });
 });
 
