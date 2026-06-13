@@ -20,7 +20,7 @@ import {
   type BuildingDefId,
   type GateRequirement,
 } from './building-defs.js';
-import { floorLevel, type PlacedBuilding } from './buildings.js';
+import { activeFloorLevel, type PlacedBuilding } from './buildings.js';
 import { footprintTiles, type Rotation } from './shape-mask.js';
 
 /** All footprint tiles a building occupies, returned as a Set of "x,y" keys
@@ -90,7 +90,7 @@ export function touchesBorder(
  */
 function clusterFloorCapacity(b: PlacedBuilding): number {
   const underConstruction = (b.constructionRemainingMs ?? 0) > 0;
-  return floorLevel(b) + (underConstruction ? 0 : 1);
+  return Math.max(0, activeFloorLevel(b) + (underConstruction ? 0 : 1));
 }
 
 /**

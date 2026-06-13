@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   hasOperationalBuilding,
   isOperationalBuilding,
+  participatesInCluster,
   findOperationalBuilding,
   ratedBuildingPower,
   activeFloors,
@@ -170,5 +171,16 @@ describe('active floors (floor-disable, Part 2)', () => {
   });
   it('clamps over-disable to 0 active', () => {
     expect(activeFloors({ floorLevel: 0, disabledFloors: 9 })).toBe(0);
+  });
+});
+
+describe('floor-disable gating', () => {
+  it('a building with 0 active floors is non-operational', () => {
+    expect(isOperationalBuilding({ floorLevel: 1, disabledFloors: 2 })).toBe(false);
+    expect(participatesInCluster({ floorLevel: 1, disabledFloors: 2 })).toBe(false);
+  });
+  it('a partially-disabled building is still operational', () => {
+    expect(isOperationalBuilding({ floorLevel: 2, disabledFloors: 1 })).toBe(true);
+    expect(participatesInCluster({ floorLevel: 2, disabledFloors: 1 })).toBe(true);
   });
 });

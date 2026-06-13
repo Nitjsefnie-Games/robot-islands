@@ -177,16 +177,17 @@ export interface PlacedBuilding {
  *  available?" filter (e.g. §NEW disabled toggle) is a single-line edit
  *  here instead of a fan-out across the tree. Pure. */
 export function isOperationalBuilding(
-  b: { invalid?: boolean; constructionRemainingMs?: number; disabled?: boolean },
+  b: { invalid?: boolean; constructionRemainingMs?: number; disabled?: boolean; floorLevel?: number; disabledFloors?: number },
 ): boolean {
   if (b.invalid === true) return false;
   if ((b.constructionRemainingMs ?? 0) > 0) return false;
-  if (b.disabled === true) return false;
+  if (b.disabled === true) return false;           // legacy, removed in a later task
+  if (activeFloors(b) <= 0) return false;          // floor-disable
   return true;
 }
 
 export function hasOperationalBuilding(
-  buildings: ReadonlyArray<{ defId: string; invalid?: boolean; constructionRemainingMs?: number; disabled?: boolean }>,
+  buildings: ReadonlyArray<{ defId: string; invalid?: boolean; constructionRemainingMs?: number; disabled?: boolean; floorLevel?: number; disabledFloors?: number }>,
   defId: BuildingDefId,
 ): boolean {
   for (const b of buildings) {
@@ -204,13 +205,13 @@ export function hasOperationalBuilding(
  *  contributes its previous (completed) floor capacity (the floor being built
  *  is excluded by `clusterFloorCapacity` in `adjacency.ts`). */
 export function participatesInCluster(
-  b: { invalid?: boolean; disabled?: boolean },
+  b: { invalid?: boolean; disabled?: boolean; floorLevel?: number; disabledFloors?: number },
 ): boolean {
-  return b.invalid !== true && b.disabled !== true;
+  return b.invalid !== true && b.disabled !== true && activeFloors(b) > 0;
 }
 
 export function findOperationalBuilding(
-  buildings: ReadonlyArray<{ defId: string; invalid?: boolean; constructionRemainingMs?: number; disabled?: boolean }>,
+  buildings: ReadonlyArray<{ defId: string; invalid?: boolean; constructionRemainingMs?: number; disabled?: boolean; floorLevel?: number; disabledFloors?: number }>,
   defId: BuildingDefId,
 ): PlacedBuilding | undefined {
   for (const b of buildings) {

@@ -305,6 +305,12 @@ describe('clusterBonusMul — §4.5 per-cluster bonus', () => {
     expect(clusterBonusMul(a, [a, b])).toBeCloseTo(1.05, 9);
     expect(clusterBonusMul(b, [a, b])).toBeCloseTo(1.55, 9);
   });
+
+  it('a half-disabled building contributes its ACTIVE floor count to the cluster (floor-disable)', () => {
+    const a = place('a', 'mine', 0, 0);
+    const b = { ...place('b', 'mine', 2, 0), floorLevel: 2, disabledFloors: 2 }; // built 3, 2 off -> active 1 -> c=1
+    expect(clusterBonusMul(a, [a, b])).toBeCloseTo(1.05, 9); // 1 + 0.05×(2−1)
+  });
 });
 
 describe('clusterBonusMul — §4.5 under-construction contributes previous floor (#35)', () => {
