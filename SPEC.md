@@ -584,15 +584,21 @@ The player's responsibility is to keep maintenance supplies flowing — plant Wo
 
 **Queued state.** A queued building occupies its footprint and has paid its placement cost, but `queued === true` on the `PlacedBuilding` prevents it from ticking and from being counted as a running slot. Its `constructionRemainingMs` is set at enqueue but does not count down until promoted.
 
-**Promotion.** Whenever a running build completes its timer (construction-completion boundary inside `advanceIsland`), `promoteQueuedBuilds` immediately promotes the FIFO head of the queue (lowest `queueSeq`) into the freed slot. Promotion happens within the same advance/offline-catchup pass.
+**Stacked upgrade queue.** A building can have **multiple floor upgrades queued at once**. Each pending upgrade beyond the one currently running is stored as a `BuildJob` entry in `IslandState.buildJobs: BuildJob[]` (one entry per pending floor, ordered globally by `seq`). These queued-upgrade jobs share the island's QUEUE slot budget with queued placements — the combined count is `queuedBuildCount(state)`, which sums `queued === true` buildings and `buildJobs.length`. A building with only queued (not-yet-running) upgrades keeps producing at its current completed floor — its `constructionRemainingMs` is **not set** until a job promotes to running. Cost is paid at enqueue time. A queued upgrade does not advance `floorLevel`; `floorLevel` only increments when the upgrade starts running (see §4.9). `kind` on `BuildJob` is a union for forward-compat; only `'upgrade'` stacks today (placements never stack multiple entries per building).
 
-**Cancel.** An in-progress build (running OR queued) can be cancelled for a **100% material refund**. This is distinct from §6.7 demolish (~30% Scrap recovery) and from relocate (half-fee). For a fresh placement (`floorLevel === 0`), cancel removes the building entirely; for an in-progress upgrade it reverts the building to `floorLevel − 1` and clears the construction timer. Because storage caps are granted only at construction completion (§4.6), an unfinished build holds no cap and cancel strips none — it touches only the building/level and the material refund. Cancel is only valid while `constructionRemainingMs > 0`.
+**Promotion.** Whenever a running build completes its timer (construction-completion boundary inside `advanceIsland`), `promoteQueuedBuilds` immediately promotes the FIFO head of the queue (lowest `queueSeq`) into the freed slot. Promotion is global FIFO across all pending entries (placements and upgrade jobs), with per-building serialisation: a building that already has a running upgrade cannot have a second job promoted onto it until that upgrade completes. Promotion happens within the same advance/offline-catchup pass.
+
+**Cancel.** An in-progress build (running OR queued) can be cancelled for a **100% material refund**. This is distinct from §6.7 demolish (~30% Scrap recovery) and from relocate (half-fee). For upgrades, cancel is **LIFO per building**: the newest queued floor (highest `seq`) is peeled off first, with a full refund of that floor's cost — keeping floors contiguous from the bottom up. Only after all queued upgrade jobs for a building are gone can the currently running upgrade be cancelled; at that point it reverts the building to `floorLevel − 1` and clears the construction timer. For a fresh placement (`floorLevel === 0`) with no running upgrade, cancel removes the building entirely. Because storage caps are granted only at construction completion (§4.6), an unfinished build holds no cap and cancel strips none — it touches only the building/level and the material refund. **Demolishing a building** also drops all of its queued upgrade jobs from `buildJobs` — no dangling `BuildJob` entries are left for a demolished building.
 
 **Level badge.** Every placed building shows its current floor level (displayed as `floorLevel + 1`) as a persistent badge in the bottom-right corner of its tile footprint, rendered via the building-alerts overlay regardless of construction state.
 
 ### 4.9 Floor Upgrades
 
 A building starts at floor 1 (`floorLevel === 0`). Each floor upgrade raises the displayed floor by one and, once construction completes, improves the building's throughput, power output, and storage contribution.
+
+**Floor level advance timing.** `floorLevel` is incremented the moment an upgrade **starts running** (immediate start or promotion from the queue via `promoteQueuedBuilds`) — not at enqueue time. A queued upgrade job in `IslandState.buildJobs` has already paid its cost but does not bump `floorLevel`; the building continues producing at its current completed floor. Enqueueing multiple upgrades in advance therefore keeps the building running at its present floor while the jobs wait their turn.
+
+**Construction time.** Upgrade construction time scales as `base_ms × (level + 1)` where `level` is the new `floorLevel` being built (e.g. upgrading to floor 2, `floorLevel = 1`, costs `base × 2`). The result is divided by the Robotics `constructionTimeMul` (Swarm Assembly) exactly as for fresh placements — `upgradeConstructionMs(def, newLevel, skillMul.constructionTime)`. A Robotics purchase after enqueue does not retroactively shorten the already-queued job's stored time; it takes effect on the next enqueued upgrade.
 
 **No hard cap.** Buildings can be upgraded to floor 11, 12, and beyond indefinitely.
 
@@ -696,7 +702,7 @@ Slag (from smelting), Ash (from combustion), Waste heat, Exhaust gas, Wastewater
 
 **Implementation note — demolish also refunds 50% of invested materials.** In addition to the scrap credit, `demolishBuilding` returns `floor(totalInvestedCost[r] / 2)` of each original placement resource (`stone`, `wood`, etc.) directly to inventory, clamped per-resource to the post-demolish storage cap (excess is lost, per §4.6). `totalInvestedCost` = base `placementCost` + the sum of every completed upgrade's cost (legacy `ceil(0.8 × placementCost)` for floors 2–10, exponential `ceil(0.08 × 1.15^(L−10) × placementCost)` for floor L > 10), so upgraded buildings refund proportionally more. This 50% in-kind refund is distinct from the scrap recovery: both fire on every demolish of a completed building. Source of truth: `demolishBuilding` in `src/placement.ts`, `DemolishResult.refunded` field.
 
-**Construction cancel (distinct from demolish).** A building currently under construction (running OR queued, i.e. `constructionRemainingMs > 0`) can be cancelled for a **100% material refund** — no Scrap penalty. For a fresh placement (`floorLevel 0`) the building is removed entirely; for an in-progress upgrade the building reverts to the previous floor level. Demolish (~30% Scrap) applies only to completed buildings; relocate (half-fee) is a third distinct action. See §4.8 for queue/cancel mechanics.
+**Construction cancel (distinct from demolish).** A building currently under construction or with queued upgrade jobs can be cancelled for a **100% material refund** — no Scrap penalty. For upgrades, cancel is LIFO per building: queued jobs are peeled off newest-first (full refund each), and only once the queue is empty can the running upgrade itself be cancelled (building reverts to `floorLevel − 1`). For a fresh placement (`floorLevel 0`) the building is removed entirely. Demolish (~30% Scrap) applies only to completed buildings; relocate (half-fee) is a third distinct action. See §4.8 for full queue/cancel mechanics including `BuildJob` and stacked upgrades.
 
 Byproducts must be handled. Untreated wastewater applies an efficiency penalty. Slag can be reprocessed for trace minerals (gold, silver, rare metals at low yield).
 
@@ -1108,7 +1114,7 @@ The skill tree is a **directed graph** of nodes connected by edges. Five top-lev
 * Mining (ore output, vein depth, rare reveal)
 * Forestry (wood output, regrowth, exotic species)
 * Drilling (oil/gas/deep mineral)
-* Robotics (construction speed, parallel building + build-queue capacity, drone production efficiency)
+* Robotics (construction speed — applies to both fresh placements and floor upgrades via `constructionTimeMul` / Swarm Assembly; parallel building + build-queue capacity; drone production efficiency)
 
 **Refinement**
 
