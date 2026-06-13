@@ -803,6 +803,22 @@ describe('§4.5 — buff adjacency in computeRates / advanceIsland', () => {
     expect(state.inventory.iron_ore).toBeCloseTo(10.5, 6);
   });
 
+  it('under-construction upgrade sibling feeds a neighbour’s cluster bonus but produces nothing (#35)', () => {
+    // mineA operational floor-1 (c=1). mineB upgrading INTO floorLevel 1
+    // (constructionRemainingMs > 0) → contributes its PREVIOUS level c=1, K=2.
+    // mineA effectiveRate = 0.05 × (1 + 0.05×(2−1)) = 0.0525. Before #35 the
+    // in-progress sibling was filtered out of the cluster set → mineA stayed 0.05.
+    // mineB is still under construction → it does NOT appear in byBuilding.
+    const mineA: PlacedBuilding = { id: 'b-mine-a', defId: 'mine', x: 0, y: 0 };
+    const mineB: PlacedBuilding = {
+      id: 'b-mine-b', defId: 'mine', x: 2, y: 0, floorLevel: 1, constructionRemainingMs: 5000,
+    };
+    const state = makeState({ buildings: [mineA, mineB], inventory: blankInventory() });
+    const { byBuilding } = computeRates(state, { defs: POWER_FREE });
+    expect(byBuilding.find((r) => r.building === mineA)?.effectiveRate).toBeCloseTo(0.0525, 9);
+    expect(byBuilding.some((r) => r.building === mineB)).toBe(false);
+  });
+
   it('floor-weighted generator power: own floor multiplies output; taller neighbour raises the cluster term', () => {
     // wwA floor-1 (c=1), wwB floor-2 (floorLevel 1 → c=2). K = 3.
     // wwA = 20 × floorEffectMul(0)=1 × (1 + 0.05×(3−1)=1.10) = 22 kW

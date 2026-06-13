@@ -79,6 +79,21 @@ export function touchesBorder(
 }
 
 /**
+ * §4.5 floor-capacity a building contributes to its cluster. For an operational
+ * building this is `1 + floorLevel` (the same `1 + L` factor as the floor
+ * throughput multiplier). A building still UNDER CONSTRUCTION (#35) contributes
+ * only its PREVIOUS, completed floor level — `1 + (floorLevel − 1) = floorLevel`
+ * — because the floor currently being built does not count toward the bonus
+ * until it finishes. A fresh placement (`floorLevel 0`) under construction
+ * therefore contributes 0 (neutral: adds nothing to neighbours' bonus) while
+ * still connecting its cluster.
+ */
+function clusterFloorCapacity(b: PlacedBuilding): number {
+  const underConstruction = (b.constructionRemainingMs ?? 0) > 0;
+  return floorLevel(b) + (underConstruction ? 0 : 1);
+}
+
+/**
  * §4.5 per-building cluster-bonus multiplier. A building's *cluster* is the
  * maximal set of same-category buildings connected through 4-neighbour links
  * (the §4.4 border test). The bonus is FLOOR-WEIGHTED and neighbours-only:
@@ -148,13 +163,13 @@ export function clusterBonusMuls(
   }
 
   // §4.5 floor-weighted component capacity: a component's "size" is the sum of
-  // its members' floor-capacity c = 1 + floorLevel (== floorEffectMul), NOT a
-  // raw head-count — so a floor-upgraded building contributes its capacity to
-  // its neighbours' bonus.
+  // its members' floor-capacity c (see `clusterFloorCapacity`), NOT a raw
+  // head-count — so a floor-upgraded building contributes its capacity to its
+  // neighbours' bonus.
   const compCap = new Map<number, number>();
   for (let i = 0; i < n; i++) {
     const r = find(i);
-    compCap.set(r, (compCap.get(r) ?? 0) + (1 + floorLevel(buildings[i]!)));
+    compCap.set(r, (compCap.get(r) ?? 0) + clusterFloorCapacity(buildings[i]!));
   }
 
   const out = new Map<string, number>();
@@ -166,7 +181,7 @@ export function clusterBonusMuls(
     // so a lone building (any floor) gets ×1.0 and a building's own height
     // drives only its floor multiplier, not its cluster term.
     const K = compCap.get(find(i)) ?? 1;
-    out.set(b.id, 1 + rate * (K - (1 + floorLevel(b))));
+    out.set(b.id, 1 + rate * (K - clusterFloorCapacity(b)));
   }
   return out;
 }

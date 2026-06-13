@@ -190,6 +190,18 @@ export function hasOperationalBuilding(
   return false;
 }
 
+/** §4.5 cluster membership: a building participates in (connects, and
+ *  contributes floor-capacity to) its same-category cluster unless it is
+ *  invalid or player-disabled. Unlike `isOperationalBuilding`, a building still
+ *  UNDER CONSTRUCTION DOES participate — per #35 it bridges its cluster and
+ *  contributes its previous (completed) floor capacity (the floor being built
+ *  is excluded by `clusterFloorCapacity` in `adjacency.ts`). */
+export function participatesInCluster(
+  b: { invalid?: boolean; disabled?: boolean },
+): boolean {
+  return b.invalid !== true && b.disabled !== true;
+}
+
 export function findOperationalBuilding(
   buildings: ReadonlyArray<{ defId: string; invalid?: boolean; constructionRemainingMs?: number; disabled?: boolean }>,
   defId: BuildingDefId,
