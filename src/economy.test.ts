@@ -1576,6 +1576,33 @@ describe('§5.1 power scales with effective throughput (rebalance)', () => {
     expect(runningState.buildings[0]!.operatingMs).toBe(dt);
     expect(stalledState.buildings[0]!.operatingMs).toBe(0); // u=0 → zero wear
   });
+
+  it('force run: a capped producer earns XP, voids overflow, and wears (§4.6)', () => {
+    // Mine at a full iron_ore bin (= cap). With forceRun on it keeps running:
+    // XP accrues, inventory stays clamped at cap (overflow voided), and it
+    // wears like a running building (u > 0).
+    const dt = 5_000;
+    const state = makeState({
+      buildings: [{ ...MINE, forceRun: true, operatingMs: 0, placedAt: 0, maintainedAt: 0 }],
+      inventory: { ...blankInventory(), iron_ore: 100 }, // at cap
+    });
+    advanceIsland(state, dt, { defs: POWER_FREE });
+    expect(state.inventory.iron_ore).toBeCloseTo(100, 9); // overflow voided — still at cap
+    expect(state.xp).toBeGreaterThan(0);                   // XP accrued from production
+    expect(state.buildings[0]!.operatingMs).toBeGreaterThan(0); // wears like a running building
+  });
+
+  it('force run OFF: the same capped producer earns no XP and no wear (§4.6)', () => {
+    const dt = 5_000;
+    const state = makeState({
+      buildings: [{ ...MINE, forceRun: false, operatingMs: 0, placedAt: 0, maintainedAt: 0 }],
+      inventory: { ...blankInventory(), iron_ore: 100 }, // at cap
+    });
+    advanceIsland(state, dt, { defs: POWER_FREE });
+    expect(state.inventory.iron_ore).toBeCloseTo(100, 9);
+    expect(state.xp).toBeCloseTo(0, 9);                    // no XP
+    expect(state.buildings[0]!.operatingMs).toBe(0);       // no wear
+  });
 });
 
 describe('skill-tree integration (§9.3)', () => {

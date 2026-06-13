@@ -150,6 +150,12 @@ export interface PlacedBuilding {
    *  power / storage capacity / §4.5 cluster contribution by the ACTIVE floor
    *  count (via the forthcoming `activeFloorLevel` helper). */
   disabledFloors?: number;
+  /** Force-run (§4.6): keep producing for XP even when an output bin is at
+   *  cap. Absent / false = default (throttle to consumer draw at a full bin).
+   *  The building still consumes inputs + power and accrues maintenance wear;
+   *  the overflow output is voided at the cap. Free + instantly reversible via
+   *  the inspector toggle. */
+  forceRun?: boolean;
 }
 
 /** Returns true iff at least one placed building of `defId` in `buildings`
