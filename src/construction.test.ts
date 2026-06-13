@@ -150,3 +150,18 @@ describe('constructionProgress', () => {
     expect(constructionProgress(0, mine, 0)).toBe(1);
   });
 });
+describe('upgradeConstructionMs honors construction speed (#31 / Swarm Assembly)', () => {
+  it('defaults to raw base × (level+1) when no multiplier given', () => {
+    const def = { tier: 1 } as never; // base 30_000
+    expect(upgradeConstructionMs(def, 1)).toBe(30_000 * 2);
+  });
+  it('divides the raw duration by the construction-time multiplier', () => {
+    const def = { tier: 1 } as never;
+    expect(upgradeConstructionMs(def, 1, 2)).toBe(Math.round(30_000 * 2 / 2));
+    expect(upgradeConstructionMs(def, 0, 4)).toBe(Math.round(30_000 * 1 / 4));
+  });
+  it('treats a non-positive multiplier as no speedup', () => {
+    const def = { tier: 1 } as never;
+    expect(upgradeConstructionMs(def, 1, 0)).toBe(30_000 * 2);
+  });
+});
