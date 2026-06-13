@@ -17,6 +17,11 @@ export interface FlowBuildingSpec {
   readonly produces: Readonly<Record<string, number>>;
   /** Consumption coefficients, units/sec at gate 1. */
   readonly consumes: Readonly<Record<string, number>>;
+  /** Force-run (§4.6): when true, this building's PRODUCTION is exempt from
+   *  output-cap throttling — a full output bin no longer drives its gate to 0.
+   *  Its overflow is voided downstream by `applyRates`' clamp. It is NOT
+   *  exempt from input-empty (zero) constraints or the power factor. */
+  readonly ignoreOutputCap?: boolean;
 }
 
 export interface FlowConstraints {
@@ -108,8 +113,10 @@ export function solveFlow(
   // of r; zero constrains CONSUMERS of r.
   const keysByBuilding: MulKey[][] = buildings.map((b) => {
     const ks: MulKey[] = [];
-    for (const r of Object.keys(b.produces)) {
-      if ((b.produces[r] ?? 0) > 0 && constraints.capConstrained.has(r)) ks.push(`cap:${r}`);
+    if (!b.ignoreOutputCap) {
+      for (const r of Object.keys(b.produces)) {
+        if ((b.produces[r] ?? 0) > 0 && constraints.capConstrained.has(r)) ks.push(`cap:${r}`);
+      }
     }
     for (const r of Object.keys(b.consumes)) {
       if ((b.consumes[r] ?? 0) > 0 && constraints.zeroConstrained.has(r)) ks.push(`zero:${r}`);
@@ -146,6 +153,7 @@ export function solveFlow(
         const p = buildings[i]!.produces[res] ?? 0;
         const c = buildings[i]!.consumes[res] ?? 0;
         if (p > 0) {
+          if (buildings[i]!.ignoreOutputCap) continue; // force-run: outside cap throttle (overflow voided)
           const net = p - c;
           if (net > 0) {
             entries.push({ coeff: net, otherGate: gate(i, key) });
