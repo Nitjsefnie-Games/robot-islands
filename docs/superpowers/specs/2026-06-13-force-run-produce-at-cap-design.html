@@ -1,0 +1,524 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Force-Run toggle — produce-at-cap for XP</title>
+  <style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--ivory);
+      color: var(--gray-700);
+      line-height: 1.58;
+      padding: 56px 32px 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { margin: 0 auto; max-width: 960px; }
+
+    header.page-head { margin-bottom: 40px; max-width: 840px; }
+    .eyebrow {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--gray-500);
+      margin-bottom: 12px;
+    }
+    h1 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 38px;
+      line-height: 1.14;
+      color: var(--slate);
+      margin-bottom: 18px;
+      letter-spacing: -0.01em;
+    }
+    .context-box {
+      background: var(--gray-150);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      font-size: 14.5px;
+      color: var(--gray-700);
+    }
+    .context-box .label {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 56px;
+    }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+    }
+    .summary .k {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      margin-bottom: 6px;
+    }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent  { color: var(--clay); }
+    .summary .v.ok      { color: var(--olive); }
+
+    .decision {
+      background: var(--white);
+      border: var(--border);
+      border-left: 4px solid var(--clay);
+      border-radius: var(--radius);
+      padding: 22px 26px;
+      margin-bottom: 56px;
+    }
+    .decision .d-tag {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--clay);
+      margin-bottom: 8px;
+    }
+    .decision .d-head {
+      font-family: var(--serif);
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--slate);
+      margin-bottom: 10px;
+      letter-spacing: -0.01em;
+    }
+    .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 800px; }
+    .decision .d-body + .d-body { margin-top: 8px; }
+
+    section { margin-bottom: 60px; }
+    .sec-head {
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+      margin-bottom: 8px;
+    }
+    .sec-head .num {
+      font-family: var(--mono);
+      font-size: 12px;
+      background: var(--oat);
+      color: var(--slate);
+      padding: 3px 9px;
+      border-radius: 8px;
+    }
+    .sec-head h2 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 26px;
+      color: var(--slate);
+      letter-spacing: -0.01em;
+    }
+    .sec-intro {
+      font-size: 14.5px;
+      color: var(--gray-500);
+      max-width: 760px;
+      margin-bottom: 24px;
+    }
+    p.body { font-size: 14.5px; max-width: 800px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+    code {
+      font-family: var(--mono);
+      font-size: 0.88em;
+      background: var(--gray-150);
+      border: 1px solid var(--gray-300);
+      border-radius: 5px;
+      padding: 1px 5px;
+      color: #C9B98A;
+    }
+    pre {
+      background: var(--gray-150);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      overflow-x: auto;
+      margin-bottom: 18px;
+      max-width: 800px;
+    }
+    pre code { background: none; border: none; padding: 0; color: #C9B98A; font-size: 12.5px; line-height: 1.6; }
+
+    .tbl {
+      width: 100%;
+      border: var(--border);
+      border-radius: var(--radius);
+      border-collapse: separate;
+      border-spacing: 0;
+      overflow: hidden;
+      font-size: 13.5px;
+    }
+    .tbl th, .tbl td {
+      text-align: left;
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--gray-300);
+      vertical-align: top;
+    }
+    .tbl th {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--gray-500);
+      background: var(--gray-150);
+      font-weight: 600;
+    }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+
+    .compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 820px) { .compare { grid-template-columns: 1fr; } }
+    .compare .col {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .compare .col-head {
+      padding: 12px 18px;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      border-bottom: var(--border);
+    }
+    .compare .col.bad  .col-head { background: #2E211C; color: var(--rust); }
+    .compare .col.good .col-head { background: #232A1C; color: var(--olive); }
+    .compare .col-body { padding: 16px 18px; font-size: 13.5px; }
+    .compare .col-body ul { list-style: none; }
+    .compare .col-body li { margin: 7px 0; padding-left: 18px; position: relative; }
+    .compare .col.bad  li:before { content: '\2715'; position: absolute; left: 0; color: var(--rust); }
+    .compare .col.good li:before { content: '\2713'; position: absolute; left: 0; color: var(--olive); }
+
+    .changes { display: flex; flex-direction: column; gap: 12px; }
+    .change {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      display: grid;
+      grid-template-columns: 200px 1fr;
+      gap: 4px 24px;
+    }
+    @media (max-width: 720px) { .change { grid-template-columns: 1fr; } }
+    .change .file {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      color: var(--clay);
+      word-break: break-all;
+    }
+    .change .what { font-size: 14px; color: var(--gray-700); }
+    .change .what .lead { color: var(--slate); font-weight: 600; }
+
+    .checklist { display: flex; flex-direction: column; gap: 10px; max-width: 800px; }
+    .check {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      background: var(--white);
+      border: var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+    }
+    .check .box {
+      width: 18px; height: 18px;
+      border-radius: 5px;
+      border: 2px solid var(--gray-500);
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .check .ck-text { font-size: 14px; color: var(--gray-700); }
+    .check .ck-text strong { color: var(--slate); }
+
+    .risks {
+      border: var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--white);
+    }
+    .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: var(--border); }
+    .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: var(--border); }
+    @media (max-width: 780px) {
+      .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); }
+    }
+    .risks .head {
+      background: var(--gray-150);
+      font-weight: 600;
+      color: var(--slate);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .sev {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-weight: 600;
+    }
+    .sev.high { background: #4A2A1C; color: #F0B79C; }
+    .sev.med  { background: var(--oat);  color: var(--slate); }
+    .sev.low  { background: #2D3A24; color: #B6CC96; }
+
+    .deferred { display: flex; flex-direction: column; gap: 14px; max-width: 840px; }
+    .defer {
+      background: var(--white);
+      border: var(--border);
+      border-left: 4px solid var(--gray-500);
+      border-radius: 10px;
+      padding: 16px 20px;
+    }
+    .defer .dt { font-weight: 600; font-size: 15px; color: var(--slate); margin-bottom: 4px; }
+    .defer .dd { font-size: 13.5px; color: var(--gray-500); }
+
+    .footer {
+      color: var(--gray-500);
+      font-size: 13px;
+      margin-top: 64px;
+      padding-top: 22px;
+      border-top: 1px solid var(--gray-300);
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Design spec · Robot Islands</div>
+      <h1>Force-Run toggle — produce-at-cap for XP</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        Under the net-flow economy, a building whose output bin is full has its
+        flow-solver gate driven to zero — it stops, earns no XP, and accrues no
+        wear. There is no way to keep a maxed-out production line running just to
+        keep levelling. This spec adds a per-building <strong>Force Run</strong>
+        toggle that keeps it running for XP, voiding the overflow at the cap.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Scope</div><div class="v accent">1 mechanic</div></div>
+      <div class="cell"><div class="k">Files touched</div><div class="v">7 + tests</div></div>
+      <div class="cell"><div class="k">Risk</div><div class="v ok">Low</div></div>
+      <div class="cell"><div class="k">Schema bump</div><div class="v ok">None expected</div></div>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision</div>
+      <div class="d-head">Exclude force-run buildings from the flow-solver's <code>cap:r</code> constraint; the existing integrator does the rest.</div>
+      <div class="d-body">The event-driven integrator already clamps inventory to
+        <code>[0, cap]</code> (overflow auto-voided) and already refuses to emit a
+        recurring event for an at-cap bin with positive net flow (no infinite
+        loop). XP and wear both follow automatically once the gate stays open. So
+        the only behavioral change is one carve-out in the solver.</div>
+      <div class="d-body">Force Run is a <em>real</em> tradeoff: the building still
+        consumes its inputs, draws power, and wears down. The overflow output is
+        always voided — caps stay hard. It is <em>not</em> a free XP faucet.</div>
+    </div>
+
+    <section>
+      <div class="sec-head"><span class="num">01</span><h2>Goal</h2></div>
+      <p class="sec-intro">What the toggle does, and the cost model.</p>
+      <p class="body">Add a per-building <strong>Force Run</strong> toggle in the
+        inspector. When <strong>on</strong>, the building keeps running even with a
+        full output bin. It genuinely operates — consumes inputs, draws power,
+        accrues maintenance wear — and the overflow output is voided at the cap.
+        The XP is the payoff; the inputs, power, and wear are the cost.</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">02</span><h2>Default vs. Force Run</h2></div>
+      <p class="sec-intro">At a full output bin, with no consumer drawing the capped resource.</p>
+      <div class="compare">
+        <div class="col bad">
+          <div class="col-head">Default (today)</div>
+          <div class="col-body"><ul>
+            <li>Flow-solver gate <code>g → 0</code>.</li>
+            <li>Production stops; inputs not consumed.</li>
+            <li>No XP earned.</li>
+            <li>No power draw, no maintenance wear.</li>
+          </ul></div>
+        </div>
+        <div class="col good">
+          <div class="col-head">Force Run on</div>
+          <div class="col-body"><ul>
+            <li>Exempt from the <code>cap:r</code> constraint; gate stays open.</li>
+            <li>Runs at full rate; inputs consumed, power drawn.</li>
+            <li>XP earned from production.</li>
+            <li>Wears normally; overflow output voided at the cap.</li>
+          </ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">03</span><h2>Why the change is small</h2></div>
+      <p class="sec-intro">The integrator already supports producing-into-a-full-bin.</p>
+      <p class="body"><strong>Overflow is auto-voided.</strong> <code>applyRates</code>
+        clamps every inventory to <code>[0, cap]</code> (<code>economy.ts:2147</code>).
+        A force-run producer's net-positive flow into a full bin is clamped at the
+        cap each segment — the excess is discarded.</p>
+      <p class="body"><strong>No infinite loop.</strong> <code>findNextCapEvent</code>
+        skips a boundary event for a bin at/over cap with positive net flow
+        (<code>economy.ts:2068</code>, <code>headroom &lt;= 0 ⇒ continue</code>).</p>
+      <p class="body"><strong>XP and wear follow automatically.</strong> XP accrues
+        from production; wear accrues as <code>dt × utilization</code>. Both are
+        nonzero exactly when <code>effectiveRate &gt; 0</code>. The single
+        behavioral change: exclude a force-run building from the <code>cap:r</code>
+        constraint so its gate isn't dragged to 0.</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">04</span><h2>Change inventory</h2></div>
+      <p class="sec-intro">Every file the implementation touches.</p>
+      <div class="changes">
+        <div class="change">
+          <div class="file">buildings.ts</div>
+          <div class="what"><span class="lead">Add <code>forceRun?: boolean</code> to <code>PlacedBuilding</code>.</span> Absent / false = today's behavior.</div>
+        </div>
+        <div class="change">
+          <div class="file">flow-solver.ts</div>
+          <div class="what"><span class="lead">Add <code>ignoreOutputCap?</code> to <code>FlowBuildingSpec</code>.</span> When set: skip the building's <code>cap:r</code> key assignment, and skip it from the producer entries / consumer target inside <code>update('cap:r')</code>. <code>zeroConstrained</code> + power factor unchanged.</div>
+        </div>
+        <div class="change">
+          <div class="file">economy.ts</div>
+          <div class="what"><span class="lead">Pass the flag through.</span> In <code>buildFlowBuildings</code>, set <code>ignoreOutputCap: b.forceRun</code>. Nothing else changes.</div>
+        </div>
+        <div class="change">
+          <div class="file">inspector-ui.ts</div>
+          <div class="what"><span class="lead">Force Run toggle button.</span> In the maintenance section beside the floor steppers; <code>makeExpandButton</code> style; pending + <code>dispatchAction</code> + <code>deps.onSetForceRun</code> + <code>paint()</code>. Shown only for resource-producing buildings; hidden under construction.</div>
+        </div>
+        <div class="change">
+          <div class="file">main.ts</div>
+          <div class="what"><span class="lead">Wire <code>onSetForceRun</code>.</span> Set <code>building.forceRun</code> and trigger the save path <code>onSetActiveFloors</code> uses.</div>
+        </div>
+        <div class="change">
+          <div class="file">persistence.ts</div>
+          <div class="what"><span class="lead">Additive field — round-trips for free.</span> Like <code>disabledFloors</code> / <code>cargoLabel</code>. No schema bump expected; confirm no strict-shape rejection.</div>
+        </div>
+        <div class="change">
+          <div class="file">SPEC.md</div>
+          <div class="what"><span class="lead">§4.6 + §4.7.</span> Document the cap-throttle override, and note force-run does not escape maintenance (nonzero duty ⇒ wears normally).</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">05</span><h2>The flag</h2></div>
+      <pre><code>/** Force-run: keep producing for XP even when an output bin is at cap.
+ *  Absent / false = default (throttle to consumer draw at a full bin).
+ *  The building still consumes inputs + power and accrues wear; overflow
+ *  output is voided at the cap. */
+forceRun?: boolean;</code></pre>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">06</span><h2>Verification</h2></div>
+      <p class="sec-intro">Concrete, runnable.</p>
+      <div class="checklist">
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>flow-solver test.</strong> Force-run producer keeps gate &gt; 0 at a capped output while a normal producer of the same resource gates to 0; non-force producers still solve to consumer draw.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>economy test.</strong> Force Run on at a full bin: XP accrues, inventory stays exactly at cap (overflow voided), wear accrues, inputs consumed, building stops when inputs run dry.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>persistence test.</strong> <code>forceRun: true</code> round-trips identity; legacy save (absent) loads with Force Run off.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>npm run build &amp; npm test.</strong> Clean under strict tsconfig; all tests green.</div></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">07</span><h2>Risks</h2></div>
+      <div class="risks">
+        <div class="row">
+          <div class="cell head">Risk</div>
+          <div class="cell head">Sev</div>
+          <div class="cell head">Mitigation</div>
+        </div>
+        <div class="row">
+          <div class="cell">Excluding a building from <code>cap:r</code> mishandles a resource with multiple producers (some force, some not).</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Skip force-run buildings from both the key and the constraint's entries/target, so θ governs only normal producers; covered by the flow-solver test.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Recurring zero-length event at a pinned full bin (integrator freeze).</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Already handled — <code>findNextCapEvent</code> skips at-cap bins with positive flow; the clamp pins inventory at cap.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Persistence rejects the new optional field.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Field is additive and absent = off; verify no strict-shape validation, add a no-op migration only if required.</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">08</span><h2>Out of scope</h2></div>
+      <div class="deferred">
+        <div class="defer">
+          <div class="dt">Global / multi-building Force Run</div>
+          <div class="dd">Per-building only — matches the "a button" request and the floor-disable precedent.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Letting output exceed cap</div>
+          <div class="dd">Overflow is always voided; caps stay hard.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">A separate XP-only code path</div>
+          <div class="dd">XP comes from genuine (then-voided) production, not a bespoke faucet.</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <p>Design spec · 2026-06-13 · Robot Islands · relates to: net-flow economy (§4.6, §4.7, §15.3), floor-disable design</p>
+    </div>
+
+  </div>
+</body>
+</html>
