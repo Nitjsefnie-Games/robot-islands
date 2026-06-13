@@ -301,3 +301,44 @@ describe('solveFlow — property test', () => {
     }
   });
 });
+
+describe('flow-solver — ignoreOutputCap (force run)', () => {
+  it('a force-run producer keeps gate 1 at a capped output with no consumer; a normal one gates to 0', () => {
+    const buildings: FlowBuildingSpec[] = [
+      { produces: { x: 5 }, consumes: {} },
+      { produces: { x: 5 }, consumes: {}, ignoreOutputCap: true },
+    ];
+    const { gates } = solveFlow(buildings, {
+      capConstrained: new Set(['x']),
+      zeroConstrained: new Set(),
+    });
+    expect(gates[0]!).toBeCloseTo(0, 9);
+    expect(gates[1]!).toBeCloseTo(1, 9);
+  });
+
+  it('force-run producer does not absorb the consumer draw owed by normal producers', () => {
+    const buildings: FlowBuildingSpec[] = [
+      { produces: { x: 10 }, consumes: {} },
+      { produces: { x: 10 }, consumes: {}, ignoreOutputCap: true },
+      { produces: {}, consumes: { x: 5 } },
+    ];
+    const { gates } = solveFlow(buildings, {
+      capConstrained: new Set(['x']),
+      zeroConstrained: new Set(),
+    });
+    expect(gates[0]!).toBeCloseTo(0.5, 6);
+    expect(gates[1]!).toBeCloseTo(1, 9);
+    expect(gates[2]!).toBeCloseTo(1, 9);
+  });
+
+  it('force-run does not exempt a building from input-empty (zero) constraints', () => {
+    const buildings: FlowBuildingSpec[] = [
+      { produces: { x: 5 }, consumes: { y: 1 }, ignoreOutputCap: true },
+    ];
+    const { gates } = solveFlow(buildings, {
+      capConstrained: new Set(['x']),
+      zeroConstrained: new Set(['y']),
+    });
+    expect(gates[0]!).toBeCloseTo(0, 9);
+  });
+});
