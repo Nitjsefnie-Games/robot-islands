@@ -179,7 +179,7 @@ If multiple routes contend for the same resource at one source, the available am
 **Transit time.** Routes use a hybrid latency model:
 
 * T1 cargo, T2 drone cargo, T3 airship: resources have a real-time-of-flight equal to `distance / route\_speed` (route speeds per tier are tuning placeholders). The §15.4 throughput formula gates dispatch (units only leave source if the destination has cap headroom at dispatch time). Units in flight then appear at destination on arrival.
-* T4 teleporter and T5 spacetime anchor: zero latency. Resources move instantly per tick, exactly as the basic throughput formula describes. No in-flight buffer.
+* T4 teleporter and T5 spacetime anchor: zero latency. Resources move instantly per tick, exactly as the basic throughput formula describes. No in-flight buffer. **Instant-transit routes are fully exempt from §2.6 weather** — both the dispatch capacity throttle and the in-flight loss. Teleportation does not traverse the ocean cells a storm occupies, so a teleporter dispatches at full capacity in any weather (the loss term already can't apply, as there is no in-flight buffer). The exemption keys off zero transit time (`transitTimeSec <= 0`), so any future zero-latency cargo type inherits it.
 
 In-flight inventory is tracked per-route in the architecture data model (§15.1). When a route is destroyed mid-flight, all in-flight units on that route are lost.
 

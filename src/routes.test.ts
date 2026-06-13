@@ -691,6 +691,31 @@ describe('§2.6 dispatch weather capacity reduction', () => {
     const dispatches = dispatchAttempt(world, states, 0, 1);
     expect(dispatches.length).toBe(0);
   });
+
+  it('does NOT throttle an instant teleporter route — exempt from weather', () => {
+    // Same catastrophic cell that zeroes a cargo route: a teleporter dispatches
+    // at full capacity (instant transit doesn't traverse the storm).
+    const cell = findCellWithWeather('test-seed', 0, 'catastrophic');
+    expect(cell).not.toBeNull();
+    if (!cell) return;
+
+    const src = makeState('a', { inventory: { ...blankInventory(), iron_ore: 100, biofuel: 1000 } });
+    const dst = makeState('b', { storageCaps: blankCaps(100000) });
+    const world = makeWorld([], [
+      makeIslandSpec('a', cell.cx * CELL_SIZE_TILES, cell.cy * CELL_SIZE_TILES),
+      makeIslandSpec('b', cell.cx * CELL_SIZE_TILES + 5, cell.cy * CELL_SIZE_TILES),
+    ]);
+    const states = new Map([['a', src], ['b', dst]]);
+    const r: Route = {
+      id: nextRouteId(), from: 'a', to: 'b', type: 'teleporter', capacityPerSec: 10,
+      mode: 'priority', cargo: [{ resourceId: 'iron_ore' }], transitTimeSec: 0, inFlight: [],
+    };
+    world.routes.push(r);
+
+    const dispatches = dispatchAttempt(world, states, 0, 1);
+    expect(dispatches.length).toBe(1);
+    expect(dispatches[0]!.amount).toBeCloseTo(10, 9); // full 10, NOT throttled to 0
+  });
 });
 
 describe('reorderPriorityList', () => {
