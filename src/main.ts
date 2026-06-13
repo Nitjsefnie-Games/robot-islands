@@ -467,9 +467,6 @@ async function main(): Promise<void> {
   defineAction(reg, 'toggle-settlement', () => undefined);
   // §14 T6 orbital launch modal — bound below after the UI is mounted.
   defineAction(reg, 'toggle-orbital', () => undefined);
-  // §NEW building-disable toggle — bound below after inspector mounts.
-  // No default key binding (p_hotkey_binding=via_input_registry_unbound).
-  defineAction(reg, 'toggle-building-disable', () => undefined);
   // Step-11 modal — bound below after the UI is mounted.
   defineAction(reg, 'toggle-construction', () => undefined);
   // Step-19 inventory modal — bound below after the UI is mounted.
