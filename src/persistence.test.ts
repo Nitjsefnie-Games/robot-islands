@@ -307,6 +307,23 @@ describe('serialize → JSON → deserialize round-trip', () => {
     }
   });
 
+  it('round-trips the §4.6 forceRun flag; absent stays absent (off)', () => {
+    const world = makeInitialWorld(0);
+    const homeSpec = world.islands.find((s) => s.id === 'home')!;
+    homeSpec.buildings.push(
+      { id: 'b-forced', defId: 'mine', x: 0, y: 0, forceRun: true },
+      { id: 'b-plain', defId: 'mine', x: 1, y: 0 }, // no forceRun → stays off
+    );
+    const snap = serializeWorld(world, new Map(), 0);
+    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    const { world: restored } = deserializeWorld(json, 0, 0);
+    const rHome = restored.islands.find((s) => s.id === 'home')!;
+    const forced = rHome.buildings.find((b) => b.id === 'b-forced')!;
+    const plain = rHome.buildings.find((b) => b.id === 'b-plain')!;
+    expect(forced.forceRun).toBe(true);
+    expect(plain.forceRun).toBeUndefined(); // absent ≡ off
+  });
+
   it('preserves a grown island radius (§3.4 Land Reclamation Hub mutation)', () => {
     // Simulate a §3.4 expansion: home Plains island grown via Land
     // Reclamation Hub from initial (16,16) to (18,16) — i.e. two +1
