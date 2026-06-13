@@ -2172,6 +2172,73 @@ describe('applyUpgrade stacking (#31)', () => {
       expect(b.constructionRemainingMs ?? 0).toBeGreaterThan(0);
     });
   });
+
+  describe('cancel/demolish with queued upgrades (#31)', () => {
+    it('1) LIFO cancel removes the newest queued upgrade, leaving the running build untouched', () => {
+      const { spec, state } = makeStackScene();
+      applyUpgrade(spec, state, 'b1'); // running (displayed target 10)
+      applyUpgrade(spec, state, 'b1'); // queued #1 (displayed target 11)
+      expect(countQueuedUpgrades(state, 'b1')).toBe(1);
+      const b = spec.buildings.find((x) => x.id === 'b1')!;
+      const runningRemaining = b.constructionRemainingMs ?? 0;
+      expect(runningRemaining).toBeGreaterThan(0);
+
+      // The queued upgrade's displayed target is 11.
+      const c11 = upgradeCost(BUILDING_DEFS.mine, 11);
+      // Drop inventory below cap so the refund has headroom (creditRefund
+      // clamps to storageCaps); raise caps so the full basket fits.
+      state.storageCaps.stone = 100000;
+      state.storageCaps.wood = 100000;
+      state.inventory.stone = 0;
+      state.inventory.wood = 0;
+      const stone0 = state.inventory.stone;
+      const wood0 = state.inventory.wood;
+
+      const r = cancelConstruction(spec, state, 'b1');
+      expect(r.ok).toBe(true);
+      // Newest queued removed; running job untouched.
+      expect(countQueuedUpgrades(state, 'b1')).toBe(0);
+      expect(b.constructionRemainingMs ?? 0).toBe(runningRemaining);
+      // Refunded the queued upgrade's displayed-target cost.
+      expect(state.inventory.stone - stone0).toBe(c11.stone ?? 0);
+      expect(state.inventory.wood - wood0).toBe(c11.wood ?? 0);
+    });
+
+    it('2) running job is only cancelled after the queue is empty', () => {
+      const { spec, state } = makeStackScene();
+      applyUpgrade(spec, state, 'b1'); // running
+      applyUpgrade(spec, state, 'b1'); // queued #1
+      applyUpgrade(spec, state, 'b1'); // queued #2
+      expect(countQueuedUpgrades(state, 'b1')).toBe(2);
+      const b = spec.buildings.find((x) => x.id === 'b1')!;
+
+      // First two cancels drain the queue without touching the running job.
+      cancelConstruction(spec, state, 'b1');
+      cancelConstruction(spec, state, 'b1');
+      expect(countQueuedUpgrades(state, 'b1')).toBe(0);
+      expect(b.constructionRemainingMs ?? 0).toBeGreaterThan(0);
+
+      // Third cancel now reverts the running upgrade.
+      const r = cancelConstruction(spec, state, 'b1');
+      expect(r.ok).toBe(true);
+      expect(b.constructionRemainingMs ?? 0).toBe(0);
+    });
+
+    it('3) demolish purges any orphan queued upgrade jobs for the removed building', () => {
+      const { spec, state } = makeStackScene();
+      // Mark the building completed so demolish accepts it.
+      const b = spec.buildings.find((x) => x.id === 'b1')!;
+      b.constructionRemainingMs = 0;
+      state.buildJobs = [
+        { seq: 0, buildingId: 'b1', kind: 'upgrade' },
+        { seq: 1, buildingId: 'other', kind: 'upgrade' },
+      ];
+      demolishBuilding(spec, state, 'b1');
+      expect(countQueuedUpgrades(state, 'b1')).toBe(0);
+      // Unrelated building's jobs survive.
+      expect(countQueuedUpgrades(state, 'other')).toBe(1);
+    });
+  });
 });
 
 describe('formatShortfall', () => {
