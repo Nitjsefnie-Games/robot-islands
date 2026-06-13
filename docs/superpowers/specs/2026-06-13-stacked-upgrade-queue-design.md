@@ -1,4 +1,18 @@
-# Stacked upgrade queue (#31) — design
+# Building refactor — stacked upgrade queue (#31) + temporary floor disabling
+
+This branch bundles two building mechanics that share the same touchpoints
+(building fields, the §4.5/#35 cluster capacity, the floor-effect multipliers,
+and the persistence schema, so they migrate together):
+
+- **Part 1 — Stacked upgrade queue (#31)** — queue multiple upgrades on one
+  building.
+- **Part 2 — Temporary floor disabling** — a free, reversible per-building
+  active-floor count that scales throughput / power / capacity and replaces the
+  binary Disable button.
+
+---
+
+# Part 1 — Stacked upgrade queue (#31)
 
 **Issue:** [#31](https://github.com/Nitjsefnie-Games/robot-islands/issues/31) —
 *Cannot queue more than 1 upgrade of the same building.* Pressing **Upgrade**
@@ -248,3 +262,157 @@ Master stays green and linear (CONTRIBUTING). Stage on a feature branch:
 (a) data model + persistence migration; (b) `applyUpgrade` + accounting +
 promotion + TDD; (c) cancel LIFO; (d) UI; (e) SPEC. Each stage compiles and
 tests green before the next.
+
+## 9. Folded-in fix — upgrades honor construction speed (Swarm Assembly)
+
+Today `upgradeConstructionMs(def, level)` is raw `base × (level+1)` and
+**ignores** `skillMul.constructionTime` (the Robotics **Swarm Assembly**
+`constructionTimeMul`), while fresh placements honor it via
+`constructionTimeFor(def, skillMul.constructionTime)`. Approved: make upgrades
+honor it too — `upgradeConstructionMs(def, level, constructionTimeMul=1)`
+divides the raw duration by the multiplier exactly like a placement. Threaded at
+the two upgrade-start sites (`applyUpgrade`, `promoteQueuedBuilds`), both of
+which have `state` → `effectiveSkillMultipliers(state).constructionTime`. SPEC
+§9.3 updated.
+
+---
+
+# Part 2 — Temporary floor disabling
+
+**Goal:** replace the binary per-building **Disable** with a free, instantly
+reversible **active-floor count** in `[0, built]`. Lowering it reduces the
+building's throughput, power (draw and output), storage capacity, and §4.5/#35
+cluster contribution proportionally; `0` active floors is the full "disabled"
+state (the building drops out of production / power / gates / wear / cluster /
+routes, exactly like today's disable).
+
+## 10. Data model
+
+`PlacedBuilding`: **remove** `disabled?: boolean`; **add**
+
+```ts
+/** §NEW temporary floor-disable: how many of the building's BUILT floors are
+ *  currently switched off, counted from the top. 0 (or absent) = all built
+ *  floors active (full effect). Equal to the built floor count
+ *  (displayedFloorLevel) = fully disabled (the old `disabled === true`).
+ *  Free + instantly reversible; no cost. Scales throughput / power / storage
+ *  capacity / cluster contribution by the ACTIVE floor count. */
+disabledFloors?: number;
+```
+
+Helpers in `buildings.ts`:
+
+```ts
+/** Displayed count of ACTIVE floors ∈ [0, displayedFloorLevel]. */
+export function activeFloors(b: { floorLevel?: number; disabledFloors?: number }): number {
+  return Math.max(0, displayedFloorLevel(b) - (b.disabledFloors ?? 0));
+}
+/** 0-based effective floor level for the floor-effect multipliers, i.e.
+ *  activeFloors − 1. For an operational building (activeFloors ≥ 1) this is in
+ *  [0, floorLevel]; for a fully-disabled building it is −1 (never read — the
+ *  building is non-operational). */
+export function activeFloorLevel(b: { floorLevel?: number; disabledFloors?: number }): number {
+  return activeFloors(b) - 1;
+}
+```
+
+## 11. Operational / cluster gating
+
+`activeFloors === 0` **is** the disabled state — so the two existing predicates
+absorb it and every downstream system (power, production, gates, wear, drones,
+routes, cluster) follows automatically:
+
+- `isOperationalBuilding(b)` — replace `b.disabled === true` →off with
+  `activeFloors(b) <= 0`.
+- `participatesInCluster(b)` — replace `b.disabled !== true` with
+  `activeFloors(b) > 0`.
+
+(Both predicate param types gain `floorLevel?` + `disabledFloors?`.)
+
+## 12. Effect scaling
+
+Everywhere throughput / power scales by `floorLevel(b)`, use `activeFloorLevel(b)`
+instead — these are only reached for operational buildings (active ≥ 1), so the
+0-based level is ≥ 0:
+
+- throughput rates: `economy.ts` ~1306, ~1425, ~1459 (`floorEffectMul(floorLevel(b))` → `floorEffectMul(activeFloorLevel(b))`).
+- power output: `economy.ts` ~1719.
+- power draw: `economy.ts` ~1723, ~1736 (`floorPowerDrawMul`).
+- `floorScaledCapacity(b, cap)` (`buildings.ts`) → use `activeFloorLevel(b)`.
+  At construction completion a building is full-active, so the completion credit
+  is unchanged; demolish/relocate/cap-adjust all read the building's *current*
+  contribution.
+
+**§4.5/#35 cluster (approved: active floors).** `clusterFloorCapacity` already
+returns `0` for a non-participant. For a participant, change the operational
+capacity from `1 + floorLevel` to `1 + activeFloorLevel` = `activeFloors` (the
+under-construction discount still applies on top: a running upgrade contributes
+its completed-active level). So a half-disabled building contributes its active
+floor count to the cluster.
+
+## 13. Toggling — `setBuildingActiveFloors` (placement.ts, pure)
+
+```ts
+setBuildingActiveFloors(spec, state, buildingId, newDisabledFloors): { ok, clampedInventory? } 
+```
+
+1. Resolve building + def; clamp `newDisabledFloors` to `[0, displayedFloorLevel(b)]`.
+2. **Storage cap adjust** (storage defs only): `deltaMult = storage.capacity ×
+   (floorEffectMul(newActiveLevel) − floorEffectMul(oldActiveLevel))`;
+   `creditStorageCaps(state, b, def, deltaMult)` (negative shrinks).
+3. **Clamp overflow** (approved): for each affected resource, if
+   `inventory[r] > storageCaps[r]`, set `inventory[r] = storageCaps[r]`
+   (discard the excess).
+4. Set `b.disabledFloors = newDisabledFloors` (delete the field when 0 to keep
+   saves clean).
+
+**Route drain stays in the render/main layer** (pure layer can't reach
+`WorldState`): the `main.ts` action handler calls `setBuildingActiveFloors`,
+then — if the toggle **crossed from active ≥ 1 to active 0** — calls
+`drainRoutesForBuilding(worldState, id)` (the existing one-way drain, mirroring
+`main.ts:1402`). Toggling among ≥ 1 active floors never drains.
+
+## 14. Maintenance / wear / alerts
+
+- `maintenance.ts` (~269) and the `advanceIsland` wear skip (`economy.ts` ~2450)
+  already skip non-operational buildings via the disabled/invalid checks —
+  rewire to `activeFloors(b) <= 0` (a partially-disabled building still wears,
+  scaled by its utilization, which already tracks throughput).
+- `building-alerts-overlay.ts` (~164): replace the `b.disabled === true` dim cue
+  with `activeFloors(b) < displayedFloorLevel(b)` (partial dim) / full dim at
+  `activeFloors(b) === 0`.
+
+## 15. UI
+
+- **Inspector** (`inspector-ui.ts` ~1670–1690): replace the Disable button with
+  **active-floor steppers** (−/＋ within `[0, built]`) plus quick **Off**
+  (active 0) / **Max** (active = built). Show `active/built floors`. All paths
+  dispatch through the input registry (AGENTS.md "every button through the
+  registry"). Cost line stays free/instant.
+- **main.ts** (~1308, ~1328–1337, ~1400–1402): replace the disable-toggle
+  actions with set-active-floors actions; keep the cross-to-0 route drain.
+
+## 16. Persistence (shared bump)
+
+The **same** v23 → v24 migration handles both Part 1 and Part 2: per island
+state default `buildJobs: []`; per building, `disabled === true` →
+`disabledFloors = displayedFloorLevel(b)` (all built floors off), then drop the
+`disabled` field; `disabled` falsy → no `disabledFloors`. Tests: a v23 building
+with `disabled:true` migrates to `disabledFloors === builtCount`; round-trips.
+
+## 17. SPEC.md (Part 2)
+
+- **§NEW / §4.x building-disable section** (the doc currently describing the
+  binary disable, per `docs/superpowers/specs/2026-05-23-building-disable-design.md`)
+  — rewrite to the active-floor model: free reversible `[0, built]`, scales
+  throughput/power/capacity/cluster by active floors, `0` = fully off (old
+  disable, incl. one-way route drain on reaching 0), capacity lower clamps
+  overflow.
+- **§4.5/#35** note: cluster capacity uses ACTIVE floors.
+
+## 18. Out of scope (Part 2)
+
+- Per-floor selection (which specific floors) — floors disable from the top, a
+  single count.
+- Scheduling / automation of floor toggles.
+- Refunding anything — toggling is always free.
