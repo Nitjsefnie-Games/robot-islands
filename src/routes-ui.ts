@@ -16,6 +16,7 @@ import {
   reorderPriorityList,
   transitTimeForDistance,
   routeProfileForBuilding,
+  routeFloorMultiplier,
   createRouteFromBuilding,
   eligibleTransportBuildings,
   islandHasTeleporterPad,
@@ -23,6 +24,7 @@ import {
 } from './routes.js';
 import { type IslandSpec, type WorldState } from './world.js';
 import { BUILDING_DEFS } from './building-defs.js';
+import { activeFloorLevel, floorEffectMul } from './buildings.js';
 import type { RouteRenderer } from './routes-renderer.js';
 
 function styled(el: HTMLElement, css: string): void {
@@ -552,8 +554,11 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     const dy = spec1.cy - spec2.cy;
     const dist = Math.sqrt(dx * dx + dy * dy);
     const transit = transitTimeForDistance(dist, profile.speedTilesPerSec);
+    // §2.4 route-floor scaling: preview the EFFECTIVE cap/ETA the new route gets
+    // from this building's current active floors (capacity ×(1+L), ETA ÷(1+L)).
+    const fmul = floorEffectMul(Math.max(0, activeFloorLevel(building)));
     formReadout.textContent =
-      `${dist.toFixed(0)} t · ETA ${transit.toFixed(1)}s · ${profile.capacityPerSec} u/s`;
+      `${dist.toFixed(0)} t · ETA ${(transit / fmul).toFixed(1)}s · ${(profile.capacityPerSec * fmul).toFixed(2)} u/s`;
     commitBtn.disabled = false;
     commitBtn.style.opacity = '1';
     commitBtn.style.cursor = 'pointer';
@@ -740,7 +745,10 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     styled(meta, 'display: flex; justify-content: space-between');
     const left = document.createElement('span');
     left.classList.add('ri-mono');
-    left.textContent = `${route.capacityPerSec.toFixed(2)} u/s · ${route.transitTimeSec.toFixed(1)}s`;
+    // §2.4 route-floor scaling: show the EFFECTIVE cap/transit the route runs
+    // at given its source building's active floors, not the stored tier base.
+    const fmul = routeFloorMultiplier(route, deps.world);
+    left.textContent = `${(route.capacityPerSec * fmul).toFixed(2)} u/s · ${(route.transitTimeSec / fmul).toFixed(1)}s`;
     styled(left, `color: ${'var(--ri-fg-3)'}; font-size: 9.5px`);
     const right = document.createElement('span');
     right.classList.add('ri-mono');
@@ -967,7 +975,9 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     let totalCap = 0;
     let totalFlight = 0;
     for (const r of deps.world.routes) {
-      totalCap += r.capacityPerSec;
+      // §2.4 route-floor scaling: aggregate EFFECTIVE capacity (tier base ×
+      // the source building's active-floor multiplier), matching the ledger.
+      totalCap += r.capacityPerSec * routeFloorMultiplier(r, deps.world);
       totalFlight += r.inFlight.length;
     }
     capStat.valueEl.textContent = `${totalCap.toFixed(2)} u`;
