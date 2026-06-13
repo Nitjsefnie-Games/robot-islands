@@ -3676,14 +3676,17 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     fill: 0xc8e8f0, // pale-cyan condenser
     stroke: 0x405058,
     power: { consumes: 300 },
-    // BOM source: Linde air-separation unit — cycle-break (P4C2b) keeps only
-    // foundation stone to avoid steel/microchip circular deadlock.
-    // 30 kg foundation pad only.
-    // cycle-break (P4C2b): removed steel and microchip per circular-deps
-    // invariant. DEVIATION: both were required to make cryo_lab placeable
-    // because the cryo deadlock is downstream of the steel SCC; spec §14
-    // rebalance owns final tuning.
-    placementCost: { stone: 30 },
+    // BOM source: Linde air-separation unit (3×3 cryogenic distillation column).
+    // §14 rebalance (#33): the prior `{ stone: 30 }` was a cycle-break stub —
+    // far too cheap for a T3 building. Air Separator is the PRE-STEEL gateway
+    // into the cryo chain (placed before blast_furnace per the tutorial; its
+    // nitrogen unblocks cryo_lab), so its cost must stay steel-/microchip-free
+    // to preserve the §circular-deps invariant — confirmed placeable from the
+    // fresh start set (stone/wood/foundation_kit) using only processed
+    // pre-steel goods: concrete pad + glass/copper heat-exchangers + brick
+    // refractory. (steel_beam/microchip would re-create the cryo deadlock the
+    // original stub was carved out to avoid.)
+    placementCost: { concrete: 2000, glass: 400, copper_ingot: 300, brick: 800 },
     glyph: '❄',
   },
   // Phase 5 — T3 cryo air separator (§7.5). Distinct from the existing
