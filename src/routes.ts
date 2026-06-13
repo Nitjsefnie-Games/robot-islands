@@ -834,8 +834,14 @@ function dispatchPhase(
     // §2.6 weather capacity modulation
     const fromSpec = world.islands.find((i) => i.id === route.from);
     const toSpec = world.islands.find((i) => i.id === route.to);
+    // Instant-transit routes (teleporter — and any future zero-latency cargo
+    // type) are EXEMPT from weather: teleportation doesn't traverse the ocean
+    // cells the storm sits in, so neither this capacity throttle nor the
+    // in-flight loss (which can't apply — instant routes keep no in-flight
+    // buffer) touches them.
+    const instant = route.transitTimeSec <= 0;
     const weatherMul =
-      fromSpec && toSpec
+      !instant && fromSpec && toSpec
         ? routeCapacityMultiplierForWeather(
             world.seed,
             fromSpec.cx,
