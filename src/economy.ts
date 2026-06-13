@@ -22,7 +22,7 @@ import {
   type BuildingDef,
   type BuildingDefId,
 } from './building-defs.js';
-import { hasOperationalBuilding, isOperationalBuilding, participatesInCluster, floorLevel, floorScaledCapacity, floorEffectMul, floorPowerDrawMul, activeFloorLevel, type PlacedBuilding } from './buildings.js';
+import { hasOperationalBuilding, isOperationalBuilding, participatesInCluster, floorLevel, floorScaledCapacity, floorEffectMul, floorPowerDrawMul, activeFloorLevel, activeFloors, type PlacedBuilding } from './buildings.js';
 import type { WorldState } from './world.js';
 import { isOceanTile } from './world.js';
 import { nextRealPhaseBoundaryMs, nextSolarBoundaryMs, realPhaseName, solarMultiplier } from './daynight.js';
@@ -2466,8 +2466,10 @@ export function applySegmentSideEffects(
     }
     // §NEW building-disable: player-disabled buildings freeze in place —
     // no operatingMs accrual, no maintenance degradation. Re-enable
-    // resumes accrual at the frozen operatingMs value.
-    if (b.disabled === true) continue;
+    // resumes accrual at the frozen operatingMs value. A fully floor-
+    // disabled building (active 0) freezes the same way; a PARTIALLY
+    // floor-disabled building (active ≥ 1) still wears.
+    if (b.disabled === true || activeFloors(b) <= 0) continue;
     // Fix 4.4: invalid buildings are non-operational the same way
     // (mirrors isOperationalBuilding, buildings.ts) — they produce
     // nothing in computeRates, so they must not accrue wear either.
