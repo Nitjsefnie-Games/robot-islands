@@ -194,6 +194,11 @@ export interface InspectorDeps {
    *  alerts-overlay re-paints the partial/full-disable cue. `newDisabledFloors`
    *  is the desired count of OFF floors (clamped to [0, built] by the mutator). */
   onSetActiveFloors(target: InspectorTarget, newDisabledFloors: number): void;
+  /** §4.6 Set the building's Force Run flag. main.ts owns the mutation
+   *  (`target.building.forceRun = value || undefined`) and bumps autosave.
+   *  Force Run keeps the building producing for XP at a full output bin;
+   *  overflow is voided, inputs / power / wear stay real costs. */
+  onSetForceRun(target: InspectorTarget, value: boolean): void;
   /** Floor-upgrade callback. main.ts owns the mutation (applyUpgrade),
    *  rebuilds world layers, and refreshes the inspector so the new floor
    *  count and effect are visible. */
@@ -298,6 +303,19 @@ export function mountInspectorUi(
     if (n === null || !target) return;
     if ((target.building.constructionRemainingMs ?? 0) > 0) return; // guard: no-op while constructing
     deps.onSetActiveFloors(target, n);
+    paint();
+  });
+
+  // ── Force Run pending ref (§4.6) ────────────────────────────────────────
+  // Mirrors the floor-disable pattern: set the desired value, dispatch the
+  // payload-less registry action, which reads + nulls the ref and calls the dep.
+  let pendingForceRun: boolean | null = null;
+  defineAction(reg, 'set-building-force-run', () => {
+    const v = pendingForceRun;
+    pendingForceRun = null;
+    if (v === null || !target) return;
+    if ((target.building.constructionRemainingMs ?? 0) > 0) return; // guard: no-op while constructing
+    deps.onSetForceRun(target, v);
     paint();
   });
 
@@ -983,6 +1001,45 @@ export function mountInspectorUi(
   const floorAllOffBtn = makeFloorDisableBtn('Off', () => (target ? displayedFloorLevel(target.building) : 0));
   const floorAllOnBtn = makeFloorDisableBtn('Max', () => 0);
   maintenanceSection.body.appendChild(floorDisableRow);
+
+  // §4.6 Force Run toggle — keep producing for XP at a full output bin.
+  // Shown only for resource-producing buildings (the only ones a cap can
+  // throttle); hidden under construction. Reuses the accent action-button look.
+  const forceRunBtn = document.createElement('button');
+  styled(
+    forceRunBtn,
+    [
+      'background: transparent',
+      `color: ${'var(--ri-accent)'}`,
+      `border: 1px solid ${'var(--ri-accent-dim)'}`,
+      'padding: 4px 8px',
+      'cursor: pointer',
+      'font-family: ui-monospace, monospace',
+      'font-size: 10.5px',
+      'letter-spacing: 0.08em',
+      'text-transform: uppercase',
+      'border-radius: 2px',
+      'transition: background 80ms ease, border-color 80ms ease',
+      'text-align: left',
+      'margin-top: 4px',
+    ].join(';'),
+  );
+  forceRunBtn.addEventListener('mouseenter', () => {
+    if (forceRunBtn.disabled) return;
+    forceRunBtn.style.background = 'rgba(125, 211, 232, 0.08)';
+    forceRunBtn.style.borderColor = 'var(--ri-accent)';
+  });
+  forceRunBtn.addEventListener('mouseleave', () => {
+    forceRunBtn.style.background = forceRunBtn.dataset.on === '1' ? 'rgba(125, 211, 232, 0.12)' : 'transparent';
+    forceRunBtn.style.borderColor = 'var(--ri-accent-dim)';
+  });
+  forceRunBtn.addEventListener('click', () => {
+    if (forceRunBtn.disabled || !target) return;
+    if ((target.building.constructionRemainingMs ?? 0) > 0) return;
+    pendingForceRun = !(target.building.forceRun === true);
+    dispatchAction(reg, 'set-building-force-run');
+  });
+  maintenanceSection.body.appendChild(forceRunBtn);
 
   // §13.3 Universe Editor — biome-reassign action. Shown only when the
   // selected building is a `universe_editor`. Cost preview + confirm
@@ -1745,6 +1802,22 @@ export function mountInspectorUi(
       setBtn(floorAllOffBtn, atMin);
       setBtn(floorOnBtn, atMax);
       setBtn(floorAllOnBtn, atMax);
+    }
+
+    // §4.6 Force Run toggle paint. Only meaningful for buildings that PRODUCE
+    // a resource (the only ones a storage cap can throttle); hidden otherwise
+    // and while under construction.
+    const producesResource = !!recipe && Object.keys(recipe.outputs).length > 0;
+    if (!producesResource || isUnderConstruction) {
+      forceRunBtn.style.display = 'none';
+    } else {
+      forceRunBtn.style.display = '';
+      const on = building.forceRun === true;
+      forceRunBtn.dataset.on = on ? '1' : '0';
+      forceRunBtn.textContent = on ? 'FORCE RUN: ON' : 'FORCE RUN: OFF';
+      forceRunBtn.style.background = on ? 'rgba(125, 211, 232, 0.12)' : 'transparent';
+      forceRunBtn.style.color = on ? 'var(--ri-accent)' : 'var(--ri-fg-2)';
+      forceRunBtn.style.borderColor = 'var(--ri-accent-dim)';
     }
 
     // §3.4 Land Reclamation section — only for the Hub itself. Renders
