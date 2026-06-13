@@ -1546,7 +1546,7 @@ export function computeRates(
         const flow = ((need ?? 0) / recipeInputDiv) * te.baseRate * te.perBuildingMul * scale;
         if (flow > 0) consumes[r] = flow;
       }
-      return { produces, consumes };
+      return { produces, consumes, ignoreOutputCap: te.building.forceRun === true };
     });
   // §13.3 D-01: snapshot THIS island's own (nominal, pf=1) flow specs — the
   // orchestrator unions these (one island's `flowSpecs` becomes another's
@@ -1555,6 +1555,7 @@ export function computeRates(
   const ownFlowSpecs: FlowBuildingSpec[] = buildFlowBuildings(1).map((fb) => ({
     produces: { ...fb.produces },
     consumes: { ...fb.consumes },
+    ...(fb.ignoreOutputCap ? { ignoreOutputCap: true } : {}),
   }));
   // §5.2 synthetic coal-burn sinks: pf-INDEPENDENT (a fixed fuel sink, not a
   // power-scaled recipe). SKIPPED when coal is zero-constrained — the binary
