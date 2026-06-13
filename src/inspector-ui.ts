@@ -35,7 +35,8 @@ import { clusterBonusMul, gateSatisfied } from './adjacency.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
 import { affordabilityShortfall, applyRelabelStorageCap, countQueuedUpgrades, formatShortfall, inProgressBuildCount, parallelBuildSlots, queuedBuildCount, queuedBuildSlots, relocateFee, topUpgradeLevel, totalInvestedCost, upgradeCost } from './placement.js';
 import { upgradeConstructionMs } from './construction.js';
-import { convertToServitor, displayedFloorLevel, floorEffectMul, floorLevel, floorScaledCapacity, hasOperationalBuilding, isOperationalBuilding, participatesInCluster, rawFloorLevel, ratedBuildingPower, type PlacedBuilding } from './buildings.js';
+import { activeFloors, convertToServitor, displayedFloorLevel, floorEffectMul, floorLevel, floorScaledCapacity, hasOperationalBuilding, isOperationalBuilding, participatesInCluster, rawFloorLevel, ratedBuildingPower, type PlacedBuilding } from './buildings.js';
+import { defineAction, dispatchAction, type InputRegistry } from './input.js';
 import type { IslandState } from './economy.js';
 import { activeBonusMul } from './active-bonus.js';
 import { computeRates, fledglingRecipeMul, type RatesContext } from './economy.js';
@@ -184,12 +185,15 @@ export interface InspectorDeps {
    *  always succeeds. */
   onDemolish(target: InspectorTarget): void;
   onMove(target: InspectorTarget): void;
-  /** Toggle target.building.disabled. Called from the new disableBtn.
-   *  main.ts flips the flag, drains routes on the false→true
-   *  transition (per p_routes_disabled_source=route_drains_and_removes
-   *  — drained routes are NOT restored on re-enable), and triggers a
-   *  world-layer rebuild so the alerts-overlay re-paints the cue. */
-  onToggleDisabled(target: InspectorTarget): void;
+  /** Set the building's active-floor count via `setBuildingActiveFloors`.
+   *  Called from the floor-disable steppers (−/+/Off/Max). main.ts owns the
+   *  mutation: it computes active-floor counts before/after, drains routes
+   *  ONLY when active floors cross to 0 (per
+   *  p_routes_disabled_source=route_drains_and_removes — drained routes are
+   *  NOT restored on re-enable), and triggers a world-layer rebuild so the
+   *  alerts-overlay re-paints the partial/full-disable cue. `newDisabledFloors`
+   *  is the desired count of OFF floors (clamped to [0, built] by the mutator). */
+  onSetActiveFloors(target: InspectorTarget, newDisabledFloors: number): void;
   /** Floor-upgrade callback. main.ts owns the mutation (applyUpgrade),
    *  rebuilds world layers, and refreshes the inspector so the new floor
    *  count and effect are visible. */
@@ -276,10 +280,26 @@ function formatHM(ms: number): string {
 }
 
 export function mountInspectorUi(
+  reg: InputRegistry,
   parentEl: HTMLElement,
   deps: InspectorDeps,
 ): InspectorUi {
   let target: InspectorTarget | null = null;
+
+  // ── Floor-disable pending ref ───────────────────────────────────────────
+  // The floor steppers (−/+/Off/Max) set the desired off-floor count just
+  // before dispatching the registry action, which has no payload. Pattern
+  // mirrors build-queue-ui's _pendingCancelBuildingId. Single-instance:
+  // one inspector is mounted, so the module-scoped action + this ref are fine.
+  let pendingDisabledFloors: number | null = null;
+  defineAction(reg, 'set-building-active-floors', () => {
+    const n = pendingDisabledFloors;
+    pendingDisabledFloors = null;
+    if (n === null || !target) return;
+    if ((target.building.constructionRemainingMs ?? 0) > 0) return; // guard: no-op while constructing
+    deps.onSetActiveFloors(target, n);
+    paint();
+  });
 
   // Panel shell — mounted via zone manager on the left edge so it doesn't
   // fight the side docks for the right edge.
@@ -902,45 +922,67 @@ export function mountInspectorUi(
   });
   maintenanceSection.body.appendChild(convertBtn);
 
-  // §NEW per-building disable toggle (spec 2026-05-23-building-disable).
-  // Mirrors convertBtn styling; label flips Disable ↔ Enable in paint().
-  // DOM-disabled while target.building.constructionRemainingMs > 0 per
-  // p_constructed_disable=no_finish_first.
-  const disableBtn = document.createElement('button');
+  // §NEW floor-disable steppers (replaces the old binary Disable toggle).
+  // Free, reversible active-floor controls: −/+ step one floor off/on, Off
+  // disables every built floor, Max re-enables all. All clicks dispatch the
+  // 'set-building-active-floors' registry action (set pendingDisabledFloors,
+  // then dispatchAction) so keyboard + mouse share one path. The whole row
+  // is hidden while the building is under construction (the old Disable
+  // button was DOM-disabled then; p_constructed_disable=no_finish_first).
+  const floorDisableRow = document.createElement('div');
   styled(
-    disableBtn,
-    [
-      'background: transparent',
-      `color: ${'var(--ri-danger, #e85d4a)'}`,
-      `border: 1px solid ${'rgba(232,93,74,0.55)'}`,
-      'padding: 4px 8px',
-      'cursor: pointer',
-      'font-family: ui-monospace, monospace',
-      'font-size: 10.5px',
-      'letter-spacing: 0.08em',
-      'text-transform: uppercase',
-      'border-radius: 2px',
-      'transition: background 80ms ease, border-color 80ms ease',
-      'text-align: left',
-      'margin-top: 4px',
-    ].join(';'),
+    floorDisableRow,
+    ['display: flex', 'align-items: center', 'gap: 4px', 'flex-wrap: wrap', 'margin-top: 4px'].join(';'),
   );
-  disableBtn.addEventListener('mouseenter', () => {
-    if (disableBtn.disabled) return;
-    disableBtn.style.background = 'rgba(232, 93, 74, 0.10)';
-    disableBtn.style.borderColor = 'var(--ri-danger, #e85d4a)';
-  });
-  disableBtn.addEventListener('mouseleave', () => {
-    disableBtn.style.background = 'transparent';
-    disableBtn.style.borderColor = disableBtn.disabled ? 'var(--ri-fg-4)' : 'rgba(232,93,74,0.55)';
-  });
-  disableBtn.addEventListener('click', () => {
-    if (!target) return;
-    if ((target.building.constructionRemainingMs ?? 0) > 0) return; // guard: no-op while constructing
-    deps.onToggleDisabled(target);
-    paint();
-  });
-  maintenanceSection.body.appendChild(disableBtn);
+  const floorDisableLabel = document.createElement('span');
+  styled(
+    floorDisableLabel,
+    [`color: ${'var(--ri-fg-2)'}`, 'font-size: 10.5px', 'letter-spacing: 0.04em', 'margin-right: 2px'].join(';'),
+  );
+  floorDisableRow.appendChild(floorDisableLabel);
+
+  function makeFloorDisableBtn(label: string, computeNext: () => number): HTMLButtonElement {
+    const btn = document.createElement('button');
+    btn.textContent = label;
+    styled(
+      btn,
+      [
+        'background: transparent',
+        `color: ${'var(--ri-fg-1)'}`,
+        `border: 1px solid ${'var(--ri-accent-dim)'}`,
+        'padding: 2px 7px',
+        'cursor: pointer',
+        'font-family: ui-monospace, monospace',
+        'font-size: 11px',
+        'border-radius: 2px',
+        'transition: background 80ms ease, border-color 80ms ease',
+      ].join(';'),
+    );
+    btn.addEventListener('mouseenter', () => {
+      if (btn.disabled) return;
+      btn.style.background = 'rgba(125, 211, 232, 0.08)';
+      btn.style.borderColor = 'var(--ri-accent)';
+    });
+    btn.addEventListener('mouseleave', () => {
+      btn.style.background = 'transparent';
+      btn.style.borderColor = btn.disabled ? 'var(--ri-fg-4)' : 'var(--ri-accent-dim)';
+    });
+    btn.addEventListener('click', () => {
+      if (btn.disabled || !target) return;
+      if ((target.building.constructionRemainingMs ?? 0) > 0) return; // guard: no-op while constructing
+      pendingDisabledFloors = computeNext();
+      dispatchAction(reg, 'set-building-active-floors');
+    });
+    floorDisableRow.appendChild(btn);
+    return btn;
+  }
+
+  // − disables one more floor; + enables one; Off all off; Max all on.
+  const floorOffBtn = makeFloorDisableBtn('−', () => (target ? (target.building.disabledFloors ?? 0) + 1 : 0));
+  const floorOnBtn = makeFloorDisableBtn('+', () => (target ? (target.building.disabledFloors ?? 0) - 1 : 0));
+  const floorAllOffBtn = makeFloorDisableBtn('Off', () => (target ? displayedFloorLevel(target.building) : 0));
+  const floorAllOnBtn = makeFloorDisableBtn('Max', () => 0);
+  maintenanceSection.body.appendChild(floorDisableRow);
 
   // §13.3 Universe Editor — biome-reassign action. Shown only when the
   // selected building is a `universe_editor`. Cost preview + confirm
@@ -1675,17 +1717,30 @@ export function mountInspectorUi(
       convertBtn.style.display = 'none';
     }
 
-    // §NEW disable-toggle button paint.
+    // §NEW floor-disable steppers paint. The whole row is hidden while the
+    // building is under construction (the old Disable button was gated the
+    // same way; p_constructed_disable=no_finish_first).
     const isUnderConstruction = (building.constructionRemainingMs ?? 0) > 0;
-    const isDisabled = building.disabled === true;
-    disableBtn.textContent = isDisabled ? 'Enable' : 'Disable';
-    disableBtn.disabled = isUnderConstruction;
-    disableBtn.style.opacity = isUnderConstruction ? '0.45' : '1';
-    disableBtn.title = isUnderConstruction
-      ? 'Cannot disable while under construction — wait for the build to finish.'
-      : (isDisabled
-          ? 'Resume operation. Free. Drained routes are not restored.'
-          : 'Stop production / power / gates. Drains routes owned by this building. Free; reversible.');
+    if (isUnderConstruction) {
+      floorDisableRow.style.display = 'none';
+    } else {
+      floorDisableRow.style.display = 'flex';
+      const built = displayedFloorLevel(building);
+      const active = activeFloors(building);
+      floorDisableLabel.textContent = `Floors: ${active}/${built}`;
+      const atMin = active === 0; // all floors off
+      const atMax = active === built; // all floors on
+      const setBtn = (btn: HTMLButtonElement, disabled: boolean): void => {
+        btn.disabled = disabled;
+        btn.style.opacity = disabled ? '0.45' : '1';
+        btn.style.cursor = disabled ? 'default' : 'pointer';
+        btn.style.borderColor = disabled ? 'var(--ri-fg-4)' : 'var(--ri-accent-dim)';
+      };
+      setBtn(floorOffBtn, atMin);
+      setBtn(floorAllOffBtn, atMin);
+      setBtn(floorOnBtn, atMax);
+      setBtn(floorAllOnBtn, atMax);
+    }
 
     // §3.4 Land Reclamation section — only for the Hub itself. Renders
     // two expansion buttons; each is enabled when canExpandIsland

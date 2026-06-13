@@ -8,7 +8,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { BUILDING_DEFS, type BuildingDef } from './building-defs.js';
-import { convertToServitor, type PlacedBuilding } from './buildings.js';
+import { convertToServitor, displayedFloorLevel, type PlacedBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
 import {
   MAINTENANCE_DEGRADE_DURATION_MS,
@@ -384,7 +384,7 @@ describe('pickMostDegradedTarget', () => {
     // it would be targeted and — its recipe likely out of stock — block ALL
     // auto-maintenance on the island (caller picks exactly one target).
     const disabled = mkBuilding('mine', T1_THRESHOLD + MAINTENANCE_DEGRADE_DURATION_MS * 2);
-    (disabled as { disabled?: boolean }).disabled = true;
+    (disabled as { disabledFloors?: number }).disabledFloors = displayedFloorLevel({ floorLevel: 0 });
     const enabled = mkBuilding('mine', T1_THRESHOLD + 1000);
     expect(pickMostDegradedTarget([disabled, enabled], BUILDING_DEFS)).toBe(enabled);
   });
@@ -398,7 +398,7 @@ describe('pickMostDegradedTarget', () => {
 
   it('returns null when every degraded building is disabled or invalid (fix 4.4)', () => {
     const disabled = mkBuilding('mine', T1_THRESHOLD + 1000);
-    (disabled as { disabled?: boolean }).disabled = true;
+    (disabled as { disabledFloors?: number }).disabledFloors = displayedFloorLevel({ floorLevel: 0 });
     const invalid = mkBuilding('mine', T1_THRESHOLD + 1000);
     (invalid as { invalid?: boolean }).invalid = true;
     expect(pickMostDegradedTarget([disabled, invalid], BUILDING_DEFS)).toBeNull();

@@ -951,7 +951,7 @@ function derivationsSignature(
   ];
   for (const b of state.buildings) {
     parts.push(
-      `${b.id},${b.defId},${b.x},${b.y},${b.rotation ?? 0},${b.disabled === true ? 1 : 0},${b.invalid === true ? 1 : 0},${(b.constructionRemainingMs ?? 0) > 0 ? 1 : 0},${b.floorLevel ?? 0}`,
+      `${b.id},${b.defId},${b.x},${b.y},${b.rotation ?? 0},${activeFloors(b) <= 0 ? 1 : 0},${b.invalid === true ? 1 : 0},${(b.constructionRemainingMs ?? 0) > 0 ? 1 : 0},${b.floorLevel ?? 0}`,
     );
   }
   parts.push('#n');
@@ -2098,7 +2098,7 @@ export function findNextCapEvent(
   // otherwise long offline catchup splits at the wrong moment.
   const thresholdMul = (ctx?.baseMult ?? effectiveSkillMultipliers(state)).maintenanceThreshold;
   for (const b of state.buildings) {
-    if (b.disabled === true) continue;
+    if (activeFloors(b) <= 0) continue;
     const def = defs[b.defId];
     const boundary = nextMaintenanceBoundaryMs(b, def, thresholdMul);
     if (boundary === null) continue;
@@ -2469,7 +2469,7 @@ export function applySegmentSideEffects(
     // resumes accrual at the frozen operatingMs value. A fully floor-
     // disabled building (active 0) freezes the same way; a PARTIALLY
     // floor-disabled building (active ≥ 1) still wears.
-    if (b.disabled === true || activeFloors(b) <= 0) continue;
+    if (activeFloors(b) <= 0) continue;
     // Fix 4.4: invalid buildings are non-operational the same way
     // (mirrors isOperationalBuilding, buildings.ts) — they produce
     // nothing in computeRates, so they must not accrue wear either.

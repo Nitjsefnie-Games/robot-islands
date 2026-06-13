@@ -265,9 +265,9 @@ export type DispatchResult =
   | { ok: false; reason: 'insufficient-fuel' | 'invalid-direction' | 'already-in-flight' | 'path-too-long' };
 
 /** §13.3 Probability Engine — compute the rare-island scan bias for an island.
- *  Only OPERATIONAL buildings count — under-construction, invalid, or disabled
- *  Probability Engines grant no bias. */
-export function probabilityBiasForIsland(state: { buildings: ReadonlyArray<{ defId: string; invalid?: boolean; constructionRemainingMs?: number; disabled?: boolean }> }): number {
+ *  Only OPERATIONAL buildings count — under-construction, invalid, or fully
+ *  floor-disabled Probability Engines grant no bias. */
+export function probabilityBiasForIsland(state: { buildings: ReadonlyArray<{ defId: string; invalid?: boolean; constructionRemainingMs?: number; floorLevel?: number; disabledFloors?: number }> }): number {
   const engineCount = state.buildings.filter(
     (b) => b.defId === 'probability_engine' && isOperationalBuilding(b),
   ).length;
