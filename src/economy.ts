@@ -260,6 +260,22 @@ export interface CableComponentBalance {
 export type Inventory = Record<ResourceId, number>;
 
 /**
+ * §4.8 a single QUEUED floor-upgrade job that has not started running yet —
+ * one pending upgrade for `buildingId`, beyond whatever upgrade (if any) is
+ * currently RUNNING on that building. Ordered globally by `seq` (sourced from
+ * `IslandState.nextQueueSeq`) for FIFO promotion. A queued upgrade does NOT
+ * set the building's `constructionRemainingMs`, so the building keeps producing
+ * at its completed floor until the job promotes to running (`promoteQueuedBuilds`).
+ * Cost is paid at enqueue time. `kind` is a union for forward-compat; only
+ * 'upgrade' stacks today (placements never stack).
+ */
+export interface BuildJob {
+  readonly seq: number;
+  readonly buildingId: string;
+  readonly kind: 'upgrade';
+}
+
+/**
  * The mutable per-island runtime state. `IslandSpec` in world.ts is the
  * static definition (shape, terrain, building positions); `IslandState`
  * carries everything that changes during play. They reference each other
@@ -383,6 +399,10 @@ export interface IslandState {
   /** §queue: next FIFO sequence number to stamp on an enqueued build.
    *  Incremented on each enqueue. Optional; absent ≡ 0 (forward-compat). */
   nextQueueSeq?: number;
+  /** §4.8 queued upgrade jobs (see `BuildJob`). Optional; absent ≡ [] for
+   *  forward-compat with pre-v24 saves. Mutated by `applyUpgrade` (enqueue),
+   *  `promoteQueuedBuilds` (dequeue→running), and `cancelConstruction` (LIFO). */
+  buildJobs?: BuildJob[];
   /** Wall-clock timestamp of the last advance, in milliseconds. */
   lastTick: number;
   /** §13.3 Time Lock banked time in minutes. One per Time Lock building. */
