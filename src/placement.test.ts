@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 import { BUILDING_DEFS } from './building-defs.js';
 import { SHAPES } from './shape-mask.js';
-import type { PlacedBuilding } from './buildings.js';
+import { rawFloorLevel, type PlacedBuilding } from './buildings.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import { RESOURCE_STORAGE_CATEGORY, storageBaseFor } from './storage-categories.js';
 import {
@@ -22,6 +22,7 @@ import {
   inProgressBuildCount,
   placeBuilding,
   placementCostFor,
+  promoteQueuedBuilds,
   queuedBuildCount,
   queuedBuildSlots,
   relocateBuilding,
@@ -2133,6 +2134,43 @@ describe('applyUpgrade stacking (#31)', () => {
     } else {
       throw new Error(`unexpected result: ${JSON.stringify(r)}`);
     }
+  });
+
+  describe('promoteQueuedBuilds with upgrade jobs (#31)', () => {
+    // A building at floor 1 with a RUNNING first upgrade (timer armed, raw floor
+    // still 1) and one QUEUED upgrade job behind it. With a single parallel
+    // build slot, the queued upgrade must wait until the running one frees the
+    // building — upgrades on one building serialise.
+    function makeRunningPlusQueued(): { state: IslandState; b: PlacedBuilding } {
+      const { state, target } = makeStackScene(1);
+      // Arm a running first upgrade WITHOUT pre-bumping the floor: the building
+      // is at floor 1 and constructing toward floor 2.
+      target.constructionRemainingMs = 5000;
+      target.constructionTotalMs = 5000;
+      // Queue one upgrade job behind it.
+      state.buildJobs = [{ seq: 0, buildingId: 'b1', kind: 'upgrade' }];
+      return { state, b: target };
+    }
+
+    it('(a) one slot: running building keeps the queued upgrade waiting', () => {
+      const { state, b } = makeRunningPlusQueued();
+      // The default scene has one parallel build slot (base 1, no Robotics
+      // bonus), saturated by the running upgrade — and the building is busy.
+      // Both gates keep the queued job parked.
+      expect(countQueuedUpgrades(state, 'b1')).toBe(1);
+      promoteQueuedBuilds(state);
+      expect(countQueuedUpgrades(state, 'b1')).toBe(1);
+      expect(rawFloorLevel(b)).toBe(1);
+    });
+
+    it('(b) clearing the running timer lets the queued upgrade promote', () => {
+      const { state, b } = makeRunningPlusQueued();
+      b.constructionRemainingMs = 0;
+      promoteQueuedBuilds(state);
+      expect(countQueuedUpgrades(state, 'b1')).toBe(0);
+      expect(rawFloorLevel(b)).toBe(2);
+      expect(b.constructionRemainingMs ?? 0).toBeGreaterThan(0);
+    });
   });
 });
 
