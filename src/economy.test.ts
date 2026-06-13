@@ -25,7 +25,7 @@ import {
   type BuildingDef,
   type BuildingDefId,
 } from './building-defs.js';
-import type { PlacedBuilding } from './buildings.js';
+import { isOperationalBuilding, rawFloorLevel, type PlacedBuilding } from './buildings.js';
 import { MAINTENANCE_DEGRADE_DURATION_MS, MAINTENANCE_THRESHOLD_MS_BY_TIER, maintenanceFactor } from './maintenance.js';
 import {
   accrueXp,
@@ -5746,5 +5746,61 @@ describe('computeRates derivations memo — equivalence under mutation', () => {
     const s2 = makeState({ buildings: [mkMine('m-a', 0)] });
     const soloRate = rateOf(computeRates(s2, { defs: POWER_FREE }), 'm-a');
     expect(soloRate).toBeCloseTo(clusteredRate / (1 + EXTRACTION_RATE), 12);
+  });
+});
+
+
+describe('stacked upgrade queue (#31)', () => {
+  function mineSpec(): import('./world.js').IslandSpec {
+    return {
+      id: 'm', name: 'm', biome: 'plains', cx: 0, cy: 0,
+      majorRadius: 14, minorRadius: 14,
+      populated: true, discovered: true, buildings: [], modifiers: [],
+    };
+  }
+
+  it('runs a 3-deep upgrade stack sequentially to completion', () => {
+    const spec = mineSpec();
+    spec.buildings.push({ id: 'm1', defId: 'mine', x: 0, y: 0 });
+    const state = makeState({ buildings: spec.buildings, lastTick: 0 });
+    state.inventory.stone = 1e9;
+    state.inventory.wood = 1e9;
+
+    const ur1 = applyUpgrade(spec, state, 'm1');
+    expect(ur1.ok).toBe(true);
+    const ur2 = applyUpgrade(spec, state, 'm1');
+    expect(ur2.ok).toBe(true);
+    const ur3 = applyUpgrade(spec, state, 'm1');
+    expect(ur3.ok).toBe(true);
+
+    expect((state.buildJobs ?? []).length).toBe(2);
+    expect((spec.buildings[0]!.constructionRemainingMs ?? 0)).toBeGreaterThan(0);
+
+    advanceIsland(state, 60 * 60 * 1000, { defs: POWER_FREE });
+
+    expect(rawFloorLevel(spec.buildings[0]!)).toBe(3);
+    expect((state.buildJobs ?? []).length).toBe(0);
+    expect((spec.buildings[0]!.constructionRemainingMs ?? 0)).toBe(0);
+  });
+
+  it('keeps producing while an upgrade is merely QUEUED, offline only while running', () => {
+    const spec = mineSpec();
+    spec.buildings.push({ id: 'm1', defId: 'mine', x: 0, y: 0 });
+    const state = makeState({ buildings: spec.buildings, lastTick: 0 });
+    state.inventory.stone = 1e9;
+    state.inventory.wood = 1e9;
+
+    const ur1 = applyUpgrade(spec, state, 'm1');
+    expect(ur1.ok).toBe(true);
+    const ur2 = applyUpgrade(spec, state, 'm1');
+    expect(ur2.ok).toBe(true);
+
+    expect((spec.buildings[0]!.constructionRemainingMs ?? 0)).toBeGreaterThan(0);
+    expect(isOperationalBuilding(spec.buildings[0]!)).toBe(false);
+
+    // Simulate the running upgrade finishing but the queued job not yet promoted.
+    spec.buildings[0]!.constructionRemainingMs = 0;
+
+    expect(isOperationalBuilding(spec.buildings[0]!)).toBe(true);
   });
 });
