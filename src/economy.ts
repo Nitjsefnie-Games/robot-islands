@@ -22,7 +22,7 @@ import {
   type BuildingDef,
   type BuildingDefId,
 } from './building-defs.js';
-import { hasOperationalBuilding, isOperationalBuilding, participatesInCluster, floorLevel, floorScaledCapacity, floorEffectMul, floorPowerDrawMul, type PlacedBuilding } from './buildings.js';
+import { hasOperationalBuilding, isOperationalBuilding, participatesInCluster, floorLevel, floorScaledCapacity, floorEffectMul, floorPowerDrawMul, activeFloorLevel, type PlacedBuilding } from './buildings.js';
 import type { WorldState } from './world.js';
 import { isOceanTile } from './world.js';
 import { nextRealPhaseBoundaryMs, nextSolarBoundaryMs, realPhaseName, solarMultiplier } from './daynight.js';
@@ -1323,7 +1323,7 @@ export function computeRates(
         tentative.push({ building: b, recipe: syntheticRecipe, baseRate: 0, buffStack: 1, effectiveMul: 0, perBuildingMul: 1 });
         continue;
       }
-      const baseRate = (1 / GENESIS_CYCLE_SEC) * gateResult.effectiveMul * floorEffectMul(floorLevel(b));
+      const baseRate = (1 / GENESIS_CYCLE_SEC) * gateResult.effectiveMul * floorEffectMul(activeFloorLevel(b));
       // Fix 3.7: same per-building throughput factors pass 4 applies.
       const genesisPbm =
         maintenanceFactor(b, defs[b.defId], skillMul.maintenanceThreshold) *
@@ -1442,7 +1442,7 @@ export function computeRates(
     const cryoMul = Object.keys(recipe.outputs).some((r) => r.includes('cryo'))
       ? modifierMul.cryoRecipeRateMul
       : 1;
-    const baseRate = (1 / recipe.cycleSec) * buffStack * rateMul * gateResult.effectiveMul * t5Mul * cryoMul * heatFactor * floorEffectMul(floorLevel(b)) * fledglingRecipeMul(state.level);
+    const baseRate = (1 / recipe.cycleSec) * buffStack * rateMul * gateResult.effectiveMul * t5Mul * cryoMul * heatFactor * floorEffectMul(activeFloorLevel(b)) * fledglingRecipeMul(state.level);
     tentative.push({ building: b, recipe, baseRate, buffStack, effectiveMul: gateResult.effectiveMul * heatFactor, perBuildingMul });
     const pass1Outputs = resolveRotatingOutput(recipe, t);
     for (const [r, yld] of Object.entries(pass1Outputs)) {
@@ -1476,7 +1476,7 @@ export function computeRates(
     // siblings. Fix 3.7: the per-building factors (maintenance/toxicity/
     // yield) scale the demand for the same reason — pass-4's actual
     // drawdown includes them.
-    const nominalRate = (1 / te.recipe.cycleSec) * te.buffStack * rateMul * te.effectiveMul * floorEffectMul(floorLevel(te.building)) * fledglingRecipeMul(state.level) * te.perBuildingMul;
+    const nominalRate = (1 / te.recipe.cycleSec) * te.buffStack * rateMul * te.effectiveMul * floorEffectMul(activeFloorLevel(te.building)) * fledglingRecipeMul(state.level) * te.perBuildingMul;
     const externalSupply: Record<ResourceId, number> = {} as Record<ResourceId, number>;
     for (const r of Object.keys(tentSupply) as ResourceId[]) {
       externalSupply[r] = tentSupply[r] ?? 0;
@@ -1736,11 +1736,11 @@ export function computeRates(
       // multiplier (clustered generators boost each other). Consumption below
       // is deliberately NOT scaled.
       const clusterMul = clusterMuls.get(b.id) ?? 1;
-      producedW += producesBase * floorEffectMul(floorLevel(b)) * solarFactor * windFactor * skillMul.powerProduction * clusterMul;
+      producedW += producesBase * floorEffectMul(activeFloorLevel(b)) * solarFactor * windFactor * skillMul.powerProduction * clusterMul;
       // §5.1 rebalance: per-building draw scales by nominal throughput fraction.
       // powerConsumption is a "reduction" multiplier (>=1 means lower draw),
       // so we divide. Default 1.0 leaves draw untouched.
-      consumedW += ((def.power?.consumes ?? 0) * floorPowerDrawMul(floorLevel(b)) * nominalThroughputFrac) / skillMul.powerConsumption;
+      consumedW += ((def.power?.consumes ?? 0) * floorPowerDrawMul(activeFloorLevel(b)) * nominalThroughputFrac) / skillMul.powerConsumption;
     }
     // §13.3 Genesis Chamber tier-based power draw (converted kW → W).
     for (const b of validBuildings) {
@@ -1753,7 +1753,7 @@ export function computeRates(
       if (targetTier < 1 || targetTier > 4) continue;
       // Output-stalled chambers don't draw power (no production = no load).
       if (inv(state, state.genesisTarget) >= cap(state, state.genesisTarget, undefined, undefined, ctx?.baseMult)) continue;
-      consumedW += (GENESIS_POWER_KW[targetTier]! * 1000 * floorPowerDrawMul(floorLevel(b))) / skillMul.powerConsumption;
+      consumedW += (GENESIS_POWER_KW[targetTier]! * 1000 * floorPowerDrawMul(activeFloorLevel(b))) / skillMul.powerConsumption;
     }
     return { producedW, consumedW };
   };
