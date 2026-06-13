@@ -75,7 +75,7 @@ export const STORAGE_KEY_DISPLAY = 'robot-islands:save';
 
 /** Current schema version. `loadWorld` rejects (returns null) any
  *  snapshot whose `v` is not strictly equal to this. */
-export const SCHEMA_VERSION = 23 as const;
+export const SCHEMA_VERSION = 24 as const;
 
 /** Versions that loadWorld accepts. The walker (loadWorld) chains
  *  migrateV<N>toV<N+1> functions from the lowest known version up to
@@ -83,7 +83,7 @@ export const SCHEMA_VERSION = 23 as const;
  *
  *  See AGENTS.md → "Persistence migrations" for the full "bump = migrate"
  *  policy from v7 onward. */
-export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23]);
+export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]);
 
 // ---------------------------------------------------------------------------
 // Serialized shapes
@@ -675,6 +675,47 @@ export function migrateV22toV23(s: SerializedSnapshotV22): SaveSnapshot {
   } as unknown as SaveSnapshot;
 }
 
+/** v23 top-level snapshot shape. Structurally identical to v24 (SaveSnapshot)
+ *  except the v literal AND the two §4.8 fields a v23 save lacks: per-island
+ *  `state.buildJobs` (queued upgrade jobs) and the per-building
+ *  `disabledFloors` floor-disable counter. A v23 building instead carries the
+ *  legacy boolean `disabled?` flag, which the v23 → v24 migration folds into
+ *  `disabledFloors`. */
+export type SerializedSnapshotV23 = Omit<SaveSnapshot, 'v'> & { readonly v: 23 };
+
+/** v23 -> v24: §4.8 stacked upgrade queue + floor-disable shipped. Two changes:
+ *
+ *   1. Per-island `state.buildJobs` (queued upgrade `BuildJob[]`) is new; a v23
+ *      save has none, so seed `[]`.
+ *   2. The legacy per-building boolean `disabled` is folded into the
+ *      `disabledFloors` counter (how many BUILT floors are off, from the top).
+ *      `disabled === true` meant "all floors off", which is
+ *      `(floorLevel ?? 0) + 1` floors disabled; carry that across and drop the
+ *      now-defunct boolean from the serialized building. A falsy `disabled`
+ *      just drops the field (no `disabledFloors` ⇒ all floors active).
+ *
+ *  Lossless: every disabled building stays disabled, every enabled one stays
+ *  enabled, nothing queued (the player had no queue concept at v23). */
+export function migrateV23toV24(s: SerializedSnapshotV23): SaveSnapshot {
+  return {
+    ...s,
+    v: 24 as const,
+    islandStates: s.islandStates.map((entry) => ({
+      ...entry,
+      state: {
+        ...entry.state,
+        buildJobs: [],
+        buildings: entry.state.buildings.map((b) => {
+          const { disabled, ...rest } = b as typeof b & { disabled?: boolean };
+          return disabled === true
+            ? { ...rest, disabledFloors: (rest.floorLevel ?? 0) + 1 }
+            : rest;
+        }),
+      },
+    })),
+  } as unknown as SaveSnapshot;
+}
+
 export interface SaveSnapshot {
   readonly v: typeof SCHEMA_VERSION;
   /** `Date.now()` wall-clock ms at save time. Used to compute the offline
@@ -873,6 +914,9 @@ export function deserializeWorld(
   }
   if ((snapshot as unknown as { v: number }).v === 22) {
     snapshot = migrateV22toV23(snapshot as unknown as SerializedSnapshotV22);
+  }
+  if ((snapshot as unknown as { v: number }).v === 23) {
+    snapshot = migrateV23toV24(snapshot as unknown as SerializedSnapshotV23);
   }
 
   if (snapshot.v !== SCHEMA_VERSION) {

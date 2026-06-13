@@ -55,6 +55,7 @@ import {
   migrateV20toV21,
   migrateV21toV22,
   migrateV22toV23,
+  migrateV23toV24,
   serializeWorld,
   type SaveSnapshot,
   type SerializedSnapshotV7,
@@ -155,7 +156,7 @@ describe('serializeWorld', () => {
     const states = new Map<string, IslandState>();
     const snap = serializeWorld(world, states, /* savedAt */ 1_234_567);
     expect(snap.v).toBe(SCHEMA_VERSION);
-    expect(snap.v).toBe(23);
+    expect(snap.v).toBe(24);
     expect(snap.savedAt).toBe(1_234_567);
   });
 
@@ -1654,7 +1655,7 @@ describe('persistence — tileOverrides round-trip (schema 7)', () => {
     const states = new Map<string, IslandState>();
     states.set('home', makeInitialIslandState(homeSpec!, 0));
     const snap = serializeWorld(world, states, 1_700_000_000_000, 0);
-    expect(snap.v).toBe(23);
+    expect(snap.v).toBe(24);
     const { world: rehydrated } = deserializeWorld(snap, 1_700_000_000_000, 0);
     const rh = rehydrated.islands.find((s) => s.id === 'home');
     expect(rh?.tileOverrides).toEqual({
@@ -2358,7 +2359,7 @@ describe('v17 -> v18 migration', () => {
     const states = new Map<string, IslandState>([['home', homeState]]);
     const snap = serializeWorld(world, states, 0, 0);
     // The snapshot must be at v22 (SCHEMA_VERSION).
-    expect(snap.v).toBe(23);
+    expect(snap.v).toBe(24);
     const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
     const { world: restored, islandStates: restoredStates } = deserializeWorld(json, 0, 0);
     const rSpec = restored.islands.find((s) => s.id === 'home')!;
@@ -2383,8 +2384,8 @@ describe('v17 -> v18 migration', () => {
 });
 
 describe('v18 -> v19 migration (everProduced seen-set)', () => {
-  it('SCHEMA_VERSION is 23', () => {
-    expect(SCHEMA_VERSION).toBe(23);
+  it('SCHEMA_VERSION is 24', () => {
+    expect(SCHEMA_VERSION).toBe(24);
   });
 
   it('migrateV18toV19 backfills everProduced only from POSITIVE-stock resources', () => {
@@ -2428,7 +2429,7 @@ describe('v18 -> v19 migration (everProduced seen-set)', () => {
     homeState.everProduced = new Set(['bolt', 'iron_ingot']);
     const states = new Map<string, IslandState>([['home', homeState]]);
     const snap = serializeWorld(world, states, 0, 0);
-    expect(snap.v).toBe(23);
+    expect(snap.v).toBe(24);
     const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
     const { islandStates: restored } = deserializeWorld(json, 0, 0);
     const rState = restored.get('home')!;
@@ -2472,7 +2473,7 @@ describe('v20 -> v21 tutorial xpBumpClaimed migration', () => {
     } as unknown as Parameters<typeof migrateV20toV21>[0];
     const out = migrateV20toV21(v20);
     expect(out.v).toBe(21);
-    expect(SCHEMA_VERSION).toBe(23);
+    expect(SCHEMA_VERSION).toBe(24);
     expect((out.world.tutorialState as unknown as { xpBumpClaimed: string[] }).xpBumpClaimed)
       .toEqual(['a', 'b']);
   });
@@ -2523,7 +2524,7 @@ describe('schema v22 — activeBonusMs (§9.9)', () => {
     const world = makeInitialWorld(0);
     world.activeBonusMs = 600_000; // 10 focused minutes banked
     const snap = serializeWorld(world, new Map(), 1_000_000, 500);
-    expect(snap.v).toBe(23);
+    expect(snap.v).toBe(24);
     expect(snap.world.activeBonusMs).toBe(600_000);
     // Reload 1 minute of wall-clock later: decay 3 × 60_000.
     const { world: loaded } = deserializeWorld(snap, 1_000_000 + 60_000, 9_999);
@@ -2643,5 +2644,73 @@ describe('migrateV22toV23 — regenerates procedural islands at density 0.02', (
     const outsider = expected.find((i) => islandCells(i).every((c) => !insideCells.includes(c)));
     expect(outsider).toBeDefined();
     expect(out.world.islands.find((i) => i.id === outsider!.id)!.discovered).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// v23 → v24 — buildJobs + disabled→disabledFloors (§4.8 stacked upgrade queue)
+// ---------------------------------------------------------------------------
+describe('schema v24 — buildJobs + disabled→disabledFloors', () => {
+  it('SCHEMA_VERSION is 24', () => {
+    expect(SCHEMA_VERSION).toBe(24);
+  });
+
+  function makeV23(islandStates: Array<{ id: string; state: unknown }>): SaveSnapshot {
+    const base = serializeWorld(makeInitialWorld(0), new Map(), 0);
+    return {
+      ...base,
+      v: 23,
+      islandStates,
+    } as unknown as SaveSnapshot;
+  }
+
+  it('migrateV23toV24 defaults each island state buildJobs to []', () => {
+    const out = migrateV23toV24(makeV23([
+      { id: 'home', state: { buildings: [] } },
+      { id: 'b', state: { buildings: [] } },
+    ]) as never);
+    expect(out.v).toBe(24);
+    for (const entry of out.islandStates) {
+      expect((entry.state as { buildJobs?: unknown[] }).buildJobs).toEqual([]);
+    }
+  });
+
+  it('migrates a disabled building (floorLevel 2) to disabledFloors 3 and drops disabled', () => {
+    const out = migrateV23toV24(makeV23([
+      { id: 'home', state: { buildings: [{ id: 'x', defId: 'solar', x: 0, y: 0, disabled: true, floorLevel: 2 }] } },
+    ]) as never);
+    const b = (out.islandStates[0]!.state as { buildings: Array<{ disabled?: boolean; disabledFloors?: number }> }).buildings[0]!;
+    expect(b.disabled).toBeUndefined();
+    expect(b.disabledFloors).toBe(3);
+  });
+
+  it('drops disabled (falsy) without setting disabledFloors', () => {
+    const out = migrateV23toV24(makeV23([
+      { id: 'home', state: { buildings: [{ id: 'y', defId: 'solar', x: 0, y: 0, disabled: false }] } },
+    ]) as never);
+    const b = (out.islandStates[0]!.state as { buildings: Array<{ disabled?: boolean; disabledFloors?: number }> }).buildings[0]!;
+    expect('disabled' in b).toBe(false);
+    expect(b.disabledFloors).toBeUndefined();
+  });
+
+  it('round-trips buildJobs and disabledFloors through serialize → JSON → deserialize', () => {
+    const world = makeInitialWorld(0);
+    const homeSpec = world.islands.find((s) => s.id === 'home')!;
+    homeSpec.buildings.push({
+      id: 'upg-1', defId: 'solar', x: 4, y: 4, floorLevel: 3, disabledFloors: 1,
+    });
+    const homeState = makeInitialIslandState(homeSpec, 0);
+    homeState.buildJobs = [{ seq: 1, buildingId: 'upg-1', kind: 'upgrade' }];
+    const states = new Map<string, IslandState>([['home', homeState]]);
+    const snap = serializeWorld(world, states, 0);
+    expect(snap.v).toBe(24);
+    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    const { world: restored, islandStates: restoredStates } = deserializeWorld(json, 0, 0);
+    expect(restoredStates.get('home')!.buildJobs).toEqual([
+      { seq: 1, buildingId: 'upg-1', kind: 'upgrade' },
+    ]);
+    const b = restored.islands.find((s) => s.id === 'home')!.buildings.find((x) => x.id === 'upg-1')!;
+    expect(b.disabledFloors).toBe(1);
+    expect(b.floorLevel).toBe(3);
   });
 });
