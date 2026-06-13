@@ -1362,12 +1362,28 @@ export function validateOceanPlacement(
 export function promoteQueuedBuilds(state: IslandState): void {
   let free = parallelBuildSlots(state) - inProgressBuildCount(state);
   if (free <= 0) return;
-  const queued = state.buildings
-    .filter((b) => b.queued === true)
-    .sort((a, b) => (a.queueSeq ?? 0) - (b.queueSeq ?? 0));
-  for (const b of queued) {
+  type Cand =
+    | { seq: number; kind: 'place'; b: PlacedBuilding }
+    | { seq: number; kind: 'upgrade'; job: BuildJob };
+  const cands: Cand[] = [];
+  for (const b of state.buildings) {
+    if (b.queued === true) cands.push({ seq: b.queueSeq ?? 0, kind: 'place', b });
+  }
+  for (const job of state.buildJobs ?? []) cands.push({ seq: job.seq, kind: 'upgrade', job });
+  cands.sort((a, b) => a.seq - b.seq);
+  for (const c of cands) {
     if (free <= 0) break;
-    b.queued = false;
+    if (c.kind === 'place') { c.b.queued = false; free--; continue; }
+    const b = state.buildings.find((bb) => bb.id === c.job.buildingId);
+    if (!b) { state.buildJobs = (state.buildJobs ?? []).filter((j) => j !== c.job); continue; }
+    if ((b.constructionRemainingMs ?? 0) > 0) continue; // building busy — wait
+    const def = BUILDING_DEFS[b.defId];
+    const newL = rawFloorLevel(b) + 1;
+    b.floorLevel = newL;
+    const upgradeMs = upgradeConstructionMs(def, newL, effectiveSkillMultipliers(state).constructionTime);
+    b.constructionRemainingMs = upgradeMs;
+    b.constructionTotalMs = upgradeMs;
+    state.buildJobs = (state.buildJobs ?? []).filter((j) => j !== c.job);
     free--;
   }
 }
