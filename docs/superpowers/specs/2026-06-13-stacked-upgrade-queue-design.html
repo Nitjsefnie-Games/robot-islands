@@ -1,0 +1,990 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Design spec — Building Refactor: Stacked Upgrade Queue (#31) + Floor Disabling</title>
+  <style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--ivory);
+      color: var(--gray-700);
+      line-height: 1.58;
+      padding: 56px 32px 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { margin: 0 auto; max-width: 1080px; }
+
+    /* ---------- TOC ---------- */
+    .toc {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 20px 26px;
+      margin-bottom: 48px;
+      max-width: 820px;
+    }
+    .toc .toc-label {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--gray-500);
+      margin-bottom: 12px;
+    }
+    .toc ol {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+    .toc li { padding: 2px 0; }
+    .toc a {
+      font-size: 13.5px;
+      color: var(--clay);
+      text-decoration: none;
+      transition: color 0.15s;
+    }
+    .toc a:hover { color: var(--slate); }
+    .toc .toc-part {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      margin: 10px 0 4px;
+    }
+    .toc .toc-sub {
+      padding-left: 16px;
+    }
+
+    /* ---------- header ---------- */
+    header.page-head { margin-bottom: 40px; max-width: 840px; }
+    .eyebrow {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--gray-500);
+      margin-bottom: 12px;
+    }
+    h1 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 38px;
+      line-height: 1.14;
+      color: var(--slate);
+      margin-bottom: 18px;
+      letter-spacing: -0.01em;
+    }
+    .context-box {
+      background: var(--gray-150);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      font-size: 14.5px;
+      color: var(--gray-700);
+    }
+    .context-box .label {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    /* ---------- summary strip ---------- */
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 56px;
+    }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+    }
+    .summary .k {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      margin-bottom: 6px;
+    }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent  { color: var(--clay); }
+    .summary .v.ok      { color: var(--olive); }
+
+    /* ---------- part divider ---------- */
+    .part-divider {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin: 72px 0 48px;
+    }
+    .part-divider .part-badge {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--clay);
+      background: rgba(217,119,87,0.12);
+      border: 1px solid rgba(217,119,87,0.28);
+      border-radius: 8px;
+      padding: 4px 12px;
+      white-space: nowrap;
+    }
+    .part-divider h2 {
+      font-family: var(--serif);
+      font-size: 30px;
+      font-weight: 500;
+      color: var(--slate);
+      letter-spacing: -0.01em;
+    }
+    .part-divider hr {
+      flex: 1;
+      border: none;
+      border-top: var(--border);
+    }
+
+    /* ---------- decision banner ---------- */
+    .decision {
+      background: var(--white);
+      border: var(--border);
+      border-left: 4px solid var(--clay);
+      border-radius: var(--radius);
+      padding: 22px 26px;
+      margin-bottom: 56px;
+    }
+    .decision .d-tag {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--clay);
+      margin-bottom: 8px;
+    }
+    .decision .d-head {
+      font-family: var(--serif);
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--slate);
+      margin-bottom: 10px;
+      letter-spacing: -0.01em;
+    }
+    .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 820px; }
+    .decision .d-body + .d-body { margin-top: 8px; }
+    .decision code { font-family: var(--mono); font-size: 0.9em; color: #C9B98A; }
+
+    /* ---------- section chrome ---------- */
+    section { margin-bottom: 60px; }
+    .sec-head {
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+      margin-bottom: 8px;
+    }
+    .sec-head .num {
+      font-family: var(--mono);
+      font-size: 12px;
+      background: var(--oat);
+      color: var(--slate);
+      padding: 3px 9px;
+      border-radius: 8px;
+    }
+    .sec-head h2 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 26px;
+      color: var(--slate);
+      letter-spacing: -0.01em;
+    }
+    .sec-intro {
+      font-size: 14.5px;
+      color: var(--gray-500);
+      max-width: 820px;
+      margin-bottom: 24px;
+    }
+    p.body { font-size: 14.5px; max-width: 820px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+
+    /* ---------- subsection ---------- */
+    .subsec {
+      margin: 28px 0 18px;
+    }
+    .subsec h3 {
+      font-family: var(--serif);
+      font-size: 18px;
+      font-weight: 500;
+      color: var(--slate);
+      margin-bottom: 8px;
+      letter-spacing: -0.01em;
+    }
+
+    code {
+      font-family: var(--mono);
+      font-size: 0.88em;
+      background: var(--gray-150);
+      border: 1px solid var(--gray-300);
+      border-radius: 5px;
+      padding: 1px 5px;
+      color: #C9B98A;
+    }
+    pre.codeblock {
+      background: var(--gray-150);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 18px 22px;
+      font-family: var(--mono);
+      font-size: 12.5px;
+      color: var(--gray-700);
+      overflow-x: auto;
+      max-width: 820px;
+      margin-bottom: 18px;
+      line-height: 1.65;
+    }
+    pre.codeblock .kw  { color: #C9B98A; }
+    pre.codeblock .cm  { color: var(--gray-500); }
+    pre.codeblock .ty  { color: var(--olive); }
+    pre.formula {
+      background: var(--gray-150);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 18px 22px;
+      font-family: var(--mono);
+      font-size: 13px;
+      color: var(--gray-700);
+      overflow-x: auto;
+      max-width: 820px;
+      margin-bottom: 18px;
+      line-height: 1.6;
+    }
+    pre.formula b { color: var(--clay); font-weight: 600; }
+
+    /* ---------- generic data table ---------- */
+    .tbl {
+      width: 100%;
+      border: var(--border);
+      border-radius: var(--radius);
+      border-collapse: separate;
+      border-spacing: 0;
+      overflow: hidden;
+      font-size: 13.5px;
+      margin-bottom: 18px;
+    }
+    .tbl th, .tbl td {
+      text-align: left;
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--gray-300);
+      vertical-align: top;
+    }
+    .tbl th {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--gray-500);
+      background: var(--gray-150);
+      font-weight: 600;
+    }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl td.num { font-family: var(--mono); }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+
+    /* ---------- change inventory ---------- */
+    .changes { display: flex; flex-direction: column; gap: 12px; }
+    .change {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 4px 24px;
+    }
+    @media (max-width: 720px) { .change { grid-template-columns: 1fr; } }
+    .change .file {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      color: var(--clay);
+      word-break: break-all;
+    }
+    .change .what { font-size: 14px; color: var(--gray-700); }
+    .change .what .lead { color: var(--slate); font-weight: 600; }
+
+    /* ---------- note callout ---------- */
+    .note {
+      background: var(--oat);
+      border: var(--border);
+      border-left: 4px solid var(--gray-500);
+      border-radius: 10px;
+      padding: 14px 18px;
+      font-size: 13.5px;
+      color: var(--gray-700);
+      max-width: 820px;
+      margin: 16px 0;
+    }
+    .note strong { color: var(--slate); }
+
+    /* ---------- checklist ---------- */
+    .checklist { display: flex; flex-direction: column; gap: 10px; max-width: 820px; }
+    .check {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      background: var(--white);
+      border: var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+    }
+    .check .box {
+      width: 18px; height: 18px;
+      border-radius: 5px;
+      border: 2px solid var(--gray-500);
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .check .ck-text { font-size: 14px; color: var(--gray-700); }
+    .check .ck-text strong { color: var(--slate); }
+
+    /* ---------- deferred / out-of-scope cards ---------- */
+    .deferred { display: flex; flex-direction: column; gap: 14px; max-width: 840px; }
+    .defer {
+      background: var(--white);
+      border: var(--border);
+      border-left: 4px solid var(--gray-500);
+      border-radius: 10px;
+      padding: 16px 20px;
+    }
+    .defer .dt { font-weight: 600; font-size: 15px; color: var(--slate); margin-bottom: 4px; }
+    .defer .dd { font-size: 13.5px; color: var(--gray-500); }
+
+    .footer {
+      color: var(--gray-500);
+      font-size: 13px;
+      margin-top: 64px;
+      padding-top: 22px;
+      border-top: 1px solid var(--gray-300);
+    }
+
+    /* ---------- bold list ---------- */
+    ul.blist {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-width: 820px;
+      margin-bottom: 14px;
+    }
+    ul.blist li {
+      font-size: 14px;
+      color: var(--gray-700);
+      padding-left: 18px;
+      position: relative;
+    }
+    ul.blist li:before {
+      content: '·';
+      position: absolute;
+      left: 4px;
+      color: var(--clay);
+    }
+    ul.blist li strong { color: var(--slate); }
+    ul.blist li code { font-family: var(--mono); font-size: 0.88em; color: #C9B98A; background: var(--gray-150); border: 1px solid var(--gray-300); border-radius: 5px; padding: 1px 5px; }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Design spec · Robot Islands · Building refactor · 2026-06-13</div>
+      <h1>Stacked upgrade queue (#31) + temporary floor disabling</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        Two building mechanics that share the same touchpoints — building fields, the §4.5/#35
+        cluster capacity, floor-effect multipliers, and the persistence schema — so they migrate
+        together in one v23 → v24 bump. Part 1 replaces the single-upgrade-per-building limit
+        with a proper stackable queue; Part 2 replaces the binary Disable button with a
+        free, reversible active-floor count that scales throughput / power / capacity proportionally.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Parts</div><div class="v accent">2 features</div></div>
+      <div class="cell"><div class="k">Schema bump</div><div class="v accent">v23 → v24</div></div>
+      <div class="cell"><div class="k">Risk</div><div class="v ok">Low–Med</div></div>
+      <div class="cell"><div class="k">Status</div><div class="v ok">Approved</div></div>
+    </div>
+
+    <!-- TOC -->
+    <div class="toc">
+      <div class="toc-label">Contents</div>
+      <ol>
+        <li class="toc-part">Part 1 — Stacked upgrade queue (#31)</li>
+        <li class="toc-sub"><a href="#s1">§1 Root cause</a></li>
+        <li class="toc-sub"><a href="#s2">§2 Approach — central queued-upgrade job list</a></li>
+        <li class="toc-sub"><a href="#s3">§3 Behaviour</a></li>
+        <li class="toc-sub"><a href="#s4">§4 SPEC.md changes</a></li>
+        <li class="toc-sub"><a href="#s5">§5 Persistence (v23 → v24, Part 1)</a></li>
+        <li class="toc-sub"><a href="#s6">§6 Test plan</a></li>
+        <li class="toc-sub"><a href="#s7">§7 Out of scope</a></li>
+        <li class="toc-sub"><a href="#s8">§8 Risk / staging</a></li>
+        <li class="toc-sub"><a href="#s9">§9 Folded-in fix — upgrades honor construction speed</a></li>
+        <li class="toc-part">Part 2 — Temporary floor disabling</li>
+        <li class="toc-sub"><a href="#s10">§10 Data model</a></li>
+        <li class="toc-sub"><a href="#s11">§11 Operational / cluster gating</a></li>
+        <li class="toc-sub"><a href="#s12">§12 Effect scaling</a></li>
+        <li class="toc-sub"><a href="#s13">§13 Toggling — <code>setBuildingActiveFloors</code></a></li>
+        <li class="toc-sub"><a href="#s14">§14 Maintenance / wear / alerts</a></li>
+        <li class="toc-sub"><a href="#s15">§15 UI</a></li>
+        <li class="toc-sub"><a href="#s16">§16 Persistence (shared v23 → v24)</a></li>
+        <li class="toc-sub"><a href="#s17">§17 SPEC.md (Part 2)</a></li>
+        <li class="toc-sub"><a href="#s18">§18 Out of scope</a></li>
+      </ol>
+    </div>
+
+    <!-- ===================== PART 1 ===================== -->
+    <div class="part-divider" id="part1">
+      <span class="part-badge">Part 1</span>
+      <h2>Stacked upgrade queue (#31)</h2>
+      <hr>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision (approved)</div>
+      <div class="d-head">Central per-island job queue for queued upgrades; running builds keep today's building-flag representation; queued upgrades keep the building producing.</div>
+      <div class="d-body">
+        Issue: <a href="https://github.com/Nitjsefnie-Games/robot-islands/issues/31" style="color:var(--clay)">#31</a> —
+        pressing <strong>Upgrade</strong> on an already-upgrading building does nothing.
+        Expected behaviour: queue another upgrade into the build queue (but not into a parallel build slot).
+        The fix adds exactly one new piece of state (<code>buildJobs</code> on <code>IslandState</code>);
+        running-job state stays on the building object unchanged, keeping all 27 <code>isOperationalBuilding</code>
+        call-sites, the §4.5/#35 cluster-capacity logic, construction alerts, and the inspector guard untouched.
+      </div>
+      <div class="d-body">
+        Queued upgrades do <em>not</em> set <code>constructionRemainingMs</code>, so the building keeps
+        producing at its completed floor until the job promotes to running — the deliberate improvement
+        over today's behaviour where even a queued upgrade froze production.
+      </div>
+    </div>
+
+    <!-- §1 -->
+    <section id="s1">
+      <div class="sec-head"><span class="num">01</span><h2>Root cause</h2></div>
+      <p class="sec-intro">The build queue is modelled as flags on the building object — one <code>PlacedBuilding</code> can represent at most one construction job.</p>
+
+      <p class="body">
+        Three fields on <code>PlacedBuilding</code> encode a single in-progress job:
+        <code>constructionRemainingMs</code> / <code>constructionTotalMs</code> (the running timer),
+        <code>floorLevel</code> (pre-bumped to the upgrade target the instant <code>applyUpgrade</code> runs),
+        and <code>queued</code> / <code>queueSeq</code> (at most one "waiting for a slot" flag).
+      </p>
+      <p class="body">
+        <code>applyUpgrade</code> therefore hard-rejects a second upgrade at
+        <code>placement.ts:931</code>:
+      </p>
+      <pre class="codeblock"><span class="cm">// placement.ts:931</span>
+<span class="kw">if</span> ((b.constructionRemainingMs ?? 0) > 0) <span class="kw">return</span> { ok: <span class="kw">false</span>, reason: <span class="ty">'already-building'</span> };</pre>
+      <p class="body">
+        There is nowhere to store a second pending upgrade for the same building.
+      </p>
+    </section>
+
+    <!-- §2 -->
+    <section id="s2">
+      <div class="sec-head"><span class="num">02</span><h2>Approach — central queued-upgrade job list (scoped)</h2></div>
+      <p class="sec-intro">Add one new piece of state — a per-island list of queued upgrade jobs. Everything that already works stays put.</p>
+
+      <p class="body">
+        <strong>Running job state stays on the building</strong> (<code>constructionRemainingMs</code>,
+        <code>constructionTotalMs</code>, and <code>floorLevel</code> pre-bumped for the active upgrade) —
+        exactly as today. This is load-bearing: it keeps all 27 <code>isOperationalBuilding</code>
+        call-sites, the §4.5/#35 cluster-capacity logic (<code>adjacency.ts</code> reads
+        <code>constructionRemainingMs</code> + <code>floorLevel</code>), the construction alert overlay,
+        the inspector, and the <code>main.ts</code> guard <strong>unchanged</strong>.
+      </p>
+      <p class="body">
+        <strong>Queued placements stay on the building</strong> (<code>queued</code> / <code>queueSeq</code> +
+        <code>constructionRemainingMs</code>) — placements never stack, so they need no new representation.
+        Their slot accounting is unified with queued upgrades below.
+      </p>
+      <p class="body">
+        <strong>Queued upgrades</strong> — the genuinely new, stackable thing — live in the central list.
+      </p>
+
+      <div class="subsec" id="s2-1">
+        <h3>2.1 Data model</h3>
+        <p class="body"><code>IslandState</code> (in <code>economy.ts</code>) gains:</p>
+        <pre class="codeblock"><span class="cm">/** §4.8 queued upgrade jobs that haven't started running yet. Each entry is
+ *  ONE pending floor-upgrade for `buildingId`, beyond whatever upgrade (if
+ *  any) is currently running on that building. Ordered globally by `seq`
+ *  (from nextQueueSeq) for FIFO promotion. A queued upgrade does NOT take the
+ *  building offline — the building keeps producing at its completed floor
+ *  until the job promotes to running. Cost is paid at enqueue. Optional;
+ *  absent ≡ [] (forward-compat with pre-v24 saves). */</span>
+buildJobs?: <span class="ty">BuildJob</span>[];</pre>
+
+        <pre class="codeblock"><span class="kw">export interface</span> <span class="ty">BuildJob</span> {
+  <span class="kw">readonly</span> seq: <span class="ty">number</span>;       <span class="cm">// global FIFO order, from state.nextQueueSeq</span>
+  <span class="kw">readonly</span> buildingId: <span class="ty">string</span>;
+  <span class="kw">readonly</span> kind: <span class="ty">'upgrade'</span>;   <span class="cm">// only upgrades stack today; future-proofed as a union</span>
+}</pre>
+
+        <p class="body">
+          <code>PlacedBuilding</code>: <strong>no field added or removed.</strong> <code>floorLevel</code>
+          keeps its current "pre-bumped to the running upgrade's target" meaning. The queued jobs do
+          <strong>not</strong> touch <code>floorLevel</code> — it only advances when a job promotes to running.
+        </p>
+      </div>
+
+      <div class="subsec" id="s2-2">
+        <h3>2.2 The "effective top floor" of a building</h3>
+        <p class="body">For cost and display we need the highest floor a building is heading toward, counting the running upgrade (if any) and all queued upgrades:</p>
+        <pre class="formula"><b>topLevel(b, state) = rawFloorLevel(b) + countQueuedUpgrades(state, b.id)</b>
+
+  rawFloorLevel(b)     = floorLevel pre-bumped for the running upgrade (already today's value)
+  countQueuedUpgrades  = number of buildJobs entries with buildingId === b.id
+
+  Next upgrade target (displayed floor) = topLevel + 2
+    (+1 for the new raw level, +1 because displayed = raw + 1)</pre>
+      </div>
+    </section>
+
+    <!-- §3 -->
+    <section id="s3">
+      <div class="sec-head"><span class="num">03</span><h2>Behaviour</h2></div>
+
+      <div class="subsec" id="s3-1">
+        <h3>3.1 <code>applyUpgrade</code> (placement.ts)</h3>
+        <p class="body">Replace the hard reject with a branch:</p>
+        <ul class="blist">
+          <li>Resolve <code>def</code>, compute <code>targetDisplayed = topLevel(b, state) + 2</code> and <code>cost = upgradeCost(def, targetDisplayed)</code>.</li>
+          <li>Affordability check (as today).</li>
+          <li><strong>Slot decision.</strong> If the building has <strong>no running construction</strong> AND a parallel slot is free → start it running now (today's path: bump <code>floorLevel</code>, set <code>constructionRemainingMs</code>/<code>constructionTotalMs</code>). Otherwise it must <strong>queue</strong>: check <code>queuedBuildCount(state) &lt; queuedBuildSlots(state)</code>; if full, return <code>'queue-full'</code>. Append a <code>BuildJob {seq, buildingId, kind}</code>, <code>state.nextQueueSeq++</code>.</li>
+          <li>Deduct cost, return <code>{ ok: true }</code>.</li>
+        </ul>
+        <p class="body">The <code>'already-building'</code> reason is <strong>removed</strong> (no longer reachable).</p>
+      </div>
+
+      <div class="subsec" id="s3-2">
+        <h3>3.2 Slot / queue accounting (placement.ts)</h3>
+        <ul class="blist">
+          <li><strong><code>inProgressBuildCount</code></strong> — unchanged (buildings with a running timer).</li>
+          <li><strong><code>queuedBuildCount</code></strong> = (buildings with <code>queued === true</code>) <strong>+ <code>buildJobs.length</code></strong>.</li>
+          <li><strong><code>queuedBuildSlots</code></strong> — unchanged cap; now bounds the combined total.</li>
+          <li><code>parallelBuildSlots</code> / <code>queuedBuildSlots</code> formulas unchanged.</li>
+        </ul>
+      </div>
+
+      <div class="subsec" id="s3-3">
+        <h3>3.3 Promotion (<code>promoteQueuedBuilds</code>, placement.ts)</h3>
+        <p class="body">
+          Promotion fills free running slots from the merged FIFO of <strong>queued placements</strong>
+          (building flags) and <strong>queued upgrade jobs</strong> (<code>buildJobs</code>), ordered by
+          <code>seq</code>, with one rule: <strong>never start an upgrade on a building that already has
+          a running construction</strong> (serialise per building).
+        </p>
+        <p class="body">For each free slot, take the lowest-<code>seq</code> eligible item:</p>
+        <ul class="blist">
+          <li><strong>Queued placement</strong> → clear <code>queued</code> (today's behaviour; its <code>constructionRemainingMs</code> was already set at enqueue).</li>
+          <li><strong>Queued upgrade job</strong> → "start" it: bump the building's <code>floorLevel</code> by 1, set <code>constructionRemainingMs</code>/<code>constructionTotalMs = upgradeConstructionMs(def, newFloorLevel)</code>, and <strong>remove the job</strong> from <code>buildJobs</code>. (The building now carries the running upgrade exactly as a fresh <code>applyUpgrade</code> start would.)</li>
+        </ul>
+        <p class="body">
+          A building with N queued upgrades thus processes them one at a time, each taking a slot when it
+          reaches the FIFO head and the building is free — they compete fairly with other islands' queued
+          work, and never run two-at-once on the same building.
+        </p>
+      </div>
+
+      <div class="subsec" id="s3-4">
+        <h3>3.4 Construction completion (<code>economy.ts advanceIsland</code>)</h3>
+        <p class="body">
+          Unchanged tick/complete logic. After the existing <code>tickConstruction</code> + storage-cap
+          credit, <code>promoteQueuedBuilds(state)</code> already runs each segment — it now also promotes
+          queued upgrade jobs, so a building's next stacked upgrade starts within the same
+          advance/offline-catchup call. The storage-cap completion branch still keys on
+          <code>floorLevel === 0 ? base : delta</code>, which remains correct (a completing upgrade has
+          <code>floorLevel ≥ 1</code>).
+        </p>
+      </div>
+
+      <div class="subsec" id="s3-5">
+        <h3>3.5 Producing-while-queued</h3>
+        <p class="body">
+          A queued upgrade does <strong>not</strong> set <code>constructionRemainingMs</code>, so
+          <code>isOperationalBuilding</code> returns <code>true</code> and the building keeps producing
+          at its completed floor until the job promotes to running — matching the approved "keep queued
+          ones working" decision. (Today's behaviour froze even a queued upgrade; this is the deliberate
+          improvement.) A <strong>running</strong> upgrade still takes the building offline, unchanged.
+        </p>
+        <div class="note">
+          <strong>Note:</strong> this only changes upgrades. Queued <strong>placements</strong> stay
+          non-operational (<code>constructionRemainingMs &gt; 0</code>) — an unbuilt shell has nothing to produce.
+        </div>
+      </div>
+
+      <div class="subsec" id="s3-6">
+        <h3>3.6 Cancel (<code>cancelConstruction</code>, build-queue-ui.ts)</h3>
+        <p class="body">
+          Floors must stay contiguous — you cannot cancel the floor-2 upgrade while a floor-3 upgrade
+          is queued behind it. So cancel is <strong>LIFO per building</strong>:
+        </p>
+        <ul class="blist">
+          <li><strong>Cancel a queued upgrade:</strong> remove the <strong>highest-<code>seq</code></strong> <code>buildJob</code> for that building, refund its <code>upgradeCost</code> (clamped to caps, as today). The build-queue panel's per-row ✕ targets a specific queued job (row keyed by <code>seq</code>); cancelling any row for a building removes its newest queued upgrade first.</li>
+          <li><strong>Cancel the running job:</strong> allowed only when the building has <strong>no queued upgrade jobs</strong> remaining (otherwise the ✕ on the running row is disabled / a no-op while queued upgrades exist). Running-cancel behaviour itself is unchanged (revert <code>floorLevel-1</code> for an upgrade, or splice for a placement).</li>
+        </ul>
+        <p class="body">
+          <code>cancelConstruction</code> gains a path: if <code>buildingId</code> has queued upgrade jobs,
+          cancel the newest job (refund) instead of touching the running timer.
+        </p>
+      </div>
+
+      <div class="subsec" id="s3-7">
+        <h3>3.7 UI</h3>
+        <ul class="blist">
+          <li><strong>Build-queue panel</strong> (<code>build-queue-ui.ts</code>): the queued section renders <strong>one row per queued upgrade job</strong> (keyed by <code>seq</code>), labelled e.g. <code>Mine → floor N</code>, each with its own ✕. Running section unchanged. Row cache re-keys on <code>seq</code> rather than building id.</li>
+          <li><strong>Inspector upgrade button</strong> (<code>inspector-ui.ts</code>): no longer disabled while the building is constructing; enabled whenever another upgrade can be queued (queue has room and affordable). Label/subtext shows queued count (e.g. <code>Upgrade (2 queued)</code>). Cost shown is for the next target floor (<code>topLevel + 2</code>).</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- §4 -->
+    <section id="s4">
+      <div class="sec-head"><span class="num">04</span><h2>SPEC.md changes (Part 1)</h2></div>
+      <div class="changes">
+        <div class="change">
+          <div class="file">SPEC.md §4.8</div>
+          <div class="what"><span class="lead">Build queue / cancel.</span> Describe stacked upgrades: queued upgrades live in <code>state.buildJobs</code>, occupy queue slots, keep the building operational until promoted, promote by global FIFO with per-building serialisation, and cancel LIFO per building.</div>
+        </div>
+        <div class="change">
+          <div class="file">SPEC.md §9.3</div>
+          <div class="what"><span class="lead">Construction.</span> Note that <code>floorLevel</code> advances only when an upgrade <em>starts running</em>; queued upgrades are pending jobs that have paid their cost.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- §5 -->
+    <section id="s5">
+      <div class="sec-head"><span class="num">05</span><h2>Persistence (v23 → v24, Part 1)</h2></div>
+      <div class="changes">
+        <div class="change">
+          <div class="file">src/persistence.ts</div>
+          <div class="what"><span class="lead">Add <code>SerializedSnapshotV23</code> alias.</span> Capturing the pre-<code>buildJobs</code> per-island state shape — precise input type for the migration.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/persistence.ts</div>
+          <div class="what"><span class="lead">Add <code>migrateV23toV24</code>.</span> Per island state, default <code>buildJobs: []</code> (no existing save has stacked upgrades; running/queued state is already represented on buildings, so nothing else moves).</div>
+        </div>
+        <div class="change">
+          <div class="file">src/persistence.ts</div>
+          <div class="what"><span class="lead">Wire into <code>loadWorld</code>; add <code>24</code> to <code>SUPPORTED_LOAD_VERSIONS</code>; serialise <code>buildJobs</code> in <code>toSnapshot</code>.</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- §6 -->
+    <section id="s6">
+      <div class="sec-head"><span class="num">06</span><h2>Test plan (TDD)</h2></div>
+      <p class="sec-intro">Pure-layer first (no DOM). Six test groups.</p>
+      <div class="checklist">
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>placement.test.ts — applyUpgrade stacking.</strong> <code>applyUpgrade</code> while running queues a job (was <code>'already-building'</code>); a second/third stack; cost charged per ascending target floor; <code>queue-full</code> when combined queue is full; affordability gating.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>placement.test.ts — promoteQueuedBuilds.</strong> Starts a building's queued upgrade only after its running job frees, never two-at-once on one building; merged FIFO with a queued placement orders by <code>seq</code>.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>economy.test.ts — 3-deep stack.</strong> <code>advanceIsland</code> runs a 3-deep upgrade stack to completion sequentially; <code>floorLevel</code> lands at the final level; building keeps <strong>producing while upgrades are merely queued</strong> and goes offline only while one is running; storage caps credited once per completed floor.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>placement.test.ts — cancel LIFO.</strong> Cancelling removes the newest queued upgrade and refunds its cost; running-cancel blocked while queued upgrades remain.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>persistence.test.ts — v23 → v24 migration.</strong> v23 fixture loads into v24 with <code>buildJobs: []</code>; v24 round-trips identity; a v24 snapshot with non-empty <code>buildJobs</code> round-trips.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Circular-deps / full suite.</strong> <code>npm run build &amp;&amp; npx vitest run</code> — stays green.</div></div>
+      </div>
+    </section>
+
+    <!-- §7 -->
+    <section id="s7">
+      <div class="sec-head"><span class="num">07</span><h2>Out of scope (Part 1)</h2></div>
+      <div class="deferred">
+        <div class="defer">
+          <div class="dt">Unifying placements into <code>buildJobs</code></div>
+          <div class="dd">Placements don't stack; left on building flags to minimise regression risk on a green master.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Producing at the completed level during a running upgrade</div>
+          <div class="dd">The approved decision keeps running-upgrade downtime as-is.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Parallel upgrades of the same building</div>
+          <div class="dd">Inherently sequential by floor.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- §8 -->
+    <section id="s8">
+      <div class="sec-head"><span class="num">08</span><h2>Risk / staging</h2></div>
+      <p class="sec-intro">Master stays green and linear (CONTRIBUTING). Stage on a feature branch.</p>
+      <table class="tbl">
+        <thead><tr><th>Stage</th><th>Work</th><th>Gate</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">a</td><td>Data model + persistence migration</td><td>Compiles + tests green</td></tr>
+          <tr><td class="slate">b</td><td><code>applyUpgrade</code> + accounting + promotion + TDD</td><td>Compiles + tests green</td></tr>
+          <tr><td class="slate">c</td><td>Cancel LIFO</td><td>Compiles + tests green</td></tr>
+          <tr><td class="slate">d</td><td>UI (build-queue-ui.ts, inspector-ui.ts)</td><td>Compiles + tests green</td></tr>
+          <tr><td class="slate">e</td><td>SPEC.md update</td><td>Compiles + tests green</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- §9 -->
+    <section id="s9">
+      <div class="sec-head"><span class="num">09</span><h2>Folded-in fix — upgrades honor construction speed (Swarm Assembly)</h2></div>
+      <p class="body">
+        Today <code>upgradeConstructionMs(def, level)</code> is raw <code>base × (level+1)</code> and
+        <strong>ignores</strong> <code>skillMul.constructionTime</code> (the Robotics <strong>Swarm Assembly</strong>
+        <code>constructionTimeMul</code>), while fresh placements honor it via
+        <code>constructionTimeFor(def, skillMul.constructionTime)</code>.
+      </p>
+      <p class="body">
+        <strong>Approved:</strong> make upgrades honor it too — <code>upgradeConstructionMs(def, level, constructionTimeMul=1)</code>
+        divides the raw duration by the multiplier exactly like a placement. Threaded at the two upgrade-start
+        sites (<code>applyUpgrade</code>, <code>promoteQueuedBuilds</code>), both of which have
+        <code>state</code> → <code>effectiveSkillMultipliers(state).constructionTime</code>. SPEC §9.3 updated.
+      </p>
+    </section>
+
+    <!-- ===================== PART 2 ===================== -->
+    <div class="part-divider" id="part2">
+      <span class="part-badge">Part 2</span>
+      <h2>Temporary floor disabling</h2>
+      <hr>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision (approved)</div>
+      <div class="d-head">Replace the binary Disable button with a free, instantly reversible active-floor count in [0, built] that scales throughput / power / capacity / cluster contribution proportionally.</div>
+      <div class="d-body">
+        <code>0</code> active floors is the full "disabled" state — the building drops out of
+        production / power / gates / wear / cluster / routes, exactly like today's disable.
+        The existing <code>isOperationalBuilding</code> and <code>participatesInCluster</code>
+        predicates absorb the new gating, so every downstream system follows automatically.
+      </div>
+      <div class="d-body">
+        Toggling is <em>always free and instant</em>. Reducing active floors below the inventory's
+        storage caps clamps (discards) excess — no refunds for the discarded resources.
+      </div>
+    </div>
+
+    <!-- §10 -->
+    <section id="s10">
+      <div class="sec-head"><span class="num">10</span><h2>Data model</h2></div>
+      <p class="body">
+        <code>PlacedBuilding</code>: <strong>remove</strong> <code>disabled?: boolean</code>; <strong>add</strong>:
+      </p>
+      <pre class="codeblock"><span class="cm">/** §NEW temporary floor-disable: how many of the building's BUILT floors are
+ *  currently switched off, counted from the top. 0 (or absent) = all built
+ *  floors active (full effect). Equal to the built floor count
+ *  (displayedFloorLevel) = fully disabled (the old `disabled === true`).
+ *  Free + instantly reversible; no cost. Scales throughput / power / storage
+ *  capacity / cluster contribution by the ACTIVE floor count. */</span>
+disabledFloors?: <span class="ty">number</span>;</pre>
+
+      <p class="body">Helpers in <code>buildings.ts</code>:</p>
+      <pre class="codeblock"><span class="cm">/** Displayed count of ACTIVE floors ∈ [0, displayedFloorLevel]. */</span>
+<span class="kw">export function</span> <span class="ty">activeFloors</span>(b: { floorLevel?: <span class="ty">number</span>; disabledFloors?: <span class="ty">number</span> }): <span class="ty">number</span> {
+  <span class="kw">return</span> Math.max(0, displayedFloorLevel(b) - (b.disabledFloors ?? 0));
+}
+
+<span class="cm">/** 0-based effective floor level for the floor-effect multipliers, i.e.
+ *  activeFloors − 1. For an operational building (activeFloors ≥ 1) this is in
+ *  [0, floorLevel]; for a fully-disabled building it is −1 (never read — the
+ *  building is non-operational). */</span>
+<span class="kw">export function</span> <span class="ty">activeFloorLevel</span>(b: { floorLevel?: <span class="ty">number</span>; disabledFloors?: <span class="ty">number</span> }): <span class="ty">number</span> {
+  <span class="kw">return</span> activeFloors(b) - 1;
+}</pre>
+    </section>
+
+    <!-- §11 -->
+    <section id="s11">
+      <div class="sec-head"><span class="num">11</span><h2>Operational / cluster gating</h2></div>
+      <p class="body">
+        <code>activeFloors === 0</code> <strong>is</strong> the disabled state — the two existing
+        predicates absorb it and every downstream system (power, production, gates, wear, drones,
+        routes, cluster) follows automatically:
+      </p>
+      <div class="changes">
+        <div class="change">
+          <div class="file">src/economy.ts</div>
+          <div class="what"><span class="lead"><code>isOperationalBuilding(b)</code></span> — replace <code>b.disabled === true</code> → off with <code>activeFloors(b) &lt;= 0</code>. Param type gains <code>floorLevel?</code> + <code>disabledFloors?</code>.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/adjacency.ts</div>
+          <div class="what"><span class="lead"><code>participatesInCluster(b)</code></span> — replace <code>b.disabled !== true</code> with <code>activeFloors(b) &gt; 0</code>. Param type gains the same fields.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- §12 -->
+    <section id="s12">
+      <div class="sec-head"><span class="num">12</span><h2>Effect scaling</h2></div>
+      <p class="sec-intro">Everywhere throughput / power scales by <code>floorLevel(b)</code>, use <code>activeFloorLevel(b)</code> instead — only reached for operational buildings (active ≥ 1), so the 0-based level is ≥ 0.</p>
+      <div class="changes">
+        <div class="change">
+          <div class="file">src/economy.ts ~1306, ~1425, ~1459</div>
+          <div class="what"><span class="lead">Throughput rates.</span> <code>floorEffectMul(floorLevel(b))</code> → <code>floorEffectMul(activeFloorLevel(b))</code>.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/economy.ts ~1719</div>
+          <div class="what"><span class="lead">Power output.</span> Same substitution.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/economy.ts ~1723, ~1736</div>
+          <div class="what"><span class="lead">Power draw.</span> <code>floorPowerDrawMul</code> site — same substitution.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/buildings.ts</div>
+          <div class="what"><span class="lead"><code>floorScaledCapacity(b, cap)</code></span> — use <code>activeFloorLevel(b)</code>. At construction completion a building is full-active, so the completion credit is unchanged; demolish/relocate/cap-adjust all read the building's current contribution.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/adjacency.ts — <code>clusterFloorCapacity</code></div>
+          <div class="what"><span class="lead">§4.5/#35 cluster capacity (approved: active floors).</span> <code>clusterFloorCapacity</code> already returns 0 for a non-participant. For a participant, change the operational capacity from <code>1 + floorLevel</code> to <code>1 + activeFloorLevel</code> = <code>activeFloors</code> (the under-construction discount still applies on top: a running upgrade contributes its completed-active level).</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- §13 -->
+    <section id="s13">
+      <div class="sec-head"><span class="num">13</span><h2>Toggling — <code>setBuildingActiveFloors</code> (placement.ts, pure)</h2></div>
+      <pre class="formula"><b>setBuildingActiveFloors(spec, state, buildingId, newDisabledFloors)</b>
+  → { ok, clampedInventory? }</pre>
+      <ul class="blist">
+        <li>Resolve building + def; clamp <code>newDisabledFloors</code> to <code>[0, displayedFloorLevel(b)]</code>.</li>
+        <li><strong>Storage cap adjust</strong> (storage defs only): <code>deltaMult = storage.capacity × (floorEffectMul(newActiveLevel) − floorEffectMul(oldActiveLevel))</code>; <code>creditStorageCaps(state, b, def, deltaMult)</code> (negative shrinks).</li>
+        <li><strong>Clamp overflow</strong> (approved): for each affected resource, if <code>inventory[r] &gt; storageCaps[r]</code>, set <code>inventory[r] = storageCaps[r]</code> (discard the excess).</li>
+        <li>Set <code>b.disabledFloors = newDisabledFloors</code> (delete the field when 0 to keep saves clean).</li>
+      </ul>
+      <div class="note">
+        <strong>Route drain stays in the render/main layer</strong> (pure layer can't reach <code>WorldState</code>):
+        the <code>main.ts</code> action handler calls <code>setBuildingActiveFloors</code>, then — if the toggle
+        <strong>crossed from active ≥ 1 to active 0</strong> — calls <code>drainRoutesForBuilding(worldState, id)</code>
+        (the existing one-way drain, mirroring <code>main.ts:1402</code>). Toggling among ≥ 1 active floors never drains.
+      </div>
+    </section>
+
+    <!-- §14 -->
+    <section id="s14">
+      <div class="sec-head"><span class="num">14</span><h2>Maintenance / wear / alerts</h2></div>
+      <div class="changes">
+        <div class="change">
+          <div class="file">src/maintenance.ts ~269</div>
+          <div class="what"><span class="lead">Skip non-operational.</span> Already skips non-operational buildings via the disabled/invalid checks — rewire to <code>activeFloors(b) &lt;= 0</code>. A partially-disabled building still wears, scaled by its utilization (which already tracks throughput).</div>
+        </div>
+        <div class="change">
+          <div class="file">src/economy.ts ~2450</div>
+          <div class="what"><span class="lead">Wear skip in <code>advanceIsland</code>.</span> Same rewire: <code>activeFloors(b) &lt;= 0</code>.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/building-alerts-overlay.ts ~164</div>
+          <div class="what"><span class="lead">Disabled dim cue.</span> Replace <code>b.disabled === true</code> dim cue with <code>activeFloors(b) &lt; displayedFloorLevel(b)</code> (partial dim) / full dim at <code>activeFloors(b) === 0</code>.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- §15 -->
+    <section id="s15">
+      <div class="sec-head"><span class="num">15</span><h2>UI</h2></div>
+      <div class="changes">
+        <div class="change">
+          <div class="file">src/inspector-ui.ts ~1670–1690</div>
+          <div class="what"><span class="lead">Replace Disable button with active-floor steppers.</span> −/＋ within <code>[0, built]</code> plus quick <strong>Off</strong> (active 0) / <strong>Max</strong> (active = built). Show <code>active/built floors</code>. All paths dispatch through the input registry (AGENTS.md "every button through the registry"). Cost line stays free/instant.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/main.ts ~1308, ~1328–1337, ~1400–1402</div>
+          <div class="what"><span class="lead">Replace disable-toggle actions with set-active-floors actions.</span> Keep the cross-to-0 route drain.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- §16 -->
+    <section id="s16">
+      <div class="sec-head"><span class="num">16</span><h2>Persistence (shared v23 → v24)</h2></div>
+      <p class="body">
+        The <strong>same</strong> v23 → v24 migration handles both Part 1 and Part 2:
+      </p>
+      <ul class="blist">
+        <li>Per island state: default <code>buildJobs: []</code>.</li>
+        <li>Per building: <code>disabled === true</code> → <code>disabledFloors = displayedFloorLevel(b)</code> (all built floors off), then drop the <code>disabled</code> field; <code>disabled</code> falsy → no <code>disabledFloors</code>.</li>
+      </ul>
+      <div class="checklist" style="margin-top:16px">
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>v23 building with <code>disabled:true</code></strong> migrates to <code>disabledFloors === builtCount</code>.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>v24 round-trip identity.</strong> Snapshot in / snapshot out — field-for-field match.</div></div>
+      </div>
+    </section>
+
+    <!-- §17 -->
+    <section id="s17">
+      <div class="sec-head"><span class="num">17</span><h2>SPEC.md (Part 2)</h2></div>
+      <div class="changes">
+        <div class="change">
+          <div class="file">SPEC.md §NEW / §4.x</div>
+          <div class="what"><span class="lead">Rewrite building-disable section.</span> (The doc currently describing the binary disable, per <code>docs/superpowers/specs/2026-05-23-building-disable-design.md</code>) — rewrite to the active-floor model: free reversible <code>[0, built]</code>, scales throughput/power/capacity/cluster by active floors, <code>0</code> = fully off (old disable, incl. one-way route drain on reaching 0), capacity lower clamps overflow.</div>
+        </div>
+        <div class="change">
+          <div class="file">SPEC.md §4.5/#35</div>
+          <div class="what"><span class="lead">Cluster capacity note.</span> Cluster capacity uses ACTIVE floors.</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- §18 -->
+    <section id="s18">
+      <div class="sec-head"><span class="num">18</span><h2>Out of scope (Part 2)</h2></div>
+      <div class="deferred">
+        <div class="defer">
+          <div class="dt">Per-floor selection (which specific floors)</div>
+          <div class="dd">Floors disable from the top as a single count — no cherry-picking individual floor indices.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Scheduling / automation of floor toggles</div>
+          <div class="dd">Out of scope. Always a manual, instant, free action.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Refunding inventory on floor disable</div>
+          <div class="dd">Explicitly out of scope — toggling is always free. Excess inventory above the new lower cap is discarded (approved).</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <p>Design spec · 2026-06-13 · Robot Islands · Building refactor (Part 1: stacked upgrade queue #31; Part 2: floor disabling) · schema v23 → v24 · paired with 2026-06-13-stacked-upgrade-queue-design.md</p>
+    </div>
+
+  </div>
+</body>
+</html>
