@@ -24,7 +24,7 @@
 // button when the active island has an operational Reality Forge.
 
 import type { BuildingDef } from './building-defs.js';
-import type { PlacedBuilding } from './buildings.js';
+import { activeFloors, type PlacedBuilding } from './buildings.js';
 import { affordabilityShortfall } from './placement.js';
 import type { ResourceId } from './recipes.js';
 import type { Tier } from './skilltree.js';
@@ -266,7 +266,7 @@ export function pickMostDegradedTarget(
     // (the caller services exactly one target per check, no fall-through).
     // Disabled buildings also freeze operatingMs accrual, so they can sit
     // degraded indefinitely. Skip both.
-    if (b.disabled === true || b.invalid === true) continue;
+    if (b.disabled === true || activeFloors(b) <= 0 || b.invalid === true) continue;
     const def = defs[b.defId];
     if (!def) continue;
     const f = maintenanceFactor(b, def, thresholdMul);

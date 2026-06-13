@@ -30,7 +30,7 @@ import {
   footprintTiles,
 } from './shape-mask.js';
 export { rotateShape, type ShapeMask };
-import { floorScaledCapacity, hasOperationalBuilding, rawFloorLevel, type PlacedBuilding } from './buildings.js';
+import { displayedFloorLevel, floorEffectMul, floorScaledCapacity, hasOperationalBuilding, rawFloorLevel, type PlacedBuilding } from './buildings.js';
 import { constructionTimeFor, upgradeConstructionMs } from './construction.js';
 import type { BuildJob, IslandState } from './economy.js';
 import { islandInscribedAny } from './island.js';
@@ -442,20 +442,73 @@ export function creditStorageCaps(
   def: BuildingDef,
   mult: number,
 ): void {
+  if (!def.storage) return;
+  for (const r of storageCapResources(building, def)) {
+    state.storageCaps[r] = (state.storageCaps[r] ?? 0) + mult * storageBaseFor(r);
+  }
+}
+
+/** The exact resource set whose `storageCaps` a storage building writes:
+ *  a generic-category building affects ONLY its `cargoLabel` resource; a
+ *  specialized-category building affects every resource whose
+ *  `RESOURCE_STORAGE_CATEGORY` matches `def.storage.category`. Empty for a
+ *  non-storage def, or a generic building with no label. Shared by
+ *  `creditStorageCaps` and `setBuildingActiveFloors`'s overflow-clamp loop so
+ *  the credit and the clamp can never diverge on which resources they touch. */
+export function storageCapResources(
+  building: PlacedBuilding,
+  def: BuildingDef,
+): ReadonlyArray<ResourceId> {
   const storage = def.storage;
-  if (!storage) return;
+  if (!storage) return [];
   if (storage.category === 'generic') {
     const label = building.cargoLabel;
-    if (label !== undefined) {
-      state.storageCaps[label] = (state.storageCaps[label] ?? 0) + mult * storageBaseFor(label);
-    }
-  } else {
-    for (const r of ALL_RESOURCES as ReadonlyArray<ResourceId>) {
-      if (RESOURCE_STORAGE_CATEGORY[r] === storage.category) {
-        state.storageCaps[r] = (state.storageCaps[r] ?? 0) + mult * storageBaseFor(r);
-      }
+    return label !== undefined ? [label] : [];
+  }
+  return (ALL_RESOURCES as ReadonlyArray<ResourceId>).filter(
+    (r) => RESOURCE_STORAGE_CATEGORY[r] === storage.category,
+  );
+}
+
+export interface SetActiveFloorsResult { readonly ok: boolean; readonly reason?: 'not-found'; }
+
+/** §NEW floor-disable: set how many of a building's BUILT floors are switched
+ *  off (counted from the top; 0 = full effect, displayedFloorLevel = fully
+ *  disabled). Adjusts the building's `storageCaps` contribution by the floor-
+ *  effect delta and discards any inventory above the lowered cap. Free +
+ *  instantly reversible. Pure mutation on `state` and the target building.
+ *  Returns `{ ok: false, reason: 'not-found' }` when no building matches. */
+export function setBuildingActiveFloors(
+  spec: IslandSpec,
+  state: IslandState,
+  buildingId: string,
+  newDisabledFloors: number,
+): SetActiveFloorsResult {
+  const b = spec.buildings.find((bb) => bb.id === buildingId);
+  if (!b) return { ok: false, reason: 'not-found' };
+  const def = BUILDING_DEFS[b.defId];
+  const built = displayedFloorLevel(b);
+  const next = Math.max(0, Math.min(built, Math.round(newDisabledFloors)));
+  const prev = b.disabledFloors ?? 0;
+  if (next === prev) return { ok: true };
+
+  const storage = def.storage;
+  if (storage) {
+    const oldActiveLevel = Math.max(0, built - prev) - 1; // −1 when fully off
+    const newActiveLevel = Math.max(0, built - next) - 1;
+    const oldMult = oldActiveLevel >= 0 ? storage.capacity * floorEffectMul(oldActiveLevel) : 0;
+    const newMult = newActiveLevel >= 0 ? storage.capacity * floorEffectMul(newActiveLevel) : 0;
+    const deltaMult = newMult - oldMult;
+    if (deltaMult !== 0) creditStorageCaps(state, b, def, deltaMult);
+    // Clamp overflow: discard inventory above the lowered cap, mirroring
+    // creditStorageCaps' resource selection exactly via storageCapResources.
+    for (const r of storageCapResources(b, def)) {
+      const cap = state.storageCaps[r] ?? 0;
+      if ((state.inventory[r] ?? 0) > cap) state.inventory[r] = cap;
     }
   }
+  if (next === 0) delete b.disabledFloors; else b.disabledFloors = next;
+  return { ok: true };
 }
 
 /** §4.6 relabel: move a generic-storage building's storage cap from one
