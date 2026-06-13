@@ -453,6 +453,20 @@ describe('computeRates', () => {
     expect(net.bolt).toBeCloseTo(0.00023255813953488373, 9);
   });
 
+  it('disabling floors scales throughput by active floor count (floor-disable)', () => {
+    // mine built to floor 3 (floorLevel 2 → ×3) with 2 floors disabled → active 1 → ×1 (base 0.05 iron_ore/s)
+    const mine: PlacedBuilding = { id: 'm', defId: 'mine', x: 0, y: 0, floorLevel: 2, disabledFloors: 2 };
+    const state = makeState({ buildings: [mine], inventory: blankInventory() });
+    const { byBuilding } = computeRates(state, { defs: POWER_FREE });
+    expect(byBuilding.find((r) => r.building === mine)?.effectiveRate).toBeCloseTo(0.05, 9);
+  });
+  it('fully disabling all floors stops production (floor-disable)', () => {
+    const mine: PlacedBuilding = { id: 'm', defId: 'mine', x: 0, y: 0, floorLevel: 2, disabledFloors: 3 };
+    const state = makeState({ buildings: [mine], inventory: blankInventory() });
+    const { byBuilding } = computeRates(state, { defs: POWER_FREE });
+    expect(byBuilding.some((r) => r.building === mine)).toBe(false); // non-operational
+  });
+
   it('recipeInput divisor reduces consumption but not production (magic lever)', () => {
     // Workshop: iron_ore:1 + coal:1 -> bolt:1 per 4300s cycle (0.000232.../s base).
     // Stock both inputs so inputAvail = 1 in BOTH runs — the divisor must show up
