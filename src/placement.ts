@@ -538,6 +538,21 @@ export function queuedBuildCount(state: IslandState): number {
   return n;
 }
 
+/** §4.8 number of QUEUED (not-yet-running) upgrade jobs for `buildingId`. */
+export function countQueuedUpgrades(state: IslandState, buildingId: string): number {
+  let n = 0;
+  for (const j of state.buildJobs ?? []) if (j.buildingId === buildingId) n++;
+  return n;
+}
+
+/** §4.8 the highest RAW floor level a building is heading toward: its current
+ *  rawFloorLevel (which already includes any running upgrade's pre-bumped
+ *  target) plus every queued upgrade for it. The next upgrade's target DISPLAYED
+ *  floor is `topUpgradeLevel + 2` (raw→raw+1, displayed = raw+1). */
+export function topUpgradeLevel(state: IslandState, b: { id: string; floorLevel?: number }): number {
+  return rawFloorLevel(b) + countQueuedUpgrades(state, b.id);
+}
+
 /** §queue mirror of `parallelBuildSlots`: base 2 + floor(queueCapBonus)
  *  + structural `parallelQueue` (+2 when owned). Holds a 1:2 ratio with
  *  running slots at empty and full skill tree. */
