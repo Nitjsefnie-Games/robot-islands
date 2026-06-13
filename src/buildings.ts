@@ -157,6 +157,13 @@ export interface PlacedBuilding {
    *  the existing `{...b}` spread at `persistence.ts:329`; no schema
    *  bump needed. */
   disabled?: boolean;
+  /** §NEW temporary floor-disable: how many of the building's BUILT floors are
+   *  switched off, counted from the top. 0 / absent = all built floors active
+   *  (full effect); equal to displayedFloorLevel = fully disabled (the old
+   *  `disabled === true`). Free + instantly reversible; scales throughput /
+   *  power / storage capacity / §4.5 cluster contribution by the ACTIVE floor
+   *  count (via the forthcoming `activeFloorLevel` helper). */
+  disabledFloors?: number;
 }
 
 /** Returns true iff at least one placed building of `defId` in `buildings`
