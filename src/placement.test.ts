@@ -1846,19 +1846,25 @@ describe('applyUpgrade', () => {
     if (!r.ok) expect(r.reason).toBe('not-found');
   });
 
-  it('rejects when the target building is itself already under construction', () => {
+  it('enqueues a build job when the target building is itself already under construction (#31)', () => {
+    // New stacking contract (#31): a busy building no longer hard-rejects — the
+    // upgrade queues as a BuildJob in state.buildJobs and the running build
+    // keeps ticking. The queued upgrade does NOT pre-bump the running build's
+    // floorLevel; that happens when it promotes to running.
     const spec = makeSpec();
     const state = makeState(spec);
     const b: PlacedBuilding = { id: 'b1', defId: 'mine', x: 0, y: 0, constructionRemainingMs: 5000 };
     spec.buildings.push(b);
     const r = applyUpgrade(spec, state, 'b1');
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.reason).toBe('already-building');
-    expect(b.floorLevel).toBeUndefined(); // no mutation
+    expect(r.ok).toBe(true);
+    expect(countQueuedUpgrades(state, 'b1')).toBe(1);
+    expect(b.floorLevel).toBeUndefined(); // running build's floor not pre-bumped by the queued job
   });
 
-  it('enqueues (ok:true, queued=true) when the running cap is taken but queue has room', () => {
-    // New contract (Task 6): running slots full + queue room → enqueue, not reject.
+  it('enqueues a BuildJob when the running cap is taken but queue has room (#31)', () => {
+    // Contract (#31): running slots full + queue room → enqueue as a BuildJob,
+    // not reject. The queued upgrade lives in state.buildJobs and does NOT
+    // pre-bump the target's floorLevel or set b.queued.
     const spec = makeSpec();
     const state = makeState(spec);
     // One OTHER building occupies the island's single (no-skill) build slot.
@@ -1867,10 +1873,11 @@ describe('applyUpgrade', () => {
     spec.buildings.push(target);
     const r = applyUpgrade(spec, state, 'b1');
     expect(r.ok).toBe(true);
-    // floorLevel is advanced immediately (queued upgrade holds its level advance).
-    expect(target.floorLevel).toBe(1);
-    // queued flag is set on the building.
-    expect(target.queued).toBe(true);
+    expect(countQueuedUpgrades(state, 'b1')).toBe(1);
+    // floorLevel NOT advanced for a queued upgrade.
+    expect(target.floorLevel).toBeUndefined();
+    // queued flag is NOT set on the building (the job, not the building, carries the queue state).
+    expect(target.queued).toBeUndefined();
   });
 
   it('rejects with queue-full when BOTH running slots AND queue are full', () => {
@@ -2029,6 +2036,103 @@ describe('applyUpgrade', () => {
     // Deducted twice.
     expect(state.inventory.stone).toBe(1000 - 160 * 2);
     expect(state.inventory.wood).toBe(1000 - 64 * 2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// applyUpgrade stacking (#31)
+// ---------------------------------------------------------------------------
+describe('applyUpgrade stacking (#31)', () => {
+  // A mine at floorLevel 8, idle, with generous inventory for several upgrades.
+  // Starting near floor 10 makes successive ascending targets cross the §4.9
+  // exponential curve so per-upgrade cost baskets differ.
+  function makeStackScene(floorLevel = 8): { spec: IslandSpec; state: IslandState; target: PlacedBuilding } {
+    const spec = makeSpec();
+    const state = makeState(spec);
+    const target: PlacedBuilding = { id: 'b1', defId: 'mine', x: 0, y: 0, floorLevel };
+    spec.buildings.push(target);
+    return { spec, state, target };
+  }
+
+  it('1) first upgrade on an idle building with a free slot starts RUNNING', () => {
+    const { spec, state, target } = makeStackScene();
+    const r = applyUpgrade(spec, state, 'b1');
+    expect(r.ok).toBe(true);
+    expect((target.constructionRemainingMs ?? 0)).toBeGreaterThan(0);
+    expect(target.floorLevel).toBe(9); // raw bumped by the running upgrade
+    expect(countQueuedUpgrades(state, 'b1')).toBe(0);
+  });
+
+  it('2) a second upgrade while running returns ok:true and queues one job', () => {
+    const { spec, state } = makeStackScene();
+    const r1 = applyUpgrade(spec, state, 'b1');
+    expect(r1.ok).toBe(true);
+    const r2 = applyUpgrade(spec, state, 'b1');
+    expect(r2.ok).toBe(true);
+    // Not the old already-building rejection.
+    expect((r2 as { reason?: string }).reason).toBeUndefined();
+    expect(countQueuedUpgrades(state, 'b1')).toBe(1);
+  });
+
+  it('3) a third upgrade stacks to two queued; per-building job seqs strictly increase', () => {
+    const { spec, state } = makeStackScene();
+    applyUpgrade(spec, state, 'b1'); // running
+    const r2 = applyUpgrade(spec, state, 'b1'); // queued #1
+    const r3 = applyUpgrade(spec, state, 'b1'); // queued #2
+    expect(r2.ok).toBe(true);
+    expect(r3.ok).toBe(true);
+    expect(countQueuedUpgrades(state, 'b1')).toBe(2);
+    const seqs = (state.buildJobs ?? []).filter((j) => j.buildingId === 'b1').map((j) => j.seq);
+    expect(seqs).toHaveLength(2);
+    expect(seqs[1]!).toBeGreaterThan(seqs[0]!);
+  });
+
+  it('4) each enqueue charges upgradeCost for its ascending displayed target', () => {
+    const { spec, state } = makeStackScene();
+    // Expected ascending displayed targets: running=10, queued1=11, queued2=12.
+    const c10 = upgradeCost(BUILDING_DEFS.mine, 10);
+    const c11 = upgradeCost(BUILDING_DEFS.mine, 11);
+    const c12 = upgradeCost(BUILDING_DEFS.mine, 12);
+    // Costs differ per ascending target (exponential past floor 10).
+    expect(c11.stone).not.toBe(c10.stone);
+    expect(c12.stone).not.toBe(c11.stone);
+
+    const stone0 = state.inventory.stone;
+    const wood0 = state.inventory.wood;
+    applyUpgrade(spec, state, 'b1'); // charges c10
+    applyUpgrade(spec, state, 'b1'); // charges c11
+    applyUpgrade(spec, state, 'b1'); // charges c12
+    const totalStone = (c10.stone ?? 0) + (c11.stone ?? 0) + (c12.stone ?? 0);
+    const totalWood = (c10.wood ?? 0) + (c11.wood ?? 0) + (c12.wood ?? 0);
+    expect(stone0 - state.inventory.stone).toBe(totalStone);
+    expect(wood0 - state.inventory.wood).toBe(totalWood);
+  });
+
+  it('5) returns queue-full once running + every queued slot is taken', () => {
+    const { spec, state } = makeStackScene();
+    applyUpgrade(spec, state, 'b1'); // running (1)
+    const qSlots = queuedBuildSlots(state);
+    for (let i = 0; i < qSlots; i++) {
+      const r = applyUpgrade(spec, state, 'b1');
+      expect(r.ok).toBe(true);
+    }
+    expect(countQueuedUpgrades(state, 'b1')).toBe(qSlots);
+    const overflow = applyUpgrade(spec, state, 'b1');
+    expect(overflow.ok).toBe(false);
+    if (!overflow.ok) expect(overflow.reason).toBe('queue-full');
+  });
+
+  it('6) returns insufficient-resources with a missing basket when inventory is short', () => {
+    const { spec, state } = makeStackScene(0);
+    state.inventory.stone = 0;
+    state.inventory.wood = 0;
+    const r = applyUpgrade(spec, state, 'b1');
+    expect(r.ok).toBe(false);
+    if (!r.ok && r.reason === 'insufficient-resources') {
+      expect(r.missing).toEqual({ stone: 160, wood: 64 });
+    } else {
+      throw new Error(`unexpected result: ${JSON.stringify(r)}`);
+    }
   });
 });
 
@@ -2248,7 +2352,7 @@ describe('enqueue when slots full', () => {
     }
   });
 
-  it('applyUpgrade returns ok:true with queued=true on the building when running slots full and queue has room', () => {
+  it('applyUpgrade enqueues a BuildJob (no floorLevel/queued mutation) when running slots full and queue has room (#31)', () => {
     const spec = makeSpec();
     const state = makeState(spec);
     state.inventory.stone = 10000;
@@ -2260,37 +2364,36 @@ describe('enqueue when slots full', () => {
     spec.buildings.push(target);
     const r = applyUpgrade(spec, state, 'b1');
     expect(r.ok).toBe(true);
-    // floorLevel was still incremented (queued upgrade holds its level advance).
-    expect(target.floorLevel).toBe(1);
-    // queued flag is set on the building.
-    expect(target.queued).toBe(true);
+    expect(countQueuedUpgrades(state, 'b1')).toBe(1);
+    // floorLevel NOT advanced for a queued upgrade.
+    expect(target.floorLevel).toBeUndefined();
+    // queued flag is NOT set on the building.
+    expect(target.queued).toBeUndefined();
   });
 
-  it('applyUpgrade rejects with already-building when the target is already queued (no stacking)', () => {
-    // Regression: a queued build has constructionRemainingMs > 0, so the
-    // already-building guard must block a SECOND applyUpgrade — otherwise it
-    // would stack floorLevel, re-grant storage, re-stamp queueSeq, and re-pay.
-    // (No promotion logic exists yet — Task 7 — so a queued build stays queued
-    // and is otherwise upgradeable repeatedly.)
+  it('applyUpgrade STACKS a second upgrade onto an already-running target instead of rejecting (#31)', () => {
+    // New stacking contract (#31): a building already under construction no
+    // longer hard-rejects a second upgrade — it queues. (Old behaviour was
+    // reason: 'already-building'.)
     const spec = makeSpec();
     const state = makeState(spec);
-    // A building that is already queued (queued upgrade in flight).
+    // A building that is already building (running upgrade in flight). Its
+    // floorLevel is pre-bumped to the running upgrade's target.
     const target: PlacedBuilding = {
       id: 'b1',
       defId: 'mine',
       x: 0,
       y: 0,
       floorLevel: 1,
-      queued: true,
       constructionRemainingMs: 5000,
-      queueSeq: 0,
+      constructionTotalMs: 5000,
     };
     spec.buildings.push(target);
     const floorBefore = target.floorLevel;
     const r = applyUpgrade(spec, state, 'b1');
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.reason).toBe('already-building');
-    // No mutation: floorLevel unchanged.
+    expect(r.ok).toBe(true);
+    expect(countQueuedUpgrades(state, 'b1')).toBe(1);
+    // The running build's floorLevel is NOT touched by the queued job.
     expect(target.floorLevel).toBe(floorBefore);
   });
 });

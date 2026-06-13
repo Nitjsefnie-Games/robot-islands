@@ -32,7 +32,7 @@ import {
 export { rotateShape, type ShapeMask };
 import { floorScaledCapacity, hasOperationalBuilding, rawFloorLevel, type PlacedBuilding } from './buildings.js';
 import { constructionTimeFor, upgradeConstructionMs } from './construction.js';
-import type { IslandState } from './economy.js';
+import type { BuildJob, IslandState } from './economy.js';
 import { islandInscribedAny } from './island.js';
 import { footprintMatches } from './ocean-cell.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
@@ -529,13 +529,14 @@ export function inProgressBuildCount(state: IslandState): number {
   return n;
 }
 
-/** Count of builds currently waiting in the queue. */
+/** Count of builds currently waiting in the queue: queued placements
+ *  (`b.queued === true`) PLUS queued upgrade jobs in `state.buildJobs`. */
 export function queuedBuildCount(state: IslandState): number {
   let n = 0;
   for (const b of state.buildings) {
     if (b.queued === true) n++;
   }
-  return n;
+  return n + (state.buildJobs?.length ?? 0);
 }
 
 /** §4.8 number of QUEUED (not-yet-running) upgrade jobs for `buildingId`. */
@@ -907,7 +908,6 @@ export type UpgradeResult =
       readonly ok: false;
       readonly reason:
         | 'not-found'
-        | 'already-building'
         | 'queue-full'
         | 'insufficient-resources';
       readonly missing?: Partial<Record<ResourceId, number>>;
@@ -938,19 +938,25 @@ export function applyUpgrade(
   const b = spec.buildings.find((bb) => bb.id === buildingId);
   if (!b) return { ok: false, reason: 'not-found' };
   const def = BUILDING_DEFS[b.defId];
-  const L = rawFloorLevel(b);
-  // An upgrade IS a construction job (§9.3): it can't stack on a building that
-  // is already building/upgrading, and it consumes a parallel-build slot just
-  // like a placement — mirror `placeBuilding`'s gate so upgrades can't bypass
-  // the concurrent-construction cap.
-  if ((b.constructionRemainingMs ?? 0) > 0) return { ok: false, reason: 'already-building' };
+
+  // An upgrade IS a construction job (§9.3) and consumes a parallel-build slot
+  // like a placement. Stacking is supported (#31): if the building is already
+  // building, OR every running slot is taken, the upgrade QUEUES as a BuildJob
+  // in `state.buildJobs` instead of hard-rejecting. The running construction
+  // stays on the building; the queued job carries the next upgrade.
+  const buildingBusy = (b.constructionRemainingMs ?? 0) > 0;
   const slots = parallelBuildSlots(state);
   const inProgress = inProgressBuildCount(state);
-  const mustQueue = inProgress >= slots;
+  const mustQueue = buildingBusy || inProgress >= slots;
+
   if (mustQueue && queuedBuildCount(state) >= queuedBuildSlots(state)) {
     return { ok: false, reason: 'queue-full', inProgress, slots };
   }
-  const targetLevel = L + 2; // displayed floor we are upgrading INTO
+
+  // The displayed target floor for THIS upgrade accounts for the building's
+  // raw floor (including any pre-bumped running upgrade) plus every already-
+  // queued upgrade, so successive enqueues charge ascending floor costs.
+  const targetLevel = topUpgradeLevel(state, b) + 2;
   const cost = upgradeCost(def, targetLevel);
   const missing = affordabilityShortfall(state.inventory, cost);
   if (Object.keys(missing).length > 0) {
@@ -960,23 +966,25 @@ export function applyUpgrade(
     if (n <= 0) continue;
     state.inventory[r] = (state.inventory[r] ?? 0) - n;
   }
-  const newL = L + 1;
+
+  if (mustQueue) {
+    const job: BuildJob = { seq: state.nextQueueSeq ?? 0, buildingId, kind: 'upgrade' };
+    (state.buildJobs ??= []).push(job);
+    state.nextQueueSeq = (state.nextQueueSeq ?? 0) + 1;
+    return { ok: true };
+  }
+
+  // Immediate-start path: pre-bump the raw floor to the running upgrade's
+  // target and arm the construction timer (folding in the Swarm Assembly
+  // `constructionTime` multiplier).
+  const newL = rawFloorLevel(b) + 1;
   b.floorLevel = newL;
-  const upgradeMs = upgradeConstructionMs(def, newL);
+  const upgradeMs = upgradeConstructionMs(def, newL, effectiveSkillMultipliers(state).constructionTime);
   b.constructionRemainingMs = upgradeMs;
   b.constructionTotalMs = upgradeMs;
-  // §storage-timing: the +storage.capacity cap delta is NO LONGER credited
-  // here. An upgrade IS a construction job; the cap delta is granted by the
-  // construction-completion hook in `advanceIsland` the tick the upgrade
-  // becomes operational. Because the building is then at floorLevel >= 1 the
-  // hook credits the flat `storage.capacity` delta (the per-level increment
-  // floorScaledCapacity(L) − floorScaledCapacity(L−1) = storage.capacity),
-  // matching production/power scaling which also waits for the timer.
-  if (mustQueue) {
-    b.queued = true;
-    b.queueSeq = state.nextQueueSeq ?? 0;
-    state.nextQueueSeq = (state.nextQueueSeq ?? 0) + 1;
-  }
+  // §storage-timing: the +storage.capacity cap delta is NOT credited here. An
+  // upgrade IS a construction job; the cap delta is granted by the construction-
+  // completion hook in `advanceIsland` the tick the upgrade becomes operational.
   return { ok: true };
 }
 
