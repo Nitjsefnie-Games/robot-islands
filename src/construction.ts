@@ -37,11 +37,19 @@ export function constructionTimeFor(def: BuildingDef, constructionTimeMul: numbe
 }
 
 /** Upgrade construction time for raising a building to `level` (the NEW level).
- *  Scales as base × (level + 1), so the L9 upgrade takes 10× base. Does NOT
- *  divide by Robotics constructionTimeMul — the brief pins raw base × (L+1). */
-export function upgradeConstructionMs(def: BuildingDef, level: number): number {
+ *  Scales as base × (level + 1), so the L9 upgrade takes 10× base, then divides
+ *  by the Robotics `constructionTimeMul` (Swarm Assembly) exactly like a fresh
+ *  placement (`constructionTimeFor`) — a non-positive multiplier means no
+ *  speedup. */
+export function upgradeConstructionMs(
+  def: BuildingDef,
+  level: number,
+  constructionTimeMul: number = 1,
+): number {
   const base = BASE_CONSTRUCTION_MS_BY_TIER[def.tier];
-  return base * (level + 1);
+  const raw = base * (level + 1);
+  if (constructionTimeMul <= 0) return raw;
+  return Math.round(raw / constructionTimeMul);
 }
 
 /** Completed fraction [0,1] of a building's in-progress construction job —
