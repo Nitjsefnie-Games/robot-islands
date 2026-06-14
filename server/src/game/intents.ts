@@ -26,14 +26,14 @@ import {
   applyUpgrade,
   setBuildingActiveFloors,
 } from '../../../src/placement.js';
-import { displayedFloorLevel } from '../../../src/buildings.js';
+import { displayedFloorLevel } from '../../../src/floor-levels.js';
 import { dispatchDrone } from '../../../src/drones.js';
 import {
   createRouteFromBuilding,
   routeProfileForBuilding,
   islandHasTeleporterPad,
 } from '../../../src/routes.js';
-import { buyNode, nodePurchaseStatus, DEFAULT_GRAPH } from '../../../src/skilltree.js';
+import { buyNode, nodePurchaseStatus, keystonePrereqFor, DEFAULT_GRAPH } from '../../../src/skilltree.js';
 import type { ResourceId } from '../../../src/recipes.js';
 import type { Rotation } from '../../../src/shape-mask.js';
 
@@ -254,13 +254,19 @@ export const INTENTS: Record<string, IntentHandler> = {
   // { fromIslandId, toIslandId, buildingId, filterResource? }. No cost.
   // `createRouteFromBuilding` returns null only when the building is not a
   // transport def, and does NOT append to world.routes — the caller must push.
-  // It TRUSTS its caller on island existence, building ownership, distinctness,
-  // and the teleporter→pad rule. Authoritative legality pre-check mirrors the
-  // routes-UI commission path: both island specs exist on server state, they're
-  // distinct, the building exists on the FROM island, it has a route profile,
-  // and a teleporter route requires a teleporter pad on the TO island. The
-  // server computes distance from authoritative island centres (never trusts a
-  // client distance), then pushes the route.
+  // It TRUSTS its caller on island existence, eligibility, building ownership,
+  // distinctness, and the teleporter→pad rule.
+  //
+  // ELIGIBILITY (anti-cheat): per §2.4 routes connect islands that the player
+  // has settled, and the routes-UI builds BOTH the FROM and TO dropdowns
+  // exclusively from `populatedIslands()` (`src/routes-ui.ts`). So both
+  // endpoints MUST be populated — a crafted intent must not be able to route
+  // to/from an unpopulated (unsettled) island. The authoritative pre-check
+  // therefore requires: both island specs exist on server state, both are
+  // populated, they're distinct, the building exists on the FROM island, it has
+  // a route profile, and a teleporter route requires a teleporter pad on the TO
+  // island. The server computes distance from authoritative island centres
+  // (never trusts a client distance), then pushes the route.
   'create-route': {
     apply(game: LiveGame, payload: unknown): IntentResult {
       if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
@@ -276,6 +282,10 @@ export const INTENTS: Record<string, IntentHandler> = {
       if (!fromSpec) return { ok: false, error: 'unknown from island' };
       const toSpec = game.world.islands.find((s) => s.id === toIslandId);
       if (!toSpec) return { ok: false, error: 'unknown to island' };
+      // §2.4 eligibility: both endpoints must be populated (settled). The
+      // routes-UI only ever offers populated islands; the server enforces it.
+      if (!fromSpec.populated) return { ok: false, error: 'from island is not populated' };
+      if (!toSpec.populated) return { ok: false, error: 'to island is not populated' };
       const building = fromSpec.buildings.find((b) => b.id === buildingId);
       if (!building) return { ok: false, error: 'building not on from island' };
       const profile = routeProfileForBuilding(building.defId);
@@ -299,13 +309,21 @@ export const INTENTS: Record<string, IntentHandler> = {
   // `buyNode` THROWS for an illegal target (insufficient SP, tier-locked,
   // unreachable, unknown) rather than returning a result, so the runner's
   // try/catch is the only backstop — but per the no-throw handler contract we
-  // pre-check with `nodePurchaseStatus` (the canonical single-source predicate
-  // buyNode's own acceptance mirrors) against authoritative state and reject
-  // anything that isn't 'purchasable' BEFORE calling buyNode. This validates
-  // unspentSkillPoints covers the path cost and the depth→tier gate, on server
-  // state. (A 'purchasable' keystone target routes through buyKeystone, not
-  // buyNode; we reject keystone purchases here since buyNode does not handle
-  // them — they are not in this intent's surface.)
+  // must NOT rely on it: we pre-check with `nodePurchaseStatus` (the canonical
+  // single-source predicate buyNode's own acceptance mirrors) against
+  // authoritative state and reject anything that isn't 'purchasable' BEFORE
+  // calling buyNode. This validates unspentSkillPoints covers the path cost and
+  // the depth→tier gate, on server state.
+  //
+  // KEYSTONE EXCLUSION: a keystone is identified by `keystonePrereqFor(nodeId)`
+  // returning a prereq spec (non-keystones return undefined). Keystones are
+  // purchased only via `buyKeystone` (AND-prereqs + flat SP cost) — NOT via
+  // `buyNode`, which has no keystone branch and would THROW 'unreachable' for
+  // one (keystone targets are excluded from pathing adjacency). Worse,
+  // `nodePurchaseStatus` reports a keystone with met prereqs + enough SP as
+  // 'purchasable', so the status check alone would forward it into buyNode's
+  // throw. We therefore reject keystone targets explicitly BEFORE the status
+  // check so no keystone ever reaches buyNode.
   'unlock-skill-node': {
     apply(game: LiveGame, payload: unknown): IntentResult {
       if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
@@ -315,9 +333,15 @@ export const INTENTS: Record<string, IntentHandler> = {
       const island = resolveIsland(game, islandId);
       if (!island) return { ok: false, error: 'unknown island' };
       const { state } = island;
+      // Anti-cheat: keystones are not in this intent's surface — buyNode throws
+      // for them and the no-throw contract forbids leaning on the runner's
+      // try/catch. Reject before any buyNode path can be reached.
+      if (keystonePrereqFor(nodeId) !== undefined) {
+        return { ok: false, error: 'keystone not purchasable via this intent' };
+      }
       // Authoritative purchasability pre-check (anti-cheat): SP sufficiency +
       // depth→tier gate + reachability, all recomputed from server state. Only
-      // a 'purchasable' status (and not the keystone branch) proceeds.
+      // a 'purchasable' status proceeds.
       const status = nodePurchaseStatus(DEFAULT_GRAPH, state, nodeId);
       if (status !== 'purchasable') return { ok: false, error: status };
       buyNode(DEFAULT_GRAPH, state, nodeId);
