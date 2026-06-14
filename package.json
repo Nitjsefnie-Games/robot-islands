@@ -2,6 +2,7 @@
   "name": "robot-islands",
   "version": "0.1.0",
   "private": true,
+  "workspaces": ["server"],
   "type": "module",
   "scripts": {
     "dev": "vite",
