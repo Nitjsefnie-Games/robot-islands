@@ -492,6 +492,18 @@ export function mountInspectorUi(
       nameInput.value = target.spec.name;
       return;
     }
+    // Route the mutation through the gateway. LOCAL applies synchronously;
+    // REMOTE fires the intent and we keep the existing optimistic local update
+    // so the UI stays responsive until the next authoritative snapshot.
+    if (deps.gateway) {
+      const gatewayResult = deps.gateway.renameIsland(target.spec.id, trimmed);
+      if (gatewayResult instanceof Promise) {
+        void gatewayResult;
+      } else if (!gatewayResult.ok) {
+        nameInput.value = target.spec.name;
+        return;
+      }
+    }
     const res = renameIsland(target.spec, trimmed);
     if (res.ok) {
       deps.onRenameIsland(target, trimmed);
@@ -1921,7 +1933,7 @@ export function mountInspectorUi(
               'border-radius: 2px',
             ].join(';'),
           );
-          btn.addEventListener('click', () => {
+          btn.addEventListener('click', async () => {
             const t = resolveTarget();
             if (!t) { close(); return; }
             const tspec = t.spec;
@@ -1931,7 +1943,17 @@ export function mountInspectorUi(
                 'Buildings on now-wrong tiles will go invalid until you demolish them.',
             );
             if (!proceed) return;
-            const r = editIslandBiome(deps.world, tspec.id, b.id);
+            let r: { ok: boolean; reason?: string };
+            if (deps.gateway) {
+              const gatewayResult = await deps.gateway.editBiome(tspec.id, b.id);
+              if (gatewayResult.ok) {
+                r = { ok: true };
+              } else {
+                r = { ok: false, reason: gatewayResult.error };
+              }
+            } else {
+              r = editIslandBiome(deps.world, tspec.id, b.id);
+            }
             if (r.ok) {
               deps.onIslandBiomeReassigned?.(tspec.id);
               paint();

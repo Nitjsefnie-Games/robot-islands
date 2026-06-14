@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { makeLocalGateway, makeRemoteGateway } from './mutation-gateway.js';
+import { makeLocalGateway, makeRemoteGateway, unwrapGatewayResult } from './mutation-gateway.js';
 import { createNewGame } from './new-game.js';
 import { makeInitialIslandState } from './world.js';
 import type { Ack, GameServerClient } from './server-client.js';
@@ -118,5 +118,90 @@ describe('makeLocalGateway — createRoute parity', () => {
     const gateway = makeLocalGateway(world, islandStates);
     const result = gateway.createRoute('home', colony.id, 'dock-1', 'not_a_resource' as unknown as import('./recipes.js').ResourceId);
     expect(result).toEqual({ ok: false, error: 'unknown filterResource' });
+  });
+});
+
+
+describe('makeLocalGateway — rename / edit-biome / construct-island parity', () => {
+  it('renames an island', () => {
+    const now = Date.now();
+    const { world, islandStates } = createNewGame(now);
+    const gateway = makeLocalGateway(world, islandStates);
+    const result = gateway.renameIsland('home', 'Renamed');
+    expect(result).toEqual({ ok: true });
+    expect(world.islands.find((s) => s.id === 'home')!.name).toBe('Renamed');
+  });
+
+  it('rejects an invalid rename', () => {
+    const now = Date.now();
+    const { world, islandStates } = createNewGame(now);
+    const gateway = makeLocalGateway(world, islandStates);
+    const result = unwrapGatewayResult(gateway.renameIsland('home', ''));
+    expect(result.ok).toBe(false);
+  });
+
+  it('rejects edit-biome for same biome', () => {
+    const now = Date.now();
+    const { world, islandStates } = createNewGame(now);
+    const home = world.islands.find((s) => s.id === 'home')!;
+    const state = islandStates.get('home')!;
+    state.level = 30;
+    home.buildings.push({
+      id: 'ue-1', defId: 'universe_editor', x: 0, y: 0,
+      constructionRemainingMs: 0, placedAt: now,
+    });
+    state.buildings = home.buildings;
+    state.inventory.reality_anchor = 10;
+    state.inventory.memetic_core = 10;
+    state.inventory.phase_converter = 10;
+    const gateway = makeLocalGateway(world, islandStates);
+    const result = unwrapGatewayResult(gateway.editBiome('home', 'plains'));
+    expect(result.ok).toBe(false);
+  });
+
+  it('constructs an artificial island locally', () => {
+    const now = Date.now();
+    const { world, islandStates } = createNewGame(now);
+    const home = world.islands.find((s) => s.id === 'home')!;
+    const state = islandStates.get('home')!;
+    state.level = 15;
+    home.buildings.push({
+      id: 'pc-1', defId: 'platform_constructor', x: 0, y: 0,
+      constructionRemainingMs: 0, placedAt: now,
+    });
+    state.buildings = home.buildings;
+    state.inventory.steel_beam = 10000;
+    state.inventory.concrete = 10000;
+    const gateway = makeLocalGateway(world, islandStates);
+    const result = unwrapGatewayResult(
+      gateway.constructIsland({
+        founderIslandId: 'home',
+        biome: 'plains',
+        majorRadius: 4,
+        minorRadius: 4,
+        cx: 100,
+        cy: 100,
+      }),
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value!.newSpec.id).toBe('art-1');
+    expect(result.value!.newSpec.biome).toBe('plains');
+  });
+});
+
+describe('makeRemoteGateway — rename / edit-biome / construct-island forwarding', () => {
+  it('forwards rename-island', async () => {
+    let captured: { type: string; payload: unknown } | null = null;
+    const client: GameServerClient = {
+      sendIntent(type: string, payload: unknown) {
+        captured = { type, payload };
+        return Promise.resolve({ seq: 1, ok: true });
+      },
+      close() {},
+    };
+    const gateway = makeRemoteGateway(client);
+    await gateway.renameIsland('home', 'x');
+    expect(captured).toEqual({ type: 'rename-island', payload: { islandId: 'home', name: 'x' } });
   });
 });

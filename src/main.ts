@@ -1607,6 +1607,7 @@ async function main(): Promise<void> {
     world: worldState,
     islandStates,
     getActiveIslandId: () => activeIslandId,
+    gateway,
     onConstruct: ({ newSpec, newState }) => {
       worldState.islands.push(newSpec);
       islandStates.set(newSpec.id, newState);
