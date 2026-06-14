@@ -2,11 +2,33 @@
 import type { FastifyInstance } from 'fastify';
 import type { Pool } from '../db.js';
 import { makeAuthGuard } from '../auth/guard.js';
-import { hasSave, saveSnapshot } from './persistence.js';
+import { hasSave, saveSnapshot, loadSnapshot } from './persistence.js';
 import { createInitialSnapshot } from './new-game.js';
-import { loadAndCatchUp } from './runtime.js';
+import { loadAndCatchUp, catchUp } from './runtime.js';
 import { projectGame } from './projection.js';
-import { deserializeWorld, isValidSaveSnapshot } from '../../../src/persistence.js';
+import { deserializeWorld, isValidSaveSnapshot, type SaveSnapshot } from '../../../src/persistence.js';
+
+/** Largest offline gap an imported snapshot is allowed to claim. Import is a
+ *  one-time migration of the player's OWN local save (TODO #4); `savedAt` is
+ *  client-authored, so an attacker could set it far in the past to trigger a
+ *  multi-year offline catch-up windfall. We clamp it into [now - this, now] on
+ *  import so no unbounded offline bonus is granted. 24h matches the LOCAL
+ *  client's effective offline horizon. */
+export const MAX_OFFLINE_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/** Clamp an imported snapshot's client-authored `savedAt`/`savedAtPerf` so the
+ *  offline catch-up window (computed in deserializeWorld as
+ *  `max(0, now - savedAt)`) cannot exceed MAX_OFFLINE_WINDOW_MS. A far-future
+ *  `savedAt` collapses to 0 elapsed (no negative replay); a far-past one is
+ *  pulled forward to the window edge. `savedAtPerf` is shifted by the same
+ *  amount so the perf-domain remap stays consistent. */
+export function clampImportSavedAt(snapshot: SaveSnapshot, now: number): SaveSnapshot {
+  const earliest = now - MAX_OFFLINE_WINDOW_MS;
+  const clampedSavedAt = Math.min(now, Math.max(earliest, snapshot.savedAt));
+  if (clampedSavedAt === snapshot.savedAt) return snapshot;
+  const delta = clampedSavedAt - snapshot.savedAt;
+  return { ...snapshot, savedAt: clampedSavedAt, savedAtPerf: snapshot.savedAtPerf + delta };
+}
 
 export function registerGameRoutes(app: FastifyInstance, pool: Pool): void {
   const guard = makeAuthGuard(pool);
@@ -24,25 +46,37 @@ export function registerGameRoutes(app: FastifyInstance, pool: Pool): void {
     const userId = req.user!.id;
     if (await hasSave(pool, userId)) return reply.code(409).send({ error: 'game already exists' });
     const body = req.body as { snapshot?: unknown };
-    const snapshot = body?.snapshot;
-    if (!isValidSaveSnapshot(snapshot)) {
+    const rawSnapshot = body?.snapshot;
+    if (!isValidSaveSnapshot(rawSnapshot)) {
       return reply.code(400).send({ error: 'snapshot is missing, malformed, or unsupported version' });
     }
+    // TRUST BOUNDARY (SPEC Appendix C): import trusts the player's OWN local
+    // save as a one-time migration; it is NOT a general anti-cheat-safe write
+    // path (no content/reachability validation — out of scope). We DO clamp the
+    // client-authored savedAt/savedAtPerf to [now - MAX_OFFLINE_WINDOW_MS, now]
+    // so a hand-crafted far-past/far-future savedAt cannot mint an unbounded
+    // offline catch-up windfall.
+    const now = Date.now();
+    const snapshot = clampImportSavedAt(rawSnapshot as SaveSnapshot, now);
     // Deep-validate by attempting to deserialize. This catches corrupted inner
     // shapes without persisting junk into the authoritative store.
     try {
-      deserializeWorld(snapshot, Date.now(), Date.now());
+      deserializeWorld(snapshot, now, now);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'invalid snapshot';
       return reply.code(400).send({ error: message });
     }
     await saveSnapshot(pool, userId, snapshot);
-    const game = await loadAndCatchUp(pool, userId, Date.now());
+    const game = await loadAndCatchUp(pool, userId, now);
     return reply.code(201).send(projectGame(game!));
   });
 
   app.get('/api/game/state', { preHandler: guard }, async (req, reply) => {
-    const game = await loadAndCatchUp(pool, req.user!.id, Date.now());
+    // READ-ONLY: project the advanced state without persisting. A plain state
+    // read must reflect catch-up to `now` but must not commit it (the next
+    // intent persists authoritatively). Idempotent at a fixed `now`.
+    const now = Date.now();
+    const game = catchUp(await loadSnapshot(pool, req.user!.id), now);
     if (game === null) return reply.code(404).send({ error: 'no game' });
     return reply.code(200).send(projectGame(game));
   });

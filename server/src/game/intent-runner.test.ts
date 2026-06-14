@@ -64,6 +64,43 @@ describe('applyIntent', () => {
     expect(dup).toMatchObject({ ok: false, error: 'overlap' });
   });
 
+  it('serializes concurrent same-account intents: both place-building mutations land (no lost update)', async () => {
+    const uid = await aUserWithGame();
+    const now = Date.now();
+    // Two workshops at distinct, non-overlapping 2x2 footprints inside the home
+    // ellipse. Fired concurrently against the SAME account (simulating two WS
+    // connections / two browser tabs). With a non-atomic read-modify-write both
+    // would read the pre-mutation snapshot and last-writer-wins would drop one
+    // workshop; the per-account advisory-lock transaction serializes them so
+    // BOTH land.
+    const placeA = {
+      type: 'place-building',
+      payload: { islandId: 'home', defId: 'workshop', x: 0, y: 0, rotation: 0 },
+      seq: 1,
+    };
+    const placeB = {
+      type: 'place-building',
+      payload: { islandId: 'home', defId: 'workshop', x: 4, y: 0, rotation: 0 },
+      seq: 2,
+    };
+    const [ackA, ackB] = await Promise.all([
+      applyIntent(pool, uid, placeA, now),
+      applyIntent(pool, uid, placeB, now),
+    ]);
+    expect(ackA.ok).toBe(true);
+    expect(ackB.ok).toBe(true);
+
+    // Both workshops are present in the stored save — neither write clobbered
+    // the other.
+    const after = await loadSnapshot(pool, uid);
+    const home = after!.islandStates.find((e) => e.id === 'home')!;
+    const buildings = (home.state as { buildings: Array<{ defId: string; x: number; y: number }> }).buildings;
+    const workshops = buildings.filter((b) => b.defId === 'workshop');
+    expect(workshops).toHaveLength(2);
+    expect(workshops.some((b) => b.x === 0 && b.y === 0)).toBe(true);
+    expect(workshops.some((b) => b.x === 4 && b.y === 0)).toBe(true);
+  });
+
   it('rejects an unaffordable place-building and persists nothing (byte-identical save)', async () => {
     const uid = await aUserWithGame();
     // Use a FIXED `now` for both the priming call and the rejected intent.

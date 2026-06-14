@@ -2241,8 +2241,29 @@ It is being delivered in slices, each with its own design + plan under
     ```
   - Validation re-runs the existing pure entry function from `src/` on the
     authoritative server state; client numbers are never trusted. A rejected
-    intent persists nothing, and intents are serialized to one in-flight
-    intent per connection.
+    intent persists nothing.
+  - **Per-account atomicity (Slice 5 hardening).** The whole
+    load→apply→persist sequence for an intent runs inside a single Postgres
+    transaction that first takes a transaction-scoped advisory lock keyed on the
+    account (`pg_advisory_xact_lock(hashtext(userId))`, `server/src/db.ts`
+    `withAccountTx`). The lock covers the catch-up read AND the post-apply save
+    for the SAME intent and releases on commit/rollback, so two in-flight
+    intents for the same account — two browser tabs / two WS connections, or a
+    state-push tick racing an intent — SERIALIZE rather than both reading the
+    old snapshot and last-writer-wins clobbering a mutation. Per-connection
+    promise chaining still bounds in-flight work per socket, but the advisory
+    lock is what guarantees correctness ACROSS connections. A throwing handler
+    returns a failure ack (the catch-up write commits; the would-be mutation is
+    dropped) preserving no-partial-persist; an error in the runner/persistence
+    rolls the whole tx back, leaving the stored save byte-identical.
+  - **Read-only projection path (Slice 5 hardening).** Reads
+    (`GET /api/game/state`, the ~1 Hz WS state push) use `runtime.catchUp`,
+    which deserializes + advances the offline gap to `now` IN MEMORY and returns
+    the projection WITHOUT writing. Only accepted mutations (intents) and the
+    one-time seeds (`/api/game/new`, `/api/game/import`) persist, via
+    `loadAndCatchUp`. A read at a fixed `now` is idempotent (advances but never
+    commits); this removes the prior per-second-per-socket write amplification
+    and stops a read from re-persisting state a concurrent intent could clobber.
   - Weather and day-night are not sent; the client renders them from
     `(seed, t)`.
 
@@ -2274,6 +2295,17 @@ It is being delivered in slices, each with its own design + plan under
     and persists it. Duplicate import attempts receive 409. This is the one-
     time path that preserves an existing local save when REMOTE becomes the
     default.
+    - **Trust boundary (Slice 5 hardening).** Import is a one-time migration of
+      the player's OWN local IndexedDB save and is gated by the no-existing-save
+      409 check + structural validity (`isValidSaveSnapshot` + a
+      `deserializeWorld` parse). It is **NOT** a general anti-cheat-safe write
+      path: it does NOT validate content legality / state reachability (out of
+      scope), so it trusts the player's local save as-is. Ongoing authority
+      still comes only from validated intents (the load→apply→persist path
+      above). The one bound applied on import: the client-authored
+      `savedAt`/`savedAtPerf` are clamped to `[now - MAX_OFFLINE_WINDOW_MS, now]`
+      (`clampImportSavedAt`, 24 h) so a hand-crafted far-past/far-future
+      `savedAt` cannot mint an unbounded offline catch-up windfall.
   - Settings panel: import/export save buttons are removed (TODO #8). Saves
     live server-side only; the local "Clear Save" button remains as a debug
     escape hatch.
