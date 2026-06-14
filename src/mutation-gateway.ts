@@ -22,7 +22,7 @@ import {
   relocateBuilding,
   setBuildingActiveFloors,
 } from './placement.js';
-import type { ResourceId } from './recipes.js';
+import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import {
   createRouteFromBuilding,
   reorderPriorityList,
@@ -212,6 +212,10 @@ export function makeLocalGateway(
 
   function err(error: string, reason?: string): GatewayErr {
     return { ok: false, error, reason };
+  }
+
+  function isValidResourceId(v: unknown): v is ResourceId {
+    return typeof v === 'string' && (ALL_RESOURCES as ReadonlyArray<string>).includes(v);
   }
 
   function ok<T = void>(value?: T): GatewayOk<T> {
@@ -436,6 +440,11 @@ export function makeLocalGateway(
       const toSpec = world.islands.find((s) => s.id === toIslandId);
       if (!fromSpec) return err('unknown from island');
       if (!toSpec) return err('unknown to island');
+      if (typeof filterResource === 'string' && !isValidResourceId(filterResource)) {
+        return err('unknown filterResource');
+      }
+      if (!fromSpec.populated) return err('island not populated');
+      if (!toSpec.populated) return err('island not populated');
       const building = fromSpec.buildings.find((b) => b.id === buildingId);
       if (!building) return err('building not on from island');
       const dx = fromSpec.cx - toSpec.cx;

@@ -176,6 +176,8 @@ If multiple routes contend for the same resource at one source, the available am
 
 **`filter = any` selection rule.** A route configured with `filter = any` also stores a player-defined priority list — an ordered list of resource IDs. Each tick, the route attempts to move resources in priority order: it moves as much of priority-1 as the per-tick capacity allows, then continues to priority-2 with remaining capacity, and so on. Resources not on the priority list are not moved by this route. The player edits the priority list at any time from the route configuration UI; reordering takes effect on the next tick. This makes "any" routes behave as configurable bulk movers rather than as undefined catch-alls.
 
+**Source-floor gate.** Each cargo entry may carry an optional `sourceFloorPct` (0–100, percentage of the source storage cap). When present, the route only dispatches that resource once the source stock is above the floor; omitting the field clears the gate, so the entry dispatches at any positive source stock. LOCAL and REMOTE treat an omitted `sourceFloorPct` identically as "no gate."
+
 **Transit time.** Routes use a hybrid latency model:
 
 * T1 cargo, T2 drone cargo, T3 airship: resources have a real-time-of-flight equal to `distance / route\_speed` (route speeds per tier are tuning placeholders). The §15.4 throughput formula gates dispatch (units only leave source if the destination has cap headroom at dispatch time). Units in flight then appear at destination on arrival.

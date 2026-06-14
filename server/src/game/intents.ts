@@ -43,6 +43,7 @@ import {
   nodePurchaseStatus,
   keystonePrereqFor,
   DEFAULT_GRAPH,
+  effectiveGraph,
   canBuyKeystone,
   buyKeystone,
   bindCrystal,
@@ -68,6 +69,7 @@ import { ALL_RESOURCES, type ResourceId } from '../../../src/recipes.js';
 import type { Rotation } from '../../../src/shape-mask.js';
 import { CARGO_WILDCARD, type CargoEntry, type CargoMode } from '../../../src/route-cargo.js';
 import type { CrystalId } from '../../../src/skilltree-graph.js';
+import { CELL_SIZE_TILES } from '../../../src/constants.js';
 
 export type IntentResult = { ok: true } | { ok: false; error: string };
 
@@ -228,10 +230,10 @@ export const INTENTS: Record<string, IntentHandler> = {
       // validator (validatePlacement rejects them with 'def-is-ocean' by
       // design); land/terrain defs go through validatePlacement. For ocean
       // defs x/y are anchor-LOCAL tile coords (client convention, see
-      // placement-ui.ts ocean path), so convert back to world-cell coords by
-      // adding the anchor centre before validating.
+      // placement-ui.ts ocean path), so convert back to world-cell indices by
+      // adding the anchor centre and dividing by CELL_SIZE_TILES before validating.
       if (def.oceanPlacement === true) {
-        const ov = validateOceanPlacement(game.world, typedDefId, x + spec.cx, y + spec.cy);
+        const ov = validateOceanPlacement(game.world, typedDefId, (x + spec.cx) / CELL_SIZE_TILES, (y + spec.cy) / CELL_SIZE_TILES);
         if (!ov.ok) return { ok: false, error: ov.reason ?? 'illegal ocean placement' };
       } else {
         const v = validatePlacement(spec, state, typedDefId, x, y, rot);
@@ -433,8 +435,11 @@ export const INTENTS: Record<string, IntentHandler> = {
       if (typeof fromIslandId !== 'string') return { ok: false, error: 'fromIslandId must be a string' };
       if (typeof toIslandId !== 'string') return { ok: false, error: 'toIslandId must be a string' };
       if (typeof buildingId !== 'string') return { ok: false, error: 'buildingId must be a string' };
-      if (filterResource !== undefined && typeof filterResource !== 'string') {
+      if (filterResource !== undefined && filterResource !== null && typeof filterResource !== 'string') {
         return { ok: false, error: 'filterResource must be a string when present' };
+      }
+      if (typeof filterResource === 'string' && !isValidResourceId(filterResource)) {
+        return { ok: false, error: 'unknown filterResource' };
       }
       if (fromIslandId === toIslandId) return { ok: false, error: 'from and to must differ' };
       const fromSpec = game.world.islands.find((s) => s.id === fromIslandId);
@@ -455,7 +460,7 @@ export const INTENTS: Record<string, IntentHandler> = {
       const dx = fromSpec.cx - toSpec.cx;
       const dy = fromSpec.cy - toSpec.cy;
       const dist = Math.sqrt(dx * dx + dy * dy);
-      const filter = filterResource === undefined ? null : (filterResource as ResourceId);
+      const filter = (filterResource === undefined || filterResource === null) ? null : (filterResource as ResourceId);
       const route = createRouteFromBuilding(building, fromIslandId, toIslandId, filter, dist);
       if (route === null) return { ok: false, error: 'route could not be created' };
       game.world.routes.push(route);
@@ -501,9 +506,10 @@ export const INTENTS: Record<string, IntentHandler> = {
       // Authoritative purchasability pre-check (anti-cheat): SP sufficiency +
       // depth→tier gate + reachability, all recomputed from server state. Only
       // a 'purchasable' status proceeds.
-      const status = nodePurchaseStatus(DEFAULT_GRAPH, state, nodeId);
+      const graph = effectiveGraph(state);
+      const status = nodePurchaseStatus(graph, state, nodeId);
       if (status !== 'purchasable') return { ok: false, error: status };
-      buyNode(DEFAULT_GRAPH, state, nodeId);
+      buyNode(graph, state, nodeId);
       return { ok: true };
     },
   },
@@ -525,7 +531,7 @@ export const INTENTS: Record<string, IntentHandler> = {
       }
       const island = resolveIsland(game, islandId);
       if (!island) return { ok: false, error: 'unknown island' };
-      const rot = (rotation ?? 0) as Rotation;
+      const rot = rotation === undefined ? undefined : (rotation as Rotation);
       const r = relocateBuilding(island.spec, island.state, buildingId, x, y, rot);
       if (!r.ok) return { ok: false, error: r.reason ?? 'relocate failed' };
       return { ok: true };
@@ -597,24 +603,6 @@ export const INTENTS: Record<string, IntentHandler> = {
       const can = canExpandIsland(island.spec, island.state, axis as Axis);
       if (!can.ok) return { ok: false, error: can.reason ?? 'expand failed' };
       expandIsland(island.spec, island.state, axis as Axis);
-      return { ok: true };
-    },
-  },
-
-  // cancel-queued-upgrade — §4.8/§9.3 LIFO queued-upgrade cancel. Player supplies
-  // { islandId, buildingId }. Refunding intent; `cancelConstruction` peels the
-  // newest queued upgrade job first, then falls back to running fresh-placement
-  // cancel. No separate affordability gate.
-  'cancel-queued-upgrade': {
-    apply(game: LiveGame, payload: unknown): IntentResult {
-      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
-      const { islandId, buildingId } = payload;
-      if (typeof islandId !== 'string') return { ok: false, error: 'islandId must be a string' };
-      if (typeof buildingId !== 'string') return { ok: false, error: 'buildingId must be a string' };
-      const island = resolveIsland(game, islandId);
-      if (!island) return { ok: false, error: 'unknown island' };
-      const r = cancelConstruction(island.spec, island.state, buildingId);
-      if (!r.ok) return { ok: false, error: r.reason ?? 'cancel failed' };
       return { ok: true };
     },
   },
@@ -699,14 +687,17 @@ export const INTENTS: Record<string, IntentHandler> = {
       if (typeof cargoIndex !== 'number' || !Number.isInteger(cargoIndex) || cargoIndex < 0) {
         return { ok: false, error: 'cargoIndex must be a non-negative integer' };
       }
-      if (typeof sourceFloorPct !== 'number' || !Number.isFinite(sourceFloorPct) || sourceFloorPct < 0 || sourceFloorPct > 100) {
+      const hasFloor = sourceFloorPct !== undefined;
+      if (hasFloor && (typeof sourceFloorPct !== 'number' || !Number.isFinite(sourceFloorPct) || sourceFloorPct < 0 || sourceFloorPct > 100)) {
         return { ok: false, error: 'sourceFloorPct must be 0..100' };
       }
       const route = resolveRoute(game, routeId);
       if (!route) return { ok: false, error: 'route not found' };
       if (cargoIndex >= route.cargo.length) return { ok: false, error: 'cargoIndex out of range' };
       const entry = route.cargo[cargoIndex]!;
-      route.cargo[cargoIndex] = { resourceId: entry.resourceId, weight: entry.weight, sourceFloorPct };
+      route.cargo[cargoIndex] = hasFloor
+        ? { resourceId: entry.resourceId, weight: entry.weight, sourceFloorPct }
+        : { resourceId: entry.resourceId, weight: entry.weight };
       return { ok: true };
     },
   },
