@@ -39,7 +39,13 @@ export function registerAuthRoutes(app: FastifyInstance, pool: Pool, cookieSecur
       setSessionCookie(reply, await issueSession(user.id), cookieOpts);
       return reply.code(201).send({ id: user.id, email: user.email });
     } catch (err) {
-      if (err instanceof EmailTakenError) return reply.code(409).send({ error: 'email already registered' });
+      if (err instanceof EmailTakenError) {
+        // Close the timing side-channel: run a throwaway hash so duplicate and
+        // new signups take comparable time (the 409 response still leaks email
+        // existence as an intentional UX tradeoff, but not via hash-vs-no-hash).
+        await hashPassword('dummy-password-for-timing-mitigation');
+        return reply.code(409).send({ error: 'email already registered' });
+      }
       throw err;
     }
   });
