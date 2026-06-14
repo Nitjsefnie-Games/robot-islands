@@ -1,0 +1,21 @@
+[Unit]
+# NOTE: named *-auth (not *-server) on purpose — robot-islands-server.service is
+# already taken by the separate /root/islands rewrite (ws on :8090). Do not rename
+# this back without checking that collision.
+Description=Robot Islands auth server (migration slice 1; HTTP on 127.0.0.1:5180)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+WorkingDirectory=/root/robot-islands/server
+EnvironmentFile=/root/robot-islands/server/.env
+# /usr/bin/node on this box is v12; Fastify 5 needs >=20. Use the nvm node
+# (same as robot-islands-dev.service) and put it on PATH for child processes.
+Environment=PATH=/root/.nvm/versions/node/v22.22.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=/root/.nvm/versions/node/v22.22.0/bin/node /root/robot-islands/server/dist/index.js
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
