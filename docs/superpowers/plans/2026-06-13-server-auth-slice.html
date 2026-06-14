@@ -1,0 +1,101 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Implementation plan — Server slice 1: Auth service</title>
+  <style>
+    :root {
+      --ivory:#1B1A17; --slate:#F5F3EC; --clay:#D97757; --oat:#3A352B; --olive:#8FA56E;
+      --gray-150:#2E2C27; --gray-300:#3A3833; --gray-500:#8F8D82; --gray-700:#CFCCC2; --white:#252420;
+      --serif:ui-serif,Georgia,serif; --sans:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+      --mono:ui-monospace,'SF Mono',Menlo,monospace; --radius:12px; --border:1.5px solid var(--gray-300);
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:var(--sans); background:var(--ivory); color:var(--gray-700); line-height:1.58;
+      padding:56px 32px 120px; -webkit-font-smoothing:antialiased; }
+    .page { margin:0 auto; max-width:900px; }
+    .eyebrow { font-family:var(--mono); font-size:12px; letter-spacing:0.08em; text-transform:uppercase;
+      color:var(--gray-500); margin-bottom:12px; }
+    h1 { font-family:var(--serif); font-weight:500; font-size:36px; line-height:1.14; color:var(--slate);
+      margin-bottom:18px; letter-spacing:-0.01em; }
+    .context-box { background:var(--gray-150); border:var(--border); border-radius:var(--radius);
+      padding:16px 20px; font-size:14.5px; margin-bottom:40px; }
+    .context-box .label { font-family:var(--mono); font-size:11px; text-transform:uppercase;
+      letter-spacing:0.06em; color:var(--gray-500); display:block; margin-bottom:6px; }
+    .meta { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:44px; }
+    @media (max-width:760px){ .meta{ grid-template-columns:1fr; } }
+    .meta .cell { background:var(--white); border:var(--border); border-radius:var(--radius); padding:16px 18px; }
+    .meta .k { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.06em;
+      color:var(--gray-500); margin-bottom:6px; }
+    .meta .v { font-size:15px; color:var(--slate); font-weight:600; }
+    h2 { font-family:var(--serif); font-weight:500; font-size:24px; color:var(--slate); margin:8px 0 18px;
+      letter-spacing:-0.01em; }
+    .tbl { width:100%; border:var(--border); border-radius:var(--radius); border-collapse:separate;
+      border-spacing:0; overflow:hidden; font-size:13.5px; margin-bottom:32px; }
+    .tbl th,.tbl td { text-align:left; padding:11px 16px; border-bottom:1px solid var(--gray-300); vertical-align:top; }
+    .tbl th { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.05em;
+      color:var(--gray-500); background:var(--gray-150); font-weight:600; }
+    .tbl tr:last-child td { border-bottom:none; }
+    .tbl td.n { font-family:var(--mono); color:var(--clay); white-space:nowrap; }
+    .tbl td.slate { color:var(--slate); font-weight:600; }
+    .tbl tbody tr:hover { background:var(--gray-150); }
+    code { font-family:var(--mono); font-size:0.88em; background:var(--gray-150); border:1px solid var(--gray-300);
+      border-radius:5px; padding:1px 5px; color:#C9B98A; }
+    .note { background:var(--white); border:var(--border); border-left:4px solid var(--olive);
+      border-radius:10px; padding:16px 20px; font-size:13.5px; margin-bottom:32px; }
+    .footer { color:var(--gray-500); font-size:13px; margin-top:48px; padding-top:22px; border-top:1px solid var(--gray-300); }
+    a { color:var(--clay); }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="eyebrow">Implementation plan · robot-islands · server migration slice 1 of 5</div>
+    <h1>Auth service + user store</h1>
+    <div class="context-box">
+      <span class="label">Goal</span>
+      Stand up a standalone Node + Fastify server providing email+password accounts with revocable
+      server-side sessions, backed by the box's existing PostgreSQL, with zero changes to the Vite client.
+      Full verbatim per-step code (TDD) lives in the Markdown plan; this is the human-readable task map.
+    </div>
+
+    <div class="meta">
+      <div class="cell"><div class="k">Tasks</div><div class="v">14 (bite-sized TDD)</div></div>
+      <div class="cell"><div class="k">Execution</div><div class="v">subagent-driven on master</div></div>
+      <div class="cell"><div class="k">Spec</div><div class="v"><a href="/#/d/robot-islands/2026-06-13-server-auth-slice-design">design doc</a></div></div>
+    </div>
+
+    <h2>Task map</h2>
+    <table class="tbl">
+      <thead><tr><th>#</th><th>Task</th><th>Produces</th></tr></thead>
+      <tbody>
+        <tr><td class="n">1</td><td class="slate">Workspace scaffold</td><td>root <code>workspaces</code>, <code>server/</code> package.json, tsconfig, .env.example</td></tr>
+        <tr><td class="n">2</td><td class="slate">Config parsing</td><td><code>config.ts</code> — env → Config, test-DB guard</td></tr>
+        <tr><td class="n">3</td><td class="slate">Password hashing</td><td><code>crypto/password.ts</code> — scrypt PHC hash/verify</td></tr>
+        <tr><td class="n">4</td><td class="slate">Session tokens</td><td><code>crypto/token.ts</code> — opaque token + sha256</td></tr>
+        <tr><td class="n">5</td><td class="slate">DB pool + schema</td><td><code>db.ts</code>, <code>migrations/0001_init.sql</code></td></tr>
+        <tr><td class="n">6</td><td class="slate">Migration runner</td><td><code>migrate.ts</code> — transactional, idempotent</td></tr>
+        <tr><td class="n">7</td><td class="slate">Test harness</td><td>vitest globalSetup migrates test DB; <code>test-helpers.ts</code></td></tr>
+        <tr><td class="n">8</td><td class="slate">Users repo</td><td><code>auth/users.ts</code> — create/findByEmail/findById</td></tr>
+        <tr><td class="n">9</td><td class="slate">Sessions repo</td><td><code>auth/sessions.ts</code> — create/findValid/revoke</td></tr>
+        <tr><td class="n">10</td><td class="slate">Cookie + guard</td><td><code>auth/cookie.ts</code>, <code>auth/guard.ts</code></td></tr>
+        <tr><td class="n">11</td><td class="slate">Routes + app factory</td><td><code>auth/routes.ts</code>, <code>app.ts</code> — signup/login/logout/me</td></tr>
+        <tr><td class="n">12</td><td class="slate">Entry point</td><td><code>index.ts</code> — load config, migrate, listen; curl smoke test</td></tr>
+        <tr><td class="n">13</td><td class="slate">systemd + deploy</td><td><code>deploy/robot-islands-server.service</code>, deploy notes</td></tr>
+        <tr><td class="n">14</td><td class="slate">SPEC.md forward-ref</td><td>Appendix C — server architecture (migration) stub</td></tr>
+      </tbody>
+    </table>
+
+    <div class="note">
+      <strong>Ordering note:</strong> <code>test-helpers.ts</code> (Task 7) imports <code>app.ts</code> (Task 11),
+      so a full <code>npm test -w server</code> first becomes meaningful at the repo/route tests (Tasks 8–11).
+      Pure-crypto and migration tests (Tasks 3, 4, 6) run green independently before then.
+    </div>
+
+    <div class="footer">
+      <p>Implementation plan · 2026-06-13 · robot-islands server migration slice 1 of 5 · plan source: <code>docs/superpowers/plans/2026-06-13-server-auth-slice.md</code></p>
+    </div>
+  </div>
+</body>
+</html>
