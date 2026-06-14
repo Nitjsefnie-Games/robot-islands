@@ -2059,16 +2059,34 @@ async function main(): Promise<void> {
   const islandPower = new Map<string, PowerBalance>();
   const islandNets = new Map<string, Record<ResourceId, number>>();
 
-  /** Cheap fingerprint of the world-layer-relevant discovery state for REMOTE
-   *  rebuild gating: discovered-island count + revealed-cell count. When this
-   *  shifts (a drone returned server-side, antenna scan widened coverage) the
-   *  cached fog/ocean layers are stale and must repaint. Paired with the
+  /** Cheap fingerprint of the world-layer-relevant state for REMOTE rebuild
+   *  gating: discovered-island count + revealed-cell count PLUS a structural
+   *  fingerprint of every island's rendered geometry (buildings + terrain
+   *  modifiers + populated/discovered flags). `renderIsland` draws building
+   *  sprites and terrain tiles, so a building placed / demolished / moved /
+   *  upgraded / construction-completed, a force-run toggle, an ocean-platform
+   *  pause, a relabel, or a terrain-modifier change must repaint — but in
+   *  REMOTE `applyRemoteSnapshot` is the ONLY rebuild path (the per-frame
+   *  ticker rebuild is `!isRemote`), so the gate has to notice these.
+   *  Construction is folded as a BOOLEAN (`c`/`o`), never the decrementing
+   *  `constructionRemainingMs`, so an in-progress build doesn't churn the gate
+   *  every push — only the ghost→solid transition flips it. Paired with the
    *  vision-source signature below — the same diff discipline the LOCAL ticker
-   *  uses to avoid re-baking GPU textures on every push. */
+   *  uses to avoid re-baking GPU textures on every idle push. */
   function discoverySignature(): string {
     let discovered = 0;
-    for (const s of worldState.islands) if (s.discovered) discovered++;
-    return `${discovered}|${worldState.revealedCells.size}`;
+    const parts: string[] = [];
+    for (const s of worldState.islands) {
+      if (s.discovered) discovered++;
+      let seg = `${s.id}:${s.populated ? 1 : 0}:${s.discovered ? 1 : 0}:${s.modifiers.join(',')}#`;
+      for (const b of s.buildings) {
+        seg += `${b.id}@${b.x},${b.y}/${b.rotation ?? 0}:${b.defId}:` +
+          `${(b.constructionRemainingMs ?? 0) > 0 ? 'c' : 'o'}:${b.paused ?? ''}:` +
+          `${b.forceRun ? 'f' : ''}:${b.cargoLabel ?? ''}:${b.anchorIslandId ?? ''};`;
+      }
+      parts.push(seg);
+    }
+    return `${discovered}|${worldState.revealedCells.size}|${parts.join('|')}`;
   }
   let lastDiscoverySig = discoverySignature();
 
