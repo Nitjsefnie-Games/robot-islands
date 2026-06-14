@@ -128,7 +128,11 @@ import { makeLocalGateway, makeRemoteGateway } from './mutation-gateway.js';
 import { mountAuthScreen } from './auth-ui.js';
 import { connectGameServer, gameSocketUrl, type GameServerClient } from './server-client.js';
 import { deserializeWorld, type SaveSnapshot } from './persistence.js';
-import { isRemoteBootEnabled } from './remote-boot.js';
+import {
+  isRemoteBootEnabled,
+  loadStoredPlayerLatLon,
+  storePlayerLatLon,
+} from './remote-boot.js';
 import { checkDismissals, currentStep, markBumpClaimed, markCompleted, markShown, xpBumpPercentForCompletion } from './tutorial.js';
 import { refreshTutorialHint } from './tutorial-ui.js';
 
@@ -276,6 +280,16 @@ async function main(): Promise<void> {
     const d = deserializeWorld(remote.snapshot, Date.now(), Date.now());
     worldState = d.world;
     islandStates = d.islandStates;
+    // The server snapshot does not own the player's real-world location; restore
+    // any client-local lat/lon preference so the map picker doesn't reappear.
+    const storedLatLon = loadStoredPlayerLatLon();
+    if (
+      storedLatLon &&
+      (worldState.playerLat == null || worldState.playerLon == null)
+    ) {
+      worldState.playerLat = storedLatLon.lat;
+      worldState.playerLon = storedLatLon.lon;
+    }
   } else {
     restored = await loadWorld();
     // Fresh-game path is the pure `createNewGame` module (shared with the
@@ -294,7 +308,9 @@ async function main(): Promise<void> {
         onPick: (lat, lon) => {
           worldState.playerLat = lat;
           worldState.playerLon = lon;
-          if (!isRemote) {
+          if (isRemote) {
+            storePlayerLatLon(lat, lon);
+          } else {
             void saveWorld(worldState, restored?.islandStates ?? new Map());
           }
           resolve();
@@ -2000,6 +2016,17 @@ async function main(): Promise<void> {
     worldState = d.world;
     islandStates = d.islandStates;
     worldState.islandStates = islandStates;
+
+    // The server snapshot does not own the player's real-world location; restore
+    // any client-local lat/lon preference so the map picker doesn't reappear.
+    const storedLatLon = loadStoredPlayerLatLon();
+    if (
+      storedLatLon &&
+      (worldState.playerLat == null || worldState.playerLon == null)
+    ) {
+      worldState.playerLat = storedLatLon.lat;
+      worldState.playerLon = storedLatLon.lon;
+    }
 
     islandSpecsById.clear();
     modifierMulsById.clear();

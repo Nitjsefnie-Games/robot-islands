@@ -1,10 +1,10 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
-import { isRemoteBootEnabled } from './remote-boot.js';
+import { isRemoteBootEnabled, loadStoredPlayerLatLon, storePlayerLatLon } from './remote-boot.js';
 
 describe('isRemoteBootEnabled', () => {
   beforeEach(() => {
     vi.stubGlobal('location', { search: '' } as unknown as Location);
-    vi.stubGlobal('localStorage', { getItem: vi.fn(() => null) } as unknown as Storage);
+    vi.stubGlobal('localStorage', { getItem: vi.fn(() => null), setItem: vi.fn(() => undefined) } as unknown as Storage);
   });
 
   afterEach(() => {
@@ -37,5 +37,77 @@ describe('isRemoteBootEnabled', () => {
       },
     }));
     expect(isRemoteBootEnabled()).toBe(false);
+  });
+});
+
+describe('loadStoredPlayerLatLon', () => {
+  beforeEach(() => {
+    vi.stubGlobal('location', { search: '' } as unknown as Location);
+    vi.stubGlobal('localStorage', { getItem: vi.fn(() => null), setItem: vi.fn(() => undefined) } as unknown as Storage);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('returns null in LOCAL mode', () => {
+    (globalThis.localStorage.getItem as ReturnType<typeof vi.fn>).mockReturnValue('{"lat":40,"lon":-74}');
+    expect(loadStoredPlayerLatLon()).toBeNull();
+  });
+
+  it('returns null when nothing is stored in REMOTE mode', () => {
+    vi.stubGlobal('location', { search: '?server=1' } as unknown as Location);
+    expect(loadStoredPlayerLatLon()).toBeNull();
+  });
+
+  it('returns stored lat/lon in REMOTE mode', () => {
+    vi.stubGlobal('location', { search: '?server=1' } as unknown as Location);
+    (globalThis.localStorage.getItem as ReturnType<typeof vi.fn>).mockReturnValue('{"lat":40.7,"lon":-74.0}');
+    expect(loadStoredPlayerLatLon()).toEqual({ lat: 40.7, lon: -74 });
+  });
+
+  it('returns null for malformed JSON in REMOTE mode', () => {
+    vi.stubGlobal('location', { search: '?server=1' } as unknown as Location);
+    (globalThis.localStorage.getItem as ReturnType<typeof vi.fn>).mockReturnValue('not-json');
+    expect(loadStoredPlayerLatLon()).toBeNull();
+  });
+
+  it('returns null for invalid shape in REMOTE mode', () => {
+    vi.stubGlobal('location', { search: '?server=1' } as unknown as Location);
+    (globalThis.localStorage.getItem as ReturnType<typeof vi.fn>).mockReturnValue('{"lat":"forty"}');
+    expect(loadStoredPlayerLatLon()).toBeNull();
+  });
+});
+
+describe('storePlayerLatLon', () => {
+  beforeEach(() => {
+    vi.stubGlobal('location', { search: '' } as unknown as Location);
+    vi.stubGlobal('localStorage', { getItem: vi.fn(() => null), setItem: vi.fn(() => undefined) } as unknown as Storage);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('does nothing in LOCAL mode', () => {
+    storePlayerLatLon(40.7, -74);
+    expect(globalThis.localStorage.setItem).not.toHaveBeenCalled();
+  });
+
+  it('writes JSON to localStorage in REMOTE mode', () => {
+    vi.stubGlobal('location', { search: '?server=1' } as unknown as Location);
+    storePlayerLatLon(40.7, -74);
+    expect(globalThis.localStorage.setItem).toHaveBeenCalledTimes(1);
+    expect(globalThis.localStorage.setItem).toHaveBeenCalledWith('ri_player_latlon', '{"lat":40.7,"lon":-74}');
+  });
+
+  it('swallows localStorage errors silently', () => {
+    vi.stubGlobal('location', { search: '?server=1' } as unknown as Location);
+    vi.stubGlobal('localStorage', new Proxy({} as Storage, {
+      get() {
+        throw new Error('localStorage denied');
+      },
+    }));
+    expect(() => storePlayerLatLon(0, 0)).not.toThrow();
   });
 });
