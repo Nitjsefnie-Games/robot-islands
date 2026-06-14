@@ -13,10 +13,12 @@
 //     row.
 
 import type { FastifyInstance, FastifyRequest } from 'fastify';
-import type { Pool } from '../db.js';
+import type WebSocket from 'ws';
+import { type Pool, withAccountTx } from '../db.js';
+import { DEFAULT_ALLOWED_WS_ORIGINS } from '../config.js';
 import { resolveSession } from '../auth/guard.js';
 import { applyIntent, type IntentEnvelope } from './intent-runner.js';
-import { catchUp } from './runtime.js';
+import { catchUp, loadAndCatchUp } from './runtime.js';
 import { loadSnapshot } from './persistence.js';
 import { serializeWorld } from '../../../src/persistence.js';
 
@@ -38,14 +40,28 @@ export const WS_INTENT_RATE_WINDOW_MS = 1000;
  *  up on (WS close code 1008 = policy violation). */
 export const WS_ABUSE_CLOSE_THRESHOLD = 40;
 
+/** Max concurrent authenticated WebSockets per account. More sockets let an
+ *  attacker multiply the per-connection rate limit into aggregate DB pressure
+ *  on the single saves row. */
+export const WS_MAX_SOCKETS_PER_USER = 4;
+
+/** Max wall-clock ms between read-only periodic pushes that are promoted to a
+ *  persisting checkpoint. Without this, an idle socket re-integrates the full
+ *  offline gap every second and `savedAt` never advances. */
+export const WS_CHECKPOINT_INTERVAL_MS = 30000;
+
 /** Options for the WS route registration. */
 export interface GameWsOptions {
+  /** Origins allowed to open the authenticated WS. Defaults to production + dev. */
+  readonly allowedWsOrigins?: ReadonlyArray<string>;
   /** Override the periodic state-push interval (default 1000 ms). */
   readonly statePushIntervalMs?: number;
   /** Override the per-connection intent rate limit (default WS_INTENT_RATE_LIMIT). */
   readonly intentRateLimit?: number;
   /** Override the rate-limit window (default WS_INTENT_RATE_WINDOW_MS). */
   readonly intentRateWindowMs?: number;
+  /** Override the checkpoint interval (default WS_CHECKPOINT_INTERVAL_MS). */
+  readonly checkpointIntervalMs?: number;
 }
 
 /** A sliding-window rate limiter over message timestamps. `allow(now)` records
@@ -69,20 +85,40 @@ export class SlidingWindowLimiter {
   }
 }
 
-/** Push the current authoritative snapshot to a socket. Returns the serialized
- *  snapshot (or null when the account has no game) so callers can assert on it
- *  in tests. */
-async function pushState(
-  socket: import('ws').default,
+/** Per-account open sockets. Used to enforce WS_MAX_SOCKETS_PER_USER. */
+const userSockets = new Map<string, Set<WebSocket>>();
+
+/** Push the current authoritative snapshot to a socket without persisting.
+ *  Returns the serialized snapshot (or null when the account has no game) so
+ *  callers can assert on it in tests. */
+async function pushStateReadOnly(
+  socket: WebSocket,
   pool: Pool,
   userId: string,
+  now: number,
 ): Promise<unknown | null> {
   // READ-ONLY projection: load + advance in memory but DO NOT persist. The
   // periodic push runs ~1 Hz per socket; persisting here would write the full
   // jsonb snapshot every second per connection (write amplification) and widen
   // the lost-update window. Authority is persisted only by accepted intents.
-  const now = Date.now();
   const game = catchUp(await loadSnapshot(pool, userId), now);
+  const snapshot = game === null ? null : serializeWorld(game.world, game.islandStates, now, now);
+  socket.send(JSON.stringify({ type: 'state', snapshot }));
+  return snapshot;
+}
+
+/** Persisting checkpoint push: load, advance, and save under the per-account
+ *  advisory lock. Called at most once per WS_CHECKPOINT_INTERVAL_MS so an idle
+ *  socket doesn't re-integrate an ever-growing gap. The checkpoint carries no
+ *  unpersisted mutation and is idempotent at a given `now`, so it cannot
+ *  clobber a concurrent intent. */
+async function pushStateCheckpoint(
+  socket: WebSocket,
+  pool: Pool,
+  userId: string,
+  now: number,
+): Promise<unknown | null> {
+  const game = await withAccountTx(pool, userId, (client) => loadAndCatchUp(client, userId, now));
   const snapshot = game === null ? null : serializeWorld(game.world, game.islandStates, now, now);
   socket.send(JSON.stringify({ type: 'state', snapshot }));
   return snapshot;
@@ -118,13 +154,33 @@ export function registerGameWsRoutes(
     // it completes — the client never sees an open socket. Shares the cookie->
     // session path with makeAuthGuard via resolveSession.
     preValidation: async (req: FastifyRequest, reply) => {
+      // CSWSH defense: browsers always send Origin on WS upgrades. Reject the
+      // upgrade before it completes if the Origin is missing or untrusted.
+      const origin = req.headers.origin;
+      const allowed = opts.allowedWsOrigins ?? DEFAULT_ALLOWED_WS_ORIGINS;
+      if (!origin || !allowed.includes(origin)) {
+        await reply.code(403).send({ error: 'forbidden origin' });
+        return;
+      }
       const user = await resolveSession(pool, req);
       if (!user) { await reply.code(401).send({ error: 'unauthorized' }); return; }
       req.user = user;
     },
-  }, async (socket, req: FastifyRequest) => {
+  }, async (socket: WebSocket, req: FastifyRequest) => {
     // preValidation guarantees req.user is set by the time the handler runs.
     const userId = req.user!.id;
+
+    // Enforce the per-account socket cap to prevent an attacker from multiplying
+    // the per-connection rate limit into aggregate DB pressure.
+    const socketsForUser = userSockets.get(userId) ?? new Set<WebSocket>();
+    userSockets.set(userId, socketsForUser);
+    socketsForUser.add(socket);
+    if (socketsForUser.size > WS_MAX_SOCKETS_PER_USER) {
+      socket.close(1008, 'too many connections');
+      socketsForUser.delete(socket);
+      if (socketsForUser.size === 0) userSockets.delete(userId);
+      return;
+    }
 
     // Per-connection serialization: every incoming message chains onto the
     // previous one's promise so at most one applyIntent is in flight. This is
@@ -136,15 +192,29 @@ export function registerGameWsRoutes(
     // Push the initial authoritative snapshot immediately on connect. If the
     // account has no game yet, snapshot is null; the client can use that as a
     // signal to create one (slice-4 boot will show auth/new-game UI).
-    chain = chain.then(async () => { await pushState(socket, pool, userId); }).catch(() => { /* socket gone */ });
+    chain = chain.then(async () => { await pushStateReadOnly(socket, pool, userId, Date.now()); }).catch(() => { /* socket gone */ });
 
     // Periodic authoritative state push: production advances even when the
     // client sends no intents. The interval is cleared on socket close.
     const pushIntervalMs = opts.statePushIntervalMs ?? STATE_PUSH_INTERVAL_MS;
+    const checkpointIntervalMs = opts.checkpointIntervalMs ?? WS_CHECKPOINT_INTERVAL_MS;
+    let lastCheckpointMs = 0;
     const tickInterval = setInterval(() => {
-      chain = chain.then(async () => { await pushState(socket, pool, userId); }).catch(() => { /* socket gone */ });
+      chain = chain.then(async () => {
+        const now = Date.now();
+        if (now - lastCheckpointMs >= checkpointIntervalMs) {
+          await pushStateCheckpoint(socket, pool, userId, now);
+          lastCheckpointMs = now;
+        } else {
+          await pushStateReadOnly(socket, pool, userId, now);
+        }
+      }).catch(() => { /* socket gone */ });
     }, pushIntervalMs);
-    socket.on('close', () => { clearInterval(tickInterval); });
+    socket.on('close', () => {
+      clearInterval(tickInterval);
+      socketsForUser.delete(socket);
+      if (socketsForUser.size === 0) userSockets.delete(userId);
+    });
 
     // Per-connection intent rate limiter. Excess frames get a cheap error ack
     // WITHOUT chaining an applyIntent (so a flood can't amplify into DB writes);
@@ -193,7 +263,7 @@ export function registerGameWsRoutes(
         // that actually succeeded — the next periodic tick re-pushes anyway.
         if (ack.ok) {
           try {
-            await pushState(socket, pool, userId);
+            await pushStateReadOnly(socket, pool, userId, Date.now());
           } catch { /* best-effort; next periodic tick re-pushes */ }
         }
       }).catch((err: unknown) => {

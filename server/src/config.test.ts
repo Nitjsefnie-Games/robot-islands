@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { loadConfig, assertTestDatabase } from './config.js';
+import { loadConfig, assertTestDatabase, DEFAULT_ALLOWED_WS_ORIGINS } from './config.js';
 
 describe('loadConfig', () => {
   it('parses a full env', () => {
@@ -7,12 +7,19 @@ describe('loadConfig', () => {
     expect(c.databaseUrl).toBe('postgresql:///robot_islands');
     expect(c.port).toBe(5180);
     expect(c.cookieSecure).toBe(true);
+    expect(c.allowedWsOrigins).toEqual(DEFAULT_ALLOWED_WS_ORIGINS);
   });
 
   it('applies defaults', () => {
     const c = loadConfig({ DATABASE_URL: 'postgresql:///robot_islands' });
     expect(c.port).toBe(5180);
     expect(c.cookieSecure).toBe(true);
+    expect(c.allowedWsOrigins).toEqual(DEFAULT_ALLOWED_WS_ORIGINS);
+  });
+
+  it('parses ALLOWED_WS_ORIGINS from env', () => {
+    const c = loadConfig({ DATABASE_URL: 'x', ALLOWED_WS_ORIGINS: 'https://a.eu, https://b.eu' });
+    expect(c.allowedWsOrigins).toEqual(['https://a.eu', 'https://b.eu']);
   });
 
   it('throws when DATABASE_URL missing', () => {

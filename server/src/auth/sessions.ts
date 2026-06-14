@@ -2,6 +2,9 @@ import type { Pool } from '../db.js';
 
 export interface ValidSession { readonly userId: string; readonly email: string; }
 
+/** How often the session reaper runs in the production boot path. */
+export const SESSION_REAP_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
+
 export async function createSession(
   pool: Pool, userId: string, tokenHash: Buffer, expiresAt: Date,
 ): Promise<void> {
@@ -32,4 +35,15 @@ export async function revokeSession(pool: Pool, tokenHash: Buffer, now: Date): P
     'UPDATE sessions SET revoked_at = $2 WHERE token_hash = $1 AND revoked_at IS NULL',
     [tokenHash, now],
   );
+}
+
+/** Delete expired sessions and revoked sessions older than 7 days. Returns the
+ *  number of rows removed. */
+export async function reapSessions(pool: Pool): Promise<number> {
+  const res = await pool.query(
+    `DELETE FROM sessions
+      WHERE expires_at < now()
+         OR (revoked_at IS NOT NULL AND revoked_at < now() - interval '7 days')`,
+  );
+  return res.rowCount ?? 0;
 }

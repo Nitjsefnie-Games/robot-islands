@@ -7,7 +7,7 @@ import { registerAuthRoutes } from './auth/routes.js';
 import { registerGameRoutes } from './game/routes.js';
 import { registerGameWsRoutes } from './game/ws.js';
 
-export interface AppOptions { readonly pool: Pool; readonly cookieSecure: boolean; readonly authRateLimitMax?: number; readonly wsStatePushIntervalMs?: number; readonly wsIntentRateLimit?: number; readonly wsIntentRateWindowMs?: number; }
+export interface AppOptions { readonly pool: Pool; readonly cookieSecure: boolean; readonly allowedWsOrigins?: ReadonlyArray<string>; readonly authRateLimitMax?: number; readonly wsStatePushIntervalMs?: number; readonly wsIntentRateLimit?: number; readonly wsIntentRateWindowMs?: number; readonly wsCheckpointIntervalMs?: number; }
 
 export function buildApp(opts: AppOptions): FastifyInstance {
   // trustProxy is the COUNT of trusted hops (a single nginx in front), NOT
@@ -44,9 +44,11 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     // memory-exhaustion vector for a hostile client.
     await instance.register(websocket, { options: { maxPayload: 65536 } });
     registerGameWsRoutes(instance, opts.pool, {
+      allowedWsOrigins: opts.allowedWsOrigins,
       statePushIntervalMs: opts.wsStatePushIntervalMs,
       intentRateLimit: opts.wsIntentRateLimit,
       intentRateWindowMs: opts.wsIntentRateWindowMs,
+      checkpointIntervalMs: opts.wsCheckpointIntervalMs,
     });
   });
   app.get('/health', async () => ({ ok: true }));
