@@ -14,6 +14,7 @@
 import { Container, Graphics, Text } from 'pixi.js';
 
 import { BUILDING_DEFS, type BuildingDef, type BuildingDefId } from './building-defs.js';
+import { activeFloors, activeFloorLevel } from './floor-levels.js';
 import type { IslandState, PausedReason } from './economy.js';
 import { TILE_PX, desaturate, lighten } from './island.js';
 import { MAINTENANCE_RECIPES } from './maintenance.js';
@@ -213,34 +214,16 @@ export function findOperationalBuilding(
   return undefined;
 }
 
-/** Effective floor level for throughput / power / storage effects.
- *  Unbounded on the high end; floors below 0 are treated as 0. */
-export function floorLevel(b: { floorLevel?: number }): number {
-  return Math.max(0, b.floorLevel ?? 0);
-}
-
-/** Raw stored floor level (same as `floorLevel` now that effects are unbounded). */
-export function rawFloorLevel(b: { floorLevel?: number }): number {
-  return floorLevel(b);
-}
-
-/** Player-facing floor count: raw floor level + 1 (1 = fresh building). */
-export function displayedFloorLevel(b: { floorLevel?: number }): number {
-  return rawFloorLevel(b) + 1;
-}
-
-/** §NEW floor-disable: count of ACTIVE floors ∈ [0, displayedFloorLevel].
- *  = built floors minus `disabledFloors` (clamped at 0). */
-export function activeFloors(b: { floorLevel?: number; disabledFloors?: number }): number {
-  return Math.max(0, displayedFloorLevel(b) - (b.disabledFloors ?? 0));
-}
-
-/** §NEW floor-disable: 0-based effective floor level for the floor-effect
- *  multipliers (activeFloors − 1). ≥ 0 for an operational building; −1 when
- *  fully disabled (never read — the building is then non-operational). */
-export function activeFloorLevel(b: { floorLevel?: number; disabledFloors?: number }): number {
-  return activeFloors(b) - 1;
-}
+// Pure floor-level helpers live in `floor-levels.ts` (no pixi import) so the
+// authoritative server can read floor counts without the render layer. Re-export
+// them here so existing render-layer consumers are unaffected.
+export {
+  floorLevel,
+  rawFloorLevel,
+  displayedFloorLevel,
+  activeFloors,
+  activeFloorLevel,
+} from './floor-levels.js';
 
 /** Floor-upgrade multiplier for throughput / power output / storage: ×(1+L). */
 export function floorEffectMul(level: number): number { return 1 + level; }
