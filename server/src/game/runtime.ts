@@ -28,5 +28,9 @@ export async function loadAndCatchUp(pool: Pool, userId: string, now: number): P
   }
   const advanced: SaveSnapshot = serializeWorld(world, islandStates, now, now);
   await saveSnapshot(pool, userId, advanced);
+  // Some pure entry functions (orbital.ts launch/upgrade/repair) read
+  // world.islandStates for the launching island. main.ts sets this after init;
+  // set it here so server handlers see the same unified view.
+  world.islandStates = islandStates;
   return { world, islandStates };
 }

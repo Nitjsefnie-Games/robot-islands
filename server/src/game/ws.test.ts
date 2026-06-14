@@ -9,6 +9,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import WebSocket from 'ws';
 import type { AddressInfo } from 'node:net';
 import { testPool, resetDb, buildTestApp } from '../test-helpers.js';
+import { SCHEMA_VERSION } from '../../../src/persistence.js';
 
 const pool = testPool();
 const app = buildTestApp(pool);
@@ -56,13 +57,39 @@ function awaitOpen(ws: WebSocket): Promise<void> {
   });
 }
 
-/** Send one envelope and await the single ack frame. */
-function sendAndAwait(ws: WebSocket, envelope: unknown): Promise<Record<string, unknown>> {
+/** Send one envelope and await its matching ack frame, ignoring any
+ *  intervening `state` push messages (including the initial connect push). */
+function sendAndAwait(ws: WebSocket, envelope: { seq: number } & Record<string, unknown>): Promise<Record<string, unknown>> {
   return new Promise((resolve, reject) => {
+    const seq = envelope.seq;
+    const onMsg = (data: Buffer) => {
+      let parsed: Record<string, unknown>;
+      try { parsed = JSON.parse(data.toString()); } catch (e) { reject(e); return; }
+      // Skip periodic/intent-triggered state pushes; wait for the ack.
+      if (parsed.type === 'state') {
+        ws.once('message', onMsg);
+        return;
+      }
+      if (parsed.seq === seq) {
+        resolve(parsed);
+        return;
+      }
+      // A message with a different seq could be a stray late ack; keep listening.
+      ws.once('message', onMsg);
+    };
+    ws.once('message', onMsg);
+    ws.send(JSON.stringify(envelope));
+  });
+}
+
+/** Await the next message frame from the socket, with an optional timeout. */
+function awaitMessage(ws: WebSocket, timeoutMs = 2000): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(`awaitMessage timed out after ${timeoutMs}ms`)), timeoutMs);
     ws.once('message', (data: Buffer) => {
+      clearTimeout(timer);
       try { resolve(JSON.parse(data.toString())); } catch (e) { reject(e); }
     });
-    ws.send(JSON.stringify(envelope));
   });
 }
 
@@ -116,11 +143,14 @@ describe('game ws', () => {
 
     // Collect the next two ack frames, then fire two placements at DIFFERENT
     // tiles back-to-back without awaiting in between (tests the per-connection
-    // serialization chain — they must not race the same saves row).
+    // serialization chain — they must not race the same saves row). Ignore any
+    // intervening state pushes (initial connect push + post-intent pushes).
     const acks: Array<Record<string, unknown>> = [];
     const got = new Promise<void>((resolve) => {
       const onMsg = (data: Buffer) => {
-        acks.push(JSON.parse(data.toString()));
+        const parsed = JSON.parse(data.toString()) as Record<string, unknown>;
+        if (parsed.type === 'state') return;
+        acks.push(parsed);
         if (acks.length === 2) { ws.off('message', onMsg); resolve(); }
       };
       ws.on('message', onMsg);
@@ -140,5 +170,51 @@ describe('game ws', () => {
     expect(state.statusCode).toBe(200);
     expect(state.json().islands.some((i: { id: string }) => i.id === 'home')).toBe(true);
     ws.close();
+  });
+
+  it('pushes a state message immediately on connect', async () => {
+    const cookie = await authedCookieWithGame('wsstate1@x.com');
+    const ws = new WebSocket(baseWsUrl, { headers: { cookie } });
+    await awaitOpen(ws);
+    const state = await awaitMessage(ws);
+    expect(state.type).toBe('state');
+    expect(state.snapshot).toBeDefined();
+    expect((state.snapshot as { v: number }).v).toBe(SCHEMA_VERSION);
+    expect((state.snapshot as { world: { islands: Array<{ id: string }> } }).world.islands.some((i) => i.id === 'home')).toBe(true);
+    ws.close();
+  });
+
+  it('pushes a state message after a successful intent', async () => {
+    const cookie = await authedCookieWithGame('wsstate2@x.com');
+    const ws = new WebSocket(baseWsUrl, { headers: { cookie } });
+    await awaitOpen(ws);
+    await awaitMessage(ws); // consume initial state
+    ws.send(JSON.stringify(PLACE(7)));
+    const ack = await awaitMessage(ws);
+    expect(ack.seq).toBe(7);
+    expect(ack.ok).toBe(true);
+    const state = await awaitMessage(ws);
+    expect(state.type).toBe('state');
+    expect((state.snapshot as { world: { islands: Array<{ id: string; buildings: Array<{ defId: string }> }> } }).world.islands.some(
+      (i) => i.id === 'home' && i.buildings.some((b) => b.defId === 'workshop'),
+    )).toBe(true);
+    ws.close();
+  });
+
+  it('pushes a state message on the periodic tick', async () => {
+    const cookie = await authedCookieWithGame('wsstate3@x.com');
+    const tickPool = testPool();
+    const tickApp = buildTestApp(tickPool, { wsStatePushIntervalMs: 50 });
+    await tickApp.listen({ host: '127.0.0.1', port: 0 });
+    const addr = tickApp.server.address() as AddressInfo;
+    const url = `ws://127.0.0.1:${addr.port}/api/game/ws`;
+    const ws = new WebSocket(url, { headers: { cookie } });
+    await awaitOpen(ws);
+    await awaitMessage(ws); // consume initial state
+    const tick = await awaitMessage(ws, 1000);
+    expect(tick.type).toBe('state');
+    ws.close();
+    await tickApp.close();
+    await tickPool.end();
   });
 });
