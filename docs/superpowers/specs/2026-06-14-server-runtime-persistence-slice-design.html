@@ -1,0 +1,257 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Design spec — Server migration slice 2: Server runtime + persistence</title>
+  <style>
+    :root {
+      --ivory:#1B1A17; --slate:#F5F3EC; --clay:#D97757; --oat:#3A352B; --olive:#8FA56E; --rust:#E08B7F;
+      --gray-150:#2E2C27; --gray-300:#3A3833; --gray-500:#8F8D82; --gray-700:#CFCCC2; --white:#252420;
+      --serif:ui-serif,Georgia,serif; --sans:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+      --mono:ui-monospace,'SF Mono',Menlo,monospace; --radius:12px; --border:1.5px solid var(--gray-300);
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:var(--sans); background:var(--ivory); color:var(--gray-700); line-height:1.58;
+      padding:56px 32px 120px; -webkit-font-smoothing:antialiased; }
+    .page { margin:0 auto; max-width:920px; }
+    .eyebrow { font-family:var(--mono); font-size:12px; letter-spacing:0.08em; text-transform:uppercase; color:var(--gray-500); margin-bottom:12px; }
+    h1 { font-family:var(--serif); font-weight:500; font-size:38px; line-height:1.14; color:var(--slate); margin-bottom:18px; letter-spacing:-0.01em; }
+    .context-box { background:var(--gray-150); border:var(--border); border-radius:var(--radius); padding:16px 20px; font-size:14.5px; }
+    .context-box .label { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--gray-500); display:block; margin-bottom:6px; }
+    .summary { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin:24px 0 48px; }
+    @media (max-width:900px){ .summary{ grid-template-columns:repeat(2,1fr); } }
+    .summary .cell { background:var(--white); border:var(--border); border-radius:var(--radius); padding:18px 20px; }
+    .summary .k { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--gray-500); margin-bottom:6px; }
+    .summary .v { font-size:17px; color:var(--slate); font-weight:600; }
+    .summary .v.accent { color:var(--clay); } .summary .v.ok { color:var(--olive); }
+    .decision { background:var(--white); border:var(--border); border-left:4px solid var(--clay); border-radius:var(--radius); padding:22px 26px; margin-bottom:48px; }
+    .decision .d-tag { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.07em; color:var(--clay); margin-bottom:8px; }
+    .decision .d-head { font-family:var(--serif); font-size:22px; font-weight:500; color:var(--slate); margin-bottom:10px; }
+    .decision .d-body { font-size:14.5px; } .decision .d-body + .d-body { margin-top:8px; }
+    nav.toc { background:var(--white); border:var(--border); border-radius:var(--radius); padding:18px 22px; margin-bottom:48px; }
+    nav.toc .label { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--gray-500); margin-bottom:10px; }
+    nav.toc ol { columns:2; column-gap:32px; margin-left:18px; font-size:14px; } @media (max-width:720px){ nav.toc ol{ columns:1; } }
+    nav.toc a { color:var(--gray-700); text-decoration:none; } nav.toc a:hover { color:var(--clay); }
+    section { margin-bottom:56px; scroll-margin-top:20px; }
+    .sec-head { display:flex; align-items:baseline; gap:14px; margin-bottom:8px; }
+    .sec-head .num { font-family:var(--mono); font-size:12px; background:var(--oat); color:var(--slate); padding:3px 9px; border-radius:8px; }
+    .sec-head h2 { font-family:var(--serif); font-weight:500; font-size:26px; color:var(--slate); letter-spacing:-0.01em; }
+    .sec-intro { font-size:14.5px; color:var(--gray-500); margin-bottom:24px; }
+    p.body { font-size:14.5px; margin-bottom:14px; } p.body strong { color:var(--slate); }
+    ul.body { font-size:14.5px; margin:0 0 14px 20px; } ul.body li { margin:6px 0; }
+    code { font-family:var(--mono); font-size:0.88em; background:var(--gray-150); border:1px solid var(--gray-300); border-radius:5px; padding:1px 5px; color:#C9B98A; }
+    pre { font-family:var(--mono); font-size:12.5px; background:var(--gray-150); border:var(--border); border-radius:var(--radius); padding:16px 18px; overflow-x:auto; color:var(--gray-700); margin-bottom:18px; line-height:1.5; }
+    pre code { background:none; border:none; padding:0; color:inherit; font-size:inherit; }
+    .tbl { width:100%; border:var(--border); border-radius:var(--radius); border-collapse:separate; border-spacing:0; overflow:hidden; font-size:13.5px; margin-bottom:18px; }
+    .tbl th,.tbl td { text-align:left; padding:11px 16px; border-bottom:1px solid var(--gray-300); vertical-align:top; }
+    .tbl th { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:var(--gray-500); background:var(--gray-150); font-weight:600; }
+    .tbl tr:last-child td { border-bottom:none; } .tbl td { color:var(--gray-700); } .tbl td.slate { color:var(--slate); font-weight:600; }
+    .tbl tbody tr:hover { background:var(--gray-150); }
+    .risks { border:var(--border); border-radius:var(--radius); overflow:hidden; background:var(--white); }
+    .risks .row { display:grid; grid-template-columns:1.6fr 90px 1.6fr; } @media (max-width:780px){ .risks .row{ grid-template-columns:1fr; } }
+    .risks .row + .row { border-top:var(--border); }
+    .risks .cell { padding:14px 18px; font-size:13.5px; } .risks .cell + .cell { border-left:var(--border); }
+    @media (max-width:780px){ .risks .cell + .cell{ border-left:none; border-top:1px dashed var(--gray-300); } }
+    .risks .head { background:var(--gray-150); font-weight:600; color:var(--slate); font-size:12px; text-transform:uppercase; letter-spacing:0.04em; }
+    .sev { display:inline-block; font-family:var(--mono); font-size:11px; padding:2px 8px; border-radius:6px; font-weight:600; }
+    .sev.med { background:var(--oat); color:var(--slate); } .sev.low { background:#2D3A24; color:#B6CC96; }
+    .deferred { display:flex; flex-direction:column; gap:14px; }
+    .defer { background:var(--white); border:var(--border); border-left:4px solid var(--gray-500); border-radius:10px; padding:16px 20px; }
+    .defer .dt { font-weight:600; font-size:15px; color:var(--slate); margin-bottom:4px; } .defer .dd { font-size:13.5px; color:var(--gray-500); }
+    .footer { color:var(--gray-500); font-size:13px; margin-top:64px; padding-top:22px; border-top:1px solid var(--gray-300); }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="eyebrow">Design spec · robot-islands · server migration slice 2 of 5</div>
+    <h1>Server runtime + persistence</h1>
+    <div class="context-box">
+      <span class="label">Context</span>
+      Slice 1 gave us accounts + sessions. Slice 2 makes the server own game state: it hosts the existing
+      pure simulation layer (<code>advanceIsland</code>, §15.3) and moves persistence from the browser's
+      IndexedDB to Postgres, keyed by account. This is the in-place port strategy of TODO.md ("the pure layer
+      ports as-is"), not a rewrite. The client is still untouched (cutover is slice 4).
+    </div>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Slice</div><div class="v accent">2 of 5</div></div>
+      <div class="cell"><div class="k">Reuses</div><div class="v">pure src/ as-is</div></div>
+      <div class="cell"><div class="k">Risk</div><div class="v ok">Low–Med</div></div>
+      <div class="cell"><div class="k">Client changes</div><div class="v ok">None</div></div>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision</div>
+      <div class="d-head">A per-account server runtime that deserializes, offline-catches-up via advanceIsland, and persists to a Postgres saves table — reusing the pure src/ functions unchanged.</div>
+      <div class="d-body">The integrator is dt-agnostic (a 24h gap is one integrate call) and pixi-free; profile-economy.ts proves the whole persistence+economy chain imports and runs headless. So the server reuses serializeWorld / deserializeWorld / the migrateV* chain / advanceIsland with zero divergence.</div>
+      <div class="d-body">Deliberately NOT here: the intent/WebSocket protocol (slice 3), the client cutover (slice 4), hardening (slice 5), and the world.ts/island.ts pure-render split (TODO #6 — the transitive PixiJS import is import-only and harmless).</div>
+    </div>
+
+    <nav class="toc">
+      <div class="label">Sections</div>
+      <ol>
+        <li><a href="#s1">Background — the seams</a></li>
+        <li><a href="#s2">Decisions captured</a></li>
+        <li><a href="#s3">Data model — saves</a></li>
+        <li><a href="#s4">Architecture — game/ files</a></li>
+        <li><a href="#s5">Migration-chain reuse</a></li>
+        <li><a href="#s6">Time &amp; offline catch-up</a></li>
+        <li><a href="#s7">HTTP surface</a></li>
+        <li><a href="#s8">Testing</a></li>
+        <li><a href="#s9">SPEC.md handling</a></li>
+        <li><a href="#s10">Verification</a></li>
+        <li><a href="#s11">Risks</a></li>
+        <li><a href="#s12">Out of scope</a></li>
+      </ol>
+    </nav>
+
+    <section id="s1">
+      <div class="sec-head"><span class="num">01</span><h2>Background — the seams (verified)</h2></div>
+      <ul class="body">
+        <li><code>advanceIsland(state, nowMs)</code> (<code>src/economy.ts</code>) — event-driven, dt-agnostic, <strong>pixi-free</strong>.</li>
+        <li><code>deserializeWorld(snapshot, nowWall, nowPerf)</code> → <code>{ world, islandStates }</code>; <code>serializeWorld(...)</code> → <code>SaveSnapshot</code> (current <code>SCHEMA_VERSION = v24</code>); <code>loadWorld</code> walks <code>migrateV7→…→v24</code>.</li>
+        <li>These live in <code>src/persistence.ts</code> → <code>src/world.ts</code> → <code>pixi.js</code> (transitive). <strong><code>scripts/profile-economy.ts</code> proves the chain imports + runs in Node</strong> (pixi loaded, never instantiated).</li>
+        <li><code>ECONOMY_TICK_MS = 200</code> + <code>shouldTick</code> (<code>src/economy-clock.ts</code>) — the cadence seam the server now owns.</li>
+        <li>Slice 1 provides <code>db.ts</code>, <code>migrate.ts</code>, <code>auth/guard.ts</code>, <code>app.ts</code>.</li>
+      </ul>
+    </section>
+
+    <section id="s2">
+      <div class="sec-head"><span class="num">02</span><h2>Decisions captured</h2></div>
+      <table class="tbl">
+        <thead><tr><th>Decision</th><th>Choice</th><th>Rationale</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">Strategy</td><td>In-place port of src/</td><td>TODO.md decided input; reuse proven pure layer.</td></tr>
+          <tr><td class="slate">Save granularity</td><td>One saves row per account</td><td>Single-player world per account today.</td></tr>
+          <tr><td class="slate">Snapshot storage</td><td>jsonb column</td><td>Same SaveSnapshot shape the client serializes.</td></tr>
+          <tr><td class="slate">Reuse vs reimplement</td><td>Import pure src/ unchanged</td><td>Zero divergence; the point of "ports as-is".</td></tr>
+          <tr><td class="slate">Pixi transitive import</td><td>Accept (defer split)</td><td>Harmless headless; split is TODO #6.</td></tr>
+          <tr><td class="slate">Tick model</td><td>Lazy catch-up on access + autosave</td><td>No live clients yet; cadence loop is slice 3/4.</td></tr>
+          <tr><td class="slate">Authoritative clock</td><td>Date.now() for nowWall+nowPerf</td><td>Matches profile-economy.ts; gap = elapsed real time.</td></tr>
+          <tr><td class="slate">HTTP surface</td><td>new + state only</td><td>Mutations/intents are slice 3.</td></tr>
+          <tr><td class="slate">Import/export save</td><td>Dropped</td><td>TODO #8 — server-side saves only.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="s3">
+      <div class="sec-head"><span class="num">03</span><h2>Data model — migration 0002_saves.sql</h2></div>
+      <pre><code>CREATE TABLE saves (
+  user_id        uuid PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  snapshot       jsonb NOT NULL,            -- a full SaveSnapshot (client shape)
+  schema_version integer NOT NULL,          -- snapshot.v at write time
+  created_at     timestamptz NOT NULL DEFAULT now(),
+  updated_at     timestamptz NOT NULL DEFAULT now()
+);</code></pre>
+      <p class="body">One save per account (PK = user_id). <code>snapshot</code> is the exact object
+        <code>serializeWorld</code> produces — client and server share one format (key for slice 4).
+        <code>schema_version</code> is denormalized from <code>snapshot.v</code> for cheap version queries.</p>
+    </section>
+
+    <section id="s4">
+      <div class="sec-head"><span class="num">04</span><h2>Architecture — new files (server/src/game/)</h2></div>
+      <table class="tbl">
+        <thead><tr><th>File</th><th>Responsibility</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">game/persistence.ts</td><td>Postgres save I/O + migration chain: loadSnapshot / saveSnapshot / hasSave. Wraps the pure src/persistence.ts logic against the DB instead of IDB.</td></tr>
+          <tr><td class="slate">game/new-game.ts</td><td>Build the initial SaveSnapshot for a fresh account (reuse the client's initial-world constructor — identified in the plan).</td></tr>
+          <tr><td class="slate">game/runtime.ts</td><td>loadAndCatchUp(pool, userId, now): load → migrate → deserialize → advanceIsland all populated islands to now → reserialize → persist → return state.</td></tr>
+          <tr><td class="slate">game/projection.ts</td><td>Minimal read-model: IslandStates → JSON summary (id, level, xp, key inventory) for GET /api/game/state. Full projection is slice 3.</td></tr>
+          <tr><td class="slate">game/routes.ts</td><td>POST /api/game/new, GET /api/game/state, behind the auth guard.</td></tr>
+        </tbody>
+      </table>
+      <p class="body"><code>buildApp</code> registers the guarded game-routes plugin. Pure imports come via the workspace from <code>../../../src/*.js</code>.</p>
+    </section>
+
+    <section id="s5">
+      <div class="sec-head"><span class="num">05</span><h2>Migration-chain reuse (single-sourced)</h2></div>
+      <p class="body">Slice 2 does not modify the migration logic's behavior. <code>game/persistence.ts</code> reads the
+        <code>saves.snapshot</code> jsonb (possibly old version), runs the <strong>same</strong> version-dispatch +
+        <code>migrateV*</code> chain the client uses, then calls <code>deserializeWorld</code>. If a pure
+        "migrate snapshot object to current" helper isn't already separable from the IDB-bound <code>loadWorld</code>,
+        the plan adds one small pure export to <code>src/persistence.ts</code>
+        (<code>migrateSnapshotToCurrent(raw)</code>) and refactors <code>loadWorld</code> to call it — keeping client +
+        server on one code path (with SPEC + tests updated).</p>
+    </section>
+
+    <section id="s6">
+      <div class="sec-head"><span class="num">06</span><h2>Time &amp; offline catch-up</h2></div>
+      <ul class="body">
+        <li><strong>On save</strong>: stamp <code>savedAt = savedAtPerf = Date.now()</code>.</li>
+        <li><strong>On load</strong>: <code>deserializeWorld(snapshot, Date.now(), Date.now())</code> — <code>perfShift</code> becomes the real elapsed time; each <code>IslandState.lastTick</code> is shifted so the next <code>advanceIsland(state, Date.now())</code> integrates exactly the offline gap.</li>
+        <li><code>loadAndCatchUp</code> advances every populated island then re-serializes + persists, so catch-up is durable. Same path for a 1-second and a 30-day gap.</li>
+      </ul>
+    </section>
+
+    <section id="s7">
+      <div class="sec-head"><span class="num">07</span><h2>HTTP surface (/api/game, behind the slice-1 auth guard)</h2></div>
+      <table class="tbl">
+        <thead><tr><th>Method</th><th>Path</th><th>Success</th><th>Failure</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">POST</td><td>/api/game/new</td><td>201 + summary (creates initial save)</td><td>409 if a save exists</td></tr>
+          <tr><td class="slate">GET</td><td>/api/game/state</td><td>200 + projection (load, catch up, persist)</td><td>404 no save; 401 unauthenticated</td></tr>
+        </tbody>
+      </table>
+      <p class="body">No mutation endpoints this slice. Autosave (on a timer + after each catch-up) is internal, not a public route.</p>
+    </section>
+
+    <section id="s8">
+      <div class="sec-head"><span class="num">08</span><h2>Testing (vitest, against robot_islands_test)</h2></div>
+      <ul class="body">
+        <li><strong>Save roundtrip</strong>: save then load returns an identical SaveSnapshot; schema_version matches snapshot.v.</li>
+        <li><strong>Migration on load</strong>: an older-version fixture is migrated to SCHEMA_VERSION and deserializes cleanly.</li>
+        <li><strong>Offline catch-up</strong>: a snapshot saved N hours ago advances on load; split-invariance sanity.</li>
+        <li><strong>New game</strong>: POST /new creates a save; second call → 409.</li>
+        <li><strong>State</strong>: GET /state returns a projection; 404 before new; 401 unauthenticated.</li>
+        <li><strong>Pure-layer reuse smoke</strong>: importing serializeWorld/advanceIsland from src/ compiles + runs (no pixi instantiation).</li>
+      </ul>
+    </section>
+
+    <section id="s9">
+      <div class="sec-head"><span class="num">09</span><h2>SPEC.md handling</h2></div>
+      <p class="body">This slice moves persistence server-side, so: expand <strong>Appendix C</strong> (runtime + saves + catch-up);
+        annotate <strong>§15.6</strong> as superseded-for-state-ownership (state + persistence now server-authoritative for
+        server accounts), pointer to Appendix C — "superseded, cutover pending" since the client still runs locally until
+        slice 4. If <code>migrateSnapshotToCurrent</code> is extracted, update the persistence section + migration tests.</p>
+    </section>
+
+    <section id="s10">
+      <div class="sec-head"><span class="num">10</span><h2>Verification</h2></div>
+      <ul class="body">
+        <li><code>npm run build -w server</code> clean (server now imports src/ pure modules).</li>
+        <li><code>npm test -w server</code> green (game suites + slice-1 suites); root <code>npm test</code> still green.</li>
+        <li>Live: authenticated POST /api/game/new → 201; GET /api/game/state → 200; re-GET after a time gap shows advanced state; psql shows one saves row per account.</li>
+      </ul>
+    </section>
+
+    <section id="s11">
+      <div class="sec-head"><span class="num">11</span><h2>Risks</h2></div>
+      <div class="risks">
+        <div class="row"><div class="cell head">Risk</div><div class="cell head">Sev</div><div class="cell head">Mitigation</div></div>
+        <div class="row"><div class="cell">Importing src/persistence.ts drags PixiJS into the server bundle.</div><div class="cell"><span class="sev low">LOW</span></div><div class="cell">Import-only, proven headless; split deferred to TODO #6; documented.</div></div>
+        <div class="row"><div class="cell">Extracting migrateSnapshotToCurrent breaks the client.</div><div class="cell"><span class="sev med">MED</span></div><div class="cell">Behavior-preserving pure extraction; root persistence tests are the gate; keep loadWorld signature.</div></div>
+        <div class="row"><div class="cell">Snapshot jsonb shape drift vs server expectations.</div><div class="cell"><span class="sev med">MED</span></div><div class="cell">Reuse exact serializeWorld output; roundtrip test asserts identity.</div></div>
+        <div class="row"><div class="cell">Clock/perfShift mismatch yields wrong catch-up.</div><div class="cell"><span class="sev med">MED</span></div><div class="cell">savedAt=savedAtPerf=Date.now(); load passes Date.now() for both; catch-up + split-invariance tests.</div></div>
+        <div class="row"><div class="cell">New-game constructor not cleanly reusable from src/.</div><div class="cell"><span class="sev med">MED</span></div><div class="cell">Plan identifies the initial-world path; extract a small tested pure builder if browser-coupled.</div></div>
+      </div>
+    </section>
+
+    <section id="s12">
+      <div class="sec-head"><span class="num">12</span><h2>Out of scope (named)</h2></div>
+      <div class="deferred">
+        <div class="defer"><div class="dt">Intent/mutation protocol + WebSockets</div><div class="dd">Slice 3.</div></div>
+        <div class="defer"><div class="dt">Client cutover to server state</div><div class="dd">Slice 4.</div></div>
+        <div class="defer"><div class="dt">Trust-surface hardening (as-unknown-as casts, trade/XP)</div><div class="dd">Slice 5.</div></div>
+        <div class="defer"><div class="dt">world.ts/island.ts pure/render split</div><div class="dd">TODO #6, deferred.</div></div>
+        <div class="defer"><div class="dt">Fixed-cadence server tick loop</div><div class="dd">Arrives with live clients (slice 3/4); this slice ticks lazily.</div></div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <p>Design spec · generated 2026-06-14 · robot-islands server migration slice 2 of 5 · relates to: TODO.md, SPEC.md §15.6 / Appendix C, slice-1 design</p>
+    </div>
+  </div>
+</body>
+</html>
