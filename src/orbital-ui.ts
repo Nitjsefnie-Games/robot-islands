@@ -24,6 +24,7 @@ import { effectiveSkillMultipliers } from './skilltree.js';
 import { mountModal, type ModalHandle } from './ui-modal.js';
 import { VISION_BLUE, type WorldState } from './world.js';
 import { getToastHandle } from './toast.js';
+import { unwrapGatewayResult, type MutationGateway } from './mutation-gateway.js';
 
 export interface OrbitalUiHandle {
   show(): void;
@@ -60,6 +61,9 @@ export interface OrbitalUiHandle {
 export interface OrbitalUiDeps {
   readonly world: WorldState;
   readonly islandStates: Map<string, IslandState>;
+  /** Mutation gateway — optional so tests can keep wiring only the fields
+   *  they already have. */
+  gateway?: MutationGateway;
   /** Convert a screen-pixel point to a world-tile point (fed by main.ts
    *  using the camera). Used by the reticle to colour by reachability. */
   screenToWorldTile(screenX: number, screenY: number): { x: number; y: number };
@@ -273,14 +277,18 @@ export function mountOrbitalUi(
     nowMs: number,
   ): { ok: boolean; reason?: string } {
     if (!armed) return { ok: false, reason: 'not-armed' };
-    const result = launchSatellite(
-      deps.world,
-      armed.islandId,
-      armed.variant,
-      targetWorldTileX,
-      targetWorldTileY,
-      nowMs,
-    );
+    const result = deps.gateway
+      ? unwrapGatewayResult(
+          deps.gateway.launchSatellite(armed.islandId, armed.variant, targetWorldTileX, targetWorldTileY, nowMs),
+        )
+      : launchSatellite(
+          deps.world,
+          armed.islandId,
+          armed.variant,
+          targetWorldTileX,
+          targetWorldTileY,
+          nowMs,
+        );
     const toast = getToastHandle();
     if (result.ok) {
       const msg = `Launched ${armed.variant} sat from ${nameForIsland(deps.world, armed.islandId)}`;
@@ -292,7 +300,8 @@ export function mountOrbitalUi(
       render();
       return { ok: true };
     }
-    const label = FAIL_REASON_LABEL[result.reason] ?? result.reason;
+    const failReason = result.reason ?? 'unknown';
+    const label = FAIL_REASON_LABEL[failReason] ?? failReason;
     const msg = `Launch failed: ${label}`;
     flash(msg);
     toast?.show(msg, 'failure');
@@ -300,7 +309,7 @@ export function mountOrbitalUi(
     // can pick a different target without re-arming. On other rejections
     // (insufficient-resources, etc.) the modal would be more useful — disarm
     // and reopen so the player can see what's missing.
-    if (result.reason !== 'target-at-source' && result.reason !== 'target-out-of-range') {
+    if (failReason !== 'target-at-source' && failReason !== 'target-out-of-range') {
       setLaunchMode(false);
       modal.show();
       render();
@@ -420,7 +429,9 @@ export function mountOrbitalUi(
       }
       upgradeBtn.addEventListener('click', () => {
         if (!canAfford) return;
-        const r = upgradeSpaceport(deps.world, state.id);
+        const r = deps.gateway
+          ? unwrapGatewayResult(deps.gateway.upgradeSpaceport(state.id))
+          : upgradeSpaceport(deps.world, state.id);
         const toast = getToastHandle();
         if (r.ok) {
           flash(`Spaceport upgraded to T${nextTier}`);

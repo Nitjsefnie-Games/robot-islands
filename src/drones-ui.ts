@@ -35,6 +35,7 @@ import { fuelForTier } from './recipes.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
 import { effectiveSkillMultipliers, tierForLevel } from './skilltree.js';
 import { tileToWorldPx, VISION_BLUE, type IslandSpec, type WorldState } from './world.js';
+import { unwrapGatewayResult, type MutationGateway } from './mutation-gateway.js';
 
 /** Filter a buildings array to operational Drone Pads only.
  *  Extracted to DRY the repeated `b.defId === 'dronepad' && isOperationalBuilding(b)` predicate. */
@@ -134,6 +135,9 @@ export interface DroneUiHandle {
 /** All the bits the UI needs handed in. The main module wires this once at
  *  bootstrap; the dock doesn't otherwise know about cameras or screens. */
 export interface DroneUiDeps {
+  /** Mutation gateway — optional so tests can keep wiring only the fields
+   *  they already have. */
+  gateway?: MutationGateway;
   /** The world state — drones list and islands. */
   readonly world: WorldState;
   /** Active-island state getter. Drone-launch origin is the currently
@@ -454,7 +458,10 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   pulseBtn.textContent = '◉ FIRE PULSE';
   pulseBtn.addEventListener('click', () => {
     const origin = deps.getOrigin();
-    const r = firePulse(deps.world, origin, performance.now());
+    const nowMs = performance.now();
+    const r = deps.gateway
+      ? unwrapGatewayResult(deps.gateway.firePulse(origin.id, nowMs))
+      : firePulse(deps.world, origin, nowMs);
     if (r.ok) {
       deps.onDiscoveryChanged();
     }
@@ -1235,7 +1242,9 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
       MAX_FUEL_PER_DRONE,
       Math.max(1, Math.ceil((2 * dist) / currentEfficiency)),
     );
-    const r = dispatchDrone(deps.world, origin, ox, oy, dx, dy, fuelNeeded, nowMs, undefined, selectedTier);
+    const r = deps.gateway
+      ? unwrapGatewayResult(deps.gateway.dispatchDrone(origin.id, ox, oy, dx, dy, fuelNeeded, nowMs, undefined, selectedTier))
+      : dispatchDrone(deps.world, origin, ox, oy, dx, dy, fuelNeeded, nowMs, undefined, selectedTier);
     if (r.ok) {
       setLaunchMode(false);
       refresh(nowMs);
@@ -1278,15 +1287,17 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     // dirX=1, dirY=0) — match that convention. selectedTier omitted: line 369
     // forces resolvedTier=5 when isPathDrawn (waypoints.length≥2).
     const waypointsForDispatch = [originTile, ...deduped];
-    const result = dispatchDrone(
-      deps.world,
-      originState,
-      ox, oy,
-      1, 0,
-      fuel,
-      nowMs,
-      waypointsForDispatch,
-    );
+    const result = deps.gateway
+      ? unwrapGatewayResult(deps.gateway.dispatchDrone(originState.id, ox, oy, 1, 0, fuel, nowMs, waypointsForDispatch))
+      : dispatchDrone(
+          deps.world,
+          originState,
+          ox, oy,
+          1, 0,
+          fuel,
+          nowMs,
+          waypointsForDispatch,
+        );
     if (result.ok) {
       waypointBuffer = [];
       setLaunchMode(false);

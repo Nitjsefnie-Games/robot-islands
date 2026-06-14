@@ -24,6 +24,7 @@ import {
 } from './routes.js';
 import { type IslandSpec, type WorldState } from './world.js';
 import { BUILDING_DEFS } from './building-defs.js';
+import { unwrapGatewayResult, type MutationGateway } from './mutation-gateway.js';
 import { activeFloorLevel, floorEffectMul } from './buildings.js';
 import type { RouteRenderer } from './routes-renderer.js';
 
@@ -51,6 +52,10 @@ export interface RouteUiDeps {
    *  distance/transit-time calculations in the create form). */
   readonly islandSpecs: ReadonlyMap<string, IslandSpec>;
   readonly routeRenderer: RouteRenderer;
+  /** Mutation gateway — optional so tests can keep wiring only the fields
+   *  they already have. When present, all route mutations route through the
+   *  gateway; otherwise the pure helpers are called directly. */
+  gateway?: MutationGateway;
 }
 
 // ---------------------------------------------------------------------------
@@ -581,11 +586,18 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     const dy = spec1.cy - spec2.cy;
     const dist = Math.sqrt(dx * dx + dy * dy);
     const isAny = cargoChoice === '__any__';
-    const route = createRouteFromBuilding(
-      building, fromId, toId, isAny ? null : (cargoChoice as ResourceId), dist,
-    );
-    if (!route) return;
-    deps.world.routes.push(route);
+    if (deps.gateway) {
+      const res = unwrapGatewayResult(
+        deps.gateway.createRoute(fromId, toId, building.id, isAny ? null : (cargoChoice as ResourceId)),
+      );
+      if (!res.ok) return;
+    } else {
+      const route = createRouteFromBuilding(
+        building, fromId, toId, isAny ? null : (cargoChoice as ResourceId), dist,
+      );
+      if (!route) return;
+      deps.world.routes.push(route);
+    }
     refresh(performance.now());
   }
 
@@ -699,7 +711,9 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
       delBtn.classList.add('ri-delbtn');
       styled(delBtn, ['width: 16px', 'height: 16px', 'line-height: 0', 'font-size: 10px'].join(';'));
       delBtn.addEventListener('click', () => {
-        if (route.inFlight.length === 0) {
+        if (deps.gateway) {
+          unwrapGatewayResult(deps.gateway.deleteRoute(route.id));
+        } else if (route.inFlight.length === 0) {
           // Nothing to drain — remove immediately (covers never-dispatched,
           // instant-transit, and power-link routes).
           const idx = deps.world.routes.indexOf(route);
@@ -806,7 +820,12 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     modeSel.addEventListener('mousedown', (e) => { e.stopPropagation(); });
     modeSel.addEventListener('change', (e) => {
       e.stopPropagation();
-      route.mode = modeSel.value as Route['mode'];
+      const mode = modeSel.value as Route['mode'];
+      if (deps.gateway) {
+        unwrapGatewayResult(deps.gateway.setRouteMode(route.id, mode));
+      } else {
+        route.mode = mode;
+      }
       rerender();
     });
     modeRow.appendChild(modeLbl);
@@ -846,7 +865,11 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
         w.addEventListener('change', (e) => {
           e.stopPropagation();
           const v = Math.max(1, Math.floor(Number(w.value) || 1));
-          route.cargo[index] = { ...entry, weight: v };
+          if (deps.gateway) {
+            unwrapGatewayResult(deps.gateway.setCargoWeight(route.id, index, v));
+          } else {
+            route.cargo[index] = { ...entry, weight: v };
+          }
           rerender();
         });
         li.appendChild(w);
@@ -863,10 +886,15 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
       floor.addEventListener('change', (e) => {
         e.stopPropagation();
         const raw = floor.value.trim();
-        const next: typeof entry = { ...entry };
-        if (raw === '') delete (next as { sourceFloorPct?: number }).sourceFloorPct;
-        else (next as { sourceFloorPct?: number }).sourceFloorPct = Math.min(100, Math.max(0, Number(raw) || 0));
-        route.cargo[index] = next;
+        const pct = raw === '' ? undefined : Math.min(100, Math.max(0, Number(raw) || 0));
+        if (deps.gateway) {
+          unwrapGatewayResult(deps.gateway.setCargoFloorPct(route.id, index, pct));
+        } else {
+          const next: typeof entry = { ...entry };
+          if (pct === undefined) delete (next as { sourceFloorPct?: number }).sourceFloorPct;
+          else (next as { sourceFloorPct?: number }).sourceFloorPct = pct;
+          route.cargo[index] = next;
+        }
         rerender();
       });
       li.appendChild(floor);
@@ -879,7 +907,11 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
       del.addEventListener('mousedown', (e) => { e.stopPropagation(); });
       del.addEventListener('click', (e) => {
         e.stopPropagation();
-        route.cargo = route.cargo.filter((_, i) => i !== index);
+        if (deps.gateway) {
+          unwrapGatewayResult(deps.gateway.setRouteCargo(route.id, route.cargo.filter((_, i) => i !== index)));
+        } else {
+          route.cargo = route.cargo.filter((_, i) => i !== index);
+        }
         rerender();
       });
       li.appendChild(del);
@@ -934,7 +966,11 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
       e.stopPropagation();
       const chosen = addSel.value as ResourceId | 'all';
       if (!chosen || (chosen !== 'all' && have.has(chosen))) return;
-      route.cargo = [...route.cargo, { resourceId: chosen }];
+      if (deps.gateway) {
+        unwrapGatewayResult(deps.gateway.setRouteCargo(route.id, [...route.cargo, { resourceId: chosen }]));
+      } else {
+        route.cargo = [...route.cargo, { resourceId: chosen }];
+      }
       rerender();
     });
     addRow.appendChild(addSel);
@@ -948,7 +984,11 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     const dstLi = e.currentTarget as HTMLElement;
     const dst = Number(dstLi.dataset.index);
     if (src === dst || Number.isNaN(src) || Number.isNaN(dst)) return;
-    route.cargo = reorderPriorityList(route.cargo, src, dst) as CargoEntry[];
+    if (deps.gateway) {
+      unwrapGatewayResult(deps.gateway.reorderRouteCargo(route.id, src, dst));
+    } else {
+      route.cargo = reorderPriorityList(route.cargo, src, dst) as CargoEntry[];
+    }
     rerender();
   }
 

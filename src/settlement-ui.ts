@@ -39,6 +39,7 @@ import {
 } from './settlement.js';
 import { tierForLevel } from './skilltree.js';
 import { VISION_BLUE, type IslandSpec, type WorldState } from './world.js';
+import { unwrapGatewayResult, type MutationGateway } from './mutation-gateway.js';
 
 function styled(el: HTMLElement, css: string): void {
   el.style.cssText = css;
@@ -80,6 +81,9 @@ export interface SettlementUiDeps {
   readonly world: WorldState;
   readonly islandStates: Map<string, IslandState>;
   readonly islandSpecs: ReadonlyMap<string, IslandSpec>;
+  /** Mutation gateway — optional so tests can keep wiring only the fields
+   *  they already have. */
+  gateway?: MutationGateway;
   /** Optional: current active-island id. The FROM selector prefers this
    *  when it appears in the populated list, so the panel opens with the
    *  active island as the dispatch origin by default. */
@@ -1071,7 +1075,9 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     targetId = targetSpec.id;
     if (kind === 'anchor') {
       if (!originId) return { ok: false, reason: 'no origin' };
-      const res = settleViaSpacetimeAnchor(deps.world, deps.islandStates, originId, targetId, nowMs);
+      const res = deps.gateway
+        ? unwrapGatewayResult(deps.gateway.settleViaSpacetime(originId, targetId, nowMs))
+        : settleViaSpacetimeAnchor(deps.world, deps.islandStates, originId, targetId, nowMs);
       if (res.ok) {
         deps.onInstantSettled?.();
         setLaunchMode(false);
@@ -1087,17 +1093,29 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     // different island than the dropdown selection, so compute it here at
     // click time rather than trusting the refresh()-time preview.
     const launchFuel = computeFuel(originSpec, targetSpec, tuningFor(kind, selectedTier).tilesPerFuel);
-    const r = dispatchVehicle(
-      deps.world,
-      originSpec,
-      originState,
-      targetSpec,
-      kind,
-      selectedTier,
-      launchFuel,
-      kitCount,
-      nowMs,
-    );
+    const r = deps.gateway
+      ? unwrapGatewayResult(
+          deps.gateway.dispatchSettler(
+            originSpec.id,
+            targetSpec.id,
+            kind,
+            selectedTier,
+            launchFuel,
+            kitCount,
+            nowMs,
+          ),
+        )
+      : dispatchVehicle(
+          deps.world,
+          originSpec,
+          originState,
+          targetSpec,
+          kind,
+          selectedTier,
+          launchFuel,
+          kitCount,
+          nowMs,
+        );
     if (r.ok) {
       setLaunchMode(false);
       refresh(nowMs);
