@@ -23,12 +23,9 @@ import {
   clampSaveIntervalSec,
   clearPrefs,
   clearSave,
-  isValidSaveSnapshot,
-  importSave,
   MAX_SAVE_INTERVAL_SEC,
   MIN_SAVE_INTERVAL_SEC,
   saveWorld,
-  serializeWorld,
   STORAGE_KEY_DISPLAY,
 } from './persistence.js';
 import { showMapPicker } from './map-picker.js';
@@ -409,81 +406,20 @@ export function mountSettingsUi(
       saveSection.appendChild(intervalRow);
 
       // Save-management button strip — wraps so a narrow viewport doesn't
-      // overflow horizontally.
+      // overflow horizontally. Import/export were removed as part of the
+      // server-authoritative migration (TODO #8); saves live server-side.
       const saveButtonStrip = document.createElement('div');
       saveButtonStrip.style.display = 'flex';
       saveButtonStrip.style.flexWrap = 'wrap';
       saveButtonStrip.style.gap = '6px';
       saveButtonStrip.style.paddingTop = '6px';
 
-      const exportBtn = makeButton('Export Save', async () => {
-        try {
-          const snapshot = serializeWorld(deps.world, deps.islandStates);
-          const json = JSON.stringify(snapshot);
-          await navigator.clipboard.writeText(json);
-          window.alert(
-            `Save exported to clipboard (${json.length} characters).`,
-          );
-        } catch (err) {
-          // navigator.clipboard.writeText can reject (no permission, http://
-          // origin, etc.). Surface the error so the user knows nothing was
-          // copied — the clipboard contents are unchanged.
-          console.warn('[robot-islands] export failed:', err);
-          window.alert(
-            'Export failed — clipboard write rejected. See console for details.',
-          );
-        }
-      });
-      saveButtonStrip.appendChild(exportBtn);
-
-      // Hidden file input drives import. Keeping the visible button as the
-      // primary affordance and routing it through the input keeps the styling
-      // consistent with the rest of the panel.
-      const importInput = document.createElement('input');
-      importInput.type = 'file';
-      importInput.accept = 'application/json,.json';
-      importInput.style.display = 'none';
-      importInput.addEventListener('change', async () => {
-        const file = importInput.files?.[0];
-        if (!file) return;
-        try {
-          const text = await file.text();
-          const parsed: unknown = JSON.parse(text);
-          if (!isValidSaveSnapshot(parsed)) {
-            window.alert(
-              'Import failed — file is not a valid save snapshot for this version.',
-            );
-            importInput.value = '';
-            return;
-          }
-          if (
-            !window.confirm(
-              'Import will overwrite the current save and reload the page. Continue?',
-            )
-          ) {
-            importInput.value = '';
-            return;
-          }
-          await importSave(parsed);
-          window.location.reload();
-        } catch (err) {
-          console.warn('[robot-islands] import failed:', err);
-          window.alert('Import failed — could not parse file. See console.');
-          importInput.value = '';
-        }
-      });
-      const importBtn = makeButton('Import Save', () => {
-        importInput.click();
-      });
-      saveButtonStrip.appendChild(importBtn);
-      saveButtonStrip.appendChild(importInput);
-
       const clearBtn = makeButton(
         'Clear Save',
         () => {
           if (
             !window.confirm(
-              'Clear the saved game and reload? This cannot be undone.',
+              'Clear the local saved game and reload? This cannot be undone.',
             )
           )
             return;
@@ -499,7 +435,7 @@ export function mountSettingsUi(
 
       const saveNote = document.createElement('div');
       saveNote.textContent =
-        'Export copies the full save as JSON to your clipboard. Import reads a JSON file and reloads. Rebound keys are NOT yet persisted across reloads.';
+        'Saves are persisted server-side. Clear Save wipes the local IDB copy and reloads. Rebound keys are NOT yet persisted across reloads.';
       saveNote.className = 'ri-muted';
       saveNote.style.fontSize = '10px';
       saveNote.style.lineHeight = '1.4';
