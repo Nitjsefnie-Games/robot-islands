@@ -2427,6 +2427,9 @@ async function main(): Promise<void> {
     // cadence elapses (or a structural event forces a tick). See
     // economy-clock.ts (ECONOMY_TICK_MS — the server-migration seam).
     if (!isRemote) {
+      // World-system tick block (merge/drones/routes/orbital/sonar/vehicles).
+      // The authoritative server runs the same sequence via
+      // src/world-systems-advance.ts during catch-up; keep the two in sync.
       if (forceEconomyTick || shouldTick(now, lastEconomyTickMs)) {
         lastEconomyTickMs = now;
         forceEconomyTick = false;
