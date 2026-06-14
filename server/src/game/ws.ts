@@ -24,10 +24,48 @@ import { serializeWorld } from '../../../src/persistence.js';
  *  without acting. Injectable in tests via `registerGameWsRoutes` options. */
 export const STATE_PUSH_INTERVAL_MS = 1000;
 
+/** Per-connection intent rate limit: max accepted intent frames per rolling
+ *  window. Each frame forces ≥1 Postgres write (loadAndCatchUp's saveSnapshot
+ *  plus the post-intent pushState), so an unthrottled socket is a DB-write-
+ *  amplification DoS. Legitimate play sends at most a handful of intents/sec
+ *  (one per user action); 20/sec is generous headroom. */
+export const WS_INTENT_RATE_LIMIT = 20;
+export const WS_INTENT_RATE_WINDOW_MS = 1000;
+
+/** Sustained-abuse threshold: this many consecutive over-limit frames closes
+ *  the socket. A few bursts get a soft error ack; persistent flooding is hung
+ *  up on (WS close code 1008 = policy violation). */
+export const WS_ABUSE_CLOSE_THRESHOLD = 40;
+
 /** Options for the WS route registration. */
 export interface GameWsOptions {
   /** Override the periodic state-push interval (default 1000 ms). */
   readonly statePushIntervalMs?: number;
+  /** Override the per-connection intent rate limit (default WS_INTENT_RATE_LIMIT). */
+  readonly intentRateLimit?: number;
+  /** Override the rate-limit window (default WS_INTENT_RATE_WINDOW_MS). */
+  readonly intentRateWindowMs?: number;
+}
+
+/** A sliding-window rate limiter over message timestamps. `allow(now)` records
+ *  the attempt and returns whether it is within the limit for the trailing
+ *  window. Pure/testable; one instance per connection. */
+export class SlidingWindowLimiter {
+  private readonly times: number[] = [];
+  constructor(
+    private readonly limit: number,
+    private readonly windowMs: number,
+  ) {}
+
+  /** Record an attempt at `now` and return true if it is within the limit. */
+  allow(now: number): boolean {
+    const cutoff = now - this.windowMs;
+    // Drop timestamps that have aged out of the window.
+    while (this.times.length > 0 && this.times[0]! <= cutoff) this.times.shift();
+    if (this.times.length >= this.limit) return false;
+    this.times.push(now);
+    return true;
+  }
 }
 
 /** Push the current authoritative snapshot to a socket. Returns the serialized
@@ -102,8 +140,35 @@ export function registerGameWsRoutes(
     }, pushIntervalMs);
     socket.on('close', () => { clearInterval(tickInterval); });
 
+    // Per-connection intent rate limiter. Excess frames get a cheap error ack
+    // WITHOUT chaining an applyIntent (so a flood can't amplify into DB writes);
+    // sustained abuse closes the socket. Limited frames don't reach Postgres.
+    const limiter = new SlidingWindowLimiter(
+      opts.intentRateLimit ?? WS_INTENT_RATE_LIMIT,
+      opts.intentRateWindowMs ?? WS_INTENT_RATE_WINDOW_MS,
+    );
+    let consecutiveOverLimit = 0;
+
     socket.on('message', (raw: Buffer) => {
       const text = raw.toString();
+      // Rate-limit BEFORE chaining the expensive load->apply->persist so a
+      // flooding client cannot grow the in-memory chain or hit the DB.
+      if (!limiter.allow(Date.now())) {
+        consecutiveOverLimit += 1;
+        // Correlate the rejection to the frame's seq when parseable.
+        const seq = (() => {
+          try {
+            const d = JSON.parse(text) as Record<string, unknown>;
+            return typeof d.seq === 'number' ? d.seq : -1;
+          } catch { return -1; }
+        })();
+        try { socket.send(JSON.stringify({ seq, ok: false, error: 'rate limit exceeded' })); } catch { /* socket gone */ }
+        if (consecutiveOverLimit >= WS_ABUSE_CLOSE_THRESHOLD) {
+          try { socket.close(1008, 'rate limit'); } catch { /* socket gone */ }
+        }
+        return;
+      }
+      consecutiveOverLimit = 0;
       chain = chain.then(async () => {
         const parsed = parseEnvelope(text);
         if ('error' in parsed) {
@@ -115,8 +180,15 @@ export function registerGameWsRoutes(
         // After every accepted intent, push the fresh authoritative snapshot
         // IN ADDITION to the ack. The ack keeps its existing projection field
         // for slice-3 back-compat; the state push carries the full snapshot.
+        // This push is best-effort: the intent is ALREADY durably committed by
+        // applyIntent and the ack is already sent. Swallow a push failure in its
+        // own try/catch so it can't fall through to the chain's `.catch` and
+        // manufacture a spurious {seq:-1,ok:false} failure frame for an intent
+        // that actually succeeded — the next periodic tick re-pushes anyway.
         if (ack.ok) {
-          await pushState(socket, pool, userId);
+          try {
+            await pushState(socket, pool, userId);
+          } catch { /* best-effort; next periodic tick re-pushes */ }
         }
       }).catch((err: unknown) => {
         // applyIntent already try/catches handler throws; this catch covers a

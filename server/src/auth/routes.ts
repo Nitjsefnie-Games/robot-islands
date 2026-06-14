@@ -8,6 +8,8 @@ import { setSessionCookie, clearSessionCookie, SESSION_COOKIE, SESSION_TTL_MS } 
 import { makeAuthGuard } from './guard.js';
 
 // A throwaway hash to run verify against unknown emails (defeats timing oracle).
+// hashPassword is now async (off-thread scrypt), so this is a Promise resolved
+// once at module load and awaited in the login handler.
 const DUMMY_HASH = hashPassword('this-is-never-a-real-password');
 
 const credentialsSchema = {
@@ -33,7 +35,7 @@ export function registerAuthRoutes(app: FastifyInstance, pool: Pool, cookieSecur
 
   app.post<{ Body: Creds }>('/api/auth/signup', { schema: { body: credentialsSchema } }, async (req, reply) => {
     try {
-      const user = await createUser(pool, req.body.email, hashPassword(req.body.password));
+      const user = await createUser(pool, req.body.email, await hashPassword(req.body.password));
       setSessionCookie(reply, await issueSession(user.id), cookieOpts);
       return reply.code(201).send({ id: user.id, email: user.email });
     } catch (err) {
@@ -50,9 +52,9 @@ export function registerAuthRoutes(app: FastifyInstance, pool: Pool, cookieSecur
     // this dummy verify costs the same as the real wrong-password path.
     let ok = false;
     if (user) {
-      ok = verifyPassword(user.password, req.body.password);
+      ok = await verifyPassword(user.password, req.body.password);
     } else {
-      verifyPassword(DUMMY_HASH, req.body.password);
+      await verifyPassword(await DUMMY_HASH, req.body.password);
     }
     if (!user || !ok) return reply.code(401).send({ error: 'invalid email or password' });
     setSessionCookie(reply, await issueSession(user.id), cookieOpts);
