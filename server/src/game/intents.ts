@@ -18,7 +18,23 @@ import type { LiveGame } from './runtime.js';
 import type { IslandSpec } from '../../../src/world.js';
 import type { IslandState } from '../../../src/economy.js';
 import { BUILDING_DEFS, type BuildingDefId } from '../../../src/building-defs.js';
-import { placeBuilding, validatePlacement } from '../../../src/placement.js';
+import {
+  placeBuilding,
+  validatePlacement,
+  demolishBuilding,
+  cancelConstruction,
+  applyUpgrade,
+  setBuildingActiveFloors,
+} from '../../../src/placement.js';
+import { displayedFloorLevel } from '../../../src/buildings.js';
+import { dispatchDrone } from '../../../src/drones.js';
+import {
+  createRouteFromBuilding,
+  routeProfileForBuilding,
+  islandHasTeleporterPad,
+} from '../../../src/routes.js';
+import { buyNode, nodePurchaseStatus, DEFAULT_GRAPH } from '../../../src/skilltree.js';
+import type { ResourceId } from '../../../src/recipes.js';
 import type { Rotation } from '../../../src/shape-mask.js';
 
 export type IntentResult = { ok: true } | { ok: false; error: string };
@@ -100,6 +116,211 @@ export const INTENTS: Record<string, IntentHandler> = {
       // deducts cost from authoritative inventory only on the success path.
       const result = placeBuilding(spec, state, typedDefId, x, y, rot, makePlacedIdGenerator(spec));
       if (!result.ok) return { ok: false, error: result.reason };
+      return { ok: true };
+    },
+  },
+
+  // demolish-building — refunding intent (§6.7). Player supplies
+  // { islandId, buildingId }. `demolishBuilding` self-validates existence
+  // (returns {ok:false, reason:'not-found'} for an unknown id) and computes
+  // the 30% scrap + 50% material refund from authoritative invested cost.
+  // No affordability gate (it credits, never charges), so the handler's job is
+  // payload-shape validation + island/target resolution; the pure fn owns the
+  // legality (building must exist).
+  'demolish-building': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { islandId, buildingId } = payload;
+      if (typeof islandId !== 'string') return { ok: false, error: 'islandId must be a string' };
+      if (typeof buildingId !== 'string') return { ok: false, error: 'buildingId must be a string' };
+      const island = resolveIsland(game, islandId);
+      if (!island) return { ok: false, error: 'unknown island' };
+      const r = demolishBuilding(island.spec, island.state, buildingId);
+      if (!r.ok) return { ok: false, error: r.reason ?? 'demolish failed' };
+      return { ok: true };
+    },
+  },
+
+  // cancel-construction — refunding intent. Player supplies
+  // { islandId, buildingId }. `cancelConstruction` self-validates: it rejects
+  // an unknown id ('not-found') and a building that is neither building nor has
+  // queued upgrade jobs ('not-building'), refunding 100% of materials on the
+  // success path. No affordability gate. Handler validates payload + resolves
+  // the island; the pure fn owns the "is there a cancellable job" legality.
+  'cancel-construction': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { islandId, buildingId } = payload;
+      if (typeof islandId !== 'string') return { ok: false, error: 'islandId must be a string' };
+      if (typeof buildingId !== 'string') return { ok: false, error: 'buildingId must be a string' };
+      const island = resolveIsland(game, islandId);
+      if (!island) return { ok: false, error: 'unknown island' };
+      const r = cancelConstruction(island.spec, island.state, buildingId);
+      if (!r.ok) return { ok: false, error: r.reason ?? 'cancel failed' };
+      return { ok: true };
+    },
+  },
+
+  // upgrade-building — §9.3 queued construction job. Player supplies
+  // { islandId, buildingId }. The server derives the ascending upgrade cost
+  // from authoritative floor state. `applyUpgrade` self-validates the cost gate
+  // ('insufficient-resources') AND the §9.3 queue gate ('queue-full'), and
+  // deducts cost from authoritative inventory only on the success path — so no
+  // separate handler-side affordability pre-check is needed beyond payload
+  // validation + island resolution. (The trust surface here is satisfied by the
+  // pure fn's own affordabilityShortfall check against server inventory.)
+  'upgrade-building': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { islandId, buildingId } = payload;
+      if (typeof islandId !== 'string') return { ok: false, error: 'islandId must be a string' };
+      if (typeof buildingId !== 'string') return { ok: false, error: 'buildingId must be a string' };
+      const island = resolveIsland(game, islandId);
+      if (!island) return { ok: false, error: 'unknown island' };
+      const r = applyUpgrade(island.spec, island.state, buildingId);
+      if (!r.ok) return { ok: false, error: r.reason ?? 'upgrade failed' };
+      return { ok: true };
+    },
+  },
+
+  // set-active-floors — §4.5 free toggle. Player supplies
+  // { islandId, buildingId, disabledFloors }. No cost. `setBuildingActiveFloors`
+  // CLAMPS an out-of-range value silently to ok:true, so an under-validating
+  // handler would let a client send garbage that maps to an unintended floor
+  // count. Authoritative pre-check: resolve the building from server state and
+  // reject a disabledFloors outside [0, displayedFloorLevel] BEFORE applying, so
+  // the request must name a real, in-range floor count. (Existence is also
+  // re-checked by the pure fn's 'not-found'.)
+  'set-active-floors': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { islandId, buildingId, disabledFloors } = payload;
+      if (typeof islandId !== 'string') return { ok: false, error: 'islandId must be a string' };
+      if (typeof buildingId !== 'string') return { ok: false, error: 'buildingId must be a string' };
+      if (typeof disabledFloors !== 'number' || !Number.isInteger(disabledFloors) || disabledFloors < 0) {
+        return { ok: false, error: 'disabledFloors must be a non-negative integer' };
+      }
+      const island = resolveIsland(game, islandId);
+      if (!island) return { ok: false, error: 'unknown island' };
+      const b = island.spec.buildings.find((bb) => bb.id === buildingId);
+      if (!b) return { ok: false, error: 'not-found' };
+      // Authoritative range gate: the client can't disable more floors than the
+      // building actually has (the pure fn would silently clamp instead).
+      if (disabledFloors > displayedFloorLevel(b)) {
+        return { ok: false, error: 'disabledFloors out of range' };
+      }
+      const r = setBuildingActiveFloors(island.spec, island.state, buildingId, disabledFloors);
+      if (!r.ok) return { ok: false, error: r.reason ?? 'set-active-floors failed' };
+      return { ok: true };
+    },
+  },
+
+  // dispatch-drone — §11.5/§11.7 scout launch. Player supplies
+  // { islandId, originX, originY, dirX, dirY, fuelLoaded }. `dispatchDrone`
+  // self-validates direction ('invalid-direction'), the per-pad in-flight cap
+  // ('already-in-flight'), and the §11.7 tier-matched fuel grade + amount
+  // against authoritative origin inventory ('insufficient-fuel') — deducting
+  // fuel and appending the Drone to world.drones only on success. The fuel
+  // check IS the affordability gate and it runs on server state, so the handler
+  // validates payload shape (all six numbers finite) + resolves the origin
+  // island; the pure fn owns fuel-grade/amount legality.
+  'dispatch-drone': {
+    apply(game: LiveGame, payload: unknown, now: number): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { islandId, originX, originY, dirX, dirY, fuelLoaded } = payload;
+      if (typeof islandId !== 'string') return { ok: false, error: 'islandId must be a string' };
+      for (const [name, v] of [
+        ['originX', originX], ['originY', originY],
+        ['dirX', dirX], ['dirY', dirY], ['fuelLoaded', fuelLoaded],
+      ] as const) {
+        if (typeof v !== 'number' || !Number.isFinite(v)) {
+          return { ok: false, error: `${name} must be a finite number` };
+        }
+      }
+      const island = resolveIsland(game, islandId);
+      if (!island) return { ok: false, error: 'unknown island' };
+      const r = dispatchDrone(
+        game.world, island.state,
+        originX as number, originY as number,
+        dirX as number, dirY as number,
+        fuelLoaded as number, now,
+      );
+      if (!r.ok) return { ok: false, error: r.reason };
+      return { ok: true };
+    },
+  },
+
+  // create-route — §2.4 inter-island transport. Player supplies
+  // { fromIslandId, toIslandId, buildingId, filterResource? }. No cost.
+  // `createRouteFromBuilding` returns null only when the building is not a
+  // transport def, and does NOT append to world.routes — the caller must push.
+  // It TRUSTS its caller on island existence, building ownership, distinctness,
+  // and the teleporter→pad rule. Authoritative legality pre-check mirrors the
+  // routes-UI commission path: both island specs exist on server state, they're
+  // distinct, the building exists on the FROM island, it has a route profile,
+  // and a teleporter route requires a teleporter pad on the TO island. The
+  // server computes distance from authoritative island centres (never trusts a
+  // client distance), then pushes the route.
+  'create-route': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { fromIslandId, toIslandId, buildingId, filterResource } = payload;
+      if (typeof fromIslandId !== 'string') return { ok: false, error: 'fromIslandId must be a string' };
+      if (typeof toIslandId !== 'string') return { ok: false, error: 'toIslandId must be a string' };
+      if (typeof buildingId !== 'string') return { ok: false, error: 'buildingId must be a string' };
+      if (filterResource !== undefined && typeof filterResource !== 'string') {
+        return { ok: false, error: 'filterResource must be a string when present' };
+      }
+      if (fromIslandId === toIslandId) return { ok: false, error: 'from and to must differ' };
+      const fromSpec = game.world.islands.find((s) => s.id === fromIslandId);
+      if (!fromSpec) return { ok: false, error: 'unknown from island' };
+      const toSpec = game.world.islands.find((s) => s.id === toIslandId);
+      if (!toSpec) return { ok: false, error: 'unknown to island' };
+      const building = fromSpec.buildings.find((b) => b.id === buildingId);
+      if (!building) return { ok: false, error: 'building not on from island' };
+      const profile = routeProfileForBuilding(building.defId);
+      if (profile === null) return { ok: false, error: 'building is not a transport building' };
+      if (profile.type === 'teleporter' && !islandHasTeleporterPad(toSpec)) {
+        return { ok: false, error: 'destination has no teleporter pad' };
+      }
+      const dx = fromSpec.cx - toSpec.cx;
+      const dy = fromSpec.cy - toSpec.cy;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const filter = filterResource === undefined ? null : (filterResource as ResourceId);
+      const route = createRouteFromBuilding(building, fromIslandId, toIslandId, filter, dist);
+      if (route === null) return { ok: false, error: 'route could not be created' };
+      game.world.routes.push(route);
+      return { ok: true };
+    },
+  },
+
+  // unlock-skill-node — §9.3 skill purchase. Player supplies
+  // { islandId, nodeId }. The XP/SP path is TODO-flagged sensitive (design §6).
+  // `buyNode` THROWS for an illegal target (insufficient SP, tier-locked,
+  // unreachable, unknown) rather than returning a result, so the runner's
+  // try/catch is the only backstop — but per the no-throw handler contract we
+  // pre-check with `nodePurchaseStatus` (the canonical single-source predicate
+  // buyNode's own acceptance mirrors) against authoritative state and reject
+  // anything that isn't 'purchasable' BEFORE calling buyNode. This validates
+  // unspentSkillPoints covers the path cost and the depth→tier gate, on server
+  // state. (A 'purchasable' keystone target routes through buyKeystone, not
+  // buyNode; we reject keystone purchases here since buyNode does not handle
+  // them — they are not in this intent's surface.)
+  'unlock-skill-node': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { islandId, nodeId } = payload;
+      if (typeof islandId !== 'string') return { ok: false, error: 'islandId must be a string' };
+      if (typeof nodeId !== 'string') return { ok: false, error: 'nodeId must be a string' };
+      const island = resolveIsland(game, islandId);
+      if (!island) return { ok: false, error: 'unknown island' };
+      const { state } = island;
+      // Authoritative purchasability pre-check (anti-cheat): SP sufficiency +
+      // depth→tier gate + reachability, all recomputed from server state. Only
+      // a 'purchasable' status (and not the keystone branch) proceeds.
+      const status = nodePurchaseStatus(DEFAULT_GRAPH, state, nodeId);
+      if (status !== 'purchasable') return { ok: false, error: status };
+      buyNode(DEFAULT_GRAPH, state, nodeId);
       return { ok: true };
     },
   },
