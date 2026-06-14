@@ -18,6 +18,9 @@ export async function loadAndCatchUp(pool: Pool, userId: string, now: number): P
   const snapshot = await loadSnapshot(pool, userId);
   if (snapshot === null) return null;
   const { world, islandStates } = deserializeWorld(snapshot, now, now);
+  // If advanceIsland throws mid-loop we return before saveSnapshot, so the
+  // stored save is left intact (no partial-write); the error surfaces as a 500
+  // via Fastify's default handler. That fail-safe-on-load behavior is by design.
   for (const spec of world.islands) {
     if (!spec.populated) continue;
     const state = islandStates.get(spec.id);

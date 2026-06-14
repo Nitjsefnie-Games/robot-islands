@@ -32,8 +32,10 @@ describe('game persistence', () => {
 
   it('saveSnapshot upserts (second save overwrites)', async () => {
     const uid = await aUser();
-    const a = serializeWorld(...Object.values(createNewGame(1000)) as [any, any], 1000, 1000);
-    const b = serializeWorld(...Object.values(createNewGame(2000)) as [any, any], 2000, 2000);
+    const { world: wA, islandStates: sA } = createNewGame(1000);
+    const a = serializeWorld(wA, sA, 1000, 1000);
+    const { world: wB, islandStates: sB } = createNewGame(2000);
+    const b = serializeWorld(wB, sB, 2000, 2000);
     await saveSnapshot(pool, uid, a);
     await saveSnapshot(pool, uid, b);
     const loaded = await loadSnapshot(pool, uid);
