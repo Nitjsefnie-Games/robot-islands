@@ -12,7 +12,7 @@
 //     "every button through the registry" contract without a payload parameter).
 
 import { BUILDING_DEFS } from './building-defs.js';
-import { unwrapGatewayResult, type MutationGateway } from './mutation-gateway.js';
+import { type MutationGateway } from './mutation-gateway.js';
 import { constructionProgress } from './construction.js';
 import { rawFloorLevel } from './buildings.js';
 import type { BuildJob, IslandState } from './economy.js';
@@ -97,14 +97,14 @@ export function mountBuildQueuePanel(
   // The handler reads the module-level _pendingCancelBuildingId ref set by
   // the cancel button's click handler just before dispatch. On success it
   // invokes deps.onCancel so main.ts can save + rebuild layers.
-  defineAction(reg, 'cancel-build', () => {
+  defineAction(reg, 'cancel-build', async () => {
     const buildingId = _pendingCancelBuildingId;
     _pendingCancelBuildingId = null;
     if (buildingId === null) return;
     const spec = deps.getSpec();
     const state = deps.getState();
     const result = deps.gateway
-      ? unwrapGatewayResult(deps.gateway.cancelConstruction(spec.id, buildingId))
+      ? await deps.gateway.cancelConstruction(spec.id, buildingId)
       : cancelConstruction(spec, state, buildingId);
     if (!result.ok) return;
     deps.onCancel(spec.id);
