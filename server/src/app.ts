@@ -33,7 +33,10 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   // inside an encapsulated plugin scope that depends on it so ordering holds
   // regardless of when buildApp's synchronous body runs.
   app.register(async (instance) => {
-    await instance.register(websocket);
+    // Cap the WS frame size: intents are tiny envelopes, so 64 KiB is generous.
+    // Without this, @fastify/websocket inherits ws's 100 MiB default — a cheap
+    // memory-exhaustion vector for a hostile client.
+    await instance.register(websocket, { options: { maxPayload: 65536 } });
     registerGameWsRoutes(instance, opts.pool);
   });
   app.get('/health', async () => ({ ok: true }));
