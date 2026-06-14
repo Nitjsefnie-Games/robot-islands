@@ -18,6 +18,8 @@ export async function loadSnapshot(pool: Pool, userId: string): Promise<SaveSnap
 export async function saveSnapshot(pool: Pool, userId: string, snapshot: SaveSnapshot): Promise<void> {
   await pool.query(
     `INSERT INTO saves (user_id, snapshot, schema_version, updated_at)
+       -- schema_version: denormalized from snapshot.v for cheap version
+       -- queries / future bulk migration; the loader reads snapshot.v itself.
        VALUES ($1, $2, $3, now())
      ON CONFLICT (user_id) DO UPDATE
        SET snapshot = EXCLUDED.snapshot,
