@@ -103,21 +103,21 @@ identical — important for slice 4). `schema_version` is denormalized from
 `SCHEMA_VERSION`, `SUPPORTED_LOAD_VERSIONS`, types) are imported via the
 workspace from `../../../src/*.js`.
 
-## 5. Migration-chain reuse
+## 5. Migration-chain reuse (no refactor needed — verified)
 
-`src/persistence.ts` already exports the migration functions and `loadWorld`'s
-dispatch logic, but `loadWorld` is IDB-bound. Slice 2 does **not** modify
-`src/persistence.ts`. Instead `server/src/game/persistence.ts`:
+**Verified in source:** `deserializeWorld(snapshot, nowWall, nowPerf)` already
+walks the entire `v7 → … → SCHEMA_VERSION` `migrateV*` chain *internally* at the
+top of the function (`src/persistence.ts:869-920`), then throws if the result
+isn't current. `loadWorld` is just an IDB wrapper around it. **The earlier idea
+of extracting a `migrateSnapshotToCurrent` helper is therefore unnecessary and
+dropped** — slice 2 makes **no change** to `src/persistence.ts` for migration.
+
+`server/src/game/persistence.ts` simply:
 1. Reads the `saves.snapshot` jsonb (a possibly-old-version `SaveSnapshot`).
-2. Runs the **same** version-dispatch + `migrateV*` chain the client uses to
-   bring it to `SCHEMA_VERSION`. If `src/persistence.ts` does not export a
-   pure "migrate a snapshot object to current" helper separate from `loadWorld`,
-   the plan adds one **small pure export** to `src/persistence.ts`
-   (`migrateSnapshotToCurrent(raw): SaveSnapshot`) and refactors `loadWorld` to
-   call it — keeping client + server on one code path (and updating SPEC/tests).
-3. Calls `deserializeWorld(snapshot, now, now)`.
+2. Calls `deserializeWorld(snapshot, now, now)` — migration happens inside.
 
-This keeps the migration logic **single-sourced** across client and server.
+Migration logic stays **single-sourced** (the one copy in `deserializeWorld`),
+used by both client (`loadWorld`) and server, with zero new code.
 
 ## 6. Time & offline catch-up
 
@@ -182,7 +182,7 @@ This slice **does** move persistence server-side, so:
 | Risk | Sev | Mitigation |
 |---|---|---|
 | Importing `src/persistence.ts` drags PixiJS into the server bundle | LOW | Import-only, proven headless (profile-economy.ts); split deferred to TODO #6; document it. |
-| Refactoring `loadWorld` to extract `migrateSnapshotToCurrent` breaks client | MED | Pure extraction, behavior-preserving; root `npm test` (persistence suite) is the gate; keep `loadWorld` signature. |
+| (Removed) migration-helper extraction | — | Not needed: `deserializeWorld` already migrates internally; no `src/persistence.ts` change. |
 | Snapshot jsonb shape drift between client serialize + server expectations | MED | Reuse the exact `serializeWorld` output; roundtrip test asserts identity. |
 | Clock/perfShift mismatch yields wrong catch-up | MED | Stamp savedAt=savedAtPerf=Date.now(); load passes Date.now() for both; offline-catch-up test asserts advancement + split-invariance. |
 | New-game constructor not cleanly reusable from `src/` | MED | Plan identifies the client's initial-world path; if browser-coupled, extract a pure builder (small, tested). |
