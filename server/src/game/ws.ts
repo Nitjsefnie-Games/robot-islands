@@ -16,7 +16,8 @@ import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Pool } from '../db.js';
 import { resolveSession } from '../auth/guard.js';
 import { applyIntent, type IntentEnvelope } from './intent-runner.js';
-import { loadAndCatchUp } from './runtime.js';
+import { catchUp } from './runtime.js';
+import { loadSnapshot } from './persistence.js';
 import { serializeWorld } from '../../../src/persistence.js';
 
 /** Interval between periodic authoritative state pushes to the client.
@@ -76,8 +77,13 @@ async function pushState(
   pool: Pool,
   userId: string,
 ): Promise<unknown | null> {
-  const game = await loadAndCatchUp(pool, userId, Date.now());
-  const snapshot = game === null ? null : serializeWorld(game.world, game.islandStates, Date.now(), Date.now());
+  // READ-ONLY projection: load + advance in memory but DO NOT persist. The
+  // periodic push runs ~1 Hz per socket; persisting here would write the full
+  // jsonb snapshot every second per connection (write amplification) and widen
+  // the lost-update window. Authority is persisted only by accepted intents.
+  const now = Date.now();
+  const game = catchUp(await loadSnapshot(pool, userId), now);
+  const snapshot = game === null ? null : serializeWorld(game.world, game.islandStates, now, now);
   socket.send(JSON.stringify({ type: 'state', snapshot }));
   return snapshot;
 }

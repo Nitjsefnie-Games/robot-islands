@@ -11,7 +11,7 @@
 // (already advanced + re-persisted by `loadAndCatchUp`) is simply discarded on
 // rejection.
 
-import type { Pool } from '../db.js';
+import { type Pool, withAccountTx } from '../db.js';
 import { loadAndCatchUp } from './runtime.js';
 import { saveSnapshot } from './persistence.js';
 import { serializeWorld } from '../../../src/persistence.js';
@@ -38,29 +38,41 @@ export async function applyIntent(
 ): Promise<Ack> {
   const { seq, type, payload } = envelope;
 
-  const game = await loadAndCatchUp(pool, userId, now);
-  if (game === null) return { seq, ok: false, error: 'no game' };
-
   const handler = INTENTS[type];
   if (!handler) return { seq, ok: false, error: 'unknown intent' };
 
-  let result: { ok: true } | { ok: false; error: string };
-  try {
-    result = handler.apply(game, payload, now);
-  } catch (err) {
-    // Backstop: a handler should pre-check and return {ok:false}, never throw
-    // for an illegal request. An unexpected throw still must not persist a
-    // partial mutation — discard the in-memory game and report failure.
-    const error = err instanceof Error ? err.message : 'intent failed';
-    return { seq, ok: false, error };
-  }
+  // The ENTIRE load->apply->persist sequence runs inside one transaction that
+  // holds the per-account advisory lock (withAccountTx), so two in-flight
+  // intents for the same account (two tabs / a tick racing an intent)
+  // SERIALIZE instead of both reading the old snapshot and last-writer-wins
+  // clobbering each other. The lock covers loadAndCatchUp's read AND the
+  // post-apply persist for the SAME intent; it releases on commit/rollback.
+  return withAccountTx(pool, userId, async (client): Promise<Ack> => {
+    const game = await loadAndCatchUp(client, userId, now);
+    if (game === null) return { seq, ok: false, error: 'no game' };
 
-  if (!result.ok) {
-    // Persist NOTHING. The discarded `game` carries the would-be mutation; the
-    // stored save is left exactly as `loadAndCatchUp` re-persisted it.
-    return { seq, ok: false, error: result.error };
-  }
+    let result: { ok: true } | { ok: false; error: string };
+    try {
+      result = handler.apply(game, payload, now);
+    } catch (err) {
+      // Backstop: a handler should pre-check and return {ok:false}, never throw
+      // for an illegal request. An unexpected throw must not persist a partial
+      // mutation. We RETURN a failure ack (not re-throw) so the tx COMMITS the
+      // catch-up write loadAndCatchUp already made (advancing the offline gap)
+      // while dropping the would-be mutation — preserving the original
+      // no-partial-persist semantics (the mutation never reaches saveSnapshot).
+      const error = err instanceof Error ? err.message : 'intent failed';
+      return { seq, ok: false, error };
+    }
 
-  await saveSnapshot(pool, userId, serializeWorld(game.world, game.islandStates, now, now));
-  return { seq, ok: true, projection: projectGame(game) };
+    if (!result.ok) {
+      // Persist NOTHING beyond catch-up. The in-memory `game` carries the
+      // would-be mutation but we never call saveSnapshot for it; the tx commits
+      // only the catch-up snapshot loadAndCatchUp already wrote.
+      return { seq, ok: false, error: result.error };
+    }
+
+    await saveSnapshot(client, userId, serializeWorld(game.world, game.islandStates, now, now));
+    return { seq, ok: true, projection: projectGame(game) };
+  });
 }
