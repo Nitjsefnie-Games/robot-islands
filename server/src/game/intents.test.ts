@@ -954,6 +954,33 @@ describe('route management', () => {
     expect(routes[0].draining).toBe(true);
   });
 
+  it('rejects edits to a draining route', async () => {
+    const now = Date.now();
+    const uid = await aUserWithTwoPopulatedIslands(now);
+    const routeId = await makeRoute(uid, now);
+
+    const del = await applyIntent(
+      pool, uid,
+      { type: 'delete-route', payload: { routeId }, seq: 3 },
+      now,
+    );
+    expect(del).toMatchObject({ ok: true, seq: 3 });
+
+    const modeAck = await applyIntent(
+      pool, uid,
+      { type: 'set-route-mode', payload: { routeId, mode: 'balanced' }, seq: 4 },
+      now,
+    );
+    expect(modeAck).toMatchObject({ ok: false, error: 'route is draining' });
+
+    const weightAck = await applyIntent(
+      pool, uid,
+      { type: 'set-cargo-weight', payload: { routeId, cargoIndex: 0, weight: 7 }, seq: 5 },
+      now,
+    );
+    expect(weightAck).toMatchObject({ ok: false, error: 'route is draining' });
+  });
+
   it('set-route-mode: changes the cargo allocation mode', async () => {
     const now = Date.now();
     const uid = await aUserWithTwoPopulatedIslands(now);

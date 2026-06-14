@@ -24,7 +24,9 @@
 // button when the active island has an operational Reality Forge.
 
 import type { BuildingDef } from './building-defs.js';
-import { activeFloors, type PlacedBuilding } from './buildings.js';
+import { activeFloors } from './floor-levels.js';
+
+type PlacedBuilding = import('./buildings.js').PlacedBuilding;
 import { affordabilityShortfall } from './placement.js';
 import type { ResourceId } from './recipes.js';
 import type { Tier } from './skilltree.js';
