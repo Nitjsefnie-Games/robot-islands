@@ -765,6 +765,7 @@ export const INTENTS: Record<string, IntentHandler> = {
       if (!isValidCargoMode(mode)) return { ok: false, error: 'invalid cargo mode' };
       const route = resolveRoute(game, routeId);
       if (!route) return { ok: false, error: 'route not found' };
+      if (route.draining) return { ok: false, error: 'route is draining' };
       route.mode = mode;
       return { ok: true };
     },
@@ -786,6 +787,7 @@ export const INTENTS: Record<string, IntentHandler> = {
       }
       const route = resolveRoute(game, routeId);
       if (!route) return { ok: false, error: 'route not found' };
+      if (route.draining) return { ok: false, error: 'route is draining' };
       if (cargoIndex >= route.cargo.length) return { ok: false, error: 'cargoIndex out of range' };
       route.cargo[cargoIndex] = { ...route.cargo[cargoIndex]!, weight };
       return { ok: true };
@@ -808,6 +810,7 @@ export const INTENTS: Record<string, IntentHandler> = {
       }
       const route = resolveRoute(game, routeId);
       if (!route) return { ok: false, error: 'route not found' };
+      if (route.draining) return { ok: false, error: 'route is draining' };
       if (cargoIndex >= route.cargo.length) return { ok: false, error: 'cargoIndex out of range' };
       const entry = route.cargo[cargoIndex]!;
       route.cargo[cargoIndex] = hasFloor
@@ -833,6 +836,7 @@ export const INTENTS: Record<string, IntentHandler> = {
       }
       const route = resolveRoute(game, routeId);
       if (!route) return { ok: false, error: 'route not found' };
+      if (route.draining) return { ok: false, error: 'route is draining' };
       if (srcIndex >= route.cargo.length || dstIndex >= route.cargo.length) {
         return { ok: false, error: 'index out of range' };
       }
@@ -852,6 +856,7 @@ export const INTENTS: Record<string, IntentHandler> = {
       if (typeof routeId !== 'string') return { ok: false, error: 'routeId must be a string' };
       const route = resolveRoute(game, routeId);
       if (!route) return { ok: false, error: 'route not found' };
+      if (route.draining) return { ok: false, error: 'route is draining' };
       const v = validateCargoList(cargo);
       if (!v.ok) return { ok: false, error: v.error };
       route.cargo = v.list;
