@@ -61,9 +61,9 @@ import { activeFloors, type PlacedBuilding } from './buildings.js';
 import { mountBuildingsUi } from './buildings-ui.js';
 import { mountConstructionUi } from './construction-ui.js';
 import { mountInspectorUi, type InspectorTarget } from './inspector-ui.js';
-import { expandIsland, type Axis } from './land-reclamation.js';
+import { type Axis } from './land-reclamation.js';
 import { mountInventoryUi } from './inventory-ui.js';
-import { applyUpgrade, buildingAtTile, demolishBuilding, findOceanBuildingAt, setBuildingActiveFloors } from './placement.js';
+import { buildingAtTile, findOceanBuildingAt } from './placement.js';
 import { footprintTiles, shapeHeight, shapeWidth, type Rotation } from './shape-mask.js';
 import { resolveShot } from './terrain-modifier.js';
 import { mountPlacementUi } from './placement-ui.js';
@@ -87,7 +87,6 @@ import { mountDronesUi } from './drones-ui.js';
 import { setDroneWeatherWallOffsetMs, tickDrones } from './drones.js';
 import {
   tickTradeOffers,
-  applyOffer,
   tuningFor,
   effectiveCadenceMs,
   ONLINE_DT_CAP_MS,
@@ -125,6 +124,7 @@ import { mountBuildingAlertsOverlay } from './building-alerts-overlay.js';
 import { mountDayNightTint } from './daynight-tint.js';
 import { showMapPicker } from './map-picker.js';
 import { tickVehicles } from './settlement.js';
+import { makeLocalGateway, unwrapGatewayResult } from './mutation-gateway.js';
 import { checkDismissals, currentStep, markBumpClaimed, markCompleted, markShown, xpBumpPercentForCompletion } from './tutorial.js';
 import { refreshTutorialHint } from './tutorial-ui.js';
 
@@ -964,6 +964,10 @@ async function main(): Promise<void> {
   const islandSpecsById = new Map<string, IslandSpec>();
   for (const s of worldState.islands) islandSpecsById.set(s.id, s);
 
+  // Slice 4 mutation gateway — LOCAL default. REMOTE is wired but not booted
+  // yet; panels receive this and route all mutations through it.
+  const gateway = makeLocalGateway(worldState, islandStates, {});
+
   // -----------------------------------------------------------------------
   // Active island selection — §3 (no island privileged in code)
   // -----------------------------------------------------------------------
@@ -1035,12 +1039,12 @@ async function main(): Promise<void> {
   // Skill tree panel — modal-ish DOM overlay, dismissed via KeyK, Escape,
   // or its close button. Reads the active island's state through the
   // getter on every refresh, so click-to-switch retargets without remount.
-  const skillGraph = mountSkillGraphView(document.body, { getState: activeState });
+  const skillGraph = mountSkillGraphView(document.body, { getState: activeState, gateway });
   defineAction(reg, 'toggle-skill-graph', () => {
     skillGraph.toggle();
   });
 
-  const skillTree = mountSkillTreeUi(document.body, { getState: activeState, openSkillGraph: () => skillGraph.show() });
+  const skillTree = mountSkillTreeUi(document.body, { getState: activeState, gateway, openSkillGraph: () => skillGraph.show() });
   defineAction(reg, 'toggle-skill-tree', () => {
     skillTree.toggle();
   });
@@ -1105,6 +1109,7 @@ async function main(): Promise<void> {
     getTargetSpec: activeSpec,
     getTargetState: activeState,
     screenToWorldTile,
+    gateway,
     onPlaced: () => {
       rebuildWorldLayers();
     },
@@ -1283,9 +1288,10 @@ async function main(): Promise<void> {
 
   const inspector = mountInspectorUi(reg, document.body, {
     world: worldState,
+    gateway,
     getRatesContext: (islandId: string) => lastIslandCtx.get(islandId),
     onDemolish: (target: InspectorTarget) => {
-      const result = demolishBuilding(target.spec, target.state, target.building.id);
+      const result = unwrapGatewayResult(gateway.demolishBuilding(target.spec.id, target.building.id));
       if (!result.ok) return;
       // A transport building's route drains when the building is removed —
       // in-flight cargo finishes, then tickRoutes prunes it.
@@ -1310,7 +1316,7 @@ async function main(): Promise<void> {
     onSetActiveFloors: (target: InspectorTarget, newDisabledFloors: number) => {
       const b = target.building;
       const before = activeFloors(b);
-      setBuildingActiveFloors(target.spec, target.state, b.id, newDisabledFloors);
+      unwrapGatewayResult(gateway.setBuildingActiveFloors(target.spec.id, b.id, newDisabledFloors));
       const after = activeFloors(b);
       // p_routes_disabled_source=route_drains_and_removes: drain routes ONLY
       // when active floors cross to fully-off. In-flight cargo finishes
@@ -1331,12 +1337,12 @@ async function main(): Promise<void> {
       // rebuild is needed. Store `undefined` when off to keep saves clean
       // (absent ≡ off). The periodic autosave + visibilitychange save read
       // live `worldState`, so mutating the building object is enough to persist.
-      target.building.forceRun = value ? true : undefined;
+      unwrapGatewayResult(gateway.setForceRun(target.spec.id, target.building.id, value));
       buildingAlertsOverlay.invalidate(); // repaint the green level badge now
       inspector.refresh();
     },
     onUpgradeFloor: (target: InspectorTarget) => {
-      const result = applyUpgrade(target.spec, target.state, target.building.id);
+      const result = unwrapGatewayResult(gateway.applyUpgrade(target.spec.id, target.building.id));
       if (!result.ok) return;
       rebuildWorldLayers();
       buildingAlertsOverlay.invalidate();
@@ -1349,7 +1355,7 @@ async function main(): Promise<void> {
     // the Hub itself doesn't move — the inspector stays open on the
     // same building with refreshed numbers.
     onExpandIsland: (target: InspectorTarget, axis: Axis) => {
-      expandIsland(target.spec, target.state, axis);
+      unwrapGatewayResult(gateway.expandIsland(target.spec.id, axis));
       rebuildWorldLayers();
       inspector.refresh();
     },
@@ -1463,6 +1469,7 @@ async function main(): Promise<void> {
     world: worldState,
     islandStates,
     screenToWorldTile,
+    gateway,
     onLaunchModeChanged: (armed) => {
       if (armed) {
         placementUi.cancel();
@@ -1525,6 +1532,7 @@ async function main(): Promise<void> {
     getOrigin: activeState,
     getOriginSpec: activeSpec,
     screenToWorldTile,
+    gateway,
     onDiscoveryChanged: rebuildWorldLayers,
     // Mutual-exclusion: when launch mode arms, cancel any in-progress
     // placement / settlement-arm / orbital-launch so a mouseup-commit can't
@@ -1590,6 +1598,7 @@ async function main(): Promise<void> {
     islandStates,
     islandSpecs: islandSpecsById,
     routeRenderer,
+    gateway,
   });
   defineAction(reg, 'toggle-routes', () => {
     routesUi.toggle();
@@ -1606,6 +1615,7 @@ async function main(): Promise<void> {
     islandSpecs: islandSpecsById,
     getActiveIslandId: () => activeIslandId,
     screenToWorldTile,
+    gateway,
     onLaunchModeChanged: (armed) => {
       if (armed) {
         // Disarm sister modes so a click can't ambiguously route to two.
@@ -1709,6 +1719,7 @@ async function main(): Promise<void> {
   const buildQueueUi = mountBuildQueuePanel(reg, {
     getSpec: activeSpec,
     getState: activeState,
+    gateway,
     onCancel: (_islandId: string) => {
       rebuildWorldLayers();
       buildingAlertsOverlay.invalidate();
@@ -1726,9 +1737,10 @@ async function main(): Promise<void> {
   // via applyOffer and removes the offer from the runtime list.
   const tradeUi = mountTradeUi(
     (offer) => {
+      const result = unwrapGatewayResult(gateway.acceptTrade(offer));
+      if (!result.ok) return;
       const st = islandStates.get(offer.islandId);
       if (!st) return;
-      applyOffer(st, offer);
       // Each accepted trade compounds this island's next offer 1% sooner; the
       // cooldown is reset HERE (on resolution) so the increment lands on the
       // very next offer. tuningFor folds in the Logistics-Network frequency node.

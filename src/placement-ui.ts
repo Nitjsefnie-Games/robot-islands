@@ -48,6 +48,7 @@ import { candidateAnchors, type AnchorCandidate } from './anchor-picker.js';
 import { footprintTiles, type Rotation } from './shape-mask.js';
 import type { ResourceId } from './recipes.js';
 import { VISION_BLUE, tileToWorldPx, type IslandSpec, type WorldState } from './world.js';
+import { unwrapGatewayResult, type MutationGateway } from './mutation-gateway.js';
 import { brushTilesAt, SHOT_DURATION_MS } from './terrain-modifier.js';
 
 /** §4.6 picker dep: opens the cargo-label modal and resolves to the
@@ -176,6 +177,10 @@ export interface PlacementUiDeps {
    *  cancellation (no commit) so headless test fixtures can place ocean
    *  defs only via direct `placeBuilding` calls. */
   pickAnchor?: PickAnchor;
+  /** Mutation gateway — optional so tests can keep wiring only the placement
+   *  deps they already have. When present, land + ocean commits route through
+   *  the gateway; otherwise the pure functions are called directly. */
+  gateway?: MutationGateway;
   /** terrain_modifier v5 — target-biome picker. Invoked by `begin()` when the
    *  selected def carries `terrainModifier: true`; the returned promise
    *  resolves with the player's chosen TerrainKind or `null` if cancelled.
@@ -705,7 +710,7 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
       // stale-check would fire. The cargo-label `begin()` path already
       // uses `++beginEpoch`; this mirrors it.
       const epoch = ++beginEpoch;
-      deps.pickAnchor(cands).then((picked) => {
+      deps.pickAnchor(cands).then(async (picked) => {
         if (epoch !== beginEpoch) return; // stale
         if (picked === null) {
           // Cancel — abort placement entirely (mirrors cargo-label cancel).
@@ -723,18 +728,22 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
         // (matching the per-building convention: b.x, b.y are island-local).
         const localX = cellAnchorCoordX - anchorSpec.cx;
         const localY = cellAnchorCoordY - anchorSpec.cy;
-        const result = placeBuilding(
-          anchorSpec,
-          anchorState,
-          defId,
-          localX,
-          localY,
-          0, // ocean defs ignore rotation (square footprints in initial scope)
-          () => placedIdFor(anchorSpec.id, localX, localY),
-          undefined, // nowMs — keep the default (state.lastTick)
-          undefined, // cargoLabelOverride — ocean defs aren't generic-storage
-          picked, // anchorIslandId
-        );
+        const result = deps.gateway
+          ? await deps.gateway.placeBuilding(anchorSpec.id, defId, localX, localY, 0, {
+              anchorIslandId: picked,
+            })
+          : placeBuilding(
+              anchorSpec,
+              anchorState,
+              defId,
+              localX,
+              localY,
+              0, // ocean defs ignore rotation (square footprints in initial scope)
+              () => placedIdFor(anchorSpec.id, localX, localY),
+              undefined, // nowMs — keep the default (state.lastTick)
+              undefined, // cargoLabelOverride — ocean defs aren't generic-storage
+              picked, // anchorIslandId
+            );
         if (result.ok) {
           cancel();
           deps.onPlaced();
@@ -754,10 +763,12 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     const localX = Math.round(wt.x - targetSpec.cx);
     const localY = Math.round(wt.y - targetSpec.cy);
     if (relocating) {
-      const result = relocateBuilding(targetSpec, targetState, relocating.id, localX, localY, rotation);
+      const result = deps.gateway
+        ? unwrapGatewayResult(deps.gateway.relocateBuilding(targetSpec.id, relocating.id, localX, localY, rotation))
+        : relocateBuilding(targetSpec, targetState, relocating.id, localX, localY, rotation);
       if (!result.ok) {
         recordRejection();
-        return { ok: false, reason: result.reason === 'not-found' ? undefined : result.reason };
+        return { ok: false, reason: result.reason === 'not-found' ? undefined : (result.reason as PlacementReason) };
       }
       deps.onRelocated?.();
       cancel();
@@ -779,23 +790,31 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     // commit (defensive: another sibling production tick could have
     // consumed inventory in the gap). On the rare race, fall through to
     // the same `insufficient-resources` reason the validator emits.
-    const result = placeBuilding(
-      targetSpec,
-      targetState,
-      activeDefId,
-      localX,
-      localY,
-      rotation,
-      () => placedIdFor(targetSpec.id, localX, localY),
-      undefined, // nowMs — keep the default (state.lastTick)
-      activeCargoLabel, // §4.6 picker pick — undefined for non-generic defs
-      undefined, // anchorIslandId — land path, never set
-      def.terrainModifier === true ? activeTerrainTarget : undefined,
-      def.terrainModifier === true ? SHOT_DURATION_MS : undefined,
-    );
+    const result = deps.gateway
+      ? unwrapGatewayResult(
+          deps.gateway.placeBuilding(targetSpec.id, activeDefId, localX, localY, rotation, {
+            cargoLabel: activeCargoLabel,
+            terrainTarget: def.terrainModifier === true ? activeTerrainTarget : undefined,
+            terrainShotMs: def.terrainModifier === true ? SHOT_DURATION_MS : undefined,
+          }),
+        )
+      : placeBuilding(
+          targetSpec,
+          targetState,
+          activeDefId,
+          localX,
+          localY,
+          rotation,
+          () => placedIdFor(targetSpec.id, localX, localY),
+          undefined, // nowMs — keep the default (state.lastTick)
+          activeCargoLabel, // §4.6 picker pick — undefined for non-generic defs
+          undefined, // anchorIslandId — land path, never set
+          def.terrainModifier === true ? activeTerrainTarget : undefined,
+          def.terrainModifier === true ? SHOT_DURATION_MS : undefined,
+        );
     if (!result.ok) {
       recordRejection();
-      return { ok: false, reason: result.reason };
+      return { ok: false, reason: result.reason as PlacementReason };
     }
     cancel();
     deps.onPlaced();

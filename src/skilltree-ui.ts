@@ -12,6 +12,7 @@ import {
   tierResetCost,
 } from './tier-reset.js';
 import { mountModal } from './ui-modal.js';
+import { unwrapGatewayResult, type MutationGateway } from './mutation-gateway.js';
 
 export interface SkillTreeUi {
   readonly el: HTMLDivElement;
@@ -34,6 +35,8 @@ export interface SkillTreeUi {
 export interface SkillTreeUiDeps {
   getState(): IslandState;
   openSkillGraph(): void;
+  /** Mutation gateway — optional so tests can keep wiring only `getState`. */
+  gateway?: MutationGateway;
 }
 
 export function mountSkillTreeUi(
@@ -171,7 +174,15 @@ export function mountSkillTreeUi(
           tierResetBtn.blur();
           return;
         }
-        executeTierReset(state, now);
+        if (deps.gateway) {
+          const res = unwrapGatewayResult(deps.gateway.tierReset(state.id, now));
+          if (!res.ok) {
+            tierResetBtn.blur();
+            return;
+          }
+        } else {
+          executeTierReset(state, now);
+        }
         refresh();
         tierResetBtn.blur();
       });

@@ -23,6 +23,7 @@ import {
   KEYSTONE_TARGET_NODE_IDS,
   type BranchId,
 } from './skilltree.js';
+import { unwrapGatewayResult, type MutationGateway } from './mutation-gateway.js';
 import { CRYSTAL_CATALOG } from './skilltree-crystals.js';
 import { computeSkillGraphLayout, type SkillGraphLayout } from './skilltree-layout.js';
 import type { IslandState } from './economy.js';
@@ -42,6 +43,8 @@ export interface SkillGraphView {
 
 export interface SkillGraphViewDeps {
   getState(): IslandState;
+  /** Mutation gateway — optional so tests can keep wiring only `getState`. */
+  gateway?: MutationGateway;
 }
 
 type NodeKind = 'filler' | 'notable' | 'keystone';
@@ -351,7 +354,12 @@ export function mountSkillGraphView(
     const ks = keystonePrereqFor(nodeId);
     if (ks) {
       if (!canBuyKeystone(ks, state)) return;
-      try { buyKeystone(ks, state); } catch { return; }
+      if (deps.gateway) {
+        const res = unwrapGatewayResult(deps.gateway.buyKeystone(state.id, nodeId));
+        if (!res.ok) return;
+      } else {
+        try { buyKeystone(ks, state); } catch { return; }
+      }
       refresh();
       return;
     }
@@ -359,7 +367,12 @@ export function mountSkillGraphView(
     // fallback for depth-1 fillers (no incoming edges) and walks the cheapest
     // path otherwise, auto-owning intermediates.
     const graph = effectiveGraph(state);
-    try { buyNode(graph, state, nodeId); } catch { return; }
+    if (deps.gateway) {
+      const res = unwrapGatewayResult(deps.gateway.unlockSkillNode(state.id, nodeId));
+      if (!res.ok) return;
+    } else {
+      try { buyNode(graph, state, nodeId); } catch { return; }
+    }
     refresh();
   }
 
@@ -807,7 +820,12 @@ export function mountSkillGraphView(
         row.style.textAlign = 'left';
         row.textContent = `${crystal.displayName} (×${(state.inventory as Record<string, number>)[crystal.id as string] ?? 0})`;
         row.addEventListener('click', () => {
-          bindCrystal(state, socketId, crystal.id);
+          if (deps.gateway) {
+            const res = unwrapGatewayResult(deps.gateway.bindCrystal(state.id, socketId, crystal.id));
+            if (!res.ok) return;
+          } else {
+            bindCrystal(state, socketId, crystal.id);
+          }
           closePickerModal();
           refresh();
         });
@@ -831,7 +849,12 @@ export function mountSkillGraphView(
           );
           if (!ok) return;
         }
-        unbindCrystal(state, socketId);
+        if (deps.gateway) {
+          const res = unwrapGatewayResult(deps.gateway.unbindCrystal(state.id, socketId));
+          if (!res.ok) return;
+        } else {
+          unbindCrystal(state, socketId);
+        }
         closePickerModal();
         refresh();
       });
