@@ -792,7 +792,17 @@ export function serializeWorld(
         ...r,
         // Defensive copy of the mutable inFlight array so post-snapshot
         // mutations to the live route don't leak into the serialized blob.
-        inFlight: [...r.inFlight],
+        // Project each batch to its explicit persisted fields: the §2.6
+        // crossed-cell path is NOT stored (it is recomputed from the route's
+        // from/to geometry in deliverArrivals), so scrub any legacy `crossedCells`
+        // a pre-existing save left on an in-flight batch instead of re-writing it.
+        inFlight: r.inFlight.map((b) => ({
+          resourceId: b.resourceId,
+          amount: b.amount,
+          arrivalTime: b.arrivalTime,
+          dispatchTime: b.dispatchTime,
+          ...(b.id !== undefined ? { id: b.id } : {}),
+        })),
       })),
       // Vehicles are immutable records, no nested mutable state to deep-copy.
       vehicles: [...world.vehicles],

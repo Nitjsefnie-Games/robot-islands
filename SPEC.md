@@ -272,6 +272,8 @@ Final per-tile destruction chance = state\_chance × vehicle\_multiplier, applie
 
 Established cargo routes (cargo, drone, airship, mass_driver) are not destroyed by weather, but storm-affected cells reduce route capacity temporarily: -50% during Storm cells, -90% during Severe. In addition, **in-flight cargo loses some units when its path crosses storm cells**: per-cell roll, scaled by storm severity (placeholder: 5% of in-flight units lost per Storm cell, 15% per Severe storm cell, 30% per Catastrophic cell). The route itself continues operating; only the units in flight at the time take losses. Teleporter Pad routes and T5 Spacetime Anchor are immune (no in-flight buffer to damage).
 
+The set of stratification cells a route crosses (with each cell's transit fraction, used to time-sample the storm a batch flies through) is a **pure function of the route's `from`/`to` island geometry**, so it is **not stored on in-flight batches**. It is recomputed on demand — at dispatch for the capacity throttle and at delivery for the per-cell loss roll. Storing the identical path on every in-flight batch (a route can hold hundreds at once) wrote megabytes of redundant data into every save; recomputing it keeps the persisted in-flight batch to its minimal fields (`resourceId`, `amount`, `arrivalTime`, `dispatchTime`, deterministic `id`).
+
 **Satellites are immune to weather.** Per §14, satellites operate above the weather layer — they take no damage rolls from any weather state in their cell. The only damage source for satellites is orbital debris (§14.8). This makes the Scanner Sat's weather-visibility role especially valuable: it observes weather in cells without ever being affected by it.
 
 **Weather and offline math:**
