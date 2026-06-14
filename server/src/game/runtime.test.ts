@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import { testPool, resetDb } from '../test-helpers.js';
 import { createUser } from '../auth/users.js';
 import { saveSnapshot, loadSnapshot } from './persistence.js';
-import { loadAndCatchUp } from './runtime.js';
+import { loadAndCatchUp, catchUp } from './runtime.js';
 import { createInitialSnapshot } from './new-game.js';
 import { SCHEMA_VERSION, type SaveSnapshot } from '../../../src/persistence.js';
 import type { ModifierId } from '../../../src/biomes.js';
@@ -96,6 +96,28 @@ describe('runtime loadAndCatchUp', () => {
   it('returns null when the account has no save', async () => {
     const uid = await aUser();
     expect(await loadAndCatchUp(pool, uid, Date.now())).toBeNull();
+  });
+
+  it('catchUp is read-only (does NOT change stored bytes) while loadAndCatchUp persists', async () => {
+    const uid = await aUser();
+    // Stamp the save ~2h ago so there is a real offline gap to integrate.
+    const snap = createInitialSnapshot(Date.now() - 2 * 3600_000);
+    await saveSnapshot(pool, uid, snap);
+    const before = JSON.stringify(await loadSnapshot(pool, uid));
+
+    // READ-ONLY: catchUp advances in memory only — stored row is untouched.
+    const now = Date.now();
+    const projected = catchUp(await loadSnapshot(pool, uid), now);
+    expect(projected).not.toBeNull();
+    const afterRead = JSON.stringify(await loadSnapshot(pool, uid));
+    expect(afterRead).toBe(before);
+
+    // PERSISTING: loadAndCatchUp commits the advanced snapshot — bytes change
+    // (savedAt advances). This is the path intents/new use.
+    await loadAndCatchUp(pool, uid, now);
+    const afterWrite = await loadSnapshot(pool, uid);
+    expect(afterWrite!.savedAt).toBeGreaterThan(snap.savedAt);
+    expect(JSON.stringify(afterWrite)).not.toBe(before);
   });
 
   it('migrates an older-version snapshot on load and re-persists at the current version', async () => {
