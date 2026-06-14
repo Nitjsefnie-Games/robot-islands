@@ -294,7 +294,20 @@ export function mountInspectorUi(
   parentEl: HTMLElement,
   deps: InspectorDeps,
 ): InspectorUi {
-  let target: InspectorTarget | null = null;
+  // Store only ids, not the live objects. REMOTE snapshot reconciliation
+  // re-mints IslandState / PlacedBuilding instances, so caching the objects
+  // would render frozen data until the player re-clicks. paint()/refresh()
+  // re-resolve from deps.world at the top; handlers resolve at click time.
+  let selection: { islandId: string; buildingId: string } | null = null;
+
+  function resolveTarget(): InspectorTarget | null {
+    if (!selection) return null;
+    const state = deps.world.islandStates?.get(selection.islandId);
+    const spec = deps.world.islands.find((s) => s.id === selection!.islandId);
+    const building = spec?.buildings.find((b) => b.id === selection!.buildingId);
+    if (!state || !spec || !building) return null;
+    return { spec, state, building };
+  }
 
   // ── Floor-disable pending ref ───────────────────────────────────────────
   // The floor steppers (−/+/Off/Max) set the desired off-floor count just
@@ -305,7 +318,9 @@ export function mountInspectorUi(
   defineAction(reg, 'set-building-active-floors', () => {
     const n = pendingDisabledFloors;
     pendingDisabledFloors = null;
-    if (n === null || !target) return;
+    if (n === null) return;
+    const target = resolveTarget();
+    if (!target) { close(); return; }
     if ((target.building.constructionRemainingMs ?? 0) > 0) return; // guard: no-op while constructing
     deps.onSetActiveFloors(target, n);
     paint();
@@ -318,7 +333,9 @@ export function mountInspectorUi(
   defineAction(reg, 'set-building-force-run', () => {
     const v = pendingForceRun;
     pendingForceRun = null;
-    if (v === null || !target) return;
+    if (v === null) return;
+    const target = resolveTarget();
+    if (!target) { close(); return; }
     if ((target.building.constructionRemainingMs ?? 0) > 0) return; // guard: no-op while constructing
     deps.onSetForceRun(target, v);
     paint();
@@ -465,7 +482,8 @@ export function mountInspectorUi(
     ].join(';'),
   );
   function commitRename(): void {
-    if (!target) return;
+    const target = resolveTarget();
+    if (!target) { close(); return; }
     const trimmed = nameInput.value.trim();
     if (trimmed.length === 0) {
       // Empty: revert input to current spec name (which is at least `id` —
@@ -493,7 +511,8 @@ export function mountInspectorUi(
     } else if (e.key === 'Escape') {
       e.preventDefault();
       e.stopPropagation();
-      if (target) nameInput.value = target.spec.name;
+      const t = resolveTarget();
+      if (t) nameInput.value = t.spec.name;
       nameInput.blur();
     }
   });
@@ -779,7 +798,8 @@ export function mountInspectorUi(
   let pendingRelabel: ResourceId | null = null;
 
   function applyRelabel(b: PlacedBuilding, newLabel: ResourceId): void {
-    if (!target) return;
+    const target = resolveTarget();
+    if (!target) { close(); return; }
     const def = BUILDING_DEFS[b.defId];
     if (!def.storage || def.storage.category !== 'generic') return;
     const oldLabel = b.cargoLabel;
@@ -810,7 +830,8 @@ export function mountInspectorUi(
   }
 
   cargoLabelControls.select.addEventListener('change', () => {
-    if (!target) return;
+    const target = resolveTarget();
+    if (!target) { close(); return; }
     const newLabel = cargoLabelControls.select.value as ResourceId;
     const b = target.building;
     const oldLabel = b.cargoLabel;
@@ -827,7 +848,8 @@ export function mountInspectorUi(
     paint();
   });
   cargoLabelControls.forceClearBtn.addEventListener('click', () => {
-    if (!target || pendingRelabel === null) return;
+    const target = resolveTarget();
+    if (!target || pendingRelabel === null) { close(); return; }
     const b = target.building;
     // §4.6 force-clear: destroy only the excess that would exceed the reduced
     // cap after the crate's contribution moves to the new label. The normal
@@ -898,7 +920,8 @@ export function mountInspectorUi(
   floorSection.body.appendChild(floorLine);
   const floorUpgradeBtn = makeExpandButton();
   floorUpgradeBtn.addEventListener('click', () => {
-    if (!target) return;
+    const target = resolveTarget();
+    if (!target) { close(); return; }
     deps.onUpgradeFloor(target);
     paint();
   });
@@ -952,7 +975,8 @@ export function mountInspectorUi(
     convertBtn.style.borderColor = convertBtn.disabled ? 'var(--ri-fg-4)' : 'var(--ri-accent-dim)';
   });
   convertBtn.addEventListener('click', () => {
-    if (!target) return;
+    const target = resolveTarget();
+    if (!target) { close(); return; }
     const res = convertToServitor(target.state, target.building.id, BUILDING_DEFS);
     if (res.ok) {
       paint();
@@ -979,7 +1003,7 @@ export function mountInspectorUi(
   );
   floorDisableRow.appendChild(floorDisableLabel);
 
-  function makeFloorDisableBtn(label: string, computeNext: () => number): HTMLButtonElement {
+  function makeFloorDisableBtn(label: string, computeNext: (target: InspectorTarget) => number): HTMLButtonElement {
     const btn = document.createElement('button');
     btn.textContent = label;
     styled(
@@ -1006,9 +1030,11 @@ export function mountInspectorUi(
       btn.style.borderColor = btn.disabled ? 'var(--ri-fg-4)' : 'var(--ri-accent-dim)';
     });
     btn.addEventListener('click', () => {
-      if (btn.disabled || !target) return;
+      if (btn.disabled) return;
+      const target = resolveTarget();
+      if (!target) { close(); return; }
       if ((target.building.constructionRemainingMs ?? 0) > 0) return; // guard: no-op while constructing
-      pendingDisabledFloors = computeNext();
+      pendingDisabledFloors = computeNext(target);
       dispatchAction(reg, 'set-building-active-floors');
     });
     floorDisableRow.appendChild(btn);
@@ -1016,9 +1042,9 @@ export function mountInspectorUi(
   }
 
   // − disables one more floor; + enables one; Off all off; Max all on.
-  const floorOffBtn = makeFloorDisableBtn('−', () => (target ? (target.building.disabledFloors ?? 0) + 1 : 0));
-  const floorOnBtn = makeFloorDisableBtn('+', () => (target ? (target.building.disabledFloors ?? 0) - 1 : 0));
-  const floorAllOffBtn = makeFloorDisableBtn('Off', () => (target ? displayedFloorLevel(target.building) : 0));
+  const floorOffBtn = makeFloorDisableBtn('−', (target) => (target.building.disabledFloors ?? 0) + 1);
+  const floorOnBtn = makeFloorDisableBtn('+', (target) => (target.building.disabledFloors ?? 0) - 1);
+  const floorAllOffBtn = makeFloorDisableBtn('Off', (target) => displayedFloorLevel(target.building));
   const floorAllOnBtn = makeFloorDisableBtn('Max', () => 0);
   maintenanceSection.body.appendChild(floorDisableRow);
 
@@ -1054,7 +1080,9 @@ export function mountInspectorUi(
     forceRunBtn.style.borderColor = 'var(--ri-accent-dim)';
   });
   forceRunBtn.addEventListener('click', () => {
-    if (forceRunBtn.disabled || !target) return;
+    if (forceRunBtn.disabled) return;
+    const target = resolveTarget();
+    if (!target) { close(); return; }
     if ((target.building.constructionRemainingMs ?? 0) > 0) return;
     pendingForceRun = !(target.building.forceRun === true);
     dispatchAction(reg, 'set-building-force-run');
@@ -1130,11 +1158,13 @@ export function mountInspectorUi(
   const expandMajorBtn = makeExpandButton();
   const expandMinorBtn = makeExpandButton();
   expandMajorBtn.addEventListener('click', () => {
-    if (!target) return;
+    const target = resolveTarget();
+    if (!target) { close(); return; }
     deps.onExpandIsland(target, 'major');
   });
   expandMinorBtn.addEventListener('click', () => {
-    if (!target) return;
+    const target = resolveTarget();
+    if (!target) { close(); return; }
     deps.onExpandIsland(target, 'minor');
   });
   reclamationSection.body.appendChild(expandMajorBtn);
@@ -1192,7 +1222,8 @@ export function mountInspectorUi(
     refreshBtn.style.borderColor = refreshBtn.disabled ? 'var(--ri-fg-4)' : 'var(--ri-accent-dim)';
   });
   refreshBtn.addEventListener('click', () => {
-    if (!target) return;
+    const target = resolveTarget();
+    if (!target) { close(); return; }
     const def = BUILDING_DEFS[target.building.defId];
     const ok = tryRefreshMaintenance(
       target.building,
@@ -1219,7 +1250,8 @@ export function mountInspectorUi(
   );
   demolishBtn.classList.add('ri-warnbtn');
   demolishBtn.addEventListener('click', () => {
-    if (!target) return;
+    const target = resolveTarget();
+    if (!target) { close(); return; }
     const credit = previewScrapForBuilding(target.building);
     const refund = previewRefundForBuilding(target.building);
     const refundStr = formatRefund(refund);
@@ -1243,8 +1275,7 @@ export function mountInspectorUi(
     // callback's `close()` is the single exit point; if the callback
     // forgets, the dock stays open with stale data — surfaced as an obvious
     // UX bug rather than a silent corruption.
-    const handoff = target;
-    deps.onDemolish(handoff);
+    deps.onDemolish(target);
   });
   footerSection.appendChild(demolishBtn);
 
@@ -1262,8 +1293,9 @@ export function mountInspectorUi(
   );
   moveBtn.classList.add('ri-accentbtn');
   moveBtn.addEventListener('click', () => {
-    if (!target) return;
     if (moveBtn.disabled) return;
+    const target = resolveTarget();
+    if (!target) { close(); return; }
     deps.onMove(target);
   });
   footerSection.appendChild(moveBtn);
@@ -1384,7 +1416,8 @@ export function mountInspectorUi(
   }
 
   function paint(): void {
-    if (!target) return;
+    const target = resolveTarget();
+    if (!target) { close(); return; }
     const { spec, state, building } = target;
     const def = BUILDING_DEFS[building.defId as BuildingDefId];
 
@@ -1889,8 +1922,9 @@ export function mountInspectorUi(
             ].join(';'),
           );
           btn.addEventListener('click', () => {
-            if (!target) return;
-            const tspec = target.spec;
+            const t = resolveTarget();
+            if (!t) { close(); return; }
+            const tspec = t.spec;
             const proceed = window.confirm(
               `Reassign ${tspec.name ?? tspec.id} to ${b.label}?\n\n` +
                 'Terrain will re-roll, modifiers will wipe (natural-only excluded). ' +
@@ -1960,7 +1994,7 @@ export function mountInspectorUi(
   }
 
   function open(t: InspectorTarget): void {
-    target = t;
+    selection = { islandId: t.spec.id, buildingId: t.building.id };
     // Reset any staged relabel from a previous inspection — pendingRelabel
     // is per-selection state, not per-panel.
     pendingRelabel = null;
@@ -1968,23 +2002,23 @@ export function mountInspectorUi(
     paint();
   }
   function close(): void {
-    if (!target) return;
-    target = null;
+    if (!selection) return;
+    selection = null;
     pendingRelabel = null;
     panelHandle.setVisible(false);
   }
   function refresh(): void {
-    if (!target) return;
+    if (!selection) return;
     paint();
   }
   function isVisible(): boolean {
-    return target !== null;
+    return selection !== null;
   }
   function getSelectedBuildingId(): string | null {
-    return target ? target.building.id : null;
+    return selection?.buildingId ?? null;
   }
   function getSelectedIslandId(): string | null {
-    return target ? target.spec.id : null;
+    return selection?.islandId ?? null;
   }
 
   return {
