@@ -23,6 +23,11 @@ import {
   nextVehicleId,
   type SettlementVehicle,
 } from './settlement.js';
+import {
+  type CommPacket,
+  type RepairDrone,
+  type Satellite,
+} from './orbital.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import {
   attachTerrainAt,
@@ -560,6 +565,75 @@ describe('performMerge', () => {
     expect(sa.storageCaps.iron_ore).toBeGreaterThan(100);
     // Inventory should have been transferred into the raised cap, not clamped.
     expect(sa.inventory.iron_ore).toBe(150);
+  });
+
+  it('rewrites satellite spaceportIslandId, comm packet currentNodeId, and lattice node membership from absorbed to absorber', () => {
+    const a = makeSpec({ id: 'a' });
+    const b = makeSpec({ id: 'b', cx: 20, cy: 0 });
+    const world = makeWorld([a, b]);
+
+    const sat: Satellite = {
+      id: 'sat-1',
+      variant: 'scanner',
+      spaceportIslandId: 'b',
+      x: 20,
+      y: 0,
+      commRange: 10,
+      coverageRadius: 10,
+      fuel: 100,
+      lodges: { scan: 0, weather: 0, comm: 0 },
+      locked: true,
+      pendingRepairDroneId: null,
+      buffer: [],
+    };
+    world.satellites.push(sat);
+
+    const pkt: CommPacket = {
+      id: 'pkt-1',
+      payload: { type: 'discovery', payload: null },
+      currentNodeId: 'b',
+      originSatId: 'sat-1',
+      generatedMs: 0,
+    };
+    world.commPackets.push(pkt);
+
+    world.latticeNodeIslands = ['b'];
+
+    const repair: RepairDrone = {
+      id: 'repair-1',
+      targetSatId: 'sat-1',
+      launchTime: 0,
+      expectedArrivalTime: 100_000,
+    };
+    world.repairDrones.push(repair);
+
+    const states = new Map<string, IslandState>([
+      ['a', makeState({ id: 'a' })],
+      ['b', makeState({ id: 'b' })],
+    ]);
+
+    performMerge(world, states, a, b);
+
+    expect(world.satellites[0]?.spaceportIslandId).toBe('a');
+    expect(world.commPackets[0]?.currentNodeId).toBe('a');
+    expect(world.latticeNodeIslands).toEqual(['a']);
+    expect(world.repairDrones[0]?.targetSatId).toBe('sat-1');
+  });
+
+  it('deduplicates lattice node membership when absorber is already a node', () => {
+    const a = makeSpec({ id: 'a' });
+    const b = makeSpec({ id: 'b', cx: 20, cy: 0 });
+    const world = makeWorld([a, b]);
+    world.latticeNodeIslands = ['a', 'b'];
+
+    const states = new Map<string, IslandState>([
+      ['a', makeState({ id: 'a' })],
+      ['b', makeState({ id: 'b' })],
+    ]);
+
+    performMerge(world, states, a, b);
+
+    expect(world.latticeNodeIslands).toEqual(['a']);
   });
 });
 
