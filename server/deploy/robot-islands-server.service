@@ -1,0 +1,15 @@
+[Unit]
+Description=Robot Islands auth/game server
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+WorkingDirectory=/root/robot-islands/server
+EnvironmentFile=/root/robot-islands/server/.env
+ExecStart=/usr/bin/node /root/robot-islands/server/dist/index.js
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
