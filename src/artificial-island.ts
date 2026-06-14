@@ -19,7 +19,7 @@
 //   - Radii cap on founder tier at validate time (§2.5): T3 = 8, T4 = 12,
 //     T5 = 16 (see `MAX_RADIUS_BY_TIER`).
 
-import type { Biome, IslandSpec } from './world.js';
+import type { Biome, IslandSpec, WorldState } from './world.js';
 import { BIOME_DEFS, rollModifiersArtificial } from './biomes.js';
 import { tierForLevel } from './skilltree.js';
 import type { IslandState } from './economy.js';
@@ -208,6 +208,34 @@ export function constructIsland(
   });
   const newState = makeInitialIslandState(newSpec, nowMs);
   return { newSpec, newState };
+}
+
+/** Mint a fresh artificial-island id that does not collide with any existing
+ *  island in `world`. Scans `world.islands` for `art-N` ids and returns the
+ *  next integer in the sequence. Pure — safe for both client LOCAL gateway and
+ *  server intent handlers.
+ *
+ *  This replaces the UI-only `nextArtificialId()` counter for REMOTE paths,
+ *  where the server must mint the id from authoritative state rather than
+ *  trusting a client-supplied value. */
+export function makeArtificialIdGenerator(world: WorldState): () => string {
+  const taken = new Set<string>();
+  let max = 0;
+  for (const s of world.islands) {
+    taken.add(s.id);
+    const m = /^art-(\d+)$/.exec(s.id);
+    if (m) max = Math.max(max, parseInt(m[1]!, 10));
+  }
+  return () => {
+    let n = max + 1;
+    let id = `art-${n}`;
+    while (taken.has(id)) {
+      n += 1;
+      id = `art-${n}`;
+    }
+    taken.add(id);
+    return id;
+  };
 }
 
 /** Exported for the UI's "next radius cap" indicator. Returns the maximum

@@ -17,6 +17,13 @@
 import type { LiveGame } from './runtime.js';
 import type { IslandSpec } from '../../../src/world.js';
 import type { IslandState } from '../../../src/economy.js';
+import { renameIsland, validateIslandName, type Biome } from '../../../src/world.js';
+import { editIslandBiome } from '../../../src/universe-editor.js';
+import {
+  constructIsland,
+  makeArtificialIdGenerator,
+  validateConstruction,
+} from '../../../src/artificial-island.js';
 import { BUILDING_DEFS, type BuildingDefId } from '../../../src/building-defs.js';
 import {
   placeBuilding,
@@ -65,6 +72,7 @@ import {
   type SatelliteVariant,
 } from '../../../src/orbital.js';
 import { expandIsland, canExpandIsland, type Axis } from '../../../src/land-reclamation.js';
+import { BIOME_DEFS } from '../../../src/biomes.js';
 import { ALL_RESOURCES, type ResourceId } from '../../../src/recipes.js';
 import type { Rotation } from '../../../src/shape-mask.js';
 import { CARGO_WILDCARD, type CargoEntry, type CargoMode } from '../../../src/route-cargo.js';
@@ -604,6 +612,94 @@ export const INTENTS: Record<string, IntentHandler> = {
       if (!can.ok) return { ok: false, error: can.reason ?? 'expand failed' };
       expandIsland(island.spec, island.state, axis as Axis);
       return { ok: true };
+    },
+  },
+
+  // rename-island — §3 player-mutable display name. Player supplies
+  // { islandId, name }. `renameIsland` self-validates length/empty/control-char
+  // and mutates only `spec.name`; the handler validates island existence.
+  'rename-island': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { islandId, name } = payload;
+      if (typeof islandId !== 'string') return { ok: false, error: 'islandId must be a string' };
+      if (typeof name !== 'string') return { ok: false, error: 'name must be a string' };
+      const island = resolveIsland(game, islandId);
+      if (!island) return { ok: false, error: 'unknown island' };
+      const r = renameIsland(island.spec, name);
+      if (!r.ok) return { ok: false, error: r.reason ?? 'rename failed' };
+      return { ok: true };
+    },
+  },
+
+  // edit-biome — §13.3 Universe Editor biome reassignment. Player supplies
+  // { islandId, biomeId }. `editIslandBiome` self-validates the Universe Editor
+  // presence, resource cost, and biome legality, deducts cost, and mutates the
+  // island biome + modifiers + terrain.
+  'edit-biome': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { islandId, biomeId } = payload;
+      if (typeof islandId !== 'string') return { ok: false, error: 'islandId must be a string' };
+      if (typeof biomeId !== 'string') return { ok: false, error: 'biomeId must be a string' };
+      if (!(biomeId in BIOME_DEFS)) return { ok: false, error: 'unknown biome' };
+      const r = editIslandBiome(game.world, islandId, biomeId as Biome);
+      if (!r.ok) return { ok: false, error: r.reason ?? 'edit biome failed' };
+      return { ok: true };
+    },
+  },
+
+  // construct-island — §2.5 artificial island construction. Player supplies
+  // { founderIslandId, biome, majorRadius, minorRadius, cx, cy, displayName? }.
+  // The server mints the new island id and timestamp from authoritative state;
+  // it never trusts a client-supplied id. `validateConstruction` gates tier,
+  // Platform Constructor presence, biome, radii, and materials.
+  'construct-island': {
+    apply(game: LiveGame, payload: unknown, now: number): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { founderIslandId, biome, majorRadius, minorRadius, cx, cy, displayName } = payload;
+      if (typeof founderIslandId !== 'string') return { ok: false, error: 'founderIslandId must be a string' };
+      if (typeof biome !== 'string') return { ok: false, error: 'biome must be a string' };
+      if (!(biome in BIOME_DEFS)) return { ok: false, error: 'unknown biome' };
+      if (typeof majorRadius !== 'number' || !Number.isInteger(majorRadius) || majorRadius <= 0) {
+        return { ok: false, error: 'majorRadius must be a positive integer' };
+      }
+      if (typeof minorRadius !== 'number' || !Number.isInteger(minorRadius) || minorRadius <= 0) {
+        return { ok: false, error: 'minorRadius must be a positive integer' };
+      }
+      if (typeof cx !== 'number' || !Number.isFinite(cx)) return { ok: false, error: 'cx must be finite' };
+      if (typeof cy !== 'number' || !Number.isFinite(cy)) return { ok: false, error: 'cy must be finite' };
+      if (displayName !== undefined && typeof displayName !== 'string') {
+        return { ok: false, error: 'displayName must be a string' };
+      }
+      const founder = resolveIsland(game, founderIslandId);
+      if (!founder) return { ok: false, error: 'unknown founder island' };
+      const req = { biome: biome as Biome, majorRadius, minorRadius };
+      const can = validateConstruction(founder.state, founder.spec, req);
+      if (!can.ok) return { ok: false, error: can.reason ?? 'construction invalid' };
+      const id = makeArtificialIdGenerator(game.world)();
+      let name: string | undefined;
+      if (typeof displayName === 'string') {
+        const v = validateIslandName(displayName);
+        if (v.ok) name = v.name;
+      }
+      try {
+        const { newSpec, newState } = constructIsland(
+          game.world.seed,
+          founder.state,
+          founder.spec,
+          req,
+          { cx, cy },
+          id,
+          now,
+          name,
+        );
+        game.world.islands.push(newSpec);
+        game.islandStates.set(newSpec.id, newState);
+        return { ok: true };
+      } catch (e) {
+        return { ok: false, error: e instanceof Error ? e.message : 'construction failed' };
+      }
     },
   },
 

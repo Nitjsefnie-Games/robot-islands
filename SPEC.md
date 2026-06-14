@@ -2246,6 +2246,17 @@ It is being delivered in slices, each with its own design + plan under
   - Validation re-runs the existing pure entry function from `src/` on the
     authoritative server state; client numbers are never trusted. A rejected
     intent persists nothing.
+  - Wired intents include `place-building`, `demolish-building`,
+    `cancel-construction`, `upgrade-building`, `set-active-floors`,
+    `set-force-run`, `relabel-cargo`, `expand-island`, `rename-island`,
+    `edit-biome`, `construct-island`, `dispatch-drone`, `fire-t4-pulse`,
+    `create-route`, `delete-route`, `set-route-mode`, `set-cargo-weight`,
+    `set-cargo-floor-pct`, `reorder-route-cargo`, `set-route-cargo`,
+    `unlock-skill-node`, `buy-keystone`, `bind-crystal`, `unbind-crystal`,
+    `tier-reset`, `dispatch-settler`, `settle-via-spacetime`,
+    `launch-satellite`, `upgrade-spaceport`, `move-satellite`, and
+    `dispatch-repair-drone`. `accept-trade` is LOCAL-only; `convert-to-servitor`
+    and `reject-trade` remain unwired pending pure-layer extraction.
   - **Per-account atomicity (Slice 5 hardening).** The whole
     load→apply→persist sequence for an intent runs inside a single Postgres
     transaction that first takes a transaction-scoped advisory lock keyed on the
