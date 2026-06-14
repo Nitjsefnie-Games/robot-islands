@@ -10,6 +10,9 @@ Wants=postgresql.service
 Type=simple
 WorkingDirectory=/root/robot-islands/server
 EnvironmentFile=/root/robot-islands/server/.env
+# systemd has no $USER/$PGUSER; the pure-JS pg driver needs a user for the
+# postgresql:///db socket form. Supply it explicitly (peer auth -> role root).
+Environment=PGUSER=root
 # /usr/bin/node on this box is v12; Fastify 5 needs >=20. Use the nvm node
 # (same as robot-islands-dev.service) and put it on PATH for child processes.
 Environment=PATH=/root/.nvm/versions/node/v22.22.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
