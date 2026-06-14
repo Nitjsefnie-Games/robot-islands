@@ -21,6 +21,7 @@ import { BUILDING_DEFS, type BuildingDefId } from '../../../src/building-defs.js
 import {
   placeBuilding,
   validatePlacement,
+  validateOceanPlacement,
   demolishBuilding,
   cancelConstruction,
   applyUpgrade,
@@ -28,8 +29,9 @@ import {
   relocateBuilding,
   applyRelabelStorageCap,
 } from '../../../src/placement.js';
+import type { TerrainKind } from '../../../src/island.js';
 import { displayedFloorLevel } from '../../../src/floor-levels.js';
-import { dispatchDrone, firePulse } from '../../../src/drones.js';
+import { dispatchDrone, firePulse, type DroneTier } from '../../../src/drones.js';
 import {
   createRouteFromBuilding,
   routeProfileForBuilding,
@@ -184,9 +186,9 @@ export const INTENTS: Record<string, IntentHandler> = {
   // `validatePlacement`'s job). So the authoritative pre-check here is
   // `validatePlacement`, run against server spec+state before applying.
   'place-building': {
-    apply(game: LiveGame, payload: unknown): IntentResult {
+    apply(game: LiveGame, payload: unknown, now: number): IntentResult {
       if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
-      const { islandId, defId, x, y, rotation } = payload;
+      const { islandId, defId, x, y, rotation, cargoLabel, anchorIslandId, terrainTarget, terrainShotMs } = payload;
       if (typeof islandId !== 'string') return { ok: false, error: 'islandId must be a string' };
       if (typeof defId !== 'string' || !(defId in BUILDING_DEFS)) {
         return { ok: false, error: 'unknown defId' };
@@ -196,21 +198,58 @@ export const INTENTS: Record<string, IntentHandler> = {
       if (rotation !== 0 && rotation !== 1 && rotation !== 2 && rotation !== 3) {
         return { ok: false, error: 'rotation must be 0..3' };
       }
+      // Optional payload fields — validate SHAPE here (client values are never
+      // trusted); the pure fn owns LEGALITY (§4.6 cargo label, §8.9 terrain
+      // modifier, §4 ocean anchoring). Dropping any of these silently was the
+      // server-migration regression: e.g. an omitted cargoLabel made every
+      // generic-storage building default to iron_ore regardless of the
+      // player's picker pick.
+      if (cargoLabel !== undefined && !isValidResourceId(cargoLabel)) {
+        return { ok: false, error: 'cargoLabel must be a valid resource id' };
+      }
+      if (anchorIslandId !== undefined && typeof anchorIslandId !== 'string') {
+        return { ok: false, error: 'anchorIslandId must be a string' };
+      }
+      if (terrainTarget !== undefined && typeof terrainTarget !== 'string') {
+        return { ok: false, error: 'terrainTarget must be a string' };
+      }
+      if (terrainShotMs !== undefined && (typeof terrainShotMs !== 'number' || !Number.isFinite(terrainShotMs))) {
+        return { ok: false, error: 'terrainShotMs must be a finite number' };
+      }
       const island = resolveIsland(game, islandId);
       if (!island) return { ok: false, error: 'unknown island' };
       const { spec, state } = island;
       const typedDefId = defId as BuildingDefId;
       const rot = rotation as Rotation;
+      const def = BUILDING_DEFS[typedDefId];
 
-      // Authoritative legality pre-check: tier-unlock, biome, ellipse bounds,
-      // overlap, terrain/coastal, and the §14 cost gate — all recomputed from
-      // server state. The client's claim is never trusted.
-      const v = validatePlacement(spec, state, typedDefId, x, y, rot);
-      if (!v.ok) return { ok: false, error: v.reason ?? 'illegal placement' };
+      // Authoritative legality pre-check — recomputed from server state; the
+      // client's claim is never trusted. Ocean defs route through the ocean
+      // validator (validatePlacement rejects them with 'def-is-ocean' by
+      // design); land/terrain defs go through validatePlacement. For ocean
+      // defs x/y are anchor-LOCAL tile coords (client convention, see
+      // placement-ui.ts ocean path), so convert back to world-cell coords by
+      // adding the anchor centre before validating.
+      if (def.oceanPlacement === true) {
+        const ov = validateOceanPlacement(game.world, typedDefId, x + spec.cx, y + spec.cy);
+        if (!ov.ok) return { ok: false, error: ov.reason ?? 'illegal ocean placement' };
+      } else {
+        const v = validatePlacement(spec, state, typedDefId, x, y, rot);
+        if (!v.ok) return { ok: false, error: v.reason ?? 'illegal placement' };
+      }
 
       // Apply via the pure entry fn. It re-checks the cost + queue gates and
       // deducts cost from authoritative inventory only on the success path.
-      const result = placeBuilding(spec, state, typedDefId, x, y, rot, makePlacedIdGenerator(spec));
+      // Forward every player-supplied field the LOCAL gateway forwards
+      // (mutation-gateway.ts) so REMOTE placement matches LOCAL exactly.
+      const result = placeBuilding(
+        spec, state, typedDefId, x, y, rot, makePlacedIdGenerator(spec),
+        now,
+        isValidResourceId(cargoLabel) ? cargoLabel : undefined,
+        typeof anchorIslandId === 'string' ? anchorIslandId : undefined,
+        typeof terrainTarget === 'string' ? (terrainTarget as TerrainKind) : undefined,
+        typeof terrainShotMs === 'number' ? terrainShotMs : undefined,
+      );
       if (!result.ok) return { ok: false, error: result.reason };
       return { ok: true };
     },
@@ -323,7 +362,7 @@ export const INTENTS: Record<string, IntentHandler> = {
   'dispatch-drone': {
     apply(game: LiveGame, payload: unknown, now: number): IntentResult {
       if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
-      const { islandId, originX, originY, dirX, dirY, fuelLoaded } = payload;
+      const { islandId, originX, originY, dirX, dirY, fuelLoaded, waypoints, selectedTier } = payload;
       if (typeof islandId !== 'string') return { ok: false, error: 'islandId must be a string' };
       for (const [name, v] of [
         ['originX', originX], ['originY', originY],
@@ -333,6 +372,28 @@ export const INTENTS: Record<string, IntentHandler> = {
           return { ok: false, error: `${name} must be a finite number` };
         }
       }
+      // Optional path-mode fields. Dropping these silently was a migration
+      // regression: a T5 path-drawn drone (waypoints) became a straight-line
+      // default-tier drone server-side, and the tier picker was ignored.
+      let typedWaypoints: ReadonlyArray<{ x: number; y: number }> | undefined;
+      if (waypoints !== undefined) {
+        if (!Array.isArray(waypoints)) return { ok: false, error: 'waypoints must be an array' };
+        const wp: Array<{ x: number; y: number }> = [];
+        for (const p of waypoints) {
+          if (!isRecord(p) || typeof p.x !== 'number' || !Number.isFinite(p.x) || typeof p.y !== 'number' || !Number.isFinite(p.y)) {
+            return { ok: false, error: 'each waypoint must be { x:number, y:number }' };
+          }
+          wp.push({ x: p.x, y: p.y });
+        }
+        typedWaypoints = wp;
+      }
+      let typedTier: DroneTier | undefined;
+      if (selectedTier !== undefined) {
+        if (typeof selectedTier !== 'number' || !Number.isInteger(selectedTier) || selectedTier < 1 || selectedTier > 6) {
+          return { ok: false, error: 'selectedTier must be an integer 1..6' };
+        }
+        typedTier = selectedTier as DroneTier;
+      }
       const island = resolveIsland(game, islandId);
       if (!island) return { ok: false, error: 'unknown island' };
       const r = dispatchDrone(
@@ -340,6 +401,8 @@ export const INTENTS: Record<string, IntentHandler> = {
         originX as number, originY as number,
         dirX as number, dirY as number,
         fuelLoaded as number, now,
+        typedWaypoints,
+        typedTier,
       );
       if (!r.ok) return { ok: false, error: r.reason };
       return { ok: true };
