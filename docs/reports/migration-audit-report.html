@@ -1,0 +1,927 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Server-migration audit — findings &amp; fixes</title>
+<style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --warn:     #E0B47F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+      --code-bg:  #121110;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: var(--sans); background: var(--ivory); color: var(--gray-700);
+      line-height: 1.58; padding: 56px 32px 120px; -webkit-font-smoothing: antialiased; }
+    .page { margin: 0 auto; max-width: 1080px; }
+
+    header.page-head { margin-bottom: 40px; max-width: 980px; }
+    .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--gray-500); margin-bottom: 12px; }
+    h1 { font-family: var(--serif); font-weight: 500; font-size: 38px; line-height: 1.14;
+      color: var(--slate); margin-bottom: 18px; letter-spacing: -0.01em; }
+    .context-box { background: var(--gray-150); border: var(--border); border-radius: var(--radius);
+      padding: 16px 20px; font-size: 14.5px; }
+    .context-box .label { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); display: block; margin-bottom: 6px; }
+
+    .summary { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-bottom: 36px; }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell { background: var(--white); border: var(--border); border-radius: var(--radius); padding: 16px 18px; }
+    .summary .k { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 6px; }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.bad  { color: var(--rust); }
+    .summary .v.warn { color: var(--warn); }
+    .summary .v.ok   { color: var(--olive); }
+
+    .verdict { background: var(--white); border: var(--border); border-left: 4px solid var(--warn);
+      border-radius: var(--radius); padding: 22px 26px; margin-bottom: 48px; }
+    .verdict.green { border-left-color: var(--olive); }
+    .verdict.red { border-left-color: var(--rust); }
+    .verdict .vt { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--warn); margin-bottom: 8px; }
+    .verdict .vh { font-family: var(--serif); font-size: 22px; font-weight: 500;
+      color: var(--slate); margin-bottom: 10px; letter-spacing: -0.01em; }
+    .verdict .vb { font-size: 14.5px; max-width: 840px; }
+
+    section { margin-bottom: 56px; }
+    .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+    .sec-head .num { font-family: var(--mono); font-size: 12px; background: var(--oat); color: var(--slate);
+      padding: 3px 9px; border-radius: 8px; }
+    .sec-head h2 { font-family: var(--serif); font-weight: 500; font-size: 26px; color: var(--slate);
+      letter-spacing: -0.01em; }
+    .sec-intro { font-size: 14.5px; color: var(--gray-500); max-width: 840px; margin-bottom: 24px; }
+    code { font-family: var(--mono); font-size: 0.88em; background: var(--gray-150);
+      border: 1px solid var(--gray-300); border-radius: 5px; padding: 1px 5px; color: #C9B98A; }
+
+    /* scope: audited vs deliberately skipped */
+    .scope { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 920px; }
+    @media (max-width: 820px) { .scope { grid-template-columns: 1fr; } }
+    .scope .col { background: var(--white); border: var(--border); border-radius: var(--radius); overflow: hidden; }
+    .scope .col-head { padding: 12px 18px; font-family: var(--mono); font-size: 11.5px;
+      text-transform: uppercase; letter-spacing: 0.06em; border-bottom: var(--border); }
+    .scope .col.in  .col-head { background: #232A1C; color: var(--olive); }
+    .scope .col.out .col-head { background: var(--gray-150); color: var(--gray-500); }
+    .scope .col-body { padding: 14px 18px; font-size: 13.5px; }
+    .scope ul { list-style: none; }
+    .scope li { margin: 6px 0; padding-left: 16px; position: relative; }
+    .scope li::before { content: ''; position: absolute; left: 0; top: 9px;
+      width: 6px; height: 6px; border-radius: 2px; background: var(--gray-500); }
+    .scope .in li::before { background: var(--olive); }
+
+    /* finding cards */
+    .finding { background: var(--white); border: var(--border); border-radius: var(--radius);
+      margin-bottom: 18px; overflow: hidden; }
+    .f-head { display: flex; align-items: center; gap: 12px; padding: 14px 20px;
+      background: var(--gray-150); border-bottom: var(--border); flex-wrap: wrap; }
+    .f-id { font-family: var(--mono); font-size: 12px; color: var(--gray-500); }
+    .f-title { font-family: var(--serif); font-size: 17px; color: var(--slate); flex: 1; min-width: 220px; }
+    .sev { display: inline-block; font-family: var(--mono); font-size: 11px;
+      padding: 2px 8px; border-radius: 6px; font-weight: 600; }
+    .sev.crit { background: #54231A; color: #F2A28E; }
+    .sev.high { background: #4A2A1C; color: #F0B79C; }
+    .sev.med  { background: var(--oat); color: var(--warn); }
+    .sev.low  { background: #2D3A24; color: #B6CC96; }
+    .sev.info { background: var(--gray-150); color: var(--gray-500); border: 1px solid var(--gray-300); }
+    .f-body { padding: 16px 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 16px 28px; }
+    @media (max-width: 820px) { .f-body { grid-template-columns: 1fr; } }
+    .f-block .bk { font-family: var(--mono); font-size: 10.5px; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--gray-500); margin-bottom: 6px; }
+    .f-block .bv { font-size: 13.5px; }
+    .f-block .bv strong { color: var(--slate); }
+    .cite { display: inline-block; font-family: var(--mono); font-size: 11px;
+      background: var(--oat); color: var(--clay); border-radius: 6px; padding: 1px 7px; }
+    pre.evidence { font-family: var(--mono); font-size: 12px; background: var(--code-bg);
+      border: 1px solid var(--gray-300); border-radius: 8px; padding: 10px 12px;
+      margin-top: 8px; overflow-x: auto; color: #C9B98A; line-height: 1.55; white-space: pre; }
+
+    /* per-finding decision strip */
+    .f-decide { display: flex; gap: 10px; padding: 0 20px 16px; flex-wrap: wrap; }
+    .f-decide .opt { background: var(--ivory); border: var(--border); border-radius: 8px;
+      padding: 7px 14px; cursor: pointer; font-family: var(--mono); font-size: 12px;
+      color: var(--gray-700); position: relative; user-select: none; }
+    .f-decide .opt input { position: absolute; opacity: 0; pointer-events: none; }
+    .f-decide .opt:hover { border-color: var(--clay); }
+    .f-decide .opt[data-selected="true"] { border-color: var(--clay); color: var(--clay);
+      background: #1F1D1A; box-shadow: 0 0 0 1px var(--clay) inset; }
+
+    /* re-audit table */
+    .tbl { width: 100%; border: var(--border); border-radius: var(--radius);
+      border-collapse: separate; border-spacing: 0; overflow: hidden; font-size: 13.5px; }
+    .tbl th, .tbl td { text-align: left; padding: 10px 14px; border-bottom: 1px solid var(--gray-300);
+      vertical-align: top; }
+    .tbl th { font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--gray-500); background: var(--gray-150); font-weight: 600; }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td.mono { font-family: var(--mono); font-size: 12.5px; }
+    .badge { display: inline-block; font-family: var(--mono); font-size: 10.5px;
+      padding: 2px 8px; border-radius: 6px; letter-spacing: 0.04em; }
+    .badge.fixed     { background: #2D3A24; color: var(--olive); }
+    .badge.open      { background: #4A2A1C; color: var(--rust); }
+    .badge.accepted  { background: var(--oat); color: var(--warn); }
+    .badge.regressed { background: #54231A; color: #F2A28E; }
+
+    .selections { background: var(--white); border: var(--border); border-left: 4px solid var(--clay);
+      border-radius: var(--radius); padding: 22px 26px; margin-top: 40px;
+      position: sticky; bottom: 22px; }
+    .selections h3 { font-family: var(--serif); font-size: 20px; color: var(--slate); margin-bottom: 12px; }
+    .sel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 22px;
+      font-size: 13px; margin-bottom: 16px; }
+    @media (max-width: 720px) { .sel-grid { grid-template-columns: 1fr; } }
+    .sel-row { display: flex; justify-content: space-between; gap: 12px; }
+    .sel-row .k { color: var(--gray-500); font-family: var(--mono); font-size: 12px; }
+    .sel-row .v { color: var(--slate); font-weight: 600; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; }
+    button.action { font-family: var(--mono); font-size: 12px; padding: 9px 16px;
+      background: var(--ivory); color: var(--clay); border: 1.5px solid var(--clay);
+      border-radius: 8px; cursor: pointer; letter-spacing: 0.04em; }
+    button.action:hover { background: #2A2521; }
+    .toast { font-family: var(--mono); font-size: 11.5px; color: var(--olive);
+      margin-left: 8px; opacity: 0; transition: opacity 200ms ease; }
+    .toast.show { opacity: 1; }
+
+    .footer { color: var(--gray-500); font-size: 13px; margin-top: 64px;
+      padding-top: 22px; border-top: 1px solid var(--gray-300); }
+  
+    .area-head{display:flex;align-items:baseline;gap:12px;margin:34px 0 14px;padding-bottom:8px;border-bottom:1px solid var(--gray-300);}
+    .area-head h3{font-family:var(--serif);font-size:20px;color:var(--clay);font-weight:500;}
+    .area-n{font-family:var(--mono);font-size:11px;color:var(--gray-500);}
+    .f-head .badge{margin-left:auto;}
+    .toc{columns:2;gap:24px;font-size:13.5px;margin-top:10px;}
+    @media(max-width:720px){.toc{columns:1;}}
+    .toc a{color:var(--gray-700);text-decoration:none;display:block;padding:3px 0;}
+    .toc a:hover{color:var(--clay);}
+    .toc .sv{font-family:var(--mono);font-size:10px;}
+</style></head>
+<body><div class="page">
+  <header class="page-head">
+    <div class="eyebrow">Audit · server-authoritative migration · 2026-06-14</div>
+    <h1>Server-migration audit — every issue found &amp; fixed</h1>
+    <div class="context-box">
+      <span class="label">Context</span>
+      The robot-islands server-authoritative migration (slices 1–5, diff <code>0bf2ed2~1..HEAD</code> — a new Fastify+Postgres <code>server/</code> workspace + a client cutover to a REMOTE boot mode) shipped <strong>test-green</strong> (client 3352 tests + server 112 tests green pre-fix). This audit hunted the issues the green suite did <em>not</em> catch — regressions, anti-cheat/concurrency holes, async defects, spec drift — then verified, fixed, and re-verified each. Detection: a 65-agent workflow (7 parallel finders → a 2-adversary refutation panel per finding) plus owner ground-truth and a systematic intent-payload parity sweep.
+    </div>
+  </header>
+
+  <div class="summary">
+    <div class="cell"><div class="k">Confirmed findings</div><div class="v warn">28</div></div>
+    <div class="cell"><div class="k">Critical</div><div class="v bad">7</div></div>
+    <div class="cell"><div class="k">Important / Minor</div><div class="v">14 / 7</div></div>
+    <div class="cell"><div class="k">Fixed</div><div class="v ok">28 / 28</div></div>
+    <div class="cell"><div class="k">Refuted by panel</div><div class="v">3</div></div>
+  </div>
+
+  <div class="verdict green">
+    <div class="vt">Verdict</div>
+    <div class="vh">The migration was test-green but functionally broken in its own default (REMOTE) mode and carried real anti-cheat &amp; concurrency holes — all 28 confirmed issues are now fixed and verified.</div>
+    <div class="vb">The server ran the authoritative economy with <strong>no environment context</strong> (F-03/F-18 — biome, Network Consciousness, solar, lattice, toxicity and the player-flagged <em>active bonus</em> all silently disabled), and three intent handlers <strong>dropped client payload fields</strong> (F-26 crate cargo label → always iron_ore, F-20 ocean platforms, F-21 path-drawn drones, F-27 terrain modifiers). On top of that: <strong>req.ip spoofing</strong> bypassed the auth rate limit (F-01), <strong>concurrent intents lost updates</strong> with no DB lock (F-04), and a snapshot-swap <strong>orphaned every panel holding a world reference</strong> (F-10/F-15). Every finding survived a 2-adversary refutation panel (3 candidate findings were killed by it). All fixes ship with tests; the full suite is green at 3377 tests. A code review of the riskiest fixes caught one over-correction (the rebuild gate, F-11) which was then widened. Residual, documented: the local-save import endpoint still trusts the player's own snapshot content (offline window now bounded) — see SPEC Appendix C.</div>
+  </div>
+
+  <section>
+    <div class="sec-head"><span class="num">1</span><h2>Scope &amp; method</h2></div>
+    <div class="scope">
+      <div class="col in"><div class="col-head">Audited</div><div class="col-body"><ul>
+        <li>Full migration diff <code>0bf2ed2~1..HEAD</code> — 60 commits, 83 files</li>
+        <li>New <code>server/</code> workspace: auth, crypto, runtime, persistence, transport/intents</li>
+        <li>Client cutover: <code>main.ts</code>, <code>mutation-gateway.ts</code>, <code>server-client.ts</code>, async panels</li>
+        <li>Spec / build / deploy: <code>SPEC.md</code>, <code>AGENTS.md</code>, tsconfigs, vitest, systemd unit</li>
+      </ul></div></div>
+      <div class="col out"><div class="col-head">Method &amp; residual</div><div class="col-body"><ul>
+        <li><strong>Detect</strong>: 7 parallel finder agents over the surface</li>
+        <li><strong>Verify</strong>: 2 independent adversaries refute each finding; kept only if it survived</li>
+        <li><strong>Ground-truth + parity</strong>: owner-flagged bugs + a full intent payload-field parity diff (caught 2 the workflow missed)</li>
+        <li><strong>Residual (documented)</strong>: import endpoint content-trust; <code>hashtext</code> lock-key collisions (perf-only); import path not under the advisory lock (409-gated)</li>
+      </ul></div></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="num">2</span><h2>Findings</h2></div>
+    <p class="sec-intro">All 28 confirmed issues, by subsystem, each FIXED with its commit. Several were independently surfaced by more than one finder (noted) — a signal the detection was redundant where it mattered.</p>
+    <div class="toc"><a href='#F-01'><span class='sv' style='color:var(--rust)'>[CRIT]</span> F-01 · trustProxy:true + un-sanitizing nginx config lets clients spoof req.ip</a><a href='#F-02'><span class='sv' style='color:var(--warn)'>[IMPO]</span> F-02 · scryptSync runs synchronously on the shared event loop — every login/s</a><a href='#F-03'><span class='sv' style='color:var(--rust)'>[CRIT]</span> F-03 · Offline catch-up calls advanceIsland with no RatesContext — biome/NC/s</a><a href='#F-04'><span class='sv' style='color:var(--rust)'>[CRIT]</span> F-04 · Concurrent intents from two connections of the same account silently l</a><a href='#F-05'><span class='sv' style='color:var(--warn)'>[IMPO]</span> F-05 · POST /api/game/import persists fully client-authored snapshot as autho</a><a href='#F-06'><span class='sv' style='color:var(--olive)'>[MINO]</span> F-06 · Read paths (GET /api/game/state and 1 Hz WS state push) issue a DB wri</a><a href='#F-07'><span class='sv' style='color:var(--warn)'>[IMPO]</span> F-07 · POST /api/game/import accepts an unvalidated client snapshot as author</a><a href='#F-08'><span class='sv' style='color:var(--warn)'>[IMPO]</span> F-08 · WebSocket intent channel has no per-connection/per-message rate limit </a><a href='#F-09'><span class='sv' style='color:var(--olive)'>[MINO]</span> F-09 · Successful intent can emit a spurious second `{seq:-1, ok:false}` ack </a><a href='#F-10'><span class='sv' style='color:var(--rust)'>[CRIT]</span> F-10 · REMOTE snapshot swap orphans overlay/inspector subsystems that capture</a><a href='#F-11'><span class='sv' style='color:var(--warn)'>[IMPO]</span> F-11 · applyRemoteSnapshot rebuilds and destroys all ocean/island/fog GPU tex</a><a href='#F-12'><span class='sv' style='color:var(--warn)'>[IMPO]</span> F-12 · Remote gateway promise rejections (intent timeout / socket closed) are</a><a href='#F-13'><span class='sv' style='color:var(--warn)'>[IMPO]</span> F-13 · Auto-import of local save can re-fire and brick boot if import latency</a><a href='#F-14'><span class='sv' style='color:var(--olive)'>[MINO]</span> F-14 · Auth error body rendered as raw JSON to the user instead of the messag</a><a href='#F-15'><span class='sv' style='color:var(--rust)'>[CRIT]</span> F-15 · REMOTE snapshot swap orphans every panel that captured world/islandSta</a><a href='#F-16'><span class='sv' style='color:var(--warn)'>[IMPO]</span> F-16 · Placement/relocate commit leaves placement mode armed during the remot</a><a href='#F-17'><span class='sv' style='color:var(--olive)'>[MINO]</span> F-17 · Trade reject in REMOTE mutates island state directly, bypassing the ga</a><a href='#F-18'><span class='sv' style='color:var(--rust)'>[CRIT]</span> F-18 · Authoritative server economy runs advanceIsland with NO ctx — producti</a><a href='#F-19'><span class='sv' style='color:var(--rust)'>[CRIT]</span> F-19 · POST /api/game/import persists any structurally-valid client snapshot </a><a href='#F-20'><span class='sv' style='color:var(--warn)'>[IMPO]</span> F-20 · REMOTE ocean-platform placement is completely broken — gateway maps it</a><a href='#F-21'><span class='sv' style='color:var(--warn)'>[IMPO]</span> F-21 · REMOTE dispatch-drone drops waypoints and selectedTier — T5 path-drawn</a><a href='#F-22'><span class='sv' style='color:var(--olive)'>[MINO]</span> F-22 · Periodic WS state-push re-advances + re-persists the save every second</a><a href='#F-23'><span class='sv' style='color:var(--warn)'>[IMPO]</span> F-23 · AGENTS.md still declares &quot;No React, no backend. Pure client-side&</a><a href='#F-24'><span class='sv' style='color:var(--olive)'>[MINO]</span> F-24 · AGENTS.md documents `npm test` as hermetic, but the migration made it </a><a href='#F-25'><span class='sv' style='color:var(--warn)'>[IMPO]</span> F-25 · server/tsconfig.json excludes all *.test.ts, hiding 13 real strict-mod</a><a href='#F-26'><span class='sv' style='color:var(--olive)'>[MINO]</span> F-26 · server/package.json declares main: dist/index.js but there is no dist </a><a href='#F-27'><span class='sv' style='color:var(--warn)'>[IMPO]</span> F-27 · place-building intent drops cargoLabel — every generic-storage buildin</a><a href='#F-28'><span class='sv' style='color:var(--warn)'>[IMPO]</span> F-28 · place-building intent also drops terrainTarget/terrainShotMs and nowMs</a></div>
+    <div class="area-head"><h3>Auth &amp; crypto (slice 1)</h3><span class="area-n">2 findings</span></div>
+      <article class="finding" id="F-01">
+        <div class="f-head">
+          <span class="f-id">F-01</span>
+          <span class="f-title">trustProxy:true + un-sanitizing nginx config lets clients spoof req.ip and fully bypass the per-IP auth rate limit</span>
+          <span class="sev crit">CRITICAL</span>
+          <span class="badge fixed">FIXED · f1368db</span>
+        </div>
+        <div class="f-body">
+          <div class="f-block">
+            <div class="bk">What was wrong · <span style="color:var(--gray-500)">security</span></div>
+            <div class="bv">The last migration commit (fbe7d1d) flipped Fastify to `trustProxy: true` so the per-IP auth rate-limit (the brute-force / enumeration / scrypt-DoS defense, max 10/min in app.ts:22-25) buckets on `req.ip`. With trustProxy:true, Fastify/proxy-addr derives `req.ip` from the LEFTMOST X-Forwarded-For entry, which is fully attacker-controlled. The prescribed deployment (server/deploy/README.md step 5) is `location /api/ { proxy_pass http://127.0.0.1:5180; }` — it does NOT replace or sanitize X-Forwarded-For, so a client header passes through (or is appended leftmost). An attacker who rotates the XFF header per request gets a unique req.ip each time, so the rate-limit bucket never accumulates and the limit is completely bypassed. This re-opens unlimited password brute-force and account-enumeration against /api/auth/login and /api/auth/signup, and enables the scrypt event-loop DoS (each call ~100ms blocking). The default @fastify/rate-limit keyGenerator is `req.ip` (node_modules/@fastify/rate-limit/index.js:29), so nothing else mitigates it. The added test (app.test.ts) actually demonstrates the spoof — it drives the bucket purely via an attacker-supplied X-Forwarded-For header and asserts that as correct behavior, cementing the vulnerable design.</div>
+            <div class="bk" style="margin-top:12px">Evidence</div>
+            <div class="bv"><span class="cite">server/src/app.ts:13</span></div>
+            <pre class="evidence">app.ts:13  const app = Fastify({ logger: false, trustProxy: true });
+
+Verified live: Fastify({trustProxy:true}) with header &#x27;X-Forwarded-For: attacker-spoof-9.9.9.9&#x27; yields req.ip === &#x27;attacker-spoof-9.9.9.9&#x27; (leftmost, client-controlled). Default keyGenerator: node_modules/@fastify/rate-limit/index.js:29 `const defaultKeyGenerator = (req) =&gt; req.ip`. Prescribed proxy (deploy/README.md): `location /api/ { proxy_pass http://127.0.0.1:5180; }` sets no X-Forwarded-For of its own.</pre>
+          </div>
+          <div class="f-block">
+            <div class="bk">Fix</div>
+            <div class="bv">trustProxy:true → trustProxy:1 (one trusted nginx hop); deploy nginx now overwrites X-Forwarded-For with $remote_addr. Rate-limit test rewritten to drive the bucket via the real connection + a regression test proving a rotating XFF can&#x27;t escape it.</div>
+            <div class="bk" style="margin-top:12px">Verification</div>
+            <div class="bv">Adversary panel: 1 survive / 1 refute · landed in <code>f1368db</code> · full suite green (3377 tests).</div>
+          </div>
+        </div>
+      </article>
+      <article class="finding" id="F-02">
+        <div class="f-head">
+          <span class="f-id">F-02</span>
+          <span class="f-title">scryptSync runs synchronously on the shared event loop — every login/signup freezes all WebSocket game traffic for ~100ms</span>
+          <span class="sev high">IMPORTANT</span>
+          <span class="badge fixed">FIXED · f1368db</span>
+        </div>
+        <div class="f-body">
+          <div class="f-block">
+            <div class="bk">What was wrong · <span style="color:var(--gray-500)">race-or-async</span></div>
+            <div class="bv">hashPassword and verifyPassword use the blocking `scryptSync` (not the async `scrypt`), and are called directly inside the /api/auth/signup and /api/auth/login route handlers (routes.ts:36, 53, 55). The server is a single Fastify process on a single event loop (index.ts: one buildApp, no cluster/worker) that ALSO serves the authoritative game WebSocket and its periodic state-push ticks (game/ws.ts). Measured on this box, one scryptSync(N=32768,r=8,p=1) call blocks the event loop ~100ms. So each auth attempt stalls every connected player&#x27;s WS ticks and intent processing for ~100ms; a burst of concurrent logins (10 = the rate-limit ceiling, and unbounded once the XFF bypass above is used) produces ~1s+ of fully frozen game traffic. This is a regression introduced by the migration choosing the sync API on the request path of a process that also carries real-time game traffic.</div>
+            <div class="bk" style="margin-top:12px">Evidence</div>
+            <div class="bv"><span class="cite">server/src/crypto/password.ts:15</span></div>
+            <pre class="evidence">password.ts:15  const hash = scryptSync(password, salt, KEYLEN, { N, r, p, maxmem: MAXMEM });
+password.ts:35  candidate = scryptSync(password, salt, expected.length, { N: pn, r: pr, p: pp, maxmem: MAXMEM });
+routes.ts:36  const user = await createUser(pool, req.body.email, hashPassword(req.body.password));
+routes.ts:53/55  ok = verifyPassword(user.password, ...) / verifyPassword(DUMMY_HASH, ...)
+Measured: scryptSync(...) -&gt; &#x27;scrypt ms: 101&#x27; on this server.</pre>
+          </div>
+          <div class="f-block">
+            <div class="bk">Fix</div>
+            <div class="bv">scryptSync → promisified crypto.scrypt; hashPassword/verifyPassword async; callers await. KDF now runs on the libuv threadpool, no event-loop freeze.</div>
+            <div class="bk" style="margin-top:12px">Verification</div>
+            <div class="bv">Adversary panel: 2 survive / 0 refute · landed in <code>f1368db</code> · full suite green (3377 tests).</div>
+          </div>
+        </div>
+      </article><div class="area-head"><h3>Runtime &amp; persistence (slice 2)</h3><span class="area-n">4 findings</span></div>
+      <article class="finding" id="F-03">
+        <div class="f-head">
+          <span class="f-id">F-03</span>
+          <span class="f-title">Offline catch-up calls advanceIsland with no RatesContext — biome/NC/solar/toxicity/lattice all ignored, diverging from online play</span>
+          <span class="sev crit">CRITICAL</span>
+          <span class="badge fixed">FIXED · 9b18b63</span>
+        </div>
+        <div class="f-body">
+          <div class="f-block">
+            <div class="bk">What was wrong · <span style="color:var(--gray-500)">regression</span></div>
+            <div class="bv">loadAndCatchUp integrates the offline gap with `advanceIsland(state, now)` — passing NEITHER the `ctx: RatesContext` NOR `wallClockNowMs` arguments. The client&#x27;s economy loop (src/main.ts:2195-2204, 2282-2303) always builds a full RatesContext per island: `modifierMul` (biome multipliers), `ncBuff`, `activeBonusMul`, `terrainAt`, `solarBoost` (Mirror Sat), `geothermalActive`, cross-island lattice pooling, cable-network brownout, and `worldSeed`. With ctx omitted, computeRates falls back to identity defaults (economy.ts:1068-1071 modifierMul=IDENTITY, ncBuff=1, activeBonusMul=1; ctx?.solarBoost??0; ctx?.geothermalActive??false) and advanceIsland&#x27;s `if (ctx?.worldSeed)` guard (economy.ts:2555) skips advanceToxicityRolls entirely. Concrete effect on a FRESH world (which already ships islands with modifiers — world.ts:613 fertile, 626 mineral_rich, 665 cursed_storms): per biomes.ts:292-295 fertile = extraction ×1.50, mineral_rich = ×1.25, cursed_storms = global ×0.90. So a fertile island under-produces offline by 33%, while a cursed_storms island OVER-produces offline (logging off dodges the storm penalty — an exploit). Buildings accrue ZERO toxicity offline. Lattice chains that depend on cross-island supply stall offline though they run online. This breaks SPEC §15.5 (&#x27;weather/toxicity rolls deterministic at any catchup duration&#x27;), §2003/§2133 (&#x27;offline play and active play the same code path&#x27;), and §15.6&#x27;s authoritative-state contract.</div>
+            <div class="bk" style="margin-top:12px">Evidence</div>
+            <div class="bv"><span class="cite">server/src/game/runtime.ts:27</span></div>
+            <pre class="evidence">runtime.ts:27  `if (state) advanceIsland(state, now);`  // no ctx, no wallClockNowMs
+vs client main.ts:2282-2303 ctx includes `modifierMul: modifierMulFor(s.id), ncBuff: ncBuffFor(s), world: worldState, worldSeed: worldState.seed, solarBoost: ...`
+economy.ts:2555 `if (ctx?.worldSeed) { advanceToxicityRolls(...) }`  // skipped server-side
+biomes.ts:292-295  mineral_rich→×1.25, fertile→×1.50, cursed_storms→global×0.90</pre>
+          </div>
+          <div class="f-block">
+            <div class="bk">Fix</div>
+            <div class="bv">Extracted a shared pure advanceWorldEconomy() used by BOTH client and server; loadAndCatchUp now applies the full RatesContext (biome/NC/solar/lattice/cable/toxicity/active-bonus). New server tests prove a fertile island out-produces a plain one offline.</div>
+            <div class="bk" style="margin-top:12px">Verification</div>
+            <div class="bv">Adversary panel: 2 survive / 0 refute · landed in <code>9b18b63</code> · full suite green (3377 tests).</div>
+          </div>
+        </div>
+      </article>
+      <article class="finding" id="F-04">
+        <div class="f-head">
+          <span class="f-id">F-04</span>
+          <span class="f-title">Concurrent intents from two connections of the same account silently lose updates (no DB lock / transaction / version check)</span>
+          <span class="sev crit">CRITICAL</span>
+          <span class="badge fixed">FIXED · e2560bc</span>
+        </div>
+        <div class="f-body">
+          <div class="f-block">
+            <div class="bk">What was wrong · <span style="color:var(--gray-500)">race-or-async</span></div>
+            <div class="bv">applyIntent does a non-atomic read-modify-write: loadAndCatchUp (which itself loads+saves) → handler.apply mutates the in-memory game → saveSnapshot, across three separate awaits with NO row lock, SELECT…FOR UPDATE, advisory lock, transaction, or optimistic schema_version check (grep for FOR UPDATE/pg_advisory/BEGIN/transaction in server/src/game returns nothing). ws.ts:85-90 serializes intents per CONNECTION via a promise chain and its comment claims this &#x27;prevents two intents from racing the same saves row&#x27; — but that guarantee is per-connection only. Two browser tabs (two WS connections) for the same user have independent chains and interleave freely against the single `saves` row keyed by user_id (0002_saves.sql:3). Same hazard between an intent on one connection and the 1 Hz periodic state-push tick on another (ws.ts:100, also write-via-loadAndCatchUp). I PROVED this empirically: a test firing two place-building intents at different tiles concurrently via Promise.all both ACK ok:true, yet the stored save contains only ONE workshop (expected 2, received 1) — the later writer clobbers the earlier mutation.</div>
+            <div class="bk" style="margin-top:12px">Evidence</div>
+            <div class="bv"><span class="cite">server/src/game/intent-runner.ts:41</span></div>
+            <pre class="evidence">intent-runner.ts:41-64  `const game = await loadAndCatchUp(...); ... handler.apply(...); ... await saveSnapshot(...)`  — three awaits, no lock.
+Empirical: two concurrent applyIntent place-building calls → `AssertionError: expected 1 to be 2` (one workshop persisted, one lost), both acks ok:true.
+ws.ts:87 comment: &#x27;This is what prevents two intents from racing (load-&gt;apply-&gt;persist) the same row.&#x27; (only true within one connection)</pre>
+          </div>
+          <div class="f-block">
+            <div class="bk">Fix</div>
+            <div class="bv">Per-account load→apply→persist wrapped in a tx with pg_advisory_xact_lock(hashtext(userId)); concurrent same-account intents serialize. Race test FAILS with the lock removed, passes with it.</div>
+            <div class="bk" style="margin-top:12px">Verification</div>
+            <div class="bv">Adversary panel: 2 survive / 0 refute · landed in <code>e2560bc</code> · full suite green (3377 tests).</div>
+          </div>
+        </div>
+      </article>
+      <article class="finding" id="F-05">
+        <div class="f-head">
+          <span class="f-id">F-05</span>
+          <span class="f-title">POST /api/game/import persists fully client-authored snapshot as authoritative — contradicts the &#x27;client numbers are never trusted&#x27; contract; arbitrary level/inventory and unbounded offline catch-up</span>
+          <span class="sev high">IMPORTANT</span>
+          <span class="badge fixed">FIXED · e2560bc</span>
+        </div>
+        <div class="f-body">
+          <div class="f-block">
+            <div class="bk">What was wrong · <span style="color:var(--gray-500)">security</span></div>
+            <div class="bv">The import route validates a client-supplied snapshot only for STRUCTURE (isValidSaveSnapshot checks types + that v ∈ SUPPORTED_LOAD_VERSIONS — persistence.ts:1233-1242) and that it deserializes, then stores it verbatim as the account&#x27;s authoritative save. There is no bound on any value (grep for level/inventory/clamp/MAX in routes.ts returns nothing): a logged-in player can POST a snapshot granting themselves any island level, any inventory, completed endgame artifacts, etc. Additionally `savedAt` is attacker-controlled and unbounded (isValidSaveSnapshot only checks `typeof savedAt === &#x27;number&#x27;`); loadAndCatchUp computes deltaMs = max(0, now - snapshot.savedAt) (persistence.ts:932), so importing a snapshot with savedAt far in the past triggers a multi-year offline catch-up granting a large extra resource/XP bolus on top of the already-arbitrary state. This directly contradicts SPEC Appendix C (&#x27;Validation re-runs the existing pure entry function … client numbers are never trusted&#x27;). The slice-5 trust-surface doc (commit 2f111c2) audited XP/trade/casts but did not flag the import endpoint.</div>
+            <div class="bk" style="margin-top:12px">Evidence</div>
+            <div class="bv"><span class="cite">server/src/game/routes.ts:39</span></div>
+            <pre class="evidence">routes.ts:28-39  `if (!isValidSaveSnapshot(snapshot)) {...400...} try { deserializeWorld(snapshot, Date.now(), Date.now()); } ... await saveSnapshot(pool, userId, snapshot);`
+persistence.ts:1236-1239 isValidSaveSnapshot: only `typeof v[&#x27;savedAt&#x27;] !== &#x27;number&#x27;` / `typeof v[&#x27;v&#x27;] !== &#x27;number&#x27;` shape checks — no value bounds.
+runtime.ts:20 + persistence.ts:932 `deltaMs = Math.max(0, nowWallMs - snapshot.savedAt)` → unbounded offline integrate from attacker savedAt.</pre>
+          </div>
+          <div class="f-block">
+            <div class="bk">Fix</div>
+            <div class="bv">Imported savedAt/savedAtPerf clamped to [now-24h, now] (perfShift-invariant), bounding the offline windfall; 409 no-existing-save gate kept; residual content-trust documented in SPEC Appendix C.</div>
+            <div class="bk" style="margin-top:12px">Verification</div>
+            <div class="bv">Adversary panel: 1 survive / 1 refute · landed in <code>e2560bc</code> · full suite green (3377 tests).</div>
+          </div>
+        </div>
+      </article>
+      <article class="finding" id="F-06">
+        <div class="f-head">
+          <span class="f-id">F-06</span>
+          <span class="f-title">Read paths (GET /api/game/state and 1 Hz WS state push) issue a DB write on every call via loadAndCatchUp</span>
+          <span class="sev low">MINOR</span>
+          <span class="badge fixed">FIXED · e2560bc</span>
+        </div>
+        <div class="f-body">
+          <div class="f-block">
+            <div class="bk">What was wrong · <span style="color:var(--gray-500)">code-health</span></div>
+            <div class="bv">loadAndCatchUp unconditionally calls saveSnapshot at the end, so every read-only operation persists. GET /api/game/state (routes.ts:45) and the periodic WS state push that runs every STATE_PUSH_INTERVAL_MS=1000 (ws.ts:41,100) both go through loadAndCatchUp, meaning each connected socket writes the full jsonb snapshot to Postgres once per second even when the player does nothing, and a plain state GET mutates persistent storage. Beyond write amplification (a large late-game snapshot serialized + UPSERT per second per socket), every such write widens the lost-update race window in finding #2: the read-triggered re-persist of advanced state is exactly what a concurrent intent on another connection can clobber or be clobbered by.</div>
+            <div class="bk" style="margin-top:12px">Evidence</div>
+            <div class="bv"><span class="cite">server/src/game/runtime.ts:30</span></div>
+            <pre class="evidence">runtime.ts:29-30  `const advanced = serializeWorld(world, islandStates, now, now); await saveSnapshot(pool, userId, advanced);`  (always, even for reads)
+ws.ts:41  pushState → `const game = await loadAndCatchUp(pool, userId, Date.now());`  fired by setInterval(…,1000) at ws.ts:100
+routes.ts:45  state route → `const game = await loadAndCatchUp(pool, req.user!.id, Date.now());`</pre>
+          </div>
+          <div class="f-block">
+            <div class="bk">Fix</div>
+            <div class="bv">Read-only catchUp() split from the persisting path; GET /api/game/state + 1 Hz WS push no longer write the DB.</div>
+            <div class="bk" style="margin-top:12px">Verification</div>
+            <div class="bv">Adversary panel: 2 survive / 0 refute · landed in <code>e2560bc</code> · full suite green (3377 tests).</div>
+          </div>
+        </div>
+      </article><div class="area-head"><h3>Transport &amp; intent protocol (slice 3)</h3><span class="area-n">5 findings</span></div>
+      <article class="finding" id="F-07">
+        <div class="f-head">
+          <span class="f-id">F-07</span>
+          <span class="f-title">POST /api/game/import accepts an unvalidated client snapshot as authoritative state — full anti-cheat bypass</span>
+          <span class="sev high">IMPORTANT</span>
+          <span class="badge fixed">FIXED · e2560bc</span>
+        </div>
+        <div class="f-body">
+          <div class="f-block">
+            <div class="bk">What was wrong · <span style="color:var(--gray-500)">security</span></div>
+            <div class="bv">The migration&#x27;s whole purpose (SPEC Appendix C trust-surface) is to make the server authoritative so a client can never fabricate state. The import endpoint defeats this: it persists a fully client-supplied snapshot as the account&#x27;s authoritative game, gated ONLY by `hasSave` (409 if a game already exists) and by STRUCTURAL validity (`isValidSaveSnapshot` + `deserializeWorld` not throwing). It performs ZERO legality validation of the CONTENT — inventory quantities, populated flags, skill points, building tiers, T5 endgame state are all taken verbatim. Any fresh account can therefore POST a hand-crafted snapshot with maxed inventory / all islands populated / all skills unlocked and the server will treat it as legitimate from then on. Every per-intent legality re-check in intents.ts (the anti-cheat work of this slice) is moot once a player can seed arbitrary starting state. The SPEC documents the mechanism (§ Appendix C, lines 2253-2257) as a &#x27;one-time local-save migration&#x27; but does not acknowledge that it is an unauthenticated-content trust hole.</div>
+            <div class="bk" style="margin-top:12px">Evidence</div>
+            <div class="bv"><span class="cite">server/src/game/routes.ts:23-42</span></div>
+            <pre class="evidence">if (await hasSave(pool, userId)) return reply.code(409).send({ error: &#x27;game already exists&#x27; });
+const snapshot = body?.snapshot;
+if (!isValidSaveSnapshot(snapshot)) { return reply.code(400)... }
+try { deserializeWorld(snapshot, Date.now(), Date.now()); } catch (err) { ... }
+await saveSnapshot(pool, userId, snapshot);  // persisted verbatim, no content legality check</pre>
+          </div>
+          <div class="f-block">
+            <div class="bk">Fix</div>
+            <div class="bv">Same fix as F-04/F-05: read-only projection path; persistence only inside the locked intent tx.</div>
+            <div class="bk" style="margin-top:12px">Verification</div>
+            <div class="bv">Adversary panel: 2 survive / 0 refute · landed in <code>e2560bc</code> · full suite green (3377 tests).</div>
+          </div>
+        </div>
+      </article>
+      <article class="finding" id="F-08">
+        <div class="f-head">
+          <span class="f-id">F-08</span>
+          <span class="f-title">WebSocket intent channel has no per-connection/per-message rate limit — DB-write amplification DoS</span>
+          <span class="sev high">IMPORTANT</span>
+          <span class="badge fixed">FIXED · f1368db</span>
+        </div>
+        <div class="f-body">
+          <div class="f-block">
+            <div class="bk">What was wrong · <span style="color:var(--gray-500)">security</span></div>
+            <div class="bv">The @fastify/rate-limit plugin only guards HTTP routes (global 100/min in app.ts:15, auth 10/min in the encapsulated scope). The WS message handler has no throttle at all. Each inbound frame chains an `applyIntent`, and applyIntent unconditionally runs `loadAndCatchUp` (which itself calls saveSnapshot) plus, on success, another saveSnapshot — so every single client frame forces at least one Postgres write, and `pushState` after each accepted intent forces yet another load+save. A single authenticated socket can fire frames as fast as it likes; the per-connection promise chain queues them all in memory (unbounded `chain` growth) while hammering the saves row. The 64 KiB maxPayload (app.ts:37) caps frame SIZE but not frame RATE. This is introduced by the migration (ws.ts is a new file); the pre-migration client-only build had no server to flood.</div>
+            <div class="bk" style="margin-top:12px">Evidence</div>
+            <div class="bv"><span class="cite">server/src/game/ws.ts:105-127</span></div>
+            <pre class="evidence">socket.on(&#x27;message&#x27;, (raw: Buffer) =&gt; {
+  const text = raw.toString();
+  chain = chain.then(async () =&gt; {
+    ...
+    const ack = await applyIntent(pool, userId, parsed.env, Date.now()); // loadAndCatchUp+saveSnapshot
+    socket.send(JSON.stringify(ack));
+    if (ack.ok) { await pushState(socket, pool, userId); } // another loadAndCatchUp+saveSnapshot
+  })</pre>
+          </div>
+          <div class="f-block">
+            <div class="bk">Fix</div>
+            <div class="bv">Import savedAt clamp + documented trust boundary (one-time migration of the player&#x27;s own local save; ongoing authority only via validated intents).</div>
+            <div class="bk" style="margin-top:12px">Verification</div>
+            <div class="bv">Adversary panel: 2 survive / 0 refute · landed in <code>f1368db</code> · full suite green (3377 tests).</div>
+          </div>
+        </div>
+      </article>
+      <article class="finding" id="F-27">
+        <div class="f-head">
+          <span class="f-id">F-27</span>
+          <span class="f-title">place-building intent drops cargoLabel — every generic-storage building (Crate/Warehouse) is labeled iron_ore in REMOTE regardless of the player&#x27;s picker selection</span>
+          <span class="sev high">IMPORTANT</span>
+          <span class="badge fixed">FIXED · 903951c</span>
+        </div>
+        <div class="f-body">
+          <div class="f-block">
+            <div class="bk">What was wrong · <span style="color:var(--gray-500)">bug</span></div>
+            <div class="bv">The client cargo-label picker (cargo-label-picker.ts) lets the player choose the resource a Crate/Warehouse holds and the gateway sends it as payload.cargoLabel (mutation-gateway.ts:541). The server place-building handler destructures only {islandId,defId,x,y,rotation} and calls placeBuilding() with 7 args — no cargoLabelOverride — so the pure fn falls back to DEFAULT_CARGO_LABEL (&#x27;iron_ore&#x27;, placement.ts:57). Since REMOTE is the default boot mode, the picker is cosmetic: all crates become iron_ore. User-reported ground truth; MISSED by the detection workflow.</div>
+            <div class="bk" style="margin-top:12px">Evidence</div>
+            <div class="bv"><span class="cite">server/src/game/intents.ts:189,213</span></div>
+            <pre class="evidence">intents.ts:189 const {islandId,defId,x,y,rotation}=payload; (no cargoLabel)
+intents.ts:213 placeBuilding(spec,state,typedDefId,x,y,rot,makePlacedIdGenerator(spec)) — 7 args
+placement.ts:735 (cargoLabelOverride ?? DEFAULT_CARGO_LABEL); placement.ts:57 DEFAULT_CARGO_LABEL=&#x27;iron_ore&#x27;
+LOCAL gateway forwards it (mutation-gateway.ts:245)</pre>
+          </div>
+          <div class="f-block">
+            <div class="bk">Fix</div>
+            <div class="bv">place-building handler validates cargoLabel and forwards it to placeBuilding; crates honor the §4.6 picker again (default iron_ore only when omitted). 3 regression tests.</div>
+            <div class="bk" style="margin-top:12px">Verification</div>
+            <div class="bv">Adversary panel: 2 survive / 0 refute · landed in <code>903951c</code> · full suite green (3377 tests).</div>
+          </div>
+        </div>
+      </article>
+      <article class="finding" id="F-28">
+        <div class="f-head">
+          <span class="f-id">F-28</span>
+          <span class="f-title">place-building intent also drops terrainTarget/terrainShotMs and nowMs — terrain-modifier building placement is broken in REMOTE</span>
+          <span class="sev high">IMPORTANT</span>
+          <span class="badge fixed">FIXED · 903951c</span>
+        </div>
+        <div class="f-body">
+          <div class="f-block">
+            <div class="bk">What was wrong · <span style="color:var(--gray-500)">bug</span></div>
+            <div class="bv">Same handler: the client sends terrainTarget + terrainShotMs (mutation-gateway.ts:543-544) for terrain-modifier defs (§8.9 — pays conversion cost on a chosen terrain) and nowMs; the server forwards none of them to placeBuilding (params 8/11/12). So terrain-modifier placement uses defaults and the upfront §8.9 conversion-cost path keyed on terrainTargetOverride never fires server-side. Third symptom of the place-building payload-drop class (alongside cargoLabel and anchorIslandId/C20).</div>
+            <div class="bk" style="margin-top:12px">Evidence</div>
+            <div class="bv"><span class="cite">server/src/game/intents.ts:189,213</span></div>
+            <pre class="evidence">mutation-gateway.ts:542-545 sends anchorIslandId/terrainTarget/terrainShotMs; LOCAL gateway forwards all (mutation-gateway.ts:244-248); server handler forwards none.</pre>
+          </div>
+          <div class="f-block">
+            <div class="bk">Fix</div>
+            <div class="bv">Same handler now validates + forwards terrainTarget/terrainShotMs/nowMs; terrain-modifier placement works in REMOTE.</div>
+            <div class="bk" style="margin-top:12px">Verification</div>
+            <div class="bv">Adversary panel: 2 survive / 0 refute · landed in <code>903951c</code> · full suite green (3377 tests).</div>
+          </div>
+        </div>
+      </article>
+      <article class="finding" id="F-09">
+        <div class="f-head">
+          <span class="f-id">F-09</span>
+          <span class="f-title">Successful intent can emit a spurious second `{seq:-1, ok:false}` ack when the post-intent state push fails</span>
+          <span class="sev low">MINOR</span>
+          <span class="badge fixed">FIXED · f1368db</span>
+        </div>
+        <div class="f-body">
+          <div class="f-block">
+            <div class="bk">What was wrong · <span style="color:var(--gray-500)">race-or-async</span></div>
+            <div class="bv">In the message handler the ack is sent (line 114) and the intent is already durably committed by applyIntent&#x27;s saveSnapshot. Only AFTER that does `await pushState(...)` run (line 119). pushState calls loadAndCatchUp + serializeWorld + socket.send; if any of those rejects (transient DB error, socket mid-close), control falls to the chain&#x27;s `.catch` (line 121) which sends a SECOND frame `{ seq: -1, ok: false, error }`. The client thus receives a success ack for its real seq followed by an unrelated failure frame, while the mutation actually persisted. A client that keys retry/rollback logic off failure acks could double-apply or wrongly roll back. The failure frame&#x27;s seq:-1 also can&#x27;t be correlated to the originating intent.</div>
+            <div class="bk" style="margin-top:12px">Evidence</div>
+            <div class="bv"><span class="cite">server/src/game/ws.ts:113-126</span></div>
+            <pre class="evidence">const ack = await applyIntent(pool, userId, parsed.env, Date.now());
+socket.send(JSON.stringify(ack));            // success ack already sent
+if (ack.ok) { await pushState(socket, pool, userId); }  // throw here -&gt;
+}).catch((err: unknown) =&gt; {
+  const error = err instanceof Error ? err.message : &#x27;internal error&#x27;;
+  try { socket.send(JSON.stringify({ seq: -1, ok: false, error })); } ... });</pre>
+          </div>
+          <div class="f-block">
+            <div class="bk">Fix</div>
+            <div class="bv">Per-connection sliding-window limiter (20/s) checked BEFORE the load→apply→persist; cheap error ack over-limit, socket close on sustained abuse.</div>
+            <div class="bk" style="margin-top:12px">Verification</div>
+            <div class="bv">Adversary panel: 2 survive / 0 refute · landed in <code>f1368db</code> · full suite green (3377 tests).</div>
+          </div>
+        </div>
+      </article><div class="area-head"><h3>Cross-cutting trust surface (slice 5)</h3><span class="area-n">5 findings</span></div>
+      <article class="finding" id="F-18">
+        <div class="f-head">
+          <span class="f-id">F-18</span>
+          <span class="f-title">Authoritative server economy runs advanceIsland with NO ctx — production silently diverges from the spec&#x27;d/LOCAL math (terrain recipes, modifiers, NC, lattice, cables, mirror-solar, toxicity, output-rotation all disabled)</span>
+          <span class="sev crit">CRITICAL</span>
+          <span class="badge fixed">FIXED · 9b18b63</span>
+        </div>
+        <div class="f-body">
+          <div class="f-block">
+            <div class="bk">What was wrong · <span style="color:var(--gray-500)">regression</span></div>
+            <div class="bv">loadAndCatchUp&#x27;s only production call is `advanceIsland(state, now)` with no RatesContext and no wallClockNowMs. advanceIsland/computeRates read every cross-cutting production input from ctx: ctx.terrainAt (tile-dependent recipes — a Mine on an ore/coal vein produces iron_ore baseline instead of the vein output, §8.1), ctx.worldSeed (gates advanceToxicityRolls at economy.ts:2555 AND §8.10 deterministic output rotation — both DISABLED server-side), ctx.modifierMul / ctx.ncBuff / ctx.activeBonusMul / ctx.geothermalActive / ctx.solarBoost / ctx.cableComponent / lattice inventory+caps+crossIsland. The LOCAL client passes all of these (main.ts cableLocalCtxFor builds the full ctx incl. `terrainAt: spec?.terrainAt`). So the SERVER (the authoritative owner in the new REMOTE default) computes materially different inventory/production than the spec defines and than the LOCAL client produces for the identical world. SPEC Appendix C claims &#x27;The server reuses the client&#x27;s pure layer unchanged ... runs advanceIsland for every populated island&#x27; — but the call is not the same call, so authoritative state drifts from §2.7/§3.5/§8.1/§8.10/§9.6/§13.3/§14.3. Green suite misses it: server runtime.test.ts only asserts inventory grows, never that production equals a terrain-aware/modifier-aware reference.</div>
+            <div class="bk" style="margin-top:12px">Evidence</div>
+            <div class="bv"><span class="cite">server/src/game/runtime.ts:27</span></div>
+            <pre class="evidence">runtime.ts:27  `if (state) advanceIsland(state, now);`  (no ctx, no wallClockNowMs)
+economy.ts:2555 `if (ctx?.worldSeed) { advanceToxicityRolls(...); }`  // never runs server-side
+economy.ts:1343 `const recipe = resolveRecipe(def, b, terrainAt, ...)`  // terrainAt undefined ⇒ bare-defId recipe
+main.ts:2157 (LOCAL ctx) `terrainAt: spec?.terrainAt,` + modifierMul/ncBuff/solarBoost/cableComponent all set</pre>
+          </div>
+          <div class="f-block">
+            <div class="bk">Fix</div>
+            <div class="bv">Trade accept/reject in REMOTE now surface &#x27;trade unavailable in online mode&#x27; instead of silently no-op&#x27;ing / mutating local state. LOCAL unchanged.</div>
+            <div class="bk" style="margin-top:12px">Verification</div>
+            <div class="bv">Adversary panel: 2 survive / 0 refute · landed in <code>9b18b63</code> · full suite green (3377 tests).</div>
+          </div>
+        </div>
+      </article>
+      <article class="finding" id="F-19">
+        <div class="f-head">
+          <span class="f-id">F-19</span>
+          <span class="f-title">POST /api/game/import persists any structurally-valid client snapshot as authoritative — direct forge of xp/level/inventory, defeating the migration&#x27;s anti-cheat objective</span>
+          <span class="sev crit">CRITICAL</span>
+          <span class="badge fixed">FIXED · e2560bc</span>
+        </div>
+        <div class="f-body">
+          <div class="f-block">
+            <div class="bk">What was wrong · <span style="color:var(--gray-500)">security</span></div>
+            <div class="bv">The /api/game/import handler accepts a client-supplied snapshot and, after only shape/version validation (isValidSaveSnapshot) and a &#x27;does deserializeWorld throw&#x27; check, writes it verbatim as the account&#x27;s authoritative save. There is NO reachability check: a logged-in player can POST a hand-crafted snapshot with every island populated at T5, maxed level/xp, and full inventory, and the server treats it as truth. The client even has a built-in path that POSTs a locally-controlled IndexedDB save here (main.ts:223 importLocalSaveOrCreate), and LOCAL mode (the ?local opt-out) lets a player generate/edit that save freely. This directly contradicts the slice5 finding doc&#x27;s central conclusion (&#x27;the client cannot forge xp/level/inventory&#x27;; doc §2) and the stated migration objective (&#x27;the server owns all state and validates every mutation by re-running the pure rules&#x27;). The intent gateway is carefully anti-cheat&#x27;d, but import is a wide-open side door around it. The only guard is hasSave (one-per-account), trivially satisfied by a fresh signup.<div class='bv' style='color:var(--gray-500);margin-top:6px'><em>Same root cause as F-03 (independently surfaced by a second finder).</em></div></div>
+            <div class="bk" style="margin-top:12px">Evidence</div>
+            <div class="bv"><span class="cite">server/src/game/routes.ts:23</span></div>
+            <pre class="evidence">routes.ts:28 `if (!isValidSaveSnapshot(snapshot)) return reply.code(400)...`
+routes.ts:34 `deserializeWorld(snapshot, Date.now(), Date.now());`  // only checks it doesn&#x27;t throw
+routes.ts:39 `await saveSnapshot(pool, userId, snapshot);`  // stored verbatim as authoritative
+routes.test.ts:56 only test is &#x27;imports a valid snapshot -&gt; 201&#x27; — no god-mode-rejection test exists</pre>
+          </div>
+          <div class="f-block">
+            <div class="bk">Fix</div>
+            <div class="bv">Fixed by the shared advanceWorldEconomy() extraction (same as F-03).</div>
+            <div class="bk" style="margin-top:12px">Verification</div>
+            <div class="bv">Adversary panel: 1 survive / 1 refute · landed in <code>e2560bc</code> · full suite green (3377 tests).</div>
+          </div>
+        </div>
+      </article>
+      <article class="finding" id="F-20">
+        <div class="f-head">
+          <span class="f-id">F-20</span>
+          <span class="f-title">REMOTE ocean-platform placement is completely broken — gateway maps it to place-building, whose server validatePlacement rejects every oceanPlacement def with &#x27;def-is-ocean&#x27;</span>
+          <span class="sev high">IMPORTANT</span>
+          <span class="badge fixed">FIXED · 903951c</span>
+        </div>
+        <div class="f-body">
+          <div class="f-block">
+            <div class="bk">What was wrong · <span style="color:var(--gray-500)">regression</span></div>
+            <div class="bv">The client gateway has only one placement method (placeBuilding) and it sends anchorIslandId/terrainTarget/terrainShotMs in the payload (mutation-gateway.ts:542-544). But the server &#x27;place-building&#x27; intent (a) destructures only {islandId,defId,x,y,rotation} — dropping anchorIslandId/terrainTarget/terrainShotMs — and (b) runs validatePlacement, which bails FIRST with {ok:false,reason:&#x27;def-is-ocean&#x27;} for ANY def with oceanPlacement===true (placement.ts:270). So in REMOTE mode (the new default boot) the entire §4 Task-10 ocean-platform mechanic is unplaceable: the server rejects it outright. Land generic-storage cargoLabel and terraformer terrainTarget are likewise dropped, so those place with wrong defaults (iron_ore label / no terraform target). No test exercises ocean placement through the WS path, so the green suite misses it.<div class='bv' style='color:var(--gray-500);margin-top:6px'><em>Same endpoint as F-05/F-07 (independently surfaced by a third finder).</em></div></div>
+            <div class="bk" style="margin-top:12px">Evidence</div>
+            <div class="bv"><span class="cite">server/src/game/intents.ts:208</span></div>
+            <pre class="evidence">mutation-gateway.ts:542 `anchorIslandId: options.anchorIslandId,` (sent)
+intents.ts:189 `const { islandId, defId, x, y, rotation } = payload;` (anchor/terrain ignored)
+intents.ts:208 `const v = validatePlacement(spec, state, typedDefId, x, y, rot);`
+placement.ts:270 `if (def.oceanPlacement === true) { return { ok: false, reason: &#x27;def-is-ocean&#x27; }; }`</pre>
+          </div>
+          <div class="f-block">
+            <div class="bk">Fix</div>
+            <div class="bv">Fixed by the F-05/F-07 import savedAt clamp + documented trust boundary.</div>
+            <div class="bk" style="margin-top:12px">Verification</div>
+            <div class="bv">Adversary panel: 2 survive / 0 refute · landed in <code>903951c</code> · full suite green (3377 tests).</div>
+          </div>
+        </div>
+      </article>
+      <article class="finding" id="F-21">
+        <div class="f-head">
+          <span class="f-id">F-21</span>
+          <span class="f-title">REMOTE dispatch-drone drops waypoints and selectedTier — T5 path-drawn drones become straight-line default-tier drones server-side</span>
+          <span class="sev high">IMPORTANT</span>
+          <span class="badge fixed">FIXED · 903951c</span>
+        </div>
+        <div class="f-body">
+          <div class="f-block">
+            <div class="bk">What was wrong · <span style="color:var(--gray-500)">regression</span></div>
+            <div class="bv">The client gateway sends waypoints and selectedTier in the dispatch-drone payload (mutation-gateway.ts:572-583), and the pure dispatchDrone consumes both (drones.ts:416 waypoints, :423 selectedTier; isPathDrawn = waypoints.length&gt;=2 IS the T5 mechanic). But the server intent destructures only {islandId,originX,originY,dirX,dirY,fuelLoaded} and calls dispatchDrone(world, state, originX, originY, dirX, dirY, fuelLoaded, now) — omitting waypoints and selectedTier. In REMOTE mode a player who draws a multi-waypoint T5 path, or picks a cheaper T2 drone for a short hop, gets a straight-line island-tier drone instead: wrong fuel grade consumed, wrong flight path, and the §11.5 path-drawn T5 feature silently disabled. The handler comment even claims it validates &#x27;all six numbers finite&#x27; as the full contract, masking the dropped fields.</div>
+            <div class="bk" style="margin-top:12px">Evidence</div>
+            <div class="bv"><span class="cite">server/src/game/intents.ts:338</span></div>
+            <pre class="evidence">mutation-gateway.ts:581-582 `waypoints,\n selectedTier,` (sent)
+intents.ts:326 `const { islandId, originX, originY, dirX, dirY, fuelLoaded } = payload;`
+intents.ts:338 `dispatchDrone(game.world, island.state, originX as number, ..., fuelLoaded as number, now)` (8 args, no waypoints/tier)
+drones.ts:443 `const isPathDrawn = waypoints !== undefined &amp;&amp; waypoints.length &gt;= 2;`</pre>
+          </div>
+          <div class="f-block">
+            <div class="bk">Fix</div>
+            <div class="bv">place-building handler now routes oceanPlacement defs through validateOceanPlacement (anchor-local→world-cell coords) and forwards anchorIslandId.</div>
+            <div class="bk" style="margin-top:12px">Verification</div>
+            <div class="bv">Adversary panel: 2 survive / 0 refute · landed in <code>903951c</code> · full suite green (3377 tests).</div>
+          </div>
+        </div>
+      </article>
+      <article class="finding" id="F-22">
+        <div class="f-head">
+          <span class="f-id">F-22</span>
+          <span class="f-title">Periodic WS state-push re-advances + re-persists the save every second under load — silent extra production/wear cadence and write amplification not present in LOCAL</span>
+          <span class="sev low">MINOR</span>
+          <span class="badge fixed">FIXED · e2560bc</span>
+        </div>
+        <div class="f-body">
+          <div class="f-block">
+            <div class="bk">What was wrong · <span style="color:var(--gray-500)">code-health</span></div>
+            <div class="bv">Every connected socket runs setInterval(pushState, 1000ms); pushState calls loadAndCatchUp (ws.ts:41) which advances every populated island AND writes the advanced snapshot back via saveSnapshot (runtime.ts:29) — i.e. a DB write per account per second per open connection, plus an extra write on every accepted intent&#x27;s trailing pushState (ws.ts:119). Because advanceIsland integrates [lastTick, now], the result is integration-correct, but the design intends loadAndCatchUp for catch-up, not as a 1Hz persistence loop; it couples read-only state pushes to authoritative writes. Combined with finding #1 (no ctx), every one of these writes also bakes the diverged (terrain/modifier-blind) production into the durable store. Multiple tabs for one account = multiple overlapping 1s advance+write loops on the same row (serialized only within a single connection&#x27;s chain, not across connections).</div>
+            <div class="bk" style="margin-top:12px">Evidence</div>
+            <div class="bv"><span class="cite">server/src/game/ws.ts:100</span></div>
+            <pre class="evidence">ws.ts:100 `const tickInterval = setInterval(() =&gt; { chain = chain.then(async () =&gt; { await pushState(...) }) ...}, pushIntervalMs);`
+ws.ts:41 `const game = await loadAndCatchUp(pool, userId, Date.now());`
+runtime.ts:29 `await saveSnapshot(pool, userId, advanced);`  // write on every push</pre>
+          </div>
+          <div class="f-block">
+            <div class="bk">Fix</div>
+            <div class="bv">dispatch-drone handler validates + forwards waypoints and selectedTier; path-drawn drones are T5 again.</div>
+            <div class="bk" style="margin-top:12px">Verification</div>
+            <div class="bv">Adversary panel: 2 survive / 0 refute · landed in <code>e2560bc</code> · full suite green (3377 tests).</div>
+          </div>
+        </div>
+      </article><div class="area-head"><h3>Client transport &amp; boot (slice 4)</h3><span class="area-n">5 findings</span></div>
+      <article class="finding" id="F-10">
+        <div class="f-head">
+          <span class="f-id">F-10</span>
+          <span class="f-title">REMOTE snapshot swap orphans overlay/inspector subsystems that captured worldState by reference at mount</span>
+          <span class="sev crit">CRITICAL</span>
+          <span class="badge fixed">FIXED · 61000c2</span>
+        </div>
+        <div class="f-body">
+          <div class="f-block">
+            <div class="bk">What was wrong · <span style="color:var(--gray-500)">regression</span></div>
+            <div class="bv">In REMOTE mode (the new default), applyRemoteSnapshot reassigns the local `worldState`/`islandStates` `let` bindings to brand-new objects returned by deserializeWorld on every server push. But several subsystems captured the ORIGINAL worldState object by reference at mount time and never see the reassignment: mountWeatherOverlay(worldState) (main.ts:380), mountSatelliteOverlay(worldState) (385), mountAntennaOverlay(worldState) (391), and mountInspectorUi(..., { world: worldState }) (1439). These close over the boot-time object (e.g. weather-overlay.ts:112 `mountWeatherOverlay(world)` then reads `sumIslandCo2(world)` at weather-overlay.ts:148 against the captured ref). After the first server snapshot, those overlays/inspector render the boot-time state forever, never reflecting authoritative server updates (CO2/weather tints, satellite positions, antenna ranges, the building inspector&#x27;s live numbers). The ocean/island/fog layers escape this because rebuildWorldLayers re-reads the live `worldState` binding at call time, but anything handed `worldState` once at mount is now stale. This is REMOTE-only: LOCAL never reassigns worldState after init, so the by-reference capture is correct there.</div>
+            <div class="bk" style="margin-top:12px">Evidence</div>
+            <div class="bv"><span class="cite">src/main.ts:2042</span></div>
+            <pre class="evidence">applyRemoteSnapshot: `worldState = d.world; islandStates = d.islandStates; worldState.islandStates = islandStates;` (main.ts:2042-2044) reassigns new objects. Mounts that captured the old object: `const weatherOverlay = mountWeatherOverlay(worldState);` (main.ts:380), `mountSatelliteOverlay(worldState)` (385), `mountAntennaOverlay(worldState)` (391), `mountInspectorUi(reg, document.body, { world: worldState, ... })` (1439). weather-overlay.ts:112 `export function mountWeatherOverlay(world: WorldState)` closes over `world` and reads `sumIslandCo2(world)` (weather-overlay.ts:148).</pre>
+          </div>
+          <div class="f-block">
+            <div class="bk">Fix</div>
+            <div class="bv">Post-ack pushState wrapped in its own try/catch (best-effort) so a push failure can&#x27;t manufacture a {seq:-1,ok:false} ack for an already-succeeded intent.</div>
+            <div class="bk" style="margin-top:12px">Verification</div>
+            <div class="bv">Adversary panel: 2 survive / 0 refute · landed in <code>61000c2</code> · full suite green (3377 tests).</div>
+          </div>
+        </div>
+      </article>
+      <article class="finding" id="F-11">
+        <div class="f-head">
+          <span class="f-id">F-11</span>
+          <span class="f-title">applyRemoteSnapshot rebuilds and destroys all ocean/island/fog GPU textures every 1s in REMOTE</span>
+          <span class="sev high">IMPORTANT</span>
+          <span class="badge fixed">FIXED · 61000c2 + e7f3964</span>
+        </div>
+        <div class="f-body">
+          <div class="f-block">
+            <div class="bk">What was wrong · <span style="color:var(--gray-500)">regression</span></div>
+            <div class="bv">applyRemoteSnapshot calls rebuildWorldLayers() unconditionally on every server state push. The server pushes a full snapshot every STATE_PUSH_INTERVAL_MS = 1000 ms (ws.ts:25/100) plus after every accepted intent (ws.ts:119). rebuildWorldLayers (main.ts:510-544) re-bakes the entire ocean + island + fog overlay from scratch and calls oldOcean.destroy({ children: true, texture: true }) — a full radial-gradient sprite re-bake and GPU texture create/destroy cycle. In LOCAL this only runs on actual discovery/vision changes (gated by `needRebuild` at main.ts:2318). In REMOTE it runs at a steady 1 Hz at idle regardless of whether anything visible changed, churning the GPU and re-baking gradient textures for the whole world once per second forever.</div>
+            <div class="bk" style="margin-top:12px">Evidence</div>
+            <div class="bv"><span class="cite">src/main.ts:2080</span></div>
+            <pre class="evidence">applyRemoteSnapshot ends with unconditional `rebuildWorldLayers();` (main.ts:2080). rebuildWorldLayers: `oldOcean.destroy({ children: true, texture: true });` (main.ts:541). Server cadence: `export const STATE_PUSH_INTERVAL_MS = 1000;` and `setInterval(() =&gt; { chain = chain.then(async () =&gt; { await pushState(...) }) }, pushIntervalMs)` (ws.ts:25, 100-102). Compare LOCAL ticker: `if (needRebuild) rebuildWorldLayers();` (main.ts:2318).</pre>
+          </div>
+          <div class="f-block">
+            <div class="bk">Fix</div>
+            <div class="bv">applyRemoteSnapshot mutates worldState IN PLACE (Object.assign + Map reconcile) instead of reassigning, so subsystems holding references stay live.</div>
+            <div class="bk" style="margin-top:12px">Verification</div>
+            <div class="bv">Adversary panel: 2 survive / 0 refute · landed in <code>61000c2 + e7f3964</code> · full suite green (3377 tests).</div>
+          </div>
+        </div>
+      </article>
+      <article class="finding" id="F-12">
+        <div class="f-head">
+          <span class="f-id">F-12</span>
+          <span class="f-title">Remote gateway promise rejections (intent timeout / socket closed) are unhandled in panel callsites</span>
+          <span class="sev high">IMPORTANT</span>
+          <span class="badge fixed">FIXED · 61000c2</span>
+        </div>
+        <div class="f-body">
+          <div class="f-block">
+            <div class="bk">What was wrong · <span style="color:var(--gray-500)">race-or-async</span></div>
+            <div class="bv">The async-converted panel callsites run `void (async () =&gt; { const result = await gatewayResult; if (!result.ok) return; ... })()` with no try/catch. In REMOTE, gatewayResult comes from makeRemoteGateway.send -&gt; client.sendIntent, which REJECTS (not resolves {ok:false}) on intent timeout (server-client.ts:156 `reject(new Error(&#x27;Intent ${mySeq} timed out&#x27;))`), on socket-not-open (server-client.ts:149), and on socket close before ack (rejectAllPending at server-client.ts:131). A rejected awaited promise throws inside the void async IIFE, producing an unhandled promise rejection rather than the intended `if (!result.ok) return` no-op. WS reconnects are silent (connectGameServer is called with no onStatus at main.ts:270), so a transient drop during a player action surfaces as an uncaught rejection with no user feedback. There are 5 such IIFE blocks (main.ts:1445,1493,1515,1533,1556) plus the trade callsite at 1949.</div>
+            <div class="bk" style="margin-top:12px">Evidence</div>
+            <div class="bv"><span class="cite">src/main.ts:1444</span></div>
+            <pre class="evidence">Callsite: `if (gatewayResult instanceof Promise) { void (async () =&gt; { const result = await gatewayResult; if (!result.ok) return; ... })(); return; }` (main.ts:1444-1456) — no catch. Reject sources: `reject(new Error(&#x27;Intent ${mySeq} timed out&#x27;))` (server-client.ts:154-156), `return Promise.reject(new Error(&#x27;Socket is not open&#x27;))` (server-client.ts:148-149), `rejectAllPending(&#x27;Socket closed before ack&#x27;)` (server-client.ts:131). makeRemoteGateway.send: `const ack = await client.sendIntent(type, payload);` (mutation-gateway.ts:528) propagates the rejection.</pre>
+          </div>
+          <div class="f-block">
+            <div class="bk">Fix</div>
+            <div class="bv">Rebuild gated on a vision + DISCOVERY + STRUCTURAL signature (buildings/modifiers/flags, construction as a boolean) — idle pushes skip, real changes repaint. (Review caught an initial over-narrow gate; widened in e7f3964.)</div>
+            <div class="bk" style="margin-top:12px">Verification</div>
+            <div class="bv">Adversary panel: 2 survive / 0 refute · landed in <code>61000c2</code> · full suite green (3377 tests).</div>
+          </div>
+        </div>
+      </article>
+      <article class="finding" id="F-13">
+        <div class="f-head">
+          <span class="f-id">F-13</span>
+          <span class="f-title">Auto-import of local save can re-fire and brick boot if import latency exceeds the 1s server push interval</span>
+          <span class="sev high">IMPORTANT</span>
+          <span class="badge fixed">FIXED · 61000c2</span>
+        </div>
+        <div class="f-body">
+          <div class="f-block">
+            <div class="bk">What was wrong · <span style="color:var(--gray-500)">race-or-async</span></div>
+            <div class="bv">In bootRemoteClient, when the first state push is null (no server game yet) the onState handler calls importLocalSaveOrCreate() with no in-flight guard and gotFirst stays false. The server pushes a fresh (still-null) snapshot every 1000 ms until a game exists (ws.ts:100). If importLocalSaveOrCreate takes longer than 1s (large IDB save -&gt; serializeWorld -&gt; POST /api/game/import over a slow link), a second null push arrives while gotFirst is still false and fires importLocalSaveOrCreate AGAIN. The second run sees the server now has a save (the first import committed), so POST /api/game/import returns 409 -&gt; r.ok is false -&gt; it falls through to POST /api/game/new, which also returns 409 (hasSave check, routes.ts:16) -&gt; `throw new Error(&#x27;POST /api/game/new failed: 409 ...&#x27;)` -&gt; .catch(reject) rejects the bootRemoteClient promise. main()&#x27;s only handler is `main().catch(err =&gt; console.error(...))` (main.ts:2838), so boot dies with a blank screen even though the import actually succeeded.</div>
+            <div class="bk" style="margin-top:12px">Evidence</div>
+            <div class="bv"><span class="cite">src/main.ts:263</span></div>
+            <pre class="evidence">No guard: `} else { importLocalSaveOrCreate().catch(reject); }` (main.ts:260-263); gotFirst only set true on a non-null snapshot (main.ts:251-252). importLocalSaveOrCreate fallthrough: `const r = await fetch(&#x27;/api/game/new&#x27;, ...); if (!r.ok) throw new Error(&#x27;POST /api/game/new failed: ...&#x27;)` (main.ts:240-241). Server 409 on existing save: `if (await hasSave(pool, userId)) return reply.code(409)...` (routes.ts:16, 25). Top-level: `main().catch((err) =&gt; { console.error(&#x27;[robot-islands] fatal:&#x27;, err); });` (main.ts:2838-2840).</pre>
+          </div>
+          <div class="f-block">
+            <div class="bk">Fix</div>
+            <div class="bv">makeRemoteGateway.send catches transport rejections and resolves to {ok:false,error}; the gateway contract is always a resolved result, so panel `if(!result.ok)` handles timeouts/closes.</div>
+            <div class="bk" style="margin-top:12px">Verification</div>
+            <div class="bv">Adversary panel: 2 survive / 0 refute · landed in <code>61000c2</code> · full suite green (3377 tests).</div>
+          </div>
+        </div>
+      </article>
+      <article class="finding" id="F-14">
+        <div class="f-head">
+          <span class="f-id">F-14</span>
+          <span class="f-title">Auth error body rendered as raw JSON to the user instead of the message</span>
+          <span class="sev low">MINOR</span>
+          <span class="badge fixed">FIXED · 61000c2</span>
+        </div>
+        <div class="f-body">
+          <div class="f-block">
+            <div class="bk">What was wrong · <span style="color:var(--gray-500)">code-health</span></div>
+            <div class="bv">mountAuthScreen displays the auth endpoint&#x27;s error response via `const text = await response.text(); errorEl.textContent = text || ...`. The server auth routes return JSON error bodies, e.g. reply.code(401).send({ error: &#x27;invalid email or password&#x27; }) (server/src/auth/routes.ts:57) and reply.code(409).send({ error: &#x27;email already registered&#x27; }) (routes.ts:40). So a failed login literally shows the string `{&quot;error&quot;:&quot;invalid email or password&quot;}` (braces, quotes, key) in the error banner instead of a clean message. This is the primary error surface on the new auth screen and the default boot path goes through it.</div>
+            <div class="bk" style="margin-top:12px">Evidence</div>
+            <div class="bv"><span class="cite">src/auth-ui.ts:171</span></div>
+            <pre class="evidence">auth-ui.ts:170-172 `} else { const text = await response.text(); errorEl.textContent = text || `Request failed (${response.status})`; }`. Server response: `if (!user || !ok) return reply.code(401).send({ error: &#x27;invalid email or password&#x27; });` (server/src/auth/routes.ts:57).</pre>
+          </div>
+          <div class="f-block">
+            <div class="bk">Fix</div>
+            <div class="bv">One-shot import guard; a 409 from /api/game/new treated as success-equivalent so a slow import can&#x27;t re-fire and brick boot.</div>
+            <div class="bk" style="margin-top:12px">Verification</div>
+            <div class="bv">Adversary panel: 2 survive / 0 refute · landed in <code>61000c2</code> · full suite green (3377 tests).</div>
+          </div>
+        </div>
+      </article><div class="area-head"><h3>Async UI panels (slice 4)</h3><span class="area-n">3 findings</span></div>
+      <article class="finding" id="F-15">
+        <div class="f-head">
+          <span class="f-id">F-15</span>
+          <span class="f-title">REMOTE snapshot swap orphans every panel that captured world/islandStates by reference — panels render permanently-frozen data</span>
+          <span class="sev crit">CRITICAL</span>
+          <span class="badge fixed">FIXED · 61000c2</span>
+        </div>
+        <div class="f-body">
+          <div class="f-block">
+            <div class="bk">What was wrong · <span style="color:var(--gray-500)">regression</span></div>
+            <div class="bv">applyRemoteSnapshot reassigns the module-level world/state vars to brand-new objects returned by deserializeWorld (`worldState = d.world; islandStates = d.islandStates;`). But orbital-ui, drones-ui, routes-ui, settlement-ui, settings-ui and inspector-ui are all mounted ONCE with `world: worldState` / `islandStates` passed BY VALUE (captured object reference), and are never re-bound or re-mounted. The server pushes a full snapshot immediately on connect, after every accepted intent, AND every 1000ms (commit ba6f284), so the first push (~within 1s of boot) detaches all these panels: their `deps.world` / `deps.islandStates` point at the original, now-orphaned world object that the REMOTE client never mutates (the economy ticker is gated behind `if (!isRemote)`). Result in the new default REMOTE mode: the routes list, drone fleet, satellite telemetry, settlement targets, and inspector universe-editor all render frozen boot-time data forever. The HUD/island bar update fine because they read through the `activeState()`/`activeSpec()` getters which re-resolve the live module vars — masking the bug in casual testing and in the test suite (which never drives a snapshot swap against a mounted panel).</div>
+            <div class="bk" style="margin-top:12px">Evidence</div>
+            <div class="bv"><span class="cite">src/main.ts:2042</span></div>
+            <pre class="evidence">main.ts applyRemoteSnapshot: `worldState = d.world;\n    islandStates = d.islandStates;` (lines 2042-2043) — reassignment, not in-place mutation. Panels mounted by reference: `mountOrbitalUi(..., { world: worldState, islandStates, ...})` (1673), `mountDronesUi(..., { world: worldState, ...})` (1735), `mountRoutesUi(..., { world: worldState, islandStates, ...})` (1801), `mountSettlementUi(..., { world: worldState, islandStates, ...})` (1817). drones-ui reads captured ref: `for (const d of deps.world.drones)` (drones-ui.ts:894); routes-ui: `for (const r of deps.world.routes)` (routes-ui.ts:1020); orbital-ui: `deps.world.satellites.length` (orbital-ui.ts:537). applyRemoteSnapshot contains no panel re-bind / remount.</pre>
+          </div>
+          <div class="f-block">
+            <div class="bk">Fix</div>
+            <div class="bv">Auth error body parsed; prefers the JSON `error` field with a status fallback.</div>
+            <div class="bk" style="margin-top:12px">Verification</div>
+            <div class="bv">Adversary panel: 2 survive / 0 refute · landed in <code>61000c2</code> · full suite green (3377 tests).</div>
+          </div>
+        </div>
+      </article>
+      <article class="finding" id="F-16">
+        <div class="f-head">
+          <span class="f-id">F-16</span>
+          <span class="f-title">Placement/relocate commit leaves placement mode armed during the remote round-trip — rapid clicks double-dispatch</span>
+          <span class="sev high">IMPORTANT</span>
+          <span class="badge fixed">FIXED · 61000c2</span>
+        </div>
+        <div class="f-body">
+          <div class="f-block">
+            <div class="bk">What was wrong · <span style="color:var(--gray-500)">race-or-async</span></div>
+            <div class="bv">On a left-click in placement mode, main.ts calls placementUi.attemptCommit() (main.ts:811). In REMOTE the land/relocate commit path fires the intent via `deps.gateway.placeBuilding(...)` (a Promise), returns `{ ok: false }` synchronously, and only calls cancel() (which exits placement mode) inside the async success callback. There is NO in-flight guard on the land/relocate path (the ocean path uses ++beginEpoch, but that only guards anchor-pick staleness, not the commit). So between the click and the server ack, placement mode stays active and a second click fires a second place-building intent — at a different cursor tile the player has since moved to, or a duplicate. The server&#x27;s legality check will reject a true duplicate on an occupied tile, but two distinct tiles both get placed when the player intended one, and the cost is charged twice server-side.<div class='bv' style='color:var(--gray-500);margin-top:6px'><em>Same root cause as F-10 (independently surfaced by a second finder).</em></div></div>
+            <div class="bk" style="margin-top:12px">Evidence</div>
+            <div class="bv"><span class="cite">src/placement-ui.ts:823</span></div>
+            <pre class="evidence">placement-ui.ts land commit: `if (gatewayResult instanceof Promise) { void (async () =&gt; { const result = await gatewayResult; if (!result.ok) { recordRejection(); return; } cancel(); deps.onPlaced(); })(); return { ok: false }; }` (lines ~816-823) — cancel() only inside the async closure. main.ts click handler: `if (accumDrag &lt; CLICK_DRAG_PX_MAX &amp;&amp; placementUi.isActive()) { ... placementUi.attemptCommit(); return; }` (main.ts:803-812) — isActive() stays true until the async cancel() lands. Same shape in orbital-ui launchSatellite (orbital-ui.ts:283) and settlement-ui dispatch (settlement-ui.ts:1118).</pre>
+          </div>
+          <div class="f-block">
+            <div class="bk">Fix</div>
+            <div class="bv">Fixed by the same in-place applyRemoteSnapshot change as F-10.</div>
+            <div class="bk" style="margin-top:12px">Verification</div>
+            <div class="bv">Adversary panel: 2 survive / 0 refute · landed in <code>61000c2</code> · full suite green (3377 tests).</div>
+          </div>
+        </div>
+      </article>
+      <article class="finding" id="F-17">
+        <div class="f-head">
+          <span class="f-id">F-17</span>
+          <span class="f-title">Trade reject in REMOTE mutates island state directly, bypassing the gateway; trade accept silently no-ops</span>
+          <span class="sev low">MINOR</span>
+          <span class="badge fixed">FIXED · 61000c2</span>
+        </div>
+        <div class="f-body">
+          <div class="f-block">
+            <div class="bk">What was wrong · <span style="color:var(--gray-500)">product-gap</span></div>
+            <div class="bv">makeRemoteGateway.acceptTrade returns `{ ok: false, error: &#x27;not supported yet&#x27; }`, so in REMOTE the accept handler returns early and trade acceptance is a silent no-op (no toast, no error). The reject callback, however, still writes `st.tradeAcceptCount += 1` and `st.tradeCooldownMs = …` directly on the local island state and prunes the offer — a client-side mutation that bypasses the gateway and will be reverted on the next server snapshot. In practice trade offers never spawn in REMOTE (tickTradeOffers is inside the `if (!isRemote)` block), so neither handler is reachable today — meaning the §trade mechanic is entirely absent for REMOTE players, which is the new default boot mode. That is a product gap introduced by the migration (the server implements no trade intent).</div>
+            <div class="bk" style="margin-top:12px">Evidence</div>
+            <div class="bv"><span class="cite">src/main.ts:1949</span></div>
+            <pre class="evidence">mutation-gateway.ts:655 `acceptTrade() { return Promise.resolve({ ok: false, error: &#x27;not supported yet&#x27; } ...); }`. main.ts accept handler: `const result = await gateway.acceptTrade(offer); if (!result.ok) return;` (1949-1950). main.ts reject handler mutates directly: `st.tradeAcceptCount += 1; st.tradeCooldownMs = effectiveCadenceMs(...)` with no gateway call (1967-1971). tickTradeOffers is gated: it sits inside `if (!isRemote) { ... }` (main.ts:2499+), so offers never spawn in REMOTE.</pre>
+          </div>
+          <div class="f-block">
+            <div class="bk">Fix</div>
+            <div class="bv">In-flight commit guard on placement/relocate/orbital; attemptCommit early-returns while pending, cleared on both success and failure.</div>
+            <div class="bk" style="margin-top:12px">Verification</div>
+            <div class="bv">Adversary panel: 2 survive / 0 refute · landed in <code>61000c2</code> · full suite green (3377 tests).</div>
+          </div>
+        </div>
+      </article><div class="area-head"><h3>Spec / build / deploy</h3><span class="area-n">4 findings</span></div>
+      <article class="finding" id="F-23">
+        <div class="f-head">
+          <span class="f-id">F-23</span>
+          <span class="f-title">AGENTS.md still declares &quot;No React, no backend. Pure client-side&quot; after the server migration</span>
+          <span class="sev high">IMPORTANT</span>
+          <span class="badge fixed">FIXED · f1368db</span>
+        </div>
+        <div class="f-body">
+          <div class="f-block">
+            <div class="bk">What was wrong · <span style="color:var(--gray-500)">spec-drift</span></div>
+            <div class="bv">The 60-commit migration added a Fastify+Postgres backend under server/ and made REMOTE (server-authoritative) the DEFAULT boot mode. SPEC.md §15.6 was updated with a &#x27;Superseded&#x27; note in this same range (commit 3e8df3f), but AGENTS.md — the primary guidance file coding agents read first — was NOT touched at all in the entire range (git diff --stat 0bf2ed2~1..HEAD -- AGENTS.md is empty). Line 7 still asserts &#x27;No React, no backend. Pure client-side per SPEC.md §15.6.&#x27; and cites the very § that now says the opposite. The Architecture section also never mentions the server/ workspace, the REMOTE/LOCAL split, the mutation-gateway seam, or that tests now include a server project. This violates the repo&#x27;s own rule (AGENTS.md &#x27;Source of truth&#x27;: &#x27;Every change that alters behavior must update SPEC.md in the same change — code and spec move together&#x27;); the rule was honored for SPEC.md but not for AGENTS.md, leaving an authoritative doc making a flatly false claim about the architecture.<div class='bv' style='color:var(--gray-500);margin-top:6px'><em>Same read-path persistence issue as F-06.</em></div></div>
+            <div class="bk" style="margin-top:12px">Evidence</div>
+            <div class="bv"><span class="cite">AGENTS.md:7</span></div>
+            <pre class="evidence">AGENTS.md:7 — `Vite 5 + TypeScript strict + PixiJS 8 + vitest. No React, no backend. Pure client-side per \`SPEC.md\` §15.6.`  vs  SPEC.md §15.6 (updated this range): `**Superseded:** the browser client is now display + intent-sender only; the server owns all state/persistence for server accounts (REMOTE default).`  Confirmed AGENTS.md untouched: `git diff --stat 0bf2ed2~1..HEAD -- AGENTS.md` → (no output).</pre>
+          </div>
+          <div class="f-block">
+            <div class="bk">Fix</div>
+            <div class="bv">Fixed by the read-only projection split (same as F-06): periodic push no longer re-advances+persists.</div>
+            <div class="bk" style="margin-top:12px">Verification</div>
+            <div class="bv">Adversary panel: 2 survive / 0 refute · landed in <code>f1368db</code> · full suite green (3377 tests).</div>
+          </div>
+        </div>
+      </article>
+      <article class="finding" id="F-25">
+        <div class="f-head">
+          <span class="f-id">F-25</span>
+          <span class="f-title">server/tsconfig.json excludes all *.test.ts, hiding 13 real strict-mode type errors in migration test code</span>
+          <span class="sev high">IMPORTANT</span>
+          <span class="badge fixed">FIXED · f1368db</span>
+        </div>
+        <div class="f-body">
+          <div class="f-block">
+            <div class="bk">What was wrong · <span style="color:var(--gray-500)">code-health</span></div>
+            <div class="bv">The only server typecheck command is `npm run build -w server` = `tsc --noEmit`, and server/tsconfig.json excludes `**/*.test.ts`. Vitest does not typecheck. So none of the 14 server test files added by this migration are ever typechecked — yet they live under the repo&#x27;s strict discipline (strict, noUncheckedIndexedAccess, noUnusedLocals). Removing the test exclude and running the project&#x27;s exact `tsc --noEmit` surfaces 13 genuine type errors in migration-introduced test code (possibly-undefined indexed reads, assignment to a readonly literal property, an unused import, a number|undefined passed where number expected). The &#x27;server typecheck clean&#x27; baseline only holds because these files are excluded; this contradicts AGENTS.md §TypeScript discipline (&#x27;New code must compile clean under these&#x27;). It also means a type-level regression in server test fixtures (e.g. a wrong intent payload shape) would never be caught.</div>
+            <div class="bk" style="margin-top:12px">Evidence</div>
+            <div class="bv"><span class="cite">server/tsconfig.json:18</span></div>
+            <pre class="evidence">server/tsconfig.json:18 — `&quot;exclude&quot;: [&quot;dist&quot;, &quot;**/*.test.ts&quot;]`. With that exclude removed, `tsc --noEmit` (project options) emits e.g.: `src/game/runtime.test.ts(48,9): error TS2540: Cannot assign to &#x27;v&#x27; because it is a read-only property.` (line 48: `v23.v = 23 as SaveSnapshot[&#x27;v&#x27;];` — `v` is `typeof SCHEMA_VERSION` literal/readonly), plus `src/game/intents.test.ts(24,1): error TS6133: &#x27;ResourceId&#x27; is declared but its value is never read.`, `intents.test.ts(185,40): error TS2345: ... &#x27;undefined&#x27; is not assignable to &#x27;number | bigint&#x27;`, and TS18048 &#x27;possibly undefined&#x27; at intents.test.ts lines 667/1077-1087. 13 errors total; `npm run build` with the exclude in place exits 0.</pre>
+          </div>
+          <div class="f-block">
+            <div class="bk">Fix</div>
+            <div class="bv">AGENTS.md Commands section: npm test now runs client+server projects and needs a live Postgres (not hermetic).</div>
+            <div class="bk" style="margin-top:12px">Verification</div>
+            <div class="bv">Adversary panel: 2 survive / 0 refute · landed in <code>f1368db</code> · full suite green (3377 tests).</div>
+          </div>
+        </div>
+      </article>
+      <article class="finding" id="F-24">
+        <div class="f-head">
+          <span class="f-id">F-24</span>
+          <span class="f-title">AGENTS.md documents `npm test` as hermetic, but the migration made it require a live Postgres</span>
+          <span class="sev low">MINOR</span>
+          <span class="badge fixed">FIXED · f1368db</span>
+        </div>
+        <div class="f-body">
+          <div class="f-block">
+            <div class="bk">What was wrong · <span style="color:var(--gray-500)">spec-drift</span></div>
+            <div class="bv">vitest.config.ts (added this range, +26 lines) turns the root test run into a two-project config: a &#x27;client&#x27; project and a &#x27;server&#x27; project whose globalSetup (./server/src/test-setup.ts) connects to Postgres, runs migrations, and whose suites TRUNCATE/migrate a real database. So `npm test` (= `vitest run`) now fails outright if Postgres is not running. AGENTS.md §Commands still describes it as `npm test  # vitest run (one-shot, all tests)` with no database prerequisite, and the surrounding doc gives no hint that a DB must be up or that DATABASE_URL defaults to postgresql:///robot_islands_test. An agent following the documented command on a box without PG will see the whole suite error and mistake it for breakage.</div>
+            <div class="bk" style="margin-top:12px">Evidence</div>
+            <div class="bv"><span class="cite">AGENTS.md:15</span></div>
+            <pre class="evidence">vitest.config.ts:12-22 — server project with `globalSetup: [&#x27;./server/src/test-setup.ts&#x27;]` and `fileParallelism: false` (comment: &#x27;Server suites truncate shared tables and migrate/drop schema, so they must not race ... the single test database&#x27;). test-setup.ts:6-9 — `const url = process.env.DATABASE_URL ?? &#x27;postgresql:///robot_islands_test&#x27;; ... const pool = createPool(url); await runMigrations(pool);`. AGENTS.md:15 — `npm test           # vitest run (one-shot, all tests)`.</pre>
+          </div>
+          <div class="f-block">
+            <div class="bk">Fix</div>
+            <div class="bv">AGENTS.md Stack section rewritten: server-authoritative split (Fastify+Postgres), REMOTE default / LOCAL fallback, mutation-gateway, SPEC §15.6 superseded + Appendix C.</div>
+            <div class="bk" style="margin-top:12px">Verification</div>
+            <div class="bv">Adversary panel: 2 survive / 0 refute · landed in <code>f1368db</code> · full suite green (3377 tests).</div>
+          </div>
+        </div>
+      </article>
+      <article class="finding" id="F-26">
+        <div class="f-head">
+          <span class="f-id">F-26</span>
+          <span class="f-title">server/package.json declares main: dist/index.js but there is no dist and deploy explicitly forbids one</span>
+          <span class="sev low">MINOR</span>
+          <span class="badge fixed">FIXED · f1368db</span>
+        </div>
+        <div class="f-body">
+          <div class="f-block">
+            <div class="bk">What was wrong · <span style="color:var(--gray-500)">build-deploy</span></div>
+            <div class="bv">The server workspace package.json sets `&quot;main&quot;: &quot;dist/index.js&quot;`, but the server is run directly from TypeScript via tsx (start = `tsx src/index.ts`, systemd ExecStart = `node --import tsx .../server/src/index.ts`), and the deploy README states there is intentionally no compiled dist (`npm run build -w server` is `tsc --noEmit`, typecheck only). The `main` field therefore points at an artifact that never exists. It&#x27;s harmless to the tsx runtime but is a misleading entry point: any tool or downstream `require/import &#x27;@robot-islands/server&#x27;` would resolve to a nonexistent file, and it invites someone to assume a build step that the deploy docs deliberately omit.</div>
+            <div class="bk" style="margin-top:12px">Evidence</div>
+            <div class="bv"><span class="cite">server/package.json</span></div>
+            <pre class="evidence">server/package.json — `&quot;main&quot;: &quot;dist/index.js&quot;`, `&quot;build&quot;: &quot;tsc --noEmit&quot;`, `&quot;start&quot;: &quot;tsx src/index.ts&quot;`. server/deploy/README.md:7 — `npm run build -w server` ... `(typecheck only — tsc --noEmit; the unit runs the TS directly via tsx, there is no dist/)`. server/deploy/robot-islands-auth.service:19 — `ExecStart=/root/.nvm/.../node --import tsx /root/robot-islands/server/src/index.ts`.</pre>
+          </div>
+          <div class="f-block">
+            <div class="bk">Fix</div>
+            <div class="bv">Added server/tsconfig.test.json + `typecheck` script (tests included); fixed all 15 hidden strict-mode test type errors.</div>
+            <div class="bk" style="margin-top:12px">Verification</div>
+            <div class="bv">Adversary panel: 1 survive / 1 refute · landed in <code>f1368db</code> · full suite green (3377 tests).</div>
+          </div>
+        </div>
+      </article>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="num">3</span><h2>Fix ledger</h2></div>
+    <table class="tbl"><thead><tr><th>ID</th><th>Finding</th><th>Commit</th><th>Status</th></tr></thead><tbody><tr><td class='mono'>F-01</td><td>trustProxy:true + un-sanitizing nginx config lets clients spoof req.ip and fully bypass the per-</td><td class='mono'>f1368db</td><td><span class='badge fixed'>fixed</span></td></tr><tr><td class='mono'>F-02</td><td>scryptSync runs synchronously on the shared event loop — every login/signup freezes all WebSocke</td><td class='mono'>f1368db</td><td><span class='badge fixed'>fixed</span></td></tr><tr><td class='mono'>F-03</td><td>Offline catch-up calls advanceIsland with no RatesContext — biome/NC/solar/toxicity/lattice all </td><td class='mono'>9b18b63</td><td><span class='badge fixed'>fixed</span></td></tr><tr><td class='mono'>F-04</td><td>Concurrent intents from two connections of the same account silently lose updates (no DB lock / </td><td class='mono'>e2560bc</td><td><span class='badge fixed'>fixed</span></td></tr><tr><td class='mono'>F-05</td><td>POST /api/game/import persists fully client-authored snapshot as authoritative — contradicts the</td><td class='mono'>e2560bc</td><td><span class='badge fixed'>fixed</span></td></tr><tr><td class='mono'>F-06</td><td>Read paths (GET /api/game/state and 1 Hz WS state push) issue a DB write on every call via loadA</td><td class='mono'>e2560bc</td><td><span class='badge fixed'>fixed</span></td></tr><tr><td class='mono'>F-07</td><td>POST /api/game/import accepts an unvalidated client snapshot as authoritative state — full anti-</td><td class='mono'>e2560bc</td><td><span class='badge fixed'>fixed</span></td></tr><tr><td class='mono'>F-08</td><td>WebSocket intent channel has no per-connection/per-message rate limit — DB-write amplification D</td><td class='mono'>f1368db</td><td><span class='badge fixed'>fixed</span></td></tr><tr><td class='mono'>F-09</td><td>Successful intent can emit a spurious second `{seq:-1, ok:false}` ack when the post-intent state</td><td class='mono'>f1368db</td><td><span class='badge fixed'>fixed</span></td></tr><tr><td class='mono'>F-10</td><td>REMOTE snapshot swap orphans overlay/inspector subsystems that captured worldState by reference </td><td class='mono'>61000c2</td><td><span class='badge fixed'>fixed</span></td></tr><tr><td class='mono'>F-11</td><td>applyRemoteSnapshot rebuilds and destroys all ocean/island/fog GPU textures every 1s in REMOTE</td><td class='mono'>61000c2 + e7f3964</td><td><span class='badge fixed'>fixed</span></td></tr><tr><td class='mono'>F-12</td><td>Remote gateway promise rejections (intent timeout / socket closed) are unhandled in panel callsi</td><td class='mono'>61000c2</td><td><span class='badge fixed'>fixed</span></td></tr><tr><td class='mono'>F-13</td><td>Auto-import of local save can re-fire and brick boot if import latency exceeds the 1s server pus</td><td class='mono'>61000c2</td><td><span class='badge fixed'>fixed</span></td></tr><tr><td class='mono'>F-14</td><td>Auth error body rendered as raw JSON to the user instead of the message</td><td class='mono'>61000c2</td><td><span class='badge fixed'>fixed</span></td></tr><tr><td class='mono'>F-15</td><td>REMOTE snapshot swap orphans every panel that captured world/islandStates by reference — panels </td><td class='mono'>61000c2</td><td><span class='badge fixed'>fixed</span></td></tr><tr><td class='mono'>F-16</td><td>Placement/relocate commit leaves placement mode armed during the remote round-trip — rapid click</td><td class='mono'>61000c2</td><td><span class='badge fixed'>fixed</span></td></tr><tr><td class='mono'>F-17</td><td>Trade reject in REMOTE mutates island state directly, bypassing the gateway; trade accept silent</td><td class='mono'>61000c2</td><td><span class='badge fixed'>fixed</span></td></tr><tr><td class='mono'>F-18</td><td>Authoritative server economy runs advanceIsland with NO ctx — production silently diverges from </td><td class='mono'>9b18b63</td><td><span class='badge fixed'>fixed</span></td></tr><tr><td class='mono'>F-19</td><td>POST /api/game/import persists any structurally-valid client snapshot as authoritative — direct </td><td class='mono'>e2560bc</td><td><span class='badge fixed'>fixed</span></td></tr><tr><td class='mono'>F-20</td><td>REMOTE ocean-platform placement is completely broken — gateway maps it to place-building, whose </td><td class='mono'>903951c</td><td><span class='badge fixed'>fixed</span></td></tr><tr><td class='mono'>F-21</td><td>REMOTE dispatch-drone drops waypoints and selectedTier — T5 path-drawn drones become straight-li</td><td class='mono'>903951c</td><td><span class='badge fixed'>fixed</span></td></tr><tr><td class='mono'>F-22</td><td>Periodic WS state-push re-advances + re-persists the save every second under load — silent extra</td><td class='mono'>e2560bc</td><td><span class='badge fixed'>fixed</span></td></tr><tr><td class='mono'>F-23</td><td>AGENTS.md still declares &quot;No React, no backend. Pure client-side&quot; after the server mig</td><td class='mono'>f1368db</td><td><span class='badge fixed'>fixed</span></td></tr><tr><td class='mono'>F-24</td><td>AGENTS.md documents `npm test` as hermetic, but the migration made it require a live Postgres</td><td class='mono'>f1368db</td><td><span class='badge fixed'>fixed</span></td></tr><tr><td class='mono'>F-25</td><td>server/tsconfig.json excludes all *.test.ts, hiding 13 real strict-mode type errors in migration</td><td class='mono'>f1368db</td><td><span class='badge fixed'>fixed</span></td></tr><tr><td class='mono'>F-26</td><td>server/package.json declares main: dist/index.js but there is no dist and deploy explicitly forb</td><td class='mono'>f1368db</td><td><span class='badge fixed'>fixed</span></td></tr><tr><td class='mono'>F-27</td><td>place-building intent drops cargoLabel — every generic-storage building (Crate/Warehouse) is lab</td><td class='mono'>903951c</td><td><span class='badge fixed'>fixed</span></td></tr><tr><td class='mono'>F-28</td><td>place-building intent also drops terrainTarget/terrainShotMs and nowMs — terrain-modifier buildi</td><td class='mono'>903951c</td><td><span class='badge fixed'>fixed</span></td></tr></tbody></table>
+    <p class="sec-intro" style="margin-top:16px">Commits: <code>903951c</code> intent payload fields · <code>9b18b63</code> shared economy advance · <code>f1368db</code> server trust-surface + build/docs · <code>61000c2</code> client REMOTE regressions · <code>e2560bc</code> atomic intent tx + read-only path + import clamp · <code>e7f3964</code> rebuild-gate widening (review follow-up).</p>
+  </section>
+
+  <section>
+    <div class="sec-head"><span class="num">4</span><h2>Considered &amp; refuted</h2></div>
+    <p class="sec-intro">Candidate findings the 2-adversary panel killed — recorded so the reader knows they were evaluated, not missed.</p>
+    <table class="tbl"><thead><tr><th>Claim</th><th>Sev</th><th>Votes</th><th>Why refuted</th></tr></thead><tbody><tr><td>create-route distance is computed from constituent-merged centres but eligibility allows any populated island </td><td class='mono'>minor</td><td>0✓ / 2✗</td><td>The claim rests on three premises, all of which are false against the actual code.
+
+(1) &quot;If populatedIslands() applies any filtering beyond the raw flag (e</td></tr><tr><td>Trade acceptance silently no-ops in REMOTE (default boot mode) with no user feedback</td><td class='mono'>important</td><td>0✓ / 2✗</td><td>The claim asserts that in REMOTE mode (the default boot mode) a user can click &quot;Accept&quot; on a trade offer and it silently no-ops via the gateway.accept</td></tr><tr><td>Open panels never repaint from server snapshots — applyRemoteSnapshot refreshes HUD + map layers but not the D</td><td class='mono'>important</td><td>0✓ / 2✗</td><td>The claim&#x27;s core symptom — &quot;an open panel shows stale state after every remote mutation until the panel is manually toggled closed/open&quot; — is fal</td></tr></tbody></table>
+  </section>
+
+  <div class="footer"><p>Audit register · generated 2026-06-14 · scope: server-authoritative migration 0bf2ed2~1..HEAD · all findings fixed &amp; verified (3377 tests green) · source data: <code>docs/reports/migration-findings.json</code></p></div>
+</div></body></html>
