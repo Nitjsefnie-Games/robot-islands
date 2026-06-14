@@ -1,4 +1,5 @@
-import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import { randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
+import { promisify } from 'node:util';
 
 const N = 32768; // 2**15
 const r = 8;
@@ -6,17 +7,27 @@ const p = 1;
 const KEYLEN = 32;
 const MAXMEM = 64 * 1024 * 1024; // 128*N*r ~= 33.5MB; give headroom
 
+// Async scrypt so the KDF runs on libuv's threadpool instead of blocking the
+// single shared event loop (which also serves the authoritative game WS). The
+// blocking scryptSync froze all players ~100ms per login/signup.
+const scryptAsync = promisify(scrypt) as (
+  password: string,
+  salt: Buffer,
+  keylen: number,
+  options: { N: number; r: number; p: number; maxmem: number },
+) => Promise<Buffer>;
+
 function b64url(buf: Buffer): string {
   return buf.toString('base64url');
 }
 
-export function hashPassword(password: string): string {
+export async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16);
-  const hash = scryptSync(password, salt, KEYLEN, { N, r, p, maxmem: MAXMEM });
+  const hash = await scryptAsync(password, salt, KEYLEN, { N, r, p, maxmem: MAXMEM });
   return `scrypt$N=${N},r=${r},p=${p}$${b64url(salt)}$${b64url(hash)}`;
 }
 
-export function verifyPassword(stored: string, password: string): boolean {
+export async function verifyPassword(stored: string, password: string): Promise<boolean> {
   const parts = stored.split('$');
   if (parts.length !== 4 || parts[0] !== 'scrypt') return false;
   const params = parts[1]!;
@@ -32,7 +43,7 @@ export function verifyPassword(stored: string, password: string): boolean {
   }
   let candidate: Buffer;
   try {
-    candidate = scryptSync(password, salt, expected.length, { N: pn, r: pr, p: pp, maxmem: MAXMEM });
+    candidate = await scryptAsync(password, salt, expected.length, { N: pn, r: pr, p: pp, maxmem: MAXMEM });
   } catch {
     return false;
   }

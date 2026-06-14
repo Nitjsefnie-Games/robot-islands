@@ -4,7 +4,11 @@ This file provides guidance to coding agents working with code in this repositor
 
 ## Stack
 
-Vite 5 + TypeScript strict + PixiJS 8 + vitest. No React, no backend. Pure client-side per `SPEC.md` §15.6.
+**Client** (`src/`): Vite 5 + TypeScript strict + PixiJS 8 + vitest. No React.
+
+**Server** (`server/`): Fastify 5 + Postgres + TypeScript strict, run directly via the `tsx` loader (no build step / no `dist/`). Tests use vitest against a real Postgres.
+
+This is a **server-authoritative** game, NOT pure client-side. The original "pure client-side" design (`SPEC.md` §15.6) is **superseded** — see the §15.6 Superseded note and **Appendix C** (trust-surface / migration). The browser client is now display + intent-sender only; the `server/` workspace owns all authoritative state and persistence for server accounts and re-runs the pure rules to validate every mutation. REMOTE (server-authoritative over a WebSocket intent channel) is the default boot mode; LOCAL (client-only IndexedDB, opt-out via `?server=0` or `localStorage.setItem('ri_server','0')`) is the debug fallback. Mutations from the client flow through a **mutation-gateway** seam (REMOTE → WS intents; LOCAL → direct pure-layer calls).
 
 ## Commands
 
@@ -12,13 +16,22 @@ Vite 5 + TypeScript strict + PixiJS 8 + vitest. No React, no backend. Pure clien
 npm run dev        # vite dev server on 0.0.0.0:5173 (HMR-enabled)
 npm run build      # tsc -b && vite build
 npm run preview    # serve dist/
-npm test           # vitest run (one-shot, all tests)
+npm test           # vitest run — BOTH the client and server vitest projects (NOT hermetic)
 
 # single test file
 npx vitest run src/economy.test.ts
 
 # single test by name
 npx vitest run -t "Mine fills iron_ore to exactly cap"
+```
+
+**`npm test` is no longer hermetic.** `vitest.config.ts` runs two projects — `client` and `server` — and the `server` project's globalSetup connects to a real Postgres, runs migrations, and its suites truncate/migrate a shared test database. So `npm test` from the repo root **requires a running Postgres** (DATABASE_URL defaults to `postgresql:///robot_islands_test`) and will error out wholesale if PG is down — that is a missing prerequisite, not a code break. Server-only commands live in `server/`:
+
+```bash
+cd server
+npx tsc --noEmit       # build typecheck (excludes *.test.ts — see tsconfig.json)
+npm run typecheck      # strict typecheck WITH tests included (tsconfig.test.json)
+npm test               # server vitest only (sets DATABASE_URL=postgresql:///robot_islands_test)
 ```
 
 ## Dev server — serves built `dist/` (vite preview, no HMR)
