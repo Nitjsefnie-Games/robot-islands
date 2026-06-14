@@ -45,7 +45,7 @@ Legend: **L** = live · **P** = partial · **N** = not implemented.
 | §9.5 Biome-locked uniques | L | All six biome uniques in catalog; placement gated by biome; artificial-island block honoured. |
 | §9.6 Network Consciousness | P | Network reachability + 3/5/10/20-island milestone tiers + global production buff. Auto-Patronage at 10-island milestone (3 default routes from nearest Patron Hub) L. |
 | §9.7 Tier Reset | L | Reset logic + cost formula + cooldown + spec'd preserve/clear sets. Merged-island reset operates on the absorber's IslandState transparently (no merge-specific code needed). UI cost preview in the Skill Tree's reset row + confirm dialog. |
-| §9.8 Trade Offers | L | Signal Exchange (T1 logistics) building + online-only expiring barter offers (`trade.ts`/`trade-ui.ts`). Ever-produced get-gate, fill-biased give/get pick, tier-reach cap, `xp_weight`-ratio pricing × `0.8^Δtier` spread, size cap to give-stock % clamped to output headroom; accept grants no XP. Persisted per-island online-time cooldown (`tradeCooldownMs`, refresh-proof) + 1%/accept compounding speedup floored at ~1 min (`tradeAcceptCount`), both at schema v20. Logistics-Network skill cluster tunes frequency/size/reach/spread. Offers themselves ephemeral (not serialized). |
+| §9.8 Trade Offers | P | Signal Exchange building and offer-generation logic are live, but trade offers are LOCAL-only post-migration: `tickTradeOffers` runs only in client LOCAL mode and there is no `accept-trade` intent server-side. Non-functional in REMOTE (the default boot mode) until server-deterministic trade intents land. Other mechanics (cooldown persistence, skill tuning) remain implemented. |
 | §9.9 Active-play production bonus | L | +0.1%/min focused, −0.3%/min away (incl. closed), floor 0, no cap; world-level recipe-rate multiplier, schema v22. |
 | §10 Funneling | L | Per-resource consumed-on-route XP bonus while below T3. |
 | §11 Drones | P | T1/T2/T3 drone dispatch via Drone Pad; T4 omnidirectional pulse via Launch Tower; T5 path-drawn via Path Drone Foundry. Drone Pad (T2) is the gate; once built, the tier picker lets the player launch any tier from T1 up to the launching island's current tier (T1 = biofuel = cheap entry option for short scouts). Fuel auto-computed per click. |
@@ -1280,6 +1280,12 @@ A player may pay to revert an island to Tier 1, primarily to redo skill-tree cho
 
 ### 9.8 Trade Offers
 
+> **Note — REMOTE status.** Trade offers are LOCAL-only post-migration:
+> `tickTradeOffers` runs only inside the client's `if (!isRemote)` block, and
+> there is no `accept-trade` intent server-side. The mechanic is therefore
+> non-functional in REMOTE (the default boot mode) until server-deterministic
+> trade intents land.
+
 A short-cadence engagement loop layered over the hours-long tier climb. A cheap Tier-1 **Signal Exchange** building periodically surfaces a single expiring **barter offer** on the island that hosts it: dump some of your fullest stockpile for an under-stocked resource you already make. The world advances on a live per-frame ticker but its reward cadence runs on the scale of hour-long tier climbs; Trade Offers add a seconds-scale decision the player can act on minute-to-minute.
 
 The mechanic is also a **cap-stall pressure-valve**. Per §9.1 a resource sitting at its storage cap with no consumers idles its producer at zero XP (with any live draw it earns only at the throttled rate) — a capped silo is dead weight. An offer biased toward dumping overflow stock relieves that pressure, converting a stuck resource into one the player is short on.
@@ -2262,7 +2268,9 @@ It is being delivered in slices, each with its own design + plan under
     `unbind-crystal`, `tier-reset`, `dispatch-settler`, `settle-via-spacetime`,
     `launch-satellite`, `upgrade-spaceport`, `move-satellite`, and
     `dispatch-repair-drone`. `accept-trade` is LOCAL-only; `reject-trade`
-    remains unwired pending pure-layer extraction.
+    remains unwired pending pure-layer extraction. Trade offers as a whole are
+    LOCAL-only post-migration and non-functional in REMOTE (default) until
+    server-deterministic trade intents land.
   - **Per-account atomicity (Slice 5 hardening).** The whole
     load→apply→persist sequence for an intent runs inside a single Postgres
     transaction that first takes a transaction-scoped advisory lock keyed on the
@@ -2302,8 +2310,10 @@ It is being delivered in slices, each with its own design + plan under
        (no server game yet), the client first tries to migrate any existing
        local IndexedDB save via `POST /api/game/import`; only if there is no
        local save or the import fails does it fall back to `POST /api/game/new`.
-    4. Each subsequent server-pushed snapshot replaces the client's world state
-       and triggers a full world-layer rebuild.
+    4. Each subsequent server-pushed snapshot is applied in place onto the
+       existing client world state (subsystem references are preserved), and a
+       world-layer rebuild fires only when the discovery/vision/geometry
+       signature changes (`src/discovery-signature.ts`).
   - Mutation gateway (`src/mutation-gateway.ts`):
     - LOCAL fallback: methods call the same pure entry functions as before.
     - REMOTE default: methods forward intents over the WebSocket; the server
@@ -2330,9 +2340,18 @@ It is being delivered in slices, each with its own design + plan under
   - Settings panel: import/export save buttons are removed (TODO #8). Saves
     live server-side only; the local "Clear Save" button remains as a debug
     escape hatch.
-  - Fastify runs with `trustProxy: true` (`server/src/app.ts`) so the auth
+  - Fastify runs with `trustProxy: 1` (`server/src/app.ts`) so the auth
     rate-limit buckets on the real client IP from `X-Forwarded-For` when nginx
-    fronts the service.
+    fronts the service. `trustProxy` is the COUNT of trusted hops (a single
+    nginx), NOT `true`: with `true`, Fastify/proxy-addr derives `req.ip` from
+    the leftmost X-Forwarded-For entry, which is fully client-controlled and
+    lets an attacker rotate XFF to get a fresh `req.ip` per request, bypassing
+    the per-IP auth rate limit. `trustProxy: 1` trusts exactly one proxy hop
+    and uses the rightmost X-Forwarded-For entry (the address nginx saw). The
+    nginx config MUST overwrite the header with
+    `proxy_set_header X-Forwarded-For $remote_addr;` so the upstream value is
+    the real peer, not an appended client-supplied chain (see
+    `server/deploy/README.md`).
 
 §15.6's "fully client-side" stack note is superseded by this server migration;
 the client is now display + intent-sender and the server owns all state and
