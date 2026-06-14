@@ -1,18 +1,20 @@
-// Slice 4 REMOTE boot gate. LOCAL remains the default; REMOTE is opt-in via
-// `localStorage.setItem('ri_server', '1')` or the URL query `?server=1`.
+// Slice 4 REMOTE boot gate. REMOTE is the default; LOCAL is the opt-out debug
+// fallback. Opt-out via URL query `?server=0` or by setting
+// `localStorage.setItem('ri_server', '0')`.
 
 const LATLON_KEY = 'ri_player_latlon';
 
 /** Returns true when the client should boot in server-authoritative REMOTE mode. */
 export function isRemoteBootEnabled(): boolean {
   try {
-    return (
-      globalThis.localStorage?.getItem('ri_server') === '1' ||
-      new URLSearchParams(globalThis.location.search).get('server') === '1'
-    );
+    const explicitLocal =
+      globalThis.localStorage?.getItem('ri_server') === '0' ||
+      new URLSearchParams(globalThis.location.search).get('server') === '0';
+    if (explicitLocal) return false;
+    return true;
   } catch {
     // localStorage can throw in sandboxed / private contexts; fall back to URL.
-    return new URLSearchParams(globalThis.location.search).get('server') === '1';
+    return new URLSearchParams(globalThis.location.search).get('server') !== '0';
   }
 }
 

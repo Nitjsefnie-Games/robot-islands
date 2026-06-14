@@ -54,6 +54,7 @@ import {
   loadWorld,
   savePrefs,
   saveWorld,
+  serializeWorld,
 } from './persistence.js';
 import { mountSettingsUi } from './settings-ui.js';
 import { BUILDING_DEFS } from './building-defs.js';
@@ -183,10 +184,10 @@ async function main(): Promise<void> {
   // world; applied below after the camera is constructed.
   const restoredPrefs = await loadPrefs();
 
-  // Slice 4 REMOTE boot branch. LOCAL is the default; REMOTE is gated by
-  // `ri_server=1` in localStorage or `?server=1` in the URL. In REMOTE mode the
-  // authoritative server owns the sim and pushes full snapshots over WS; the
-  // client only renders. The LOCAL path is unchanged.
+  // Slice 4 REMOTE boot branch. REMOTE is the default; LOCAL is the opt-out
+  // debug fallback, gated by `ri_server=0` in localStorage or `?server=0` in
+  // the URL. In REMOTE mode the authoritative server owns the sim and pushes
+  // full snapshots over WS; the client only renders. The LOCAL path is unchanged.
   const isRemote = isRemoteBootEnabled();
 
   type RemoteBootResult = {
@@ -196,10 +197,10 @@ async function main(): Promise<void> {
   };
 
   /** Authenticate (if necessary), open the game WebSocket, and wait for the
-   *  first server-pushed snapshot. If the account has no game yet, POST
-   *  `/api/game/new` and wait for the state that follows. The returned
-   *  `setOnState` lets main wire the subsequent-state handler after the render
-   *  machinery is live. */
+   *  first server-pushed snapshot. If the account has no game yet, try to
+   *  migrate any existing local IndexedDB save; otherwise POST `/api/game/new`
+   *  and wait for the state that follows. The returned `setOnState` lets main
+   *  wire the subsequent-state handler after the render machinery is live. */
   async function bootRemoteClient(): Promise<RemoteBootResult> {
     // If the browser already has a valid session cookie, skip the auth screen.
     try {
@@ -209,6 +210,35 @@ async function main(): Promise<void> {
       }
     } catch {
       await showAuthScreen();
+    }
+
+    /** One-time local-save migration. Reads the existing IDB save (if any),
+     *  serializes it, and posts it to the server. On failure we fall through
+     *  to a fresh game so a stale/corrupt local save doesn't brick boot. */
+    async function importLocalSaveOrCreate(): Promise<void> {
+      try {
+        const local = await loadWorld();
+        if (local) {
+          const snapshot = serializeWorld(local.world, local.islandStates);
+          const r = await fetch('/api/game/import', {
+            method: 'POST',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ snapshot }),
+          });
+          if (r.ok) {
+            // Server accepted the import; the next state push will carry the
+            // imported game. Stop here and keep waiting.
+            return;
+          }
+          console.warn('[robot-islands] local save import failed:', r.status, await r.text());
+        }
+      } catch (err) {
+        console.warn('[robot-islands] local save import error:', err);
+      }
+      // No local save or import failed — ask the server to mint a fresh game.
+      const r = await fetch('/api/game/new', { method: 'POST', credentials: 'include' });
+      if (!r.ok) throw new Error(`POST /api/game/new failed: ${r.status} ${await r.text()}`);
     }
 
     return new Promise<RemoteBootResult>((resolve, reject) => {
@@ -228,13 +258,9 @@ async function main(): Promise<void> {
               },
             });
           } else {
-            // Account has no saved game yet — ask the server to mint one, then
-            // keep waiting for the next `state` frame.
-            fetch('/api/game/new', { method: 'POST', credentials: 'include' })
-              .then(async (r) => {
-                if (!r.ok) throw new Error(`POST /api/game/new failed: ${r.status} ${await r.text()}`);
-              })
-              .catch(reject);
+            // Account has no saved game yet — migrate local save if possible,
+            // then keep waiting for the next `state` frame.
+            importLocalSaveOrCreate().catch(reject);
           }
         } else {
           onStateHandler?.(snapshot as SaveSnapshot);
