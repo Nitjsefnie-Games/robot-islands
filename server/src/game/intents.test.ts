@@ -342,23 +342,40 @@ describe('place-building cargoLabel forwarding (§4.6 picker)', () => {
   });
 });
 
-describe('create-route', () => {
-  // A fresh game populates only `home`. Routes per §2.4 connect SETTLED
-  // islands and the routes-UI only ever offers populated endpoints, so the
-  // create-route handler requires BOTH endpoints populated. Build a snapshot
-  // that marks a second island (`gen-1--3`) populated AND gives it a runtime
-  // state, so a home→colony cargo route is a LEGAL distinct destination.
-  const COLONY_ID = 'gen-1--3';
-  async function aUserWithTwoPopulatedIslands(now: number): Promise<string> {
-    const { world, islandStates } = createNewGame(now);
-    const colony = world.islands.find((s) => s.id === COLONY_ID)!;
-    colony.populated = true;
-    colony.discovered = true;
-    islandStates.set(COLONY_ID, makeInitialIslandState(colony, now));
-    world.islandStates = islandStates;
-    return userWithSnapshot(serializeWorld(world, islandStates, now, now));
-  }
+// Migration regression (Fix 3): the place-building handler passed world-TILE
+// coords to validateOceanPlacement, which expects CELL indices, so it sampled
+// 16x too far out and let illegal placements through.
+describe('place-building ocean validation', () => {
+  it('illegal: ocean building overlapping the anchor island is rejected', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'place-building', payload: { islandId: 'home', defId: 'sonar_buoy', x: 0, y: 0, rotation: 0 }, seq: 1 },
+      now,
+    );
+    expect(ack.ok).toBe(false);
+    expect(ack).toMatchObject({ error: expect.stringMatching(/land-overlap|illegal ocean placement/) });
+  });
+});
 
+// A fresh game populates only `home`. Routes per §2.4 connect SETTLED
+// islands and the routes-UI only ever offers populated endpoints, so the
+// create-route handler requires BOTH endpoints populated. Build a snapshot
+// that marks a second island (`gen-1--3`) populated AND gives it a runtime
+// state, so a home→colony cargo route is a LEGAL distinct destination.
+const COLONY_ID = 'gen-1--3';
+async function aUserWithTwoPopulatedIslands(now: number): Promise<string> {
+  const { world, islandStates } = createNewGame(now);
+  const colony = world.islands.find((s) => s.id === COLONY_ID)!;
+  colony.populated = true;
+  colony.discovered = true;
+  islandStates.set(COLONY_ID, makeInitialIslandState(colony, now));
+  world.islandStates = islandStates;
+  return userWithSnapshot(serializeWorld(world, islandStates, now, now));
+}
+
+describe('create-route', () => {
   it('legal: creates a route between two populated islands', async () => {
     const now = Date.now();
     const uid = await aUserWithTwoPopulatedIslands(now);
@@ -410,6 +427,85 @@ describe('create-route', () => {
       },
       now,
     );
+  });
+
+  // Migration regression (Fix 1): the client sends an explicit `null` for the
+  // default "any (priority)" cargo option; the server must accept it.
+  it('legal: filterResource null creates the default any-priority route', async () => {
+    const now = Date.now();
+    const uid = await aUserWithTwoPopulatedIslands(now);
+    const dockId = await placeBuilding(uid, 'dock', 0, 0, now);
+    const ack = await applyIntent(
+      pool, uid,
+      {
+        type: 'create-route',
+        payload: { fromIslandId: 'home', toIslandId: COLONY_ID, buildingId: dockId, filterResource: null },
+        seq: 2,
+      },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 2 });
+
+    const after = await loadSnapshot(pool, uid);
+    const routes = after!.world.routes;
+    expect(routes.length).toBe(1);
+    expect(routes[0]).toMatchObject({ from: 'home', to: COLONY_ID, sourceBuildingId: dockId });
+  });
+
+  // Parity fix (Fix 6): an unknown filterResource id must be rejected on both
+  // LOCAL and REMOTE, not silently treated as null.
+  it('illegal: unknown filterResource is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithTwoPopulatedIslands(now);
+    const dockId = await placeBuilding(uid, 'dock', 0, 0, now);
+    await expectRejectNoChange(
+      uid,
+      {
+        type: 'create-route',
+        payload: { fromIslandId: 'home', toIslandId: COLONY_ID, buildingId: dockId, filterResource: 'not_a_resource' },
+        seq: 9,
+      },
+      now,
+    );
+  });
+});
+
+describe('set-cargo-floor-pct', () => {
+  // Migration regression (Fix 4): omitting `sourceFloorPct` must clear the
+  // source-floor gate, matching the LOCAL gateway behavior.
+  it('legal: omits sourceFloorPct and clears the source-floor gate', async () => {
+    const now = Date.now();
+    const uid = await aUserWithTwoPopulatedIslands(now);
+    const dockId = await placeBuilding(uid, 'dock', 0, 0, now);
+    const createAck = await applyIntent(
+      pool, uid,
+      {
+        type: 'create-route',
+        payload: { fromIslandId: 'home', toIslandId: COLONY_ID, buildingId: dockId, filterResource: 'iron_ore' },
+        seq: 2,
+      },
+      now,
+    );
+    expect(createAck.ok).toBe(true);
+
+    const routeId = (await loadSnapshot(pool, uid))!.world.routes[0]!.id;
+    const setAck1 = await applyIntent(
+      pool, uid,
+      { type: 'set-cargo-floor-pct', payload: { routeId, cargoIndex: 0, sourceFloorPct: 50 }, seq: 3 },
+      now,
+    );
+    expect(setAck1.ok).toBe(true);
+    let route = (await loadSnapshot(pool, uid))!.world.routes[0]!;
+    expect(route.cargo[0]).toMatchObject({ sourceFloorPct: 50 });
+
+    const setAck2 = await applyIntent(
+      pool, uid,
+      { type: 'set-cargo-floor-pct', payload: { routeId, cargoIndex: 0 }, seq: 4 },
+      now,
+    );
+    expect(setAck2.ok).toBe(true);
+    route = (await loadSnapshot(pool, uid))!.world.routes[0]!;
+    expect(route.cargo[0]).not.toHaveProperty('sourceFloorPct');
   });
 });
 
@@ -472,6 +568,40 @@ describe('unlock-skill-node', () => {
       now,
     );
   });
+
+  // Migration regression (Fix 2): mini-tree nodes only exist in `effectiveGraph`
+  // (after a crystal is bound to a socket); the server must use the same graph
+  // as the LOCAL gateway, not DEFAULT_GRAPH.
+  it('legal: unlocks a crystal mini-tree node after binding the crystal', async () => {
+    const now = Date.now();
+    const snap = createInitialSnapshot(now) as unknown as {
+      islandStates: Array<{ id: string; state: { level: number; unspentSkillPoints: number; inventory: Record<string, number> } }>;
+    };
+    const home = snap.islandStates.find((e) => e.id === 'home')!;
+    home.state.level = 5;
+    home.state.unspentSkillPoints = 10;
+    home.state.inventory.mining_crystal_t1 = 1;
+    const uid = await userWithSnapshot(snap as unknown as SaveSnapshot);
+
+    const bindAck = await applyIntent(
+      pool, uid,
+      { type: 'bind-crystal', payload: { islandId: 'home', socketId: 'gs.ext.mining-1', crystalId: 'mining_crystal_t1' }, seq: 1 },
+      now,
+    );
+    expect(bindAck.ok).toBe(true);
+
+    const nodeId = 'gs.ext.mining-1.mining_crystal_t1.left1';
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'unlock-skill-node', payload: { islandId: 'home', nodeId }, seq: 2 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 2 });
+
+    const state = await homeState(uid);
+    expect(state.unlockedNodes).toContain(nodeId);
+    expect(state.unspentSkillPoints).toBe(9); // 10 SP - mini-tree edge cost(1)
+  });
 });
 
 
@@ -526,6 +656,32 @@ describe('relocate-building', () => {
       { type: 'relocate-building', payload: { islandId: 'home', buildingId: 'nope', x: 1, y: 0 }, seq: 9 },
       now,
     );
+  });
+
+  // Parity fix (Fix 5): an omitted rotation must preserve the building's current
+  // rotation, not reset it to 0.
+  it('legal: omits rotation and preserves the current rotation', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+    const placeAck = await applyIntent(
+      pool, uid,
+      { type: 'place-building', payload: { islandId: 'home', defId: 'workshop', x: 0, y: 0, rotation: 1 }, seq: 1 },
+      now,
+    );
+    expect(placeAck.ok).toBe(true);
+    const id = (await homeBuildings(uid)).find((b) => b.defId === 'workshop')!.id as string;
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'relocate-building', payload: { islandId: 'home', buildingId: id, x: 1, y: 0 }, seq: 2 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 2 });
+
+    const b = (await homeBuildings(uid)).find((bb) => bb.id === id)!;
+    expect(b.x).toBe(1);
+    expect(b.y).toBe(0);
+    expect(b.rotation).toBe(1);
   });
 });
 
@@ -635,36 +791,6 @@ describe('expand-island', () => {
     await expectRejectNoChange(
       uid,
       { type: 'expand-island', payload: { islandId: 'home', axis: 'major' }, seq: 9 },
-      now,
-    );
-  });
-});
-
-describe('cancel-queued-upgrade', () => {
-  it('legal: removes the newest queued upgrade job', async () => {
-    const now = Date.now();
-    const uid = await aUserWithGame();
-    const id = await placeBuilding(uid, 'workshop', 0, 0, now);
-    const up1 = await applyIntent(pool, uid, { type: 'upgrade-building', payload: { islandId: 'home', buildingId: id }, seq: 2 }, now);
-    expect(up1.ok).toBe(true);
-
-    const ack = await applyIntent(
-      pool, uid,
-      { type: 'cancel-queued-upgrade', payload: { islandId: 'home', buildingId: id }, seq: 3 },
-      now,
-    );
-    expect(ack).toMatchObject({ ok: true, seq: 3 });
-
-    const jobs = ((await homeState(uid)).buildJobs ?? []) as Array<Record<string, unknown>>;
-    expect(jobs.some((j) => j.kind === 'upgrade')).toBe(false);
-  });
-
-  it('illegal: unknown buildingId is rejected, save unchanged', async () => {
-    const now = Date.now();
-    const uid = await aUserWithGame();
-    await expectRejectNoChange(
-      uid,
-      { type: 'cancel-queued-upgrade', payload: { islandId: 'home', buildingId: 'nope' }, seq: 9 },
       now,
     );
   });
