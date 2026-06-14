@@ -14,6 +14,12 @@ import { dispatchDrone, firePulse, type DroneTier } from './drones.js';
 import type { TerrainKind } from './island.js';
 import { expandIsland, type Axis } from './land-reclamation.js';
 import {
+  constructIsland,
+  makeArtificialIdGenerator,
+  validateConstruction,
+  type ConstructResult,
+} from './artificial-island.js';
+import {
   applyUpgrade,
   applyRelabelStorageCap,
   cancelConstruction,
@@ -52,7 +58,9 @@ import { dispatchVehicle, settleViaSpacetimeAnchor } from './settlement.js';
 import type { VehicleKind, VehicleTier } from './settlement.js';
 import { canTierReset, executeTierReset } from './tier-reset.js';
 import { applyOffer, type TradeOffer } from './trade.js';
-import type { IslandSpec, WorldState } from './world.js';
+import { editIslandBiome } from './universe-editor.js';
+import { renameIsland } from './world.js';
+import type { Biome, IslandSpec, WorldState } from './world.js';
 
 // ── Result shape ─────────────────────────────────────────────────────────────
 
@@ -128,6 +136,20 @@ export interface MutationGateway {
   setForceRun(islandId: string, buildingId: string, value: boolean): GatewayReturn;
   relabelCargo(islandId: string, buildingId: string, newLabel: ResourceId): GatewayReturn;
   expandIsland(islandId: string, axis: Axis): GatewayReturn;
+  renameIsland(islandId: string, name: string): GatewayReturn;
+  editBiome(islandId: string, biomeId: string): GatewayReturn;
+  constructIsland(
+    args: {
+      founderIslandId: string;
+      biome: Biome;
+      majorRadius: number;
+      minorRadius: number;
+      cx: number;
+      cy: number;
+      displayName?: string;
+      nowMs?: number;
+    },
+  ): GatewayReturn<ConstructResult>;
 
   // §11 drones
   dispatchDrone(
@@ -311,6 +333,45 @@ export function makeLocalGateway(
       if (!island) return err('unknown island');
       expandIsland(island.spec, island.state, axis);
       return ok();
+    },
+
+    renameIsland(islandId, name) {
+      const island = resolveIsland(islandId);
+      if (!island) return err('unknown island');
+      const result = renameIsland(island.spec, name);
+      if (!result.ok) return err(result.reason ?? 'rename failed', result.reason);
+      return ok();
+    },
+
+    editBiome(islandId, biomeId) {
+      const result = editIslandBiome(world, islandId, biomeId as Biome);
+      if (!result.ok) return err(result.reason ?? 'edit biome failed', result.reason);
+      return ok();
+    },
+
+    constructIsland({ founderIslandId, biome, majorRadius, minorRadius, cx, cy, displayName, nowMs }) {
+      const founder = resolveIsland(founderIslandId);
+      if (!founder) return err('unknown founder island');
+      const req = { biome, majorRadius, minorRadius };
+      const can = validateConstruction(founder.state, founder.spec, req);
+      if (!can.ok) return err(can.reason ?? 'construction invalid', can.reason);
+      const idGenerator = makeArtificialIdGenerator(world);
+      const now = nowMsOr(performance.now(), nowMs);
+      try {
+        const result = constructIsland(
+          world.seed,
+          founder.state,
+          founder.spec,
+          req,
+          { cx, cy },
+          idGenerator(),
+          now,
+          displayName,
+        );
+        return ok(result);
+      } catch (e) {
+        return err(e instanceof Error ? e.message : String(e));
+      }
     },
 
     dispatchDrone(islandId, originX, originY, dirX, dirY, fuelLoaded, nowMs, waypoints, selectedTier) {
@@ -586,6 +647,24 @@ export function makeRemoteGateway(client: GameServerClient): MutationGateway {
     },
     expandIsland(islandId, axis) {
       return send('expand-island', { islandId, axis });
+    },
+    renameIsland(islandId, name) {
+      return send('rename-island', { islandId, name });
+    },
+    editBiome(islandId, biomeId) {
+      return send('edit-biome', { islandId, biomeId });
+    },
+    constructIsland({ founderIslandId, biome, majorRadius, minorRadius, cx, cy, displayName, nowMs }) {
+      return send('construct-island', {
+        founderIslandId,
+        biome,
+        majorRadius,
+        minorRadius,
+        cx,
+        cy,
+        displayName,
+        nowMs,
+      });
     },
 
     dispatchDrone(islandId, originX, originY, dirX, dirY, fuelLoaded, nowMs, waypoints, selectedTier) {

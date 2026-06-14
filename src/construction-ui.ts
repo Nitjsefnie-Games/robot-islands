@@ -24,6 +24,7 @@ import type { IslandState } from './economy.js';
 import { hasOperationalBuilding } from './buildings.js';
 import { tierForLevel } from './skilltree.js';
 import { mountModal } from './ui-modal.js';
+import type { MutationGateway } from './mutation-gateway.js';
 import type { ResourceId } from './recipes.js';
 import {
   distSqTiles,
@@ -52,6 +53,11 @@ export interface ConstructionUiOptions {
    *  when it appears in the eligible-founders list, so opening the panel
    *  after clicking a T3+ island defaults to that island. */
   getActiveIslandId?(): string;
+  /** Mutation gateway — optional so tests can keep wiring only the fields
+   *  they already have. When present, construction is routed through the
+   *  gateway (LOCAL direct, REMOTE intent); otherwise the pure helper is
+   *  called directly. */
+  gateway?: MutationGateway;
   /** Called after a successful construct. The result is the new spec + state,
    *  the founder id (in case the caller wants to render an attribution), and
    *  the now-ms for any animation hooks. Callers are responsible for:
@@ -580,7 +586,7 @@ export function mountConstructionUi(
     if (have >= need) el.title = '';
   }
 
-  function tryConstruct(): void {
+  async function tryConstruct(): Promise<void> {
     if (!selectedFounder) return;
     const state = options.islandStates.get(selectedFounder);
     const spec = options.world.islands.find((s) => s.id === selectedFounder);
@@ -593,24 +599,42 @@ export function mountConstructionUi(
     const v = validateConstruction(state, spec, req);
     if (!v.ok) return;
     if (!positionIsFree(options.world, posX, posY, majorRadius)) return;
-    const id = nextArtificialId();
     const nowMs = performance.now();
     // Validate via the shared `validateIslandName` predicate so the rules
     // can't drift from `renameIsland`. Failure (empty/too-long/control-char)
     // falls back to `undefined`, which makes `constructIsland` default to
-    // the auto-generated `id` rather than landing a malformed display name.
+    // the auto-generated id rather than landing a malformed display name.
     const nameCheck = validateIslandName(customName);
     const displayName = nameCheck.ok ? nameCheck.name : undefined;
-    const result = constructIsland(
-      options.world.seed,
-      state,
-      spec,
-      req,
-      { cx: posX, cy: posY },
-      id,
-      nowMs,
-      displayName,
-    );
+
+    let result: { newSpec: IslandSpec; newState: IslandState } | undefined;
+    if (options.gateway) {
+      const gatewayResult = await options.gateway.constructIsland({
+        founderIslandId: selectedFounder,
+        biome: selectedBiome,
+        majorRadius,
+        minorRadius,
+        cx: posX,
+        cy: posY,
+        displayName,
+        nowMs,
+      });
+      if (!gatewayResult.ok) return;
+      result = gatewayResult.value;
+    } else {
+      const id = nextArtificialId();
+      result = constructIsland(
+        options.world.seed,
+        state,
+        spec,
+        req,
+        { cx: posX, cy: posY },
+        id,
+        nowMs,
+        displayName,
+      );
+    }
+    if (!result) return;
     options.onConstruct({
       newSpec: result.newSpec,
       newState: result.newState,

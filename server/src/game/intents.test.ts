@@ -1441,3 +1441,172 @@ describe('orbital intents', () => {
     );
   });
 });
+
+
+describe('rename-island', () => {
+  it('legal: renames the island', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'rename-island', payload: { islandId: 'home', name: 'New Home' }, seq: 2 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 2 });
+
+    const spec = await homeSpec(uid);
+    expect(spec.name).toBe('New Home');
+  });
+
+  it('illegal: unknown island is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+    await expectRejectNoChange(
+      uid,
+      { type: 'rename-island', payload: { islandId: 'nope', name: 'x' }, seq: 9 },
+      now,
+    );
+  });
+
+  it('illegal: invalid name is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+    await expectRejectNoChange(
+      uid,
+      { type: 'rename-island', payload: { islandId: 'home', name: '' }, seq: 9 },
+      now,
+    );
+  });
+});
+
+describe('edit-biome', () => {
+  it('legal: reassigns biome and deducts cost', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
+      const home = world.islands.find((s: any) => s.id === 'home');
+      const state = islandStates.get('home');
+      state.level = 30;
+      home.buildings.push({
+        id: 'ue-1', defId: 'universe_editor', x: 0, y: 0,
+        constructionRemainingMs: 0, placedAt: now,
+      });
+      state.buildings = home.buildings;
+      state.inventory.reality_anchor = 10;
+      state.inventory.memetic_core = 10;
+      state.inventory.phase_converter = 10;
+    });
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'edit-biome', payload: { islandId: 'home', biomeId: 'forest' }, seq: 2 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 2 });
+
+    const spec = await homeSpec(uid);
+    expect(spec.biome).toBe('forest');
+    const state = await homeState(uid);
+    expect((state.inventory as Record<string, number>).reality_anchor).toBe(5);
+  });
+
+  it('illegal: same biome is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
+      const home = world.islands.find((s: any) => s.id === 'home');
+      const state = islandStates.get('home');
+      state.level = 30;
+      home.buildings.push({
+        id: 'ue-1', defId: 'universe_editor', x: 0, y: 0,
+        constructionRemainingMs: 0, placedAt: now,
+      });
+      state.buildings = home.buildings;
+      state.inventory.reality_anchor = 10;
+      state.inventory.memetic_core = 10;
+      state.inventory.phase_converter = 10;
+    });
+    await expectRejectNoChange(
+      uid,
+      { type: 'edit-biome', payload: { islandId: 'home', biomeId: 'plains' }, seq: 9 },
+      now,
+    );
+  });
+});
+
+describe('construct-island', () => {
+  it('legal: constructs an artificial island and deducts cost', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
+      const home = world.islands.find((s: any) => s.id === 'home');
+      const state = islandStates.get('home');
+      state.level = 15;
+      home.buildings.push({
+        id: 'pc-1', defId: 'platform_constructor', x: 0, y: 0,
+        constructionRemainingMs: 0, placedAt: now,
+      });
+      state.buildings = home.buildings;
+      state.inventory.steel_beam = 10000;
+      state.inventory.concrete = 10000;
+    });
+
+    const ack = await applyIntent(
+      pool, uid,
+      {
+        type: 'construct-island',
+        payload: {
+          founderIslandId: 'home',
+          biome: 'plains',
+          majorRadius: 4,
+          minorRadius: 4,
+          cx: 100,
+          cy: 100,
+          displayName: 'Artificial One',
+        },
+        seq: 2,
+      },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 2 });
+
+    const world = await worldSnap(uid);
+    const artificial = world.islands.find((s: any) => s.id === 'art-1');
+    expect(artificial).toBeTruthy();
+    expect(artificial.name).toBe('Artificial One');
+    expect(artificial.biome).toBe('plains');
+    expect(artificial.artificial).toBe(true);
+    expect(artificial.populated).toBe(true);
+    const state = await homeState(uid);
+    expect((state.inventory as Record<string, number>).concrete).toBeLessThan(10000);
+  });
+
+  it('illegal: founder below T3 is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
+      const home = world.islands.find((s: any) => s.id === 'home');
+      const state = islandStates.get('home');
+      home.buildings.push({
+        id: 'pc-1', defId: 'platform_constructor', x: 0, y: 0,
+        constructionRemainingMs: 0, placedAt: now,
+      });
+      state.buildings = home.buildings;
+      state.inventory.steel_beam = 10000;
+      state.inventory.concrete = 10000;
+    });
+    await expectRejectNoChange(
+      uid,
+      {
+        type: 'construct-island',
+        payload: {
+          founderIslandId: 'home',
+          biome: 'plains',
+          majorRadius: 4,
+          minorRadius: 4,
+          cx: 100,
+          cy: 100,
+        },
+        seq: 9,
+      },
+      now,
+    );
+  });
+});

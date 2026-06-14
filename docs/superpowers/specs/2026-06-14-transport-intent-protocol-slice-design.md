@@ -126,7 +126,7 @@ dispatch pattern as a tracked follow-up.
 | set-force-run | building flag (`b.forceRun`) | no | follow-up |
 | relabel-cargo | `placement.ts:applyRelabelStorageCap` | no | follow-up |
 | convert-to-servitor | `buildings.ts:convertToServitor` | yes | follow-up |
-| expand-island | `land-reclamation.ts:expandIsland` | yes | follow-up |
+| expand-island | `land-reclamation.ts:expandIsland` | yes | ✅ |
 | accept-trade | `trade.ts:applyOffer` | yes | ✅ |
 | reject-trade | offer removal + cooldown bump | no | follow-up |
 | dispatch-drone | `drones.ts:dispatchDrone` | yes | ✅ |
@@ -140,6 +140,9 @@ dispatch pattern as a tracked follow-up.
 | tier-reset | `tier-reset.ts:executeTierReset` | yes | follow-up |
 | dispatch-settler | `settlement.ts:dispatchVehicle` | yes | follow-up |
 | settle-via-spacetime | `settlement.ts:settleViaSpacetimeAnchor` | yes | follow-up |
+| rename-island | `world.ts:renameIsland` | no | ✅ |
+| edit-biome | `universe-editor.ts:editIslandBiome` | yes | ✅ |
+| construct-island | `artificial-island.ts:constructIsland` | yes | ✅ |
 | launch-satellite | `orbital.ts:launchSatellite` | yes | follow-up |
 | upgrade-spaceport | `orbital.ts:upgradeSpaceport` | yes | follow-up |
 | move-satellite | `orbital.ts:requestSatMove` | yes (sat fuel) | follow-up |
