@@ -96,7 +96,12 @@ export function islandRefundedPoints(state: IslandState): number {
  *   8. Settlement vehicles whose `target === absorbed.id` retarget to
  *      absorber. Vehicles whose `from === absorbed.id` redirect their
  *      origin (in-flight cargo is unchanged).
- *   9. Absorbed is removed from `world.islands` and `states.delete`'d.
+ *   9. Satellites whose `spaceportIslandId === absorbed.id` redirect to
+ *      absorber (rebuilt because the field is readonly).
+ *  10. Comm packets whose `currentNodeId === absorbed.id` redirect to absorber.
+ *  11. Lattice node membership (`world.latticeNodeIslands`): any entry for
+ *      `absorbed.id` is replaced with `absorber.id` and de-duplicated.
+ *  12. Absorbed is removed from `world.islands` and `states.delete`'d.
  *
  * Caller must invoke this AT MOST ONCE per tick (§3.6). After this returns,
  * `absorber` carries the new geometry and any later `islandsOverlap` test
@@ -277,7 +282,32 @@ export function performMerge(
     if (updated !== v) world.vehicles[i] = updated;
   }
 
-  // 8. Remove absorbed from islands list and states map.
+  // 8. Satellites launched from absorbed redirect to absorber.  Rebuild the
+  //    object because `spaceportIslandId` is readonly on `Satellite`.
+  for (let i = 0; i < world.satellites.length; i++) {
+    const s = world.satellites[i]!;
+    if (s.spaceportIslandId === absorbed.id) {
+      world.satellites[i] = { ...s, spaceportIslandId: absorber.id };
+    }
+  }
+
+  // 9. Comm packets currently at absorbed redirect to absorber.
+  for (let i = 0; i < world.commPackets.length; i++) {
+    const p = world.commPackets[i]!;
+    if (p.currentNodeId === absorbed.id) {
+      world.commPackets[i] = { ...p, currentNodeId: absorber.id };
+    }
+  }
+
+  // 10. Lattice node membership: absorbed -> absorber, de-duplicated.
+  if (world.latticeNodeIslands.includes(absorbed.id)) {
+    world.latticeNodeIslands = world.latticeNodeIslands.filter((id) => id !== absorbed.id);
+    if (!world.latticeNodeIslands.includes(absorber.id)) {
+      world.latticeNodeIslands.push(absorber.id);
+    }
+  }
+
+  // 11. Remove absorbed from islands list and states map.
   const idx = world.islands.findIndex((s) => s.id === absorbed.id);
   if (idx >= 0) world.islands.splice(idx, 1);
   states.delete(absorbed.id);
