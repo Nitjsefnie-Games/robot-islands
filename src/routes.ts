@@ -74,13 +74,11 @@ export interface InFlightBatch {
   readonly dispatchTime: number;
   /** Deterministic id for weather-loss RNG seeding. */
   readonly id?: string;
-  /** Stratification cells crossed by this batch, with transit fraction [0,1]
-   *  for weather sampling at the time the batch was in each cell. */
-  readonly crossedCells?: ReadonlyArray<{
-    readonly cx: number;
-    readonly cy: number;
-    readonly transitFraction: number;
-  }>;
+  // NOTE: the stratification cells a batch crosses are NOT stored on the batch.
+  // They are a pure function of the route's (from, to) geometry (both readonly),
+  // so storing them per batch was megabytes of redundant, identical data across
+  // every in-flight batch on a route. `deliverArrivals` recomputes the path once
+  // per route via `routeCrossedCells` for the §2.6 in-flight weather-loss roll.
 }
 
 export interface Route {
@@ -124,6 +122,33 @@ export interface Route {
 //   - route.inFlight.length  (chevron count; items themselves NOT keyed)
 //   - from.x, from.y       (world-coord endpoints; Fix 7.4)
 //   - to.x,   to.y         (world-coord endpoints; Fix 7.4)
+
+/** Build an id→spec index for the world's islands. O(islands) once per tick,
+ *  replacing the old O(routes × islands) `world.islands.find(...)` scans in the
+ *  route dispatch / delivery hot loops. */
+function buildIslandIndex(world: WorldState): Map<string, IslandSpec> {
+  const index = new Map<string, IslandSpec>();
+  for (const spec of world.islands) index.set(spec.id, spec);
+  return index;
+}
+
+const NO_CROSSED_CELLS: ReadonlyArray<{ cx: number; cy: number; transitFraction: number }> = [];
+
+/** The stratification cells a route crosses, with per-cell transit fraction —
+ *  a pure function of the route's (from, to) island geometry. Recomputed on
+ *  demand (at dispatch for the §2.6 capacity throttle and at delivery for the
+ *  §2.6 in-flight loss roll) rather than stored per in-flight batch, so saves
+ *  never carry duplicated path data. Empty when either endpoint is unknown
+ *  (matches the pre-existing "no specs ⇒ no weather" dispatch behaviour). */
+export function routeCrossedCells(
+  route: Route,
+  islandIndex: Map<string, IslandSpec>,
+): ReadonlyArray<{ cx: number; cy: number; transitFraction: number }> {
+  const fromSpec = islandIndex.get(route.from);
+  const toSpec = islandIndex.get(route.to);
+  if (!fromSpec || !toSpec) return NO_CROSSED_CELLS;
+  return rasterizeRouteCells(fromSpec.cx, fromSpec.cy, toSpec.cx, toSpec.cy, CELL_SIZE_TILES);
+}
 
 // ---------------------------------------------------------------------------
 // Step-7 tuning constants
@@ -673,6 +698,7 @@ export function deliverArrivals(
   wallOffsetMs: number = 0,
 ): Array<{ destIslandId: string; resourceId: ResourceId; amount: number }> {
   const delivered: Array<{ destIslandId: string; resourceId: ResourceId; amount: number }> = [];
+  const islandIndex = buildIslandIndex(world);
 
   for (const route of world.routes) {
     if (isPowerLink(route.type)) continue; // §5.3 / §4: power-link routes transmit power, not items.
@@ -683,6 +709,12 @@ export function deliverArrivals(
       route.inFlight = route.inFlight.filter((b) => b.arrivalTime > nowMs);
       continue;
     }
+    // §2.6 in-flight weather-loss path. The crossed cells depend only on the
+    // route's (from, to) geometry, so we recompute them ONCE per route here
+    // (lazily — only routes with an arriving batch pay for it) instead of
+    // storing an identical copy on every in-flight batch (the old design wrote
+    // megabytes of redundant path data into every save).
+    let crossedCells: ReadonlyArray<{ cx: number; cy: number; transitFraction: number }> | null = null;
     const kept: InFlightBatch[] = [];
     for (const b of route.inFlight) {
       if (b.arrivalTime > nowMs) {
@@ -691,9 +723,10 @@ export function deliverArrivals(
       }
       // §2.6 in-flight weather losses
       let remaining = b.amount;
-      if (b.crossedCells && b.crossedCells.length > 0 && b.id !== undefined) {
+      crossedCells ??= routeCrossedCells(route, islandIndex);
+      if (crossedCells.length > 0 && b.id !== undefined) {
         const transitTimeMs = b.arrivalTime - b.dispatchTime;
-        for (const cell of b.crossedCells) {
+        for (const cell of crossedCells) {
           // §7.3 coherent field: same biome + CO₂ args as the overlay /
           // tooltip / capacity / destruction consumers for this cell.
           const w = weather(
@@ -750,12 +783,6 @@ interface RouteDemand {
    *  Scales capacity ×floorMul (Phase 1) and transit time ÷floorMul (Phase 3);
    *  always ≥ 1 so the Phase-3 division is safe. */
   readonly floorMul: number;
-  /** Pre-computed stratification cells crossed by this route (§2.6). */
-  readonly crossedCells: ReadonlyArray<{
-    readonly cx: number;
-    readonly cy: number;
-    readonly transitFraction: number;
-  }>;
 }
 
 /**
@@ -820,6 +847,7 @@ function dispatchPhase(
   // destination but pulling from different sources don't contend on the
   // source side, so dest-cap clamping has to happen per-route.
   const demands: RouteDemand[] = [];
+  const islandIndex = buildIslandIndex(world);
   for (const route of world.routes) {
     if (isPowerLink(route.type)) continue; // §5.3 / §4: power-link routes transmit power, not items.
     if (route.draining) continue; // soft-deleted: stop new dispatch, let in-flight finish.
@@ -832,8 +860,8 @@ function dispatchPhase(
     const skillCapMul = effectiveSkillMultipliers(srcState).routeCapacity;
 
     // §2.6 weather capacity modulation
-    const fromSpec = world.islands.find((i) => i.id === route.from);
-    const toSpec = world.islands.find((i) => i.id === route.to);
+    const fromSpec = islandIndex.get(route.from);
+    const toSpec = islandIndex.get(route.to);
     // Instant-transit routes (teleporter — and any future zero-latency cargo
     // type) are EXEMPT from weather: teleportation doesn't traverse the ocean
     // cells the storm sits in, so neither this capacity throttle nor the
@@ -866,21 +894,11 @@ function dispatchPhase(
     // scale this route's effective capacity ×(1+L) (and transit speed below).
     const floorMul = routeFloorMultiplier(route, world);
     const capDemand = route.capacityPerSec * floorMul * skillCapMul * airshipMul * weatherMul * elapsedSec;
-    const crossedCells =
-      fromSpec && toSpec
-        ? rasterizeRouteCells(
-            fromSpec.cx,
-            fromSpec.cy,
-            toSpec.cx,
-            toSpec.cy,
-            CELL_SIZE_TILES,
-          )
-        : [];
     const planned = planRouteCargo(world, states, route, capDemand);
     for (const d of planned) {
       // §15.4 fix 7.2: use unclampedDesired so Phase-2 proportional distribution
       // sees capacity-share, not the sourceAvail-clamped amount (waterfall fix).
-      demands.push({ route, resourceId: d.resourceId, desired: d.unclampedDesired, weatherMul, floorMul, crossedCells });
+      demands.push({ route, resourceId: d.resourceId, desired: d.unclampedDesired, weatherMul, floorMul });
     }
   }
 
@@ -997,7 +1015,6 @@ function dispatchPhase(
         arrivalTime: nowMs + (d.route.transitTimeSec / d.floorMul) * 1000,
         dispatchTime: nowMs,
         id: batchId,
-        crossedCells: d.crossedCells,
       });
     }
     dispatches.push({ routeId: d.route.id, resourceId: d.resourceId, amount });

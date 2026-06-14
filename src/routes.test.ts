@@ -24,6 +24,7 @@ import {
   routeFloorMultiplier,
   routeProfileForBuilding,
   reorderPriorityList,
+  routeCrossedCells,
   tickRoutes,
   type Route,
 } from './routes.js';
@@ -2140,5 +2141,69 @@ describe('dispatch — capacity & transit scale with source building floors', ()
     const f1 = world1({ id: 'd1', defId: 'dock', x: 0, y: 0, floorLevel: 1 });
     dispatchAttempt(f1.world, f1.states, 1000, 2);
     expect(f1.r.inFlight[0]?.arrivalTime).toBe(1000 + 5_000);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §2.6 in-flight weather loss — path recomputed from route geometry, NOT stored
+// per batch (the old design wrote an identical crossed-cell array onto every
+// in-flight batch, ballooning saves into the megabytes).
+// ---------------------------------------------------------------------------
+
+describe('routeCrossedCells — deterministic path from (from,to) geometry', () => {
+  it('returns the rasterized path when both endpoints are known', () => {
+    const index = new Map<string, IslandSpec>([
+      ['a', makeIslandSpec('a', 0, 0)],
+      ['b', makeIslandSpec('b', 200, 120)],
+    ]);
+    const r = cargoRoute('a', 'b', 'iron_ore');
+    const cells = routeCrossedCells(r, index);
+    expect(cells.length).toBeGreaterThan(0);
+    // Pure function of geometry: a second call is identical.
+    expect(routeCrossedCells(r, index)).toEqual(cells);
+  });
+
+  it('returns an empty path when an endpoint spec is missing', () => {
+    const index = new Map<string, IslandSpec>([['a', makeIslandSpec('a', 0, 0)]]);
+    const r = cargoRoute('a', 'b', 'iron_ore');
+    expect(routeCrossedCells(r, index)).toEqual([]);
+  });
+});
+
+describe('§2.6 in-flight loss recomputed at delivery (no stored crossedCells)', () => {
+  it('applies storm loss to an arrived batch using the route geometry', () => {
+    const cell = findCellWithWeather('test-seed', 0, 'severe_storm');
+    expect(cell).not.toBeNull();
+    if (!cell) return;
+
+    const src = makeState('a');
+    const dst = makeState('b');
+    const world = makeWorld([], [
+      makeIslandSpec('a', cell.cx * CELL_SIZE_TILES, cell.cy * CELL_SIZE_TILES),
+      makeIslandSpec('b', cell.cx * CELL_SIZE_TILES + 5, cell.cy * CELL_SIZE_TILES),
+    ]);
+    const r = cargoRoute('a', 'b', 'iron_ore');
+    // Batch with an id but NO crossedCells stored — delivery must recompute the
+    // path from the route's endpoints and still apply the §2.6 loss.
+    r.inFlight.push({ resourceId: 'iron_ore', amount: 100, arrivalTime: 0, dispatchTime: 0, id: 'b0' });
+    world.routes.push(r);
+    const states = new Map([['a', src], ['b', dst]]);
+
+    deliverArrivals(world, states, 100);
+    // Strictly less than 100 — the severe-storm cell took a per-cell loss.
+    expect(dst.inventory.iron_ore).toBeLessThan(100);
+    expect(dst.inventory.iron_ore).toBeGreaterThan(0);
+  });
+
+  it('applies NO loss when the route has no island specs (empty path)', () => {
+    const src = makeState('a');
+    const dst = makeState('b');
+    const r = cargoRoute('a', 'b', 'iron_ore');
+    r.inFlight.push({ resourceId: 'iron_ore', amount: 100, arrivalTime: 0, dispatchTime: 0, id: 'b0' });
+    const world = makeWorld([r]); // no island specs
+    const states = new Map([['a', src], ['b', dst]]);
+
+    deliverArrivals(world, states, 100);
+    expect(dst.inventory.iron_ore).toBeCloseTo(100, 9);
   });
 });
