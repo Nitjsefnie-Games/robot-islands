@@ -66,10 +66,20 @@ plans published to docs-hub under `robot-islands/`.
   (place/demolish/cancel/upgrade/set-active-floors/dispatch-drone/
   create-route/unlock-skill-node); **accept-trade deferred** (offers are
   runtime-only/unpersisted — needs server-deterministic offers).
-- ⏭ **Slice 4 — Client cutover** (NOT started). Rewire the PixiJS client
-  (`main.ts` + UI panels) to read the server projection + send intents
-  instead of mutating local state. Product/UX decisions outstanding;
-  item 8 (drop import/export save buttons) lands here.
+- 🔄 **Slice 4 — Client cutover** (BUILT + browser-verified behind a flag;
+  finalization pending). Client modules done + reviewed: `server-client.ts`
+  (WS transport), `auth-ui.ts` (login/signup), `mutation-gateway.ts`
+  (LOCAL default / REMOTE backend), `remote-boot.ts` (flag). All ~28 panel
+  mutations async-routed through the gateway. `main.ts` REMOTE path
+  (`?server=1` or `localStorage.ri_server=1`): auth → WS → deserialize each
+  pushed snapshot → `rebuildWorldLayers` → skip the local sim tick. nginx
+  `/api/` proxy (+WS) added to the islands vhost. **Browser-verified
+  end-to-end** (auth→signup→WS→state push→render→map-picker). LOCAL stays
+  the default so the live game is untouched. Finalization (tasks #21 +
+  follow-ups): auth-ui styling, map-picker lat/lon persistence in REMOTE,
+  flip REMOTE→default, drop import/export save buttons (item 8), Fastify
+  trustProxy, SPEC §15.6 fully-superseded. ALL 30 intents wired server-side
+  (27) bar accept-trade/convert-servitor/reject-trade (justified unwired).
 - ⏭ **Slice 5 — Trust-surface hardening** (NOT started). Harden the
   `as unknown as` readonly-mutation casts + the trade/XP paths (the
   hardening note above); harden pure fns that currently trust their
