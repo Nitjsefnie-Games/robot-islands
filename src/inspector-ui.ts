@@ -35,7 +35,8 @@ import { clusterBonusMul, gateSatisfied } from './adjacency.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
 import { affordabilityShortfall, applyRelabelStorageCap, countQueuedUpgrades, formatShortfall, inProgressBuildCount, parallelBuildSlots, queuedBuildCount, queuedBuildSlots, relocateFee, topUpgradeLevel, totalInvestedCost, upgradeCost } from './placement.js';
 import { upgradeConstructionMs } from './construction.js';
-import { activeFloors, convertToServitor, displayedFloorLevel, floorEffectMul, floorLevel, floorScaledCapacity, hasOperationalBuilding, isOperationalBuilding, participatesInCluster, rawFloorLevel, ratedBuildingPower, type PlacedBuilding } from './buildings.js';
+import { activeFloors, displayedFloorLevel, floorEffectMul, floorLevel, floorScaledCapacity, hasOperationalBuilding, isOperationalBuilding, participatesInCluster, rawFloorLevel, ratedBuildingPower, type PlacedBuilding } from './buildings.js';
+import { convertToServitor as pureConvertToServitor } from './servitor.js';
 import { defineAction, dispatchAction, type InputRegistry } from './input.js';
 import type { IslandState } from './economy.js';
 import { activeBonusMul } from './active-bonus.js';
@@ -989,10 +990,21 @@ export function mountInspectorUi(
   convertBtn.addEventListener('click', () => {
     const target = resolveTarget();
     if (!target) { close(); return; }
-    const res = convertToServitor(target.state, target.building.id, BUILDING_DEFS);
-    if (res.ok) {
-      paint();
+    if (deps.gateway) {
+      const result = deps.gateway.convertToServitor(target.spec.id, target.building.id);
+      if (result instanceof Promise) {
+        void (async () => {
+          const res = await result;
+          if (res.ok) paint();
+        })();
+        return;
+      }
+      if (!result.ok) return;
+    } else {
+      const res = pureConvertToServitor(target.state, target.building.id, BUILDING_DEFS);
+      if (!res.ok) return;
     }
+    paint();
   });
   maintenanceSection.body.appendChild(convertBtn);
 

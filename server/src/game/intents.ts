@@ -72,6 +72,7 @@ import {
   type SatelliteVariant,
 } from '../../../src/orbital.js';
 import { expandIsland, canExpandIsland, type Axis } from '../../../src/land-reclamation.js';
+import { convertToServitor } from '../../../src/servitor.js';
 import { BIOME_DEFS } from '../../../src/biomes.js';
 import { ALL_RESOURCES, type ResourceId } from '../../../src/recipes.js';
 import type { Rotation } from '../../../src/shape-mask.js';
@@ -561,6 +562,24 @@ export const INTENTS: Record<string, IntentHandler> = {
       const b = island.spec.buildings.find((bb) => bb.id === buildingId);
       if (!b) return { ok: false, error: 'not-found' };
       b.forceRun = forceRun ? true : undefined;
+      return { ok: true };
+    },
+  },
+
+  // convert-to-servitor — §13.3 Eternal Servitor conversion. Player supplies
+  // { islandId, buildingId }. The pure function self-validates existence,
+  // prior conversion, and the Conversion Kit cost; the handler forwards the
+  // reason on failure.
+  'convert-to-servitor': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { islandId, buildingId } = payload;
+      if (typeof islandId !== 'string') return { ok: false, error: 'islandId must be a string' };
+      if (typeof buildingId !== 'string') return { ok: false, error: 'buildingId must be a string' };
+      const island = resolveIsland(game, islandId);
+      if (!island) return { ok: false, error: 'unknown island' };
+      const result = convertToServitor(island.state, buildingId, BUILDING_DEFS);
+      if (!result.ok) return { ok: false, error: result.reason };
       return { ok: true };
     },
   },

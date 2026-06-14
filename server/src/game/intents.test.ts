@@ -715,6 +715,82 @@ describe('set-force-run', () => {
   });
 });
 
+describe('convert-to-servitor', () => {
+  it('legal: converts a building and deducts the Conversion Kit cost', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
+      const home = world.islands.find((s: any) => s.id === 'home');
+      const state = islandStates.get('home');
+      home.buildings.push({
+        id: 'workshop-1', defId: 'workshop', x: 0, y: 0,
+        constructionRemainingMs: 0, placedAt: now,
+      });
+      state.buildings = home.buildings;
+      state.inventory.lubricant = 100;
+      state.inventory.bolt = 100;
+      state.inventory.eldritch_processor = 100;
+      state.inventory.phase_converter = 100;
+    });
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'convert-to-servitor', payload: { islandId: 'home', buildingId: 'workshop-1' }, seq: 2 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 2 });
+
+    const state = await homeState(uid);
+    const b = (state.buildings as Array<Record<string, unknown>>).find((bb) => bb.id === 'workshop-1')!;
+    expect(b.eternalServitor).toBe(true);
+    const inv = state.inventory as Record<string, number>;
+    expect(inv.lubricant).toBe(98);
+    expect(inv.bolt).toBe(95);
+    expect(inv.eldritch_processor).toBe(99);
+    expect(inv.phase_converter).toBe(99);
+  });
+
+  it('illegal: already a Servitor is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
+      const home = world.islands.find((s: any) => s.id === 'home');
+      const state = islandStates.get('home');
+      home.buildings.push({
+        id: 'workshop-1', defId: 'workshop', x: 0, y: 0,
+        constructionRemainingMs: 0, placedAt: now, eternalServitor: true,
+      });
+      state.buildings = home.buildings;
+      state.inventory.lubricant = 100;
+      state.inventory.bolt = 100;
+      state.inventory.eldritch_processor = 100;
+      state.inventory.phase_converter = 100;
+    });
+    await expectRejectNoChange(
+      uid,
+      { type: 'convert-to-servitor', payload: { islandId: 'home', buildingId: 'workshop-1' }, seq: 9 },
+      now,
+    );
+  });
+
+  it('illegal: insufficient materials is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
+      const home = world.islands.find((s: any) => s.id === 'home');
+      const state = islandStates.get('home');
+      home.buildings.push({
+        id: 'workshop-1', defId: 'workshop', x: 0, y: 0,
+        constructionRemainingMs: 0, placedAt: now,
+      });
+      state.buildings = home.buildings;
+      // No Conversion Kit materials.
+    });
+    await expectRejectNoChange(
+      uid,
+      { type: 'convert-to-servitor', payload: { islandId: 'home', buildingId: 'workshop-1' }, seq: 9 },
+      now,
+    );
+  });
+});
+
 describe('relabel-cargo', () => {
   it('legal: changes the cargo label of a generic-storage building', async () => {
     const now = Date.now();

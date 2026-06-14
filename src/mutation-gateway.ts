@@ -57,6 +57,7 @@ import {
 import { dispatchVehicle, settleViaSpacetimeAnchor } from './settlement.js';
 import type { VehicleKind, VehicleTier } from './settlement.js';
 import { canTierReset, executeTierReset } from './tier-reset.js';
+import { convertToServitor as pureConvertToServitor } from './servitor.js';
 import { applyOffer, type TradeOffer } from './trade.js';
 import { editIslandBiome } from './universe-editor.js';
 import { renameIsland } from './world.js';
@@ -134,6 +135,7 @@ export interface MutationGateway {
   cancelConstruction(islandId: string, buildingId: string): GatewayReturn;
   setBuildingActiveFloors(islandId: string, buildingId: string, disabledFloors: number): GatewayReturn;
   setForceRun(islandId: string, buildingId: string, value: boolean): GatewayReturn;
+  convertToServitor(islandId: string, buildingId: string): GatewayReturn;
   relabelCargo(islandId: string, buildingId: string, newLabel: ResourceId): GatewayReturn;
   expandIsland(islandId: string, axis: Axis): GatewayReturn;
   renameIsland(islandId: string, name: string): GatewayReturn;
@@ -313,6 +315,14 @@ export function makeLocalGateway(
       const b = island.spec.buildings.find((bb) => bb.id === buildingId);
       if (!b) return err('not-found');
       b.forceRun = value ? true : undefined;
+      return ok();
+    },
+
+    convertToServitor(islandId, buildingId) {
+      const island = resolveIsland(islandId);
+      if (!island) return err('unknown island');
+      const result = pureConvertToServitor(island.state, buildingId, BUILDING_DEFS);
+      if (!result.ok) return err(result.reason, result.reason);
       return ok();
     },
 
@@ -641,6 +651,9 @@ export function makeRemoteGateway(client: GameServerClient): MutationGateway {
     },
     setForceRun(islandId, buildingId, forceRun) {
       return send('set-force-run', { islandId, buildingId, forceRun });
+    },
+    convertToServitor(islandId, buildingId) {
+      return send('convert-to-servitor', { islandId, buildingId });
     },
     relabelCargo(islandId, buildingId, newLabel) {
       return send('relabel-cargo', { islandId, buildingId, newLabel });
