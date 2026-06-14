@@ -1345,6 +1345,7 @@ async function main(): Promise<void> {
       // (absent ≡ off). The periodic autosave + visibilitychange save read
       // live `worldState`, so mutating the building object is enough to persist.
       target.building.forceRun = value ? true : undefined;
+      buildingAlertsOverlay.invalidate(); // repaint the green level badge now
       inspector.refresh();
     },
     onUpgradeFloor: (target: InspectorTarget) => {
