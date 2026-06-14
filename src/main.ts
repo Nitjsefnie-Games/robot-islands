@@ -26,6 +26,7 @@ import { effectiveModifierMultipliers, type ModifierMultipliers } from './biomes
 import { advanceIsland, computeRates, xpForLevel, type IslandState, type PowerBalance, type RatesContext } from './economy.js';
 import type { ResourceId } from './recipes.js';
 import { computeNcState } from './network-consciousness.js';
+import { createNewGame } from './new-game.js';
 import { shouldTick } from './economy-clock.js';
 import { computeSharedNetworkState } from './network.js';
 
@@ -76,8 +77,6 @@ import { mountUi } from './ui.js';
 import {
   findPopulatedIslandAt,
   islandRenderState,
-  makeInitialIslandState,
-  makeInitialWorld,
   renderIsland,
   tileToWorldPx,
   VISION_BLUE,
@@ -170,7 +169,11 @@ async function main(): Promise<void> {
   // snapshot restore both worldState and islandStates, else fall back to the
   // demo-seed path (makeInitialWorld + per-spec makeInitialIslandState).
   const restored = await loadWorld();
-  const worldState: WorldState = restored ? restored.world : makeInitialWorld(performance.now());
+  // Fresh-game path is the pure `createNewGame` module (shared with the
+  // authoritative server). Build it ONCE so the world + per-island states are
+  // the same objects (createNewGame already wires world.islandStates).
+  const fresh = restored ? null : createNewGame(performance.now());
+  const worldState: WorldState = restored ? restored.world : fresh!.world;
   // §15.1 / §2.6 wall-clock anchor for WEATHER sampling. Captured ONCE per
   // session: every production `weather()` consumer samples at
   // `perfTs + weatherWallOffsetMs` (see `weatherClockMs`) so the weather
@@ -944,29 +947,13 @@ async function main(): Promise<void> {
   //
   // Per-island state is a Map keyed by island id so routes can dispatch
   // between any two populated islands; `hud.ts` paints every populated one.
+  // Fresh-game path: per-island state from `createNewGame` (§3.7 starter
+  // contract — home + new colonies start EMPTY). Restored saves use whatever
+  // the player had at last save.
   const islandStates: Map<string, IslandState> = restored
     ? restored.islandStates
-    : new Map<string, IslandState>();
-  const homeSpec = worldState.islands.find((s) => s.id === 'home');
-  if (!homeSpec) throw new Error('main: home island missing from worldState');
-  // Fresh-game path: build per-island state from each populated spec.
-  // Restored saves skip this entirely — whatever the player had at last
-  // save is the source of truth.
-  if (!restored) {
-    const homeState = makeInitialIslandState(homeSpec, performance.now());
-    islandStates.set('home', homeState);
-    // §3.7 starter contract: home starts with EMPTY inventory — no starter
-    // resources, no Foundation Kit. New colonies arriving via settlement
-    // vehicles likewise START EMPTY (no kit/biofuel seed).
-    for (const spec of worldState.islands) {
-      if (spec.id === 'home') continue;
-      if (!spec.populated) continue;
-      islandStates.set(spec.id, makeInitialIslandState(spec, performance.now()));
-    }
-  }
-  // Sanity gate: home state must exist after init. The `homeState`/`homeSpec`
-  // locals served as the per-panel anchor before active-island selection
-  // landed; today every panel reads through the active getter pair below.
+    : fresh!.islandStates;
+  // Sanity gate: home state must exist after init.
   if (!islandStates.get('home')) {
     throw new Error('main: home island state missing after init');
   }
