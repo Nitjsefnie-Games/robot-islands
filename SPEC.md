@@ -71,7 +71,7 @@ Legend: **L** = live · **P** = partial · **N** = not implemented.
 | §15.3 Piecewise integration | L | Event-driven `findNextCapEvent` with cap/floor/maintenance/construction boundaries; offline-catchup handles 24h+ gaps. |
 | §15.4 Inter-island flow | L | Proportional distribution under contention. |
 | §15.5 Offline math | L | Persisted state survives reload; `lastTick` shifts to current perf-clock domain; weather/toxicity rolls deterministic at any catchup duration. |
-| §15.6 Stack | L | Vite 5 + TypeScript strict + PixiJS 8 + vitest. No React, no backend, fully client-side. |
+| §15.6 Stack | L | Vite 5 + TypeScript strict + PixiJS 8 + vitest. No React, no backend, fully client-side. **Superseded for state ownership:** the server migration (Appendix C) now runs the authoritative simulation and persistence for server accounts; the browser client still runs locally until the slice-4 cutover. |
 | §15.7 Build order | — | Reference ordering, not a runtime concern. |
 
 \---
@@ -2179,8 +2179,31 @@ Out of scope for first release; designed but not implemented:
 The server-authoritative migration (see `TODO.md`) moves the simulation
 off the browser; the server owns all state and validates client intents.
 It is being delivered in slices, each with its own design + plan under
-`docs/superpowers/`. Slice 1 (auth service + user store) is specified in
-`docs/superpowers/specs/2026-06-13-server-auth-slice-design.md` and adds a
-standalone Node + Fastify server under `server/` with no change to the
-simulation. §15.6 (pure client-side) remains in force until the runtime
-slice moves game state server-side; this appendix will be expanded then.
+`docs/superpowers/`.
+
+* Slice 1 (auth service + user store) is specified in
+  `docs/superpowers/specs/2026-06-13-server-auth-slice-design.md` and adds a
+  standalone Node + Fastify server under `server/` with no change to the
+  simulation.
+* Slice 2 (server runtime + persistence) is specified in
+  `docs/superpowers/specs/2026-06-14-server-runtime-persistence-slice-design.md`.
+  It makes the server the authoritative owner of game state for server accounts.
+  - One `saves` row per account (`server/migrations/0002_saves.sql`), keyed by
+    `user_id`, storing a single `SaveSnapshot` in `jsonb` plus schema version.
+  - `loadAndCatchUp` (`server/src/game/runtime.ts`) loads the stored snapshot,
+    calls `deserializeWorld` to migrate it to the current schema and shift its
+    time domain, runs `advanceIsland` for every populated island to integrate
+    the offline gap, writes the advanced snapshot back with `serializeWorld`,
+    and returns a live projection.
+  - Offline catch-up uses `Date.now()` for both wall-clock and performance-clock
+    arguments to `deserializeWorld`, so the perf shift collapses to the real
+    elapsed time since the last save (which is stamped wall == perf). This is
+    the same code path for a 1-second or a 30-day gap.
+  - The server reuses the client's pure layer unchanged: `serializeWorld`,
+    `deserializeWorld`, `advanceIsland`, and `createNewGame` are imported from
+    `src/` via `tsx` (the server's runtime is `tsx src/index.ts`); no DOM or
+    renderer is instantiated. The browser client continues to run its own
+    local loop until the slice-4 cutover.
+
+§15.6's "fully client-side" stack note is superseded for *state ownership* by
+this server migration; see the annotation at §15.6.
