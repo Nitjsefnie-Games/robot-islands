@@ -1,0 +1,412 @@
+{
+ "generatedBy": "migration-issue-audit workflow (65 agents) + lead ground-truth/parity sweep",
+ "range": "0bf2ed2~1..HEAD",
+ "baseline": "client 3352 tests + server 112 tests green pre-fix",
+ "byArea": [
+  {
+   "area": "auth-crypto",
+   "raised": 2,
+   "confirmed": 2
+  },
+  {
+   "area": "runtime-persistence",
+   "raised": 4,
+   "confirmed": 4
+  },
+  {
+   "area": "transport-intent",
+   "raised": 4,
+   "confirmed": 3
+  },
+  {
+   "area": "client-transport",
+   "raised": 6,
+   "confirmed": 5
+  },
+  {
+   "area": "client-panels",
+   "raised": 4,
+   "confirmed": 3
+  },
+  {
+   "area": "trust-surface",
+   "raised": 5,
+   "confirmed": 5
+  },
+  {
+   "area": "spec-build-deploy",
+   "raised": 4,
+   "confirmed": 4
+  }
+ ],
+ "confirmed": [
+  {
+   "area": "auth-crypto",
+   "title": "trustProxy:true + un-sanitizing nginx config lets clients spoof req.ip and fully bypass the per-IP auth rate limit",
+   "category": "security",
+   "severity": "critical",
+   "file": "server/src/app.ts:13",
+   "description": "The last migration commit (fbe7d1d) flipped Fastify to `trustProxy: true` so the per-IP auth rate-limit (the brute-force / enumeration / scrypt-DoS defense, max 10/min in app.ts:22-25) buckets on `req.ip`. With trustProxy:true, Fastify/proxy-addr derives `req.ip` from the LEFTMOST X-Forwarded-For entry, which is fully attacker-controlled. The prescribed deployment (server/deploy/README.md step 5) is `location /api/ { proxy_pass http://127.0.0.1:5180; }` \u2014 it does NOT replace or sanitize X-Forwarded-For, so a client header passes through (or is appended leftmost). An attacker who rotates the XFF header per request gets a unique req.ip each time, so the rate-limit bucket never accumulates and the limit is completely bypassed. This re-opens unlimited password brute-force and account-enumeration against /api/auth/login and /api/auth/signup, and enables the scrypt event-loop DoS (each call ~100ms blocking). The default @fastify/rate-limit keyGenerator is `req.ip` (node_modules/@fastify/rate-limit/index.js:29), so nothing else mitigates it. The added test (app.test.ts) actually demonstrates the spoof \u2014 it drives the bucket purely via an attacker-supplied X-Forwarded-For header and asserts that as correct behavior, cementing the vulnerable design.",
+   "evidence": "app.ts:13  const app = Fastify({ logger: false, trustProxy: true });\n\nVerified live: Fastify({trustProxy:true}) with header 'X-Forwarded-For: attacker-spoof-9.9.9.9' yields req.ip === 'attacker-spoof-9.9.9.9' (leftmost, client-controlled). Default keyGenerator: node_modules/@fastify/rate-limit/index.js:29 `const defaultKeyGenerator = (req) => req.ip`. Prescribed proxy (deploy/README.md): `location /api/ { proxy_pass http://127.0.0.1:5180; }` sets no X-Forwarded-For of its own.",
+   "suggestedFix": "Do not use unconditional `trustProxy: true`. Set trustProxy to the exact number of trusted hops in front of the app (e.g. `trustProxy: 1` for a single nginx) OR to the nginx loopback address, so Fastify ignores client-supplied XFF beyond the trusted proxy. In tandem, make the prescribed nginx config use `proxy_set_header X-Forwarded-For $remote_addr;` (replace, not the appending `$proxy_add_x_forwarded_for`) so the upstream value is overwritten with the real peer. Update app.test.ts to drive the bucket via the actual connection IP, not a raw client XFF header.",
+   "refutedCount": 1,
+   "survivesCount": 1
+  },
+  {
+   "area": "auth-crypto",
+   "title": "scryptSync runs synchronously on the shared event loop \u2014 every login/signup freezes all WebSocket game traffic for ~100ms",
+   "category": "race-or-async",
+   "severity": "important",
+   "file": "server/src/crypto/password.ts:15",
+   "description": "hashPassword and verifyPassword use the blocking `scryptSync` (not the async `scrypt`), and are called directly inside the /api/auth/signup and /api/auth/login route handlers (routes.ts:36, 53, 55). The server is a single Fastify process on a single event loop (index.ts: one buildApp, no cluster/worker) that ALSO serves the authoritative game WebSocket and its periodic state-push ticks (game/ws.ts). Measured on this box, one scryptSync(N=32768,r=8,p=1) call blocks the event loop ~100ms. So each auth attempt stalls every connected player's WS ticks and intent processing for ~100ms; a burst of concurrent logins (10 = the rate-limit ceiling, and unbounded once the XFF bypass above is used) produces ~1s+ of fully frozen game traffic. This is a regression introduced by the migration choosing the sync API on the request path of a process that also carries real-time game traffic.",
+   "evidence": "password.ts:15  const hash = scryptSync(password, salt, KEYLEN, { N, r, p, maxmem: MAXMEM });\npassword.ts:35  candidate = scryptSync(password, salt, expected.length, { N: pn, r: pr, p: pp, maxmem: MAXMEM });\nroutes.ts:36  const user = await createUser(pool, req.body.email, hashPassword(req.body.password));\nroutes.ts:53/55  ok = verifyPassword(user.password, ...) / verifyPassword(DUMMY_HASH, ...)\nMeasured: scryptSync(...) -> 'scrypt ms: 101' on this server.",
+   "suggestedFix": "Switch to the async `crypto.scrypt` (promisified) in hashPassword/verifyPassword so the KDF runs on libuv's threadpool and does not block the event loop while game WS ticks for other players are pending. (Optionally raise UV_THREADPOOL_SIZE if many concurrent auths are expected.) Keep the same PHC encoding and timingSafeEqual comparison.",
+   "refutedCount": 0,
+   "survivesCount": 2
+  },
+  {
+   "area": "runtime-persistence",
+   "title": "Offline catch-up calls advanceIsland with no RatesContext \u2014 biome/NC/solar/toxicity/lattice all ignored, diverging from online play",
+   "category": "regression",
+   "severity": "critical",
+   "file": "server/src/game/runtime.ts:27",
+   "description": "loadAndCatchUp integrates the offline gap with `advanceIsland(state, now)` \u2014 passing NEITHER the `ctx: RatesContext` NOR `wallClockNowMs` arguments. The client's economy loop (src/main.ts:2195-2204, 2282-2303) always builds a full RatesContext per island: `modifierMul` (biome multipliers), `ncBuff`, `activeBonusMul`, `terrainAt`, `solarBoost` (Mirror Sat), `geothermalActive`, cross-island lattice pooling, cable-network brownout, and `worldSeed`. With ctx omitted, computeRates falls back to identity defaults (economy.ts:1068-1071 modifierMul=IDENTITY, ncBuff=1, activeBonusMul=1; ctx?.solarBoost??0; ctx?.geothermalActive??false) and advanceIsland's `if (ctx?.worldSeed)` guard (economy.ts:2555) skips advanceToxicityRolls entirely. Concrete effect on a FRESH world (which already ships islands with modifiers \u2014 world.ts:613 fertile, 626 mineral_rich, 665 cursed_storms): per biomes.ts:292-295 fertile = extraction \u00d71.50, mineral_rich = \u00d71.25, cursed_storms = global \u00d70.90. So a fertile island under-produces offline by 33%, while a cursed_storms island OVER-produces offline (logging off dodges the storm penalty \u2014 an exploit). Buildings accrue ZERO toxicity offline. Lattice chains that depend on cross-island supply stall offline though they run online. This breaks SPEC \u00a715.5 ('weather/toxicity rolls deterministic at any catchup duration'), \u00a72003/\u00a72133 ('offline play and active play the same code path'), and \u00a715.6's authoritative-state contract.",
+   "evidence": "runtime.ts:27  `if (state) advanceIsland(state, now);`  // no ctx, no wallClockNowMs\nvs client main.ts:2282-2303 ctx includes `modifierMul: modifierMulFor(s.id), ncBuff: ncBuffFor(s), world: worldState, worldSeed: worldState.seed, solarBoost: ...`\neconomy.ts:2555 `if (ctx?.worldSeed) { advanceToxicityRolls(...) }`  // skipped server-side\nbiomes.ts:292-295  mineral_rich\u2192\u00d71.25, fertile\u2192\u00d71.50, cursed_storms\u2192global\u00d70.90",
+   "suggestedFix": "Mirror the client's advanceEconomy: in loadAndCatchUp build the same per-island RatesContext (modifierMul via effectiveModifierMultipliers, ncBuff from computeNcState, activeBonusMul, terrainAt, solarBoost, geothermalActive, worldSeed=world.seed) and the lattice/cable group handling, then pass it (plus wallClockNowMs=now) to advanceIsland \u2014 ideally by extracting the client's advanceEconomy into a shared pure module so server and client cannot drift.",
+   "refutedCount": 0,
+   "survivesCount": 2
+  },
+  {
+   "area": "runtime-persistence",
+   "title": "Concurrent intents from two connections of the same account silently lose updates (no DB lock / transaction / version check)",
+   "category": "race-or-async",
+   "severity": "critical",
+   "file": "server/src/game/intent-runner.ts:41",
+   "description": "applyIntent does a non-atomic read-modify-write: loadAndCatchUp (which itself loads+saves) \u2192 handler.apply mutates the in-memory game \u2192 saveSnapshot, across three separate awaits with NO row lock, SELECT\u2026FOR UPDATE, advisory lock, transaction, or optimistic schema_version check (grep for FOR UPDATE/pg_advisory/BEGIN/transaction in server/src/game returns nothing). ws.ts:85-90 serializes intents per CONNECTION via a promise chain and its comment claims this 'prevents two intents from racing the same saves row' \u2014 but that guarantee is per-connection only. Two browser tabs (two WS connections) for the same user have independent chains and interleave freely against the single `saves` row keyed by user_id (0002_saves.sql:3). Same hazard between an intent on one connection and the 1 Hz periodic state-push tick on another (ws.ts:100, also write-via-loadAndCatchUp). I PROVED this empirically: a test firing two place-building intents at different tiles concurrently via Promise.all both ACK ok:true, yet the stored save contains only ONE workshop (expected 2, received 1) \u2014 the later writer clobbers the earlier mutation.",
+   "evidence": "intent-runner.ts:41-64  `const game = await loadAndCatchUp(...); ... handler.apply(...); ... await saveSnapshot(...)`  \u2014 three awaits, no lock.\nEmpirical: two concurrent applyIntent place-building calls \u2192 `AssertionError: expected 1 to be 2` (one workshop persisted, one lost), both acks ok:true.\nws.ts:87 comment: 'This is what prevents two intents from racing (load->apply->persist) the same row.' (only true within one connection)",
+   "suggestedFix": "Make load-apply-persist atomic per account: wrap the whole sequence in a single DB transaction that does SELECT snapshot \u2026 FOR UPDATE on the saves row (or take pg_advisory_xact_lock(hashtext(user_id))), then UPDATE within the same tx; alternatively add an optimistic version column bumped per write and retry on conflict. Per-connection chaining is insufficient for multi-tab.",
+   "refutedCount": 0,
+   "survivesCount": 2
+  },
+  {
+   "area": "runtime-persistence",
+   "title": "POST /api/game/import persists fully client-authored snapshot as authoritative \u2014 contradicts the 'client numbers are never trusted' contract; arbitrary level/inventory and unbounded offline catch-up",
+   "category": "security",
+   "severity": "important",
+   "file": "server/src/game/routes.ts:39",
+   "description": "The import route validates a client-supplied snapshot only for STRUCTURE (isValidSaveSnapshot checks types + that v \u2208 SUPPORTED_LOAD_VERSIONS \u2014 persistence.ts:1233-1242) and that it deserializes, then stores it verbatim as the account's authoritative save. There is no bound on any value (grep for level/inventory/clamp/MAX in routes.ts returns nothing): a logged-in player can POST a snapshot granting themselves any island level, any inventory, completed endgame artifacts, etc. Additionally `savedAt` is attacker-controlled and unbounded (isValidSaveSnapshot only checks `typeof savedAt === 'number'`); loadAndCatchUp computes deltaMs = max(0, now - snapshot.savedAt) (persistence.ts:932), so importing a snapshot with savedAt far in the past triggers a multi-year offline catch-up granting a large extra resource/XP bolus on top of the already-arbitrary state. This directly contradicts SPEC Appendix C ('Validation re-runs the existing pure entry function \u2026 client numbers are never trusted'). The slice-5 trust-surface doc (commit 2f111c2) audited XP/trade/casts but did not flag the import endpoint.",
+   "evidence": "routes.ts:28-39  `if (!isValidSaveSnapshot(snapshot)) {...400...} try { deserializeWorld(snapshot, Date.now(), Date.now()); } ... await saveSnapshot(pool, userId, snapshot);`\npersistence.ts:1236-1239 isValidSaveSnapshot: only `typeof v['savedAt'] !== 'number'` / `typeof v['v'] !== 'number'` shape checks \u2014 no value bounds.\nruntime.ts:20 + persistence.ts:932 `deltaMs = Math.max(0, nowWallMs - snapshot.savedAt)` \u2192 unbounded offline integrate from attacker savedAt.",
+   "suggestedFix": "Treat import as untrusted: clamp savedAt to [now - MAX_OFFLINE_WINDOW, now] before persisting (or normalize savedAt/savedAtPerf to now on import so no offline bonus is granted), and either bound/sanitize imported state against legality rules or restrict import to a server-signed export. At minimum document and bound the offline window so import cannot mint arbitrary catch-up.",
+   "refutedCount": 1,
+   "survivesCount": 1
+  },
+  {
+   "area": "runtime-persistence",
+   "title": "Read paths (GET /api/game/state and 1 Hz WS state push) issue a DB write on every call via loadAndCatchUp",
+   "category": "code-health",
+   "severity": "minor",
+   "file": "server/src/game/runtime.ts:30",
+   "description": "loadAndCatchUp unconditionally calls saveSnapshot at the end, so every read-only operation persists. GET /api/game/state (routes.ts:45) and the periodic WS state push that runs every STATE_PUSH_INTERVAL_MS=1000 (ws.ts:41,100) both go through loadAndCatchUp, meaning each connected socket writes the full jsonb snapshot to Postgres once per second even when the player does nothing, and a plain state GET mutates persistent storage. Beyond write amplification (a large late-game snapshot serialized + UPSERT per second per socket), every such write widens the lost-update race window in finding #2: the read-triggered re-persist of advanced state is exactly what a concurrent intent on another connection can clobber or be clobbered by.",
+   "evidence": "runtime.ts:29-30  `const advanced = serializeWorld(world, islandStates, now, now); await saveSnapshot(pool, userId, advanced);`  (always, even for reads)\nws.ts:41  pushState \u2192 `const game = await loadAndCatchUp(pool, userId, Date.now());`  fired by setInterval(\u2026,1000) at ws.ts:100\nroutes.ts:45  state route \u2192 `const game = await loadAndCatchUp(pool, req.user!.id, Date.now());`",
+   "suggestedFix": "Split catch-up from persistence: have a read-only path that deserializes + advances in memory for projection/push without writing, and persist only on accepted mutations (or throttle/debounce the catch-up write, e.g. only when elapsed since last save exceeds a threshold). Combine with the transactional fix in #2.",
+   "refutedCount": 0,
+   "survivesCount": 2
+  },
+  {
+   "area": "transport-intent",
+   "title": "POST /api/game/import accepts an unvalidated client snapshot as authoritative state \u2014 full anti-cheat bypass",
+   "category": "security",
+   "severity": "important",
+   "file": "server/src/game/routes.ts:23-42",
+   "description": "The migration's whole purpose (SPEC Appendix C trust-surface) is to make the server authoritative so a client can never fabricate state. The import endpoint defeats this: it persists a fully client-supplied snapshot as the account's authoritative game, gated ONLY by `hasSave` (409 if a game already exists) and by STRUCTURAL validity (`isValidSaveSnapshot` + `deserializeWorld` not throwing). It performs ZERO legality validation of the CONTENT \u2014 inventory quantities, populated flags, skill points, building tiers, T5 endgame state are all taken verbatim. Any fresh account can therefore POST a hand-crafted snapshot with maxed inventory / all islands populated / all skills unlocked and the server will treat it as legitimate from then on. Every per-intent legality re-check in intents.ts (the anti-cheat work of this slice) is moot once a player can seed arbitrary starting state. The SPEC documents the mechanism (\u00a7 Appendix C, lines 2253-2257) as a 'one-time local-save migration' but does not acknowledge that it is an unauthenticated-content trust hole.",
+   "evidence": "if (await hasSave(pool, userId)) return reply.code(409).send({ error: 'game already exists' });\nconst snapshot = body?.snapshot;\nif (!isValidSaveSnapshot(snapshot)) { return reply.code(400)... }\ntry { deserializeWorld(snapshot, Date.now(), Date.now()); } catch (err) { ... }\nawait saveSnapshot(pool, userId, snapshot);  // persisted verbatim, no content legality check",
+   "suggestedFix": "Treat imported content as untrusted: either (a) drop the import path and migrate local saves through replayed intents, or (b) sanitize on import \u2014 reject any snapshot whose state isn't reachable from a fresh game (e.g. clamp/zero inventories above plausible caps, reject pre-populated non-home islands, recompute derived caps), or (c) gate import behind a server-side signature/HMAC the client cannot mint. At minimum, document in SPEC that import is an unbounded trust hole and restrict it (e.g. admin-only / disabled in production).",
+   "refutedCount": 0,
+   "survivesCount": 2
+  },
+  {
+   "area": "transport-intent",
+   "title": "WebSocket intent channel has no per-connection/per-message rate limit \u2014 DB-write amplification DoS",
+   "category": "security",
+   "severity": "important",
+   "file": "server/src/game/ws.ts:105-127",
+   "description": "The @fastify/rate-limit plugin only guards HTTP routes (global 100/min in app.ts:15, auth 10/min in the encapsulated scope). The WS message handler has no throttle at all. Each inbound frame chains an `applyIntent`, and applyIntent unconditionally runs `loadAndCatchUp` (which itself calls saveSnapshot) plus, on success, another saveSnapshot \u2014 so every single client frame forces at least one Postgres write, and `pushState` after each accepted intent forces yet another load+save. A single authenticated socket can fire frames as fast as it likes; the per-connection promise chain queues them all in memory (unbounded `chain` growth) while hammering the saves row. The 64 KiB maxPayload (app.ts:37) caps frame SIZE but not frame RATE. This is introduced by the migration (ws.ts is a new file); the pre-migration client-only build had no server to flood.",
+   "evidence": "socket.on('message', (raw: Buffer) => {\n  const text = raw.toString();\n  chain = chain.then(async () => {\n    ...\n    const ack = await applyIntent(pool, userId, parsed.env, Date.now()); // loadAndCatchUp+saveSnapshot\n    socket.send(JSON.stringify(ack));\n    if (ack.ok) { await pushState(socket, pool, userId); } // another loadAndCatchUp+saveSnapshot\n  })",
+   "suggestedFix": "Add a per-connection token-bucket / sliding-window limiter in the message handler (e.g. N intents per second, reject excess with an error ack and/or close the socket on sustained abuse), and bound the in-memory chain depth (drop or 429 when too many intents are queued).",
+   "refutedCount": 0,
+   "survivesCount": 2
+  },
+  {
+   "area": "transport-intent",
+   "title": "Successful intent can emit a spurious second `{seq:-1, ok:false}` ack when the post-intent state push fails",
+   "category": "race-or-async",
+   "severity": "minor",
+   "file": "server/src/game/ws.ts:113-126",
+   "description": "In the message handler the ack is sent (line 114) and the intent is already durably committed by applyIntent's saveSnapshot. Only AFTER that does `await pushState(...)` run (line 119). pushState calls loadAndCatchUp + serializeWorld + socket.send; if any of those rejects (transient DB error, socket mid-close), control falls to the chain's `.catch` (line 121) which sends a SECOND frame `{ seq: -1, ok: false, error }`. The client thus receives a success ack for its real seq followed by an unrelated failure frame, while the mutation actually persisted. A client that keys retry/rollback logic off failure acks could double-apply or wrongly roll back. The failure frame's seq:-1 also can't be correlated to the originating intent.",
+   "evidence": "const ack = await applyIntent(pool, userId, parsed.env, Date.now());\nsocket.send(JSON.stringify(ack));            // success ack already sent\nif (ack.ok) { await pushState(socket, pool, userId); }  // throw here ->\n}).catch((err: unknown) => {\n  const error = err instanceof Error ? err.message : 'internal error';\n  try { socket.send(JSON.stringify({ seq: -1, ok: false, error })); } ... });",
+   "suggestedFix": "Wrap the post-ack `pushState` in its own try/catch that swallows/logs failures (the push is best-effort; the next periodic tick re-pushes), so a push failure never manufactures a failure ack for an intent that already succeeded.",
+   "refutedCount": 0,
+   "survivesCount": 2
+  },
+  {
+   "area": "client-transport",
+   "title": "REMOTE snapshot swap orphans overlay/inspector subsystems that captured worldState by reference at mount",
+   "category": "regression",
+   "severity": "critical",
+   "file": "src/main.ts:2042",
+   "description": "In REMOTE mode (the new default), applyRemoteSnapshot reassigns the local `worldState`/`islandStates` `let` bindings to brand-new objects returned by deserializeWorld on every server push. But several subsystems captured the ORIGINAL worldState object by reference at mount time and never see the reassignment: mountWeatherOverlay(worldState) (main.ts:380), mountSatelliteOverlay(worldState) (385), mountAntennaOverlay(worldState) (391), and mountInspectorUi(..., { world: worldState }) (1439). These close over the boot-time object (e.g. weather-overlay.ts:112 `mountWeatherOverlay(world)` then reads `sumIslandCo2(world)` at weather-overlay.ts:148 against the captured ref). After the first server snapshot, those overlays/inspector render the boot-time state forever, never reflecting authoritative server updates (CO2/weather tints, satellite positions, antenna ranges, the building inspector's live numbers). The ocean/island/fog layers escape this because rebuildWorldLayers re-reads the live `worldState` binding at call time, but anything handed `worldState` once at mount is now stale. This is REMOTE-only: LOCAL never reassigns worldState after init, so the by-reference capture is correct there.",
+   "evidence": "applyRemoteSnapshot: `worldState = d.world; islandStates = d.islandStates; worldState.islandStates = islandStates;` (main.ts:2042-2044) reassigns new objects. Mounts that captured the old object: `const weatherOverlay = mountWeatherOverlay(worldState);` (main.ts:380), `mountSatelliteOverlay(worldState)` (385), `mountAntennaOverlay(worldState)` (391), `mountInspectorUi(reg, document.body, { world: worldState, ... })` (1439). weather-overlay.ts:112 `export function mountWeatherOverlay(world: WorldState)` closes over `world` and reads `sumIslandCo2(world)` (weather-overlay.ts:148).",
+   "suggestedFix": "Do not reassign worldState in applyRemoteSnapshot; instead mutate the existing object in place (Object.assign the live worldState with the deserialized fields, and clear+repopulate islandStates) so every subsystem's captured reference observes the update. Alternatively, pass all overlays/panels a getter (() => worldState) instead of the object, mirroring how getState/activeState closures are threaded elsewhere.",
+   "refutedCount": 0,
+   "survivesCount": 2
+  },
+  {
+   "area": "client-transport",
+   "title": "applyRemoteSnapshot rebuilds and destroys all ocean/island/fog GPU textures every 1s in REMOTE",
+   "category": "regression",
+   "severity": "important",
+   "file": "src/main.ts:2080",
+   "description": "applyRemoteSnapshot calls rebuildWorldLayers() unconditionally on every server state push. The server pushes a full snapshot every STATE_PUSH_INTERVAL_MS = 1000 ms (ws.ts:25/100) plus after every accepted intent (ws.ts:119). rebuildWorldLayers (main.ts:510-544) re-bakes the entire ocean + island + fog overlay from scratch and calls oldOcean.destroy({ children: true, texture: true }) \u2014 a full radial-gradient sprite re-bake and GPU texture create/destroy cycle. In LOCAL this only runs on actual discovery/vision changes (gated by `needRebuild` at main.ts:2318). In REMOTE it runs at a steady 1 Hz at idle regardless of whether anything visible changed, churning the GPU and re-baking gradient textures for the whole world once per second forever.",
+   "evidence": "applyRemoteSnapshot ends with unconditional `rebuildWorldLayers();` (main.ts:2080). rebuildWorldLayers: `oldOcean.destroy({ children: true, texture: true });` (main.ts:541). Server cadence: `export const STATE_PUSH_INTERVAL_MS = 1000;` and `setInterval(() => { chain = chain.then(async () => { await pushState(...) }) }, pushIntervalMs)` (ws.ts:25, 100-102). Compare LOCAL ticker: `if (needRebuild) rebuildWorldLayers();` (main.ts:2318).",
+   "suggestedFix": "Gate the rebuild in applyRemoteSnapshot on an actual change: compare the new vision-sources signature (already computed at 2076 via visionSourcesSignature) and revealed-cell/island-discovery state against the prior values, and only call rebuildWorldLayers() when they differ \u2014 the same diff discipline the LOCAL ticker uses.",
+   "refutedCount": 0,
+   "survivesCount": 2
+  },
+  {
+   "area": "client-transport",
+   "title": "Remote gateway promise rejections (intent timeout / socket closed) are unhandled in panel callsites",
+   "category": "race-or-async",
+   "severity": "important",
+   "file": "src/main.ts:1444",
+   "description": "The async-converted panel callsites run `void (async () => { const result = await gatewayResult; if (!result.ok) return; ... })()` with no try/catch. In REMOTE, gatewayResult comes from makeRemoteGateway.send -> client.sendIntent, which REJECTS (not resolves {ok:false}) on intent timeout (server-client.ts:156 `reject(new Error('Intent ${mySeq} timed out'))`), on socket-not-open (server-client.ts:149), and on socket close before ack (rejectAllPending at server-client.ts:131). A rejected awaited promise throws inside the void async IIFE, producing an unhandled promise rejection rather than the intended `if (!result.ok) return` no-op. WS reconnects are silent (connectGameServer is called with no onStatus at main.ts:270), so a transient drop during a player action surfaces as an uncaught rejection with no user feedback. There are 5 such IIFE blocks (main.ts:1445,1493,1515,1533,1556) plus the trade callsite at 1949.",
+   "evidence": "Callsite: `if (gatewayResult instanceof Promise) { void (async () => { const result = await gatewayResult; if (!result.ok) return; ... })(); return; }` (main.ts:1444-1456) \u2014 no catch. Reject sources: `reject(new Error('Intent ${mySeq} timed out'))` (server-client.ts:154-156), `return Promise.reject(new Error('Socket is not open'))` (server-client.ts:148-149), `rejectAllPending('Socket closed before ack')` (server-client.ts:131). makeRemoteGateway.send: `const ack = await client.sendIntent(type, payload);` (mutation-gateway.ts:528) propagates the rejection.",
+   "suggestedFix": "Wrap each `await gatewayResult` in try/catch (treating a thrown error like `!result.ok`), or have makeRemoteGateway.send catch sendIntent rejections and convert them to `{ ok: false, error }` so the gateway contract is always a resolved GatewayResult and the `if (!result.ok) return` guard works as written.",
+   "refutedCount": 0,
+   "survivesCount": 2
+  },
+  {
+   "area": "client-transport",
+   "title": "Auto-import of local save can re-fire and brick boot if import latency exceeds the 1s server push interval",
+   "category": "race-or-async",
+   "severity": "important",
+   "file": "src/main.ts:263",
+   "description": "In bootRemoteClient, when the first state push is null (no server game yet) the onState handler calls importLocalSaveOrCreate() with no in-flight guard and gotFirst stays false. The server pushes a fresh (still-null) snapshot every 1000 ms until a game exists (ws.ts:100). If importLocalSaveOrCreate takes longer than 1s (large IDB save -> serializeWorld -> POST /api/game/import over a slow link), a second null push arrives while gotFirst is still false and fires importLocalSaveOrCreate AGAIN. The second run sees the server now has a save (the first import committed), so POST /api/game/import returns 409 -> r.ok is false -> it falls through to POST /api/game/new, which also returns 409 (hasSave check, routes.ts:16) -> `throw new Error('POST /api/game/new failed: 409 ...')` -> .catch(reject) rejects the bootRemoteClient promise. main()'s only handler is `main().catch(err => console.error(...))` (main.ts:2838), so boot dies with a blank screen even though the import actually succeeded.",
+   "evidence": "No guard: `} else { importLocalSaveOrCreate().catch(reject); }` (main.ts:260-263); gotFirst only set true on a non-null snapshot (main.ts:251-252). importLocalSaveOrCreate fallthrough: `const r = await fetch('/api/game/new', ...); if (!r.ok) throw new Error('POST /api/game/new failed: ...')` (main.ts:240-241). Server 409 on existing save: `if (await hasSave(pool, userId)) return reply.code(409)...` (routes.ts:16, 25). Top-level: `main().catch((err) => { console.error('[robot-islands] fatal:', err); });` (main.ts:2838-2840).",
+   "suggestedFix": "Add a one-shot guard around importLocalSaveOrCreate (e.g. `let importStarted = false;` set on first entry) so subsequent null pushes are ignored while the import is in flight; and treat a 409 from /api/game/new as success-equivalent (a game now exists) rather than a fatal throw, since it means a concurrent import already created the game.",
+   "refutedCount": 0,
+   "survivesCount": 2
+  },
+  {
+   "area": "client-transport",
+   "title": "Auth error body rendered as raw JSON to the user instead of the message",
+   "category": "code-health",
+   "severity": "minor",
+   "file": "src/auth-ui.ts:171",
+   "description": "mountAuthScreen displays the auth endpoint's error response via `const text = await response.text(); errorEl.textContent = text || ...`. The server auth routes return JSON error bodies, e.g. reply.code(401).send({ error: 'invalid email or password' }) (server/src/auth/routes.ts:57) and reply.code(409).send({ error: 'email already registered' }) (routes.ts:40). So a failed login literally shows the string `{\"error\":\"invalid email or password\"}` (braces, quotes, key) in the error banner instead of a clean message. This is the primary error surface on the new auth screen and the default boot path goes through it.",
+   "evidence": "auth-ui.ts:170-172 `} else { const text = await response.text(); errorEl.textContent = text || `Request failed (${response.status})`; }`. Server response: `if (!user || !ok) return reply.code(401).send({ error: 'invalid email or password' });` (server/src/auth/routes.ts:57).",
+   "suggestedFix": "Parse the body as JSON and prefer the `error` field: e.g. `const body = await response.json().catch(() => null); errorEl.textContent = (body && typeof body.error === 'string' ? body.error : null) ?? `Request failed (${response.status})`;`",
+   "refutedCount": 0,
+   "survivesCount": 2
+  },
+  {
+   "area": "client-panels",
+   "title": "REMOTE snapshot swap orphans every panel that captured world/islandStates by reference \u2014 panels render permanently-frozen data",
+   "category": "regression",
+   "severity": "critical",
+   "file": "src/main.ts:2042",
+   "description": "applyRemoteSnapshot reassigns the module-level world/state vars to brand-new objects returned by deserializeWorld (`worldState = d.world; islandStates = d.islandStates;`). But orbital-ui, drones-ui, routes-ui, settlement-ui, settings-ui and inspector-ui are all mounted ONCE with `world: worldState` / `islandStates` passed BY VALUE (captured object reference), and are never re-bound or re-mounted. The server pushes a full snapshot immediately on connect, after every accepted intent, AND every 1000ms (commit ba6f284), so the first push (~within 1s of boot) detaches all these panels: their `deps.world` / `deps.islandStates` point at the original, now-orphaned world object that the REMOTE client never mutates (the economy ticker is gated behind `if (!isRemote)`). Result in the new default REMOTE mode: the routes list, drone fleet, satellite telemetry, settlement targets, and inspector universe-editor all render frozen boot-time data forever. The HUD/island bar update fine because they read through the `activeState()`/`activeSpec()` getters which re-resolve the live module vars \u2014 masking the bug in casual testing and in the test suite (which never drives a snapshot swap against a mounted panel).",
+   "evidence": "main.ts applyRemoteSnapshot: `worldState = d.world;\\n    islandStates = d.islandStates;` (lines 2042-2043) \u2014 reassignment, not in-place mutation. Panels mounted by reference: `mountOrbitalUi(..., { world: worldState, islandStates, ...})` (1673), `mountDronesUi(..., { world: worldState, ...})` (1735), `mountRoutesUi(..., { world: worldState, islandStates, ...})` (1801), `mountSettlementUi(..., { world: worldState, islandStates, ...})` (1817). drones-ui reads captured ref: `for (const d of deps.world.drones)` (drones-ui.ts:894); routes-ui: `for (const r of deps.world.routes)` (routes-ui.ts:1020); orbital-ui: `deps.world.satellites.length` (orbital-ui.ts:537). applyRemoteSnapshot contains no panel re-bind / remount.",
+   "suggestedFix": "Do NOT reassign worldState/islandStates in applyRemoteSnapshot. Mutate the existing objects in place (clear and repopulate `worldState.islands`, `worldState.routes`, `worldState.drones`, `worldState.satellites`, \u2026 and the islandStates Map) exactly as islandSpecsById is already cleared+repopulated in place a few lines below \u2014 so the references the panels captured stay live. Alternatively give every panel a `getWorld()`/`getIslandStates()` getter instead of a captured value, mirroring the activeState() pattern.",
+   "refutedCount": 0,
+   "survivesCount": 2
+  },
+  {
+   "area": "client-panels",
+   "title": "Placement/relocate commit leaves placement mode armed during the remote round-trip \u2014 rapid clicks double-dispatch",
+   "category": "race-or-async",
+   "severity": "important",
+   "file": "src/placement-ui.ts:823",
+   "description": "On a left-click in placement mode, main.ts calls placementUi.attemptCommit() (main.ts:811). In REMOTE the land/relocate commit path fires the intent via `deps.gateway.placeBuilding(...)` (a Promise), returns `{ ok: false }` synchronously, and only calls cancel() (which exits placement mode) inside the async success callback. There is NO in-flight guard on the land/relocate path (the ocean path uses ++beginEpoch, but that only guards anchor-pick staleness, not the commit). So between the click and the server ack, placement mode stays active and a second click fires a second place-building intent \u2014 at a different cursor tile the player has since moved to, or a duplicate. The server's legality check will reject a true duplicate on an occupied tile, but two distinct tiles both get placed when the player intended one, and the cost is charged twice server-side.",
+   "evidence": "placement-ui.ts land commit: `if (gatewayResult instanceof Promise) { void (async () => { const result = await gatewayResult; if (!result.ok) { recordRejection(); return; } cancel(); deps.onPlaced(); })(); return { ok: false }; }` (lines ~816-823) \u2014 cancel() only inside the async closure. main.ts click handler: `if (accumDrag < CLICK_DRAG_PX_MAX && placementUi.isActive()) { ... placementUi.attemptCommit(); return; }` (main.ts:803-812) \u2014 isActive() stays true until the async cancel() lands. Same shape in orbital-ui launchSatellite (orbital-ui.ts:283) and settlement-ui dispatch (settlement-ui.ts:1118).",
+   "suggestedFix": "Set an in-flight flag (or bump beginEpoch) before dispatching the placement intent and have attemptCommit early-return while a commit is pending; clear it in both the success and failure async branches. Apply the same guard to the orbital launch and settlement dispatch async paths.",
+   "refutedCount": 0,
+   "survivesCount": 2
+  },
+  {
+   "area": "client-panels",
+   "title": "Trade reject in REMOTE mutates island state directly, bypassing the gateway; trade accept silently no-ops",
+   "category": "product-gap",
+   "severity": "minor",
+   "file": "src/main.ts:1949",
+   "description": "makeRemoteGateway.acceptTrade returns `{ ok: false, error: 'not supported yet' }`, so in REMOTE the accept handler returns early and trade acceptance is a silent no-op (no toast, no error). The reject callback, however, still writes `st.tradeAcceptCount += 1` and `st.tradeCooldownMs = \u2026` directly on the local island state and prunes the offer \u2014 a client-side mutation that bypasses the gateway and will be reverted on the next server snapshot. In practice trade offers never spawn in REMOTE (tickTradeOffers is inside the `if (!isRemote)` block), so neither handler is reachable today \u2014 meaning the \u00a7trade mechanic is entirely absent for REMOTE players, which is the new default boot mode. That is a product gap introduced by the migration (the server implements no trade intent).",
+   "evidence": "mutation-gateway.ts:655 `acceptTrade() { return Promise.resolve({ ok: false, error: 'not supported yet' } ...); }`. main.ts accept handler: `const result = await gateway.acceptTrade(offer); if (!result.ok) return;` (1949-1950). main.ts reject handler mutates directly: `st.tradeAcceptCount += 1; st.tradeCooldownMs = effectiveCadenceMs(...)` with no gateway call (1967-1971). tickTradeOffers is gated: it sits inside `if (!isRemote) { ... }` (main.ts:2499+), so offers never spawn in REMOTE.",
+   "suggestedFix": "Either implement trade intents server-side and route acceptTrade/reject through the gateway, or explicitly disable/hide the trade UI in REMOTE and document the gap in SPEC.md so code and spec stay in sync. At minimum, surface a 'not available' toast on accept instead of a silent no-op, and route the reject-side cooldown mutation through a gateway intent rather than mutating local state.",
+   "refutedCount": 0,
+   "survivesCount": 2
+  },
+  {
+   "area": "trust-surface",
+   "title": "Authoritative server economy runs advanceIsland with NO ctx \u2014 production silently diverges from the spec'd/LOCAL math (terrain recipes, modifiers, NC, lattice, cables, mirror-solar, toxicity, output-rotation all disabled)",
+   "category": "regression",
+   "severity": "critical",
+   "file": "server/src/game/runtime.ts:27",
+   "description": "loadAndCatchUp's only production call is `advanceIsland(state, now)` with no RatesContext and no wallClockNowMs. advanceIsland/computeRates read every cross-cutting production input from ctx: ctx.terrainAt (tile-dependent recipes \u2014 a Mine on an ore/coal vein produces iron_ore baseline instead of the vein output, \u00a78.1), ctx.worldSeed (gates advanceToxicityRolls at economy.ts:2555 AND \u00a78.10 deterministic output rotation \u2014 both DISABLED server-side), ctx.modifierMul / ctx.ncBuff / ctx.activeBonusMul / ctx.geothermalActive / ctx.solarBoost / ctx.cableComponent / lattice inventory+caps+crossIsland. The LOCAL client passes all of these (main.ts cableLocalCtxFor builds the full ctx incl. `terrainAt: spec?.terrainAt`). So the SERVER (the authoritative owner in the new REMOTE default) computes materially different inventory/production than the spec defines and than the LOCAL client produces for the identical world. SPEC Appendix C claims 'The server reuses the client's pure layer unchanged ... runs advanceIsland for every populated island' \u2014 but the call is not the same call, so authoritative state drifts from \u00a72.7/\u00a73.5/\u00a78.1/\u00a78.10/\u00a79.6/\u00a713.3/\u00a714.3. Green suite misses it: server runtime.test.ts only asserts inventory grows, never that production equals a terrain-aware/modifier-aware reference.",
+   "evidence": "runtime.ts:27  `if (state) advanceIsland(state, now);`  (no ctx, no wallClockNowMs)\neconomy.ts:2555 `if (ctx?.worldSeed) { advanceToxicityRolls(...); }`  // never runs server-side\neconomy.ts:1343 `const recipe = resolveRecipe(def, b, terrainAt, ...)`  // terrainAt undefined \u21d2 bare-defId recipe\nmain.ts:2157 (LOCAL ctx) `terrainAt: spec?.terrainAt,` + modifierMul/ncBuff/solarBoost/cableComponent all set",
+   "suggestedFix": "Build the same per-island RatesContext server-side that main.ts.advanceEconomy builds (at minimum worldSeed + terrainAt + modifierMul; ideally the full NC/lattice/cable/solar precompute) and pass it plus wallClockNowMs into advanceIsland. Extract the client's per-tick ctx assembly into a shared pure helper so server and client cannot drift. Add a server test that advances a world with an ore-vein Mine and asserts the vein output (not iron_ore).",
+   "refutedCount": 0,
+   "survivesCount": 2
+  },
+  {
+   "area": "trust-surface",
+   "title": "POST /api/game/import persists any structurally-valid client snapshot as authoritative \u2014 direct forge of xp/level/inventory, defeating the migration's anti-cheat objective",
+   "category": "security",
+   "severity": "critical",
+   "file": "server/src/game/routes.ts:23",
+   "description": "The /api/game/import handler accepts a client-supplied snapshot and, after only shape/version validation (isValidSaveSnapshot) and a 'does deserializeWorld throw' check, writes it verbatim as the account's authoritative save. There is NO reachability check: a logged-in player can POST a hand-crafted snapshot with every island populated at T5, maxed level/xp, and full inventory, and the server treats it as truth. The client even has a built-in path that POSTs a locally-controlled IndexedDB save here (main.ts:223 importLocalSaveOrCreate), and LOCAL mode (the ?local opt-out) lets a player generate/edit that save freely. This directly contradicts the slice5 finding doc's central conclusion ('the client cannot forge xp/level/inventory'; doc \u00a72) and the stated migration objective ('the server owns all state and validates every mutation by re-running the pure rules'). The intent gateway is carefully anti-cheat'd, but import is a wide-open side door around it. The only guard is hasSave (one-per-account), trivially satisfied by a fresh signup.",
+   "evidence": "routes.ts:28 `if (!isValidSaveSnapshot(snapshot)) return reply.code(400)...`\nroutes.ts:34 `deserializeWorld(snapshot, Date.now(), Date.now());`  // only checks it doesn't throw\nroutes.ts:39 `await saveSnapshot(pool, userId, snapshot);`  // stored verbatim as authoritative\nroutes.test.ts:56 only test is 'imports a valid snapshot -> 201' \u2014 no god-mode-rejection test exists",
+   "suggestedFix": "Either (a) remove the import endpoint and migrate local saves through a server-validated path that re-derives reachable state, or (b) gate import behind a non-player trust boundary, or (c) at minimum quarantine imported saves (flag the account, exclude from any shared/competitive surface). If kept for the one-time LOCAL\u2192REMOTE migration, restrict it to migrate-once-per-NEW-account with an explicit server-side sanity bound (e.g. reject xp/level/inventory beyond what the snapshot's lastTick could plausibly yield). Update the slice5 doc \u2014 its 'cannot forge state' conclusion is false while this endpoint exists.",
+   "refutedCount": 1,
+   "survivesCount": 1
+  },
+  {
+   "area": "trust-surface",
+   "title": "REMOTE ocean-platform placement is completely broken \u2014 gateway maps it to place-building, whose server validatePlacement rejects every oceanPlacement def with 'def-is-ocean'",
+   "category": "regression",
+   "severity": "important",
+   "file": "server/src/game/intents.ts:208",
+   "description": "The client gateway has only one placement method (placeBuilding) and it sends anchorIslandId/terrainTarget/terrainShotMs in the payload (mutation-gateway.ts:542-544). But the server 'place-building' intent (a) destructures only {islandId,defId,x,y,rotation} \u2014 dropping anchorIslandId/terrainTarget/terrainShotMs \u2014 and (b) runs validatePlacement, which bails FIRST with {ok:false,reason:'def-is-ocean'} for ANY def with oceanPlacement===true (placement.ts:270). So in REMOTE mode (the new default boot) the entire \u00a74 Task-10 ocean-platform mechanic is unplaceable: the server rejects it outright. Land generic-storage cargoLabel and terraformer terrainTarget are likewise dropped, so those place with wrong defaults (iron_ore label / no terraform target). No test exercises ocean placement through the WS path, so the green suite misses it.",
+   "evidence": "mutation-gateway.ts:542 `anchorIslandId: options.anchorIslandId,` (sent)\nintents.ts:189 `const { islandId, defId, x, y, rotation } = payload;` (anchor/terrain ignored)\nintents.ts:208 `const v = validatePlacement(spec, state, typedDefId, x, y, rot);`\nplacement.ts:270 `if (def.oceanPlacement === true) { return { ok: false, reason: 'def-is-ocean' }; }`",
+   "suggestedFix": "Add a dedicated ocean-placement intent (or extend place-building to read anchorIslandId and route oceanPlacement defs through the ocean validator + placeBuilding's anchorIslandId param), and pass cargoLabel/terrainTarget/terrainShotMs through to placeBuilding. Add WS-path tests for ocean platform, cargo-labeled storage, and terraformer placement.",
+   "refutedCount": 0,
+   "survivesCount": 2
+  },
+  {
+   "area": "trust-surface",
+   "title": "REMOTE dispatch-drone drops waypoints and selectedTier \u2014 T5 path-drawn drones become straight-line default-tier drones server-side",
+   "category": "regression",
+   "severity": "important",
+   "file": "server/src/game/intents.ts:338",
+   "description": "The client gateway sends waypoints and selectedTier in the dispatch-drone payload (mutation-gateway.ts:572-583), and the pure dispatchDrone consumes both (drones.ts:416 waypoints, :423 selectedTier; isPathDrawn = waypoints.length>=2 IS the T5 mechanic). But the server intent destructures only {islandId,originX,originY,dirX,dirY,fuelLoaded} and calls dispatchDrone(world, state, originX, originY, dirX, dirY, fuelLoaded, now) \u2014 omitting waypoints and selectedTier. In REMOTE mode a player who draws a multi-waypoint T5 path, or picks a cheaper T2 drone for a short hop, gets a straight-line island-tier drone instead: wrong fuel grade consumed, wrong flight path, and the \u00a711.5 path-drawn T5 feature silently disabled. The handler comment even claims it validates 'all six numbers finite' as the full contract, masking the dropped fields.",
+   "evidence": "mutation-gateway.ts:581-582 `waypoints,\\n selectedTier,` (sent)\nintents.ts:326 `const { islandId, originX, originY, dirX, dirY, fuelLoaded } = payload;`\nintents.ts:338 `dispatchDrone(game.world, island.state, originX as number, ..., fuelLoaded as number, now)` (8 args, no waypoints/tier)\ndrones.ts:443 `const isPathDrawn = waypoints !== undefined && waypoints.length >= 2;`",
+   "suggestedFix": "Validate and forward waypoints (array of {x,y} finite pairs) and selectedTier (DroneTier|'5-path') in the dispatch-drone intent and pass them into dispatchDrone. Add a WS-path test asserting a path-drawn drone is dispatched as T5 with the supplied waypoints.",
+   "refutedCount": 0,
+   "survivesCount": 2
+  },
+  {
+   "area": "trust-surface",
+   "title": "Periodic WS state-push re-advances + re-persists the save every second under load \u2014 silent extra production/wear cadence and write amplification not present in LOCAL",
+   "category": "code-health",
+   "severity": "minor",
+   "file": "server/src/game/ws.ts:100",
+   "description": "Every connected socket runs setInterval(pushState, 1000ms); pushState calls loadAndCatchUp (ws.ts:41) which advances every populated island AND writes the advanced snapshot back via saveSnapshot (runtime.ts:29) \u2014 i.e. a DB write per account per second per open connection, plus an extra write on every accepted intent's trailing pushState (ws.ts:119). Because advanceIsland integrates [lastTick, now], the result is integration-correct, but the design intends loadAndCatchUp for catch-up, not as a 1Hz persistence loop; it couples read-only state pushes to authoritative writes. Combined with finding #1 (no ctx), every one of these writes also bakes the diverged (terrain/modifier-blind) production into the durable store. Multiple tabs for one account = multiple overlapping 1s advance+write loops on the same row (serialized only within a single connection's chain, not across connections).",
+   "evidence": "ws.ts:100 `const tickInterval = setInterval(() => { chain = chain.then(async () => { await pushState(...) }) ...}, pushIntervalMs);`\nws.ts:41 `const game = await loadAndCatchUp(pool, userId, Date.now());`\nruntime.ts:29 `await saveSnapshot(pool, userId, advanced);`  // write on every push",
+   "suggestedFix": "Split read-only projection from catch-up persistence: have the periodic push compute+send state from an in-memory live game without writing, and persist on a coarser cadence (or only on intent / disconnect). Guard against concurrent connections for the same account (single live game per user) so two tabs don't run competing advance+write loops on one row.",
+   "refutedCount": 0,
+   "survivesCount": 2
+  },
+  {
+   "area": "spec-build-deploy",
+   "title": "AGENTS.md still declares \"No React, no backend. Pure client-side\" after the server migration",
+   "category": "spec-drift",
+   "severity": "important",
+   "file": "AGENTS.md:7",
+   "description": "The 60-commit migration added a Fastify+Postgres backend under server/ and made REMOTE (server-authoritative) the DEFAULT boot mode. SPEC.md \u00a715.6 was updated with a 'Superseded' note in this same range (commit 3e8df3f), but AGENTS.md \u2014 the primary guidance file coding agents read first \u2014 was NOT touched at all in the entire range (git diff --stat 0bf2ed2~1..HEAD -- AGENTS.md is empty). Line 7 still asserts 'No React, no backend. Pure client-side per SPEC.md \u00a715.6.' and cites the very \u00a7 that now says the opposite. The Architecture section also never mentions the server/ workspace, the REMOTE/LOCAL split, the mutation-gateway seam, or that tests now include a server project. This violates the repo's own rule (AGENTS.md 'Source of truth': 'Every change that alters behavior must update SPEC.md in the same change \u2014 code and spec move together'); the rule was honored for SPEC.md but not for AGENTS.md, leaving an authoritative doc making a flatly false claim about the architecture.",
+   "evidence": "AGENTS.md:7 \u2014 `Vite 5 + TypeScript strict + PixiJS 8 + vitest. No React, no backend. Pure client-side per \\`SPEC.md\\` \u00a715.6.`  vs  SPEC.md \u00a715.6 (updated this range): `**Superseded:** the browser client is now display + intent-sender only; the server owns all state/persistence for server accounts (REMOTE default).`  Confirmed AGENTS.md untouched: `git diff --stat 0bf2ed2~1..HEAD -- AGENTS.md` \u2192 (no output).",
+   "suggestedFix": "Update AGENTS.md \u00a7Stack to drop 'no backend / Pure client-side' and reference the server-authoritative split (point at SPEC \u00a715.6 superseded note + Appendix C). Add a short Architecture subsection describing the server/ workspace (Fastify+Postgres, REMOTE default, LOCAL fallback, mutation-gateway, WS intent transport) so agents don't act on the stale 'pure client-side' premise.",
+   "refutedCount": 0,
+   "survivesCount": 2
+  },
+  {
+   "area": "spec-build-deploy",
+   "title": "AGENTS.md documents `npm test` as hermetic, but the migration made it require a live Postgres",
+   "category": "spec-drift",
+   "severity": "minor",
+   "file": "AGENTS.md:15",
+   "description": "vitest.config.ts (added this range, +26 lines) turns the root test run into a two-project config: a 'client' project and a 'server' project whose globalSetup (./server/src/test-setup.ts) connects to Postgres, runs migrations, and whose suites TRUNCATE/migrate a real database. So `npm test` (= `vitest run`) now fails outright if Postgres is not running. AGENTS.md \u00a7Commands still describes it as `npm test  # vitest run (one-shot, all tests)` with no database prerequisite, and the surrounding doc gives no hint that a DB must be up or that DATABASE_URL defaults to postgresql:///robot_islands_test. An agent following the documented command on a box without PG will see the whole suite error and mistake it for breakage.",
+   "evidence": "vitest.config.ts:12-22 \u2014 server project with `globalSetup: ['./server/src/test-setup.ts']` and `fileParallelism: false` (comment: 'Server suites truncate shared tables and migrate/drop schema, so they must not race ... the single test database'). test-setup.ts:6-9 \u2014 `const url = process.env.DATABASE_URL ?? 'postgresql:///robot_islands_test'; ... const pool = createPool(url); await runMigrations(pool);`. AGENTS.md:15 \u2014 `npm test           # vitest run (one-shot, all tests)`.",
+   "suggestedFix": "Amend AGENTS.md \u00a7Commands: note that `npm test` now runs both the client and server vitest projects and the server project needs a running Postgres (DATABASE_URL defaults to postgresql:///robot_islands_test). Optionally document `npx vitest run --project client` for a DB-free client-only run.",
+   "refutedCount": 0,
+   "survivesCount": 2
+  },
+  {
+   "area": "spec-build-deploy",
+   "title": "server/tsconfig.json excludes all *.test.ts, hiding 13 real strict-mode type errors in migration test code",
+   "category": "code-health",
+   "severity": "important",
+   "file": "server/tsconfig.json:18",
+   "description": "The only server typecheck command is `npm run build -w server` = `tsc --noEmit`, and server/tsconfig.json excludes `**/*.test.ts`. Vitest does not typecheck. So none of the 14 server test files added by this migration are ever typechecked \u2014 yet they live under the repo's strict discipline (strict, noUncheckedIndexedAccess, noUnusedLocals). Removing the test exclude and running the project's exact `tsc --noEmit` surfaces 13 genuine type errors in migration-introduced test code (possibly-undefined indexed reads, assignment to a readonly literal property, an unused import, a number|undefined passed where number expected). The 'server typecheck clean' baseline only holds because these files are excluded; this contradicts AGENTS.md \u00a7TypeScript discipline ('New code must compile clean under these'). It also means a type-level regression in server test fixtures (e.g. a wrong intent payload shape) would never be caught.",
+   "evidence": "server/tsconfig.json:18 \u2014 `\"exclude\": [\"dist\", \"**/*.test.ts\"]`. With that exclude removed, `tsc --noEmit` (project options) emits e.g.: `src/game/runtime.test.ts(48,9): error TS2540: Cannot assign to 'v' because it is a read-only property.` (line 48: `v23.v = 23 as SaveSnapshot['v'];` \u2014 `v` is `typeof SCHEMA_VERSION` literal/readonly), plus `src/game/intents.test.ts(24,1): error TS6133: 'ResourceId' is declared but its value is never read.`, `intents.test.ts(185,40): error TS2345: ... 'undefined' is not assignable to 'number | bigint'`, and TS18048 'possibly undefined' at intents.test.ts lines 667/1077-1087. 13 errors total; `npm run build` with the exclude in place exits 0.",
+   "suggestedFix": "Either add a typecheck command that includes test files (a separate tsconfig.test.json with the same options but include of `src/**/*.test.ts`, wired into the build/CI), or fix the 13 errors and stop excluding tests. At minimum fix the readonly-`v` assignment (build via the typed snapshot rather than mutating `.v`) and the unused/undefined issues so the test fixtures match production types.",
+   "refutedCount": 0,
+   "survivesCount": 2
+  },
+  {
+   "area": "spec-build-deploy",
+   "title": "server/package.json declares main: dist/index.js but there is no dist and deploy explicitly forbids one",
+   "category": "build-deploy",
+   "severity": "minor",
+   "file": "server/package.json",
+   "description": "The server workspace package.json sets `\"main\": \"dist/index.js\"`, but the server is run directly from TypeScript via tsx (start = `tsx src/index.ts`, systemd ExecStart = `node --import tsx .../server/src/index.ts`), and the deploy README states there is intentionally no compiled dist (`npm run build -w server` is `tsc --noEmit`, typecheck only). The `main` field therefore points at an artifact that never exists. It's harmless to the tsx runtime but is a misleading entry point: any tool or downstream `require/import '@robot-islands/server'` would resolve to a nonexistent file, and it invites someone to assume a build step that the deploy docs deliberately omit.",
+   "evidence": "server/package.json \u2014 `\"main\": \"dist/index.js\"`, `\"build\": \"tsc --noEmit\"`, `\"start\": \"tsx src/index.ts\"`. server/deploy/README.md:7 \u2014 `npm run build -w server` ... `(typecheck only \u2014 tsc --noEmit; the unit runs the TS directly via tsx, there is no dist/)`. server/deploy/robot-islands-auth.service:19 \u2014 `ExecStart=/root/.nvm/.../node --import tsx /root/robot-islands/server/src/index.ts`.",
+   "suggestedFix": "Change `main` to `src/index.ts` (matching the tsx-direct execution model) or drop the `main` field entirely since the package is `private` and never imported as a built library.",
+   "refutedCount": 1,
+   "survivesCount": 1
+  },
+  {
+   "area": "transport-intent",
+   "title": "place-building intent drops cargoLabel \u2014 every generic-storage building (Crate/Warehouse) is labeled iron_ore in REMOTE regardless of the player's picker selection",
+   "category": "bug",
+   "severity": "important",
+   "file": "server/src/game/intents.ts:189,213",
+   "description": "The client cargo-label picker (cargo-label-picker.ts) lets the player choose the resource a Crate/Warehouse holds and the gateway sends it as payload.cargoLabel (mutation-gateway.ts:541). The server place-building handler destructures only {islandId,defId,x,y,rotation} and calls placeBuilding() with 7 args \u2014 no cargoLabelOverride \u2014 so the pure fn falls back to DEFAULT_CARGO_LABEL ('iron_ore', placement.ts:57). Since REMOTE is the default boot mode, the picker is cosmetic: all crates become iron_ore. User-reported ground truth; MISSED by the detection workflow.",
+   "evidence": "intents.ts:189 const {islandId,defId,x,y,rotation}=payload; (no cargoLabel)\nintents.ts:213 placeBuilding(spec,state,typedDefId,x,y,rot,makePlacedIdGenerator(spec)) \u2014 7 args\nplacement.ts:735 (cargoLabelOverride ?? DEFAULT_CARGO_LABEL); placement.ts:57 DEFAULT_CARGO_LABEL='iron_ore'\nLOCAL gateway forwards it (mutation-gateway.ts:245)",
+   "suggestedFix": "In the place-building handler validate cargoLabel via isValidResourceId and forward it (plus nowMs) to placeBuilding as cargoLabelOverride.",
+   "refutedCount": 0,
+   "survivesCount": 2,
+   "source": "ground-truth (user) + parity-sweep"
+  },
+  {
+   "area": "transport-intent",
+   "title": "place-building intent also drops terrainTarget/terrainShotMs and nowMs \u2014 terrain-modifier building placement is broken in REMOTE",
+   "category": "bug",
+   "severity": "important",
+   "file": "server/src/game/intents.ts:189,213",
+   "description": "Same handler: the client sends terrainTarget + terrainShotMs (mutation-gateway.ts:543-544) for terrain-modifier defs (\u00a78.9 \u2014 pays conversion cost on a chosen terrain) and nowMs; the server forwards none of them to placeBuilding (params 8/11/12). So terrain-modifier placement uses defaults and the upfront \u00a78.9 conversion-cost path keyed on terrainTargetOverride never fires server-side. Third symptom of the place-building payload-drop class (alongside cargoLabel and anchorIslandId/C20).",
+   "evidence": "mutation-gateway.ts:542-545 sends anchorIslandId/terrainTarget/terrainShotMs; LOCAL gateway forwards all (mutation-gateway.ts:244-248); server handler forwards none.",
+   "suggestedFix": "Validate + forward terrainTarget (TerrainKind), terrainShotMs (finite number), nowMs to placeBuilding.",
+   "refutedCount": 0,
+   "survivesCount": 2,
+   "source": "parity-sweep (lead)"
+  }
+ ],
+ "rejected": [
+  {
+   "area": "transport-intent",
+   "title": "create-route distance is computed from constituent-merged centres but eligibility allows any populated island \u2014 route to a merged-away constituent silently uses stale geometry",
+   "severity": "minor",
+   "file": "server/src/game/intents.ts:377-399",
+   "refutedCount": 2,
+   "survivesCount": 0,
+   "why": "The claim rests on three premises, all of which are false against the actual code.\n\n(1) \"If populatedIslands() applies any filtering beyond the raw flag (e.g. excluding merged constituents)...\" \u2014 populatedIslands() at src/routes-ui.ts:436-442 does literally `for (const s of deps.world.islands) { if (s.populated) out.push(s); }` and nothing else. The server handler's check `if (!fromSpec.populated)` / `if (!toSpec.populated)` (intents.ts:383-384) is semantically identical. There is zero filtering divergence; the conditional that the entire bug hinges on is false. The suggestedFix (import populatedIslands so server matches client) would be a no-op refactor \u2014 the predicates already match.\n\n(2) \"After island merging, constituent island specs can remain in world.islands referenced by id while their geometry no longer represents a routable standalone island.\" \u2014 There is NO island-merge logic on the server. `grep -rni \"merge|constituent|absorb\" server/` returns nothing; merge exists only in the client (src/island-merge.ts). The server's world.islands is never mutated by a merge, so the described stale-geometry server state is never produced.\n\n(3) Even the client's merge does the opposite of what the claim states: src/island-merge.ts:281-282 removes the absorbed island from world.islands via `world.islands.findIndex(...)` + `splice(idx, 1)`. The constituent does NOT remain in the array, so a route could not target a merged-away constituent by id. Merge also rewrites existing routes (lines 254-257). The \"stale geometry / silently uses stale centres\" mechanism therefore cannot occur.\n\nThe claim is self-flagged severity:minor, confidence:low, and is purely hypothetical (\"If ... applies any filtering\"). Verified independently: no filtering exists, no server merge exists, and merge removes (not retains) constituents. No counterexample is constructible."
+  },
+  {
+   "area": "client-transport",
+   "title": "Trade acceptance silently no-ops in REMOTE (default boot mode) with no user feedback",
+   "severity": "important",
+   "file": "src/mutation-gateway.ts:655",
+   "refutedCount": 2,
+   "survivesCount": 0,
+   "why": "The claim asserts that in REMOTE mode (the default boot mode) a user can click \"Accept\" on a trade offer and it silently no-ops via the gateway.acceptTrade() stub. I verified each cited fact, then traced reachability of the Accept button in REMOTE \u2014 which the claim never checked.\n\nConfirmed cited facts: src/mutation-gateway.ts:655-657 returns {ok:false,'not supported yet'}; src/remote-boot.ts:8-14 makes REMOTE the default; src/main.ts:1949-1950 does `if (!result.ok) return;` with no toast.\n\nBut the claim's scenario is unreachable. Trade offers live only in `tradeRuntime.offers`, initialized to [] at main.ts:1942. The sole code that populates it is `tickTradeOffers` (main.ts:2530, which pushes offers at trade.ts:249). That call sits INSIDE the `if (!isRemote)` block that opens at main.ts:2499 and closes at main.ts:2700 \u2014 so it never runs in REMOTE. The only other writes to tradeRuntime.offers (main.ts:1961, 1973) are filter-removals inside the accept/reject callbacks, which are themselves only reachable by clicking a rendered card.\n\nThe trade card is rendered by tradeUi.update (main.ts:2701, outside the gate, always runs) but reads from the always-empty offers list: trade-ui.ts:54-64 \u2014 when `!here && elsewhere === 0` it sets the card to display:none and returns, so the Accept button (built only when an offer exists, trade-ui.ts:84/94) is never created. Therefore in REMOTE there is no offer card and no Accept button to click; acceptTrade()'s {ok:false} stub is unreachable dead code, not a silently-failing interactive affordance. The claim's core assertion (\"clicking Accept does nothing / trade broken for all default users\") is false \u2014 there is nothing to click. No user-facing product gap exists. (A minor real fact remains \u2014 the stub is dead in REMOTE \u2014 but that is not the claimed bug.)"
+  },
+  {
+   "area": "client-panels",
+   "title": "Open panels never repaint from server snapshots \u2014 applyRemoteSnapshot refreshes HUD + map layers but not the DOM side-panels",
+   "severity": "important",
+   "file": "src/main.ts:2075",
+   "refutedCount": 2,
+   "survivesCount": 0,
+   "why": "The claim's core symptom \u2014 \"an open panel shows stale state after every remote mutation until the panel is manually toggled closed/open\" \u2014 is false. The DOM side-panels are refreshed unconditionally every render frame by the Pixi ticker, in REMOTE mode too, NOT only when applyRemoteSnapshot runs.\n\nWhat I verified independently:\n\n1. The factual sub-claim is correct: applyRemoteSnapshot (main.ts:2039-2081) calls only refreshRetainedRates(nowWall) and rebuildWorldLayers() \u2014 no panel refresh. True.\n\n2. But the consequence is wrong. The ticker (app.ticker.add at main.ts:2460) has an `if (!isRemote) { ... }` block that wraps ONLY the local economy advance and closes at line 2673. The panel-refresh block runs AFTER that, outside the guard: dronesUi.refresh(now), routesUi.refresh(now), settlementUi.refresh(now), orbitalUi.refresh() (lines 2715-2718) and inspector.refresh() (line 2735) execute every frame in both LOCAL and REMOTE. routesUi.refresh re-renders from deps.world.routes (routes-ui.ts:64, 646, 1018, etc.) every call. So panels repaint ~60x/sec regardless of applyRemoteSnapshot \u2014 there is no \"stale until manually toggled\" state.\n\n3. Whether the per-frame repaint shows CORRECT data after a snapshot depends on whether the panel's world reference is live. routesUi is mounted with `world: worldState` by value (main.ts:1801) and applyRemoteSnapshot does `worldState = d.world` (line 2042), swapping to a NEW object \u2014 so deps.world is stale. That is the \"live references\" issue, which the claim explicitly declares itself INDEPENDENT of (finding #1).\n\n4. The claim's suggested fix is self-defeating: calling routesUi.refresh() inside applyRemoteSnapshot would re-render from the stale deps.world, NOT the new d.world, so it would not fix the described stale-panel symptom. The root cause is the stale reference (finding #1), which the claim disclaims \u2014 so this finding both mis-describes the mechanism and proposes a fix that wouldn't work for the failure it names."
+  }
+ ],
+ "parity_note": "Systematic intent payload-field parity sweep: exactly place-building (drops cargoLabel/anchorIslandId/terrainTarget/terrainShotMs/nowMs) and dispatch-drone (drops waypoints/selectedTier) lack field parity; the other 27 intents match."
+}
