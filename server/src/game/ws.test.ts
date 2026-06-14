@@ -10,7 +10,8 @@ import WebSocket from 'ws';
 import type { AddressInfo } from 'node:net';
 import { testPool, resetDb, buildTestApp } from '../test-helpers.js';
 import { SCHEMA_VERSION } from '../../../src/persistence.js';
-import { SlidingWindowLimiter } from './ws.js';
+import { SlidingWindowLimiter, WS_MAX_SOCKETS_PER_USER } from './ws.js';
+import { loadSnapshot } from './persistence.js';
 
 const pool = testPool();
 const app = buildTestApp(pool);
@@ -24,18 +25,27 @@ beforeAll(async () => {
 });
 afterAll(async () => { await app.close(); await pool.end(); });
 
+const TRUSTED_ORIGIN = 'http://localhost:5173';
+const FOREIGN_ORIGIN = 'https://evil.example.com';
+
 function cookieFrom(res: { headers: Record<string, unknown> }): string {
   const raw = res.headers['set-cookie'];
   return (Array.isArray(raw) ? raw[0] : String(raw)).split(';')[0]!;
 }
 
-/** Sign up a fresh account, create its game, return the session cookie. */
-async function authedCookieWithGame(email: string): Promise<string> {
+/** Sign up a fresh account, create its game, return the session cookie and user id. */
+async function authedUserWithGame(email: string): Promise<{ cookie: string; userId: string }> {
   const r = await app.inject({ method: 'POST', url: '/api/auth/signup', payload: { email, password: 'a-strong-password' } });
   const cookie = cookieFrom(r);
+  const userId = (r.json() as { id: string }).id;
   // A game must exist before intents can apply.
   await app.inject({ method: 'POST', url: '/api/game/new', headers: { cookie } });
-  return cookie;
+  return { cookie, userId };
+}
+
+/** Sign up a fresh account, create its game, return the session cookie. */
+async function authedCookieWithGame(email: string): Promise<string> {
+  return (await authedUserWithGame(email)).cookie;
 }
 
 /** Resolve when the socket opens, or rejects the upgrade. An aborted upgrade
@@ -101,18 +111,32 @@ const PLACE = (seq: number) => ({
 });
 
 describe('game ws', () => {
-  it('rejects an unauthenticated upgrade', async () => {
-    const ws = new WebSocket(baseWsUrl); // no cookie
+  it('rejects an upgrade with a missing Origin header', async () => {
+    const cookie = await authedCookieWithGame('wsoriginmissing@x.com');
+    const ws = new WebSocket(baseWsUrl, { headers: { cookie } }); // no origin
     const res = await openOutcome(ws);
-    // The upgrade is aborted in preValidation with a 401 BEFORE it completes,
-    // so the client never gets an open socket — it sees the HTTP 401 instead.
+    expect(res).toMatchObject({ status: 403 });
+    ws.close();
+  });
+
+  it('rejects an upgrade with a foreign Origin header (CSWSH)', async () => {
+    const { cookie } = await authedUserWithGame('wsoriginforeign@x.com');
+    const ws = new WebSocket(baseWsUrl, { headers: { cookie }, origin: FOREIGN_ORIGIN });
+    const res = await openOutcome(ws);
+    expect(res).toMatchObject({ status: 403 });
+    ws.close();
+  });
+
+  it('rejects an unauthenticated upgrade even with a trusted origin', async () => {
+    const ws = new WebSocket(baseWsUrl, { origin: TRUSTED_ORIGIN }); // no cookie
+    const res = await openOutcome(ws);
     expect(res).toMatchObject({ status: 401 });
     ws.close();
   });
 
   it('round-trips a legal place-building with matching seq and a projection', async () => {
     const cookie = await authedCookieWithGame('wsuser1@x.com');
-    const ws = new WebSocket(baseWsUrl, { headers: { cookie } });
+    const ws = new WebSocket(baseWsUrl, { headers: { cookie }, origin: TRUSTED_ORIGIN });
     await awaitOpen(ws);
     const ack = await sendAndAwait(ws, PLACE(42));
     expect(ack.seq).toBe(42);
@@ -124,7 +148,7 @@ describe('game ws', () => {
 
   it('returns ok:false for an unaffordable intent', async () => {
     const cookie = await authedCookieWithGame('wsuser2@x.com');
-    const ws = new WebSocket(baseWsUrl, { headers: { cookie } });
+    const ws = new WebSocket(baseWsUrl, { headers: { cookie }, origin: TRUSTED_ORIGIN });
     await awaitOpen(ws);
     const ack = await sendAndAwait(ws, {
       type: 'place-building',
@@ -139,7 +163,7 @@ describe('game ws', () => {
 
   it('serializes two back-to-back envelopes; both ack and the save is intact', async () => {
     const cookie = await authedCookieWithGame('wsuser3@x.com');
-    const ws = new WebSocket(baseWsUrl, { headers: { cookie } });
+    const ws = new WebSocket(baseWsUrl, { headers: { cookie }, origin: TRUSTED_ORIGIN });
     await awaitOpen(ws);
 
     // Collect the next two ack frames, then fire two placements at DIFFERENT
@@ -175,7 +199,7 @@ describe('game ws', () => {
 
   it('pushes a state message immediately on connect', async () => {
     const cookie = await authedCookieWithGame('wsstate1@x.com');
-    const ws = new WebSocket(baseWsUrl, { headers: { cookie } });
+    const ws = new WebSocket(baseWsUrl, { headers: { cookie }, origin: TRUSTED_ORIGIN });
     await awaitOpen(ws);
     const state = await awaitMessage(ws);
     expect(state.type).toBe('state');
@@ -187,7 +211,7 @@ describe('game ws', () => {
 
   it('pushes a state message after a successful intent', async () => {
     const cookie = await authedCookieWithGame('wsstate2@x.com');
-    const ws = new WebSocket(baseWsUrl, { headers: { cookie } });
+    const ws = new WebSocket(baseWsUrl, { headers: { cookie }, origin: TRUSTED_ORIGIN });
     await awaitOpen(ws);
     await awaitMessage(ws); // consume initial state
     ws.send(JSON.stringify(PLACE(7)));
@@ -209,7 +233,7 @@ describe('game ws', () => {
     await tickApp.listen({ host: '127.0.0.1', port: 0 });
     const addr = tickApp.server.address() as AddressInfo;
     const url = `ws://127.0.0.1:${addr.port}/api/game/ws`;
-    const ws = new WebSocket(url, { headers: { cookie } });
+    const ws = new WebSocket(url, { headers: { cookie }, origin: TRUSTED_ORIGIN });
     await awaitOpen(ws);
     await awaitMessage(ws); // consume initial state
     const tick = await awaitMessage(ws, 1000);
@@ -233,7 +257,7 @@ describe('game ws', () => {
     await limApp.listen({ host: '127.0.0.1', port: 0 });
     const addr = limApp.server.address() as AddressInfo;
     const url = `ws://127.0.0.1:${addr.port}/api/game/ws`;
-    const ws = new WebSocket(url, { headers: { cookie } });
+    const ws = new WebSocket(url, { headers: { cookie }, origin: TRUSTED_ORIGIN });
     await awaitOpen(ws);
 
     const acks: Array<Record<string, unknown>> = [];
@@ -262,6 +286,52 @@ describe('game ws', () => {
     ws.close();
     await limApp.close();
     await limPool.end();
+  });
+
+  it('enforces a per-account socket cap', async () => {
+    const { cookie } = await authedUserWithGame('wscap@x.com');
+    const sockets: WebSocket[] = [];
+    for (let i = 0; i < WS_MAX_SOCKETS_PER_USER; i++) {
+      const ws = new WebSocket(baseWsUrl, { headers: { cookie }, origin: TRUSTED_ORIGIN });
+      await awaitOpen(ws);
+      sockets.push(ws);
+    }
+    // Give the server handlers a tick to register all open sockets before the
+    // overflow connection arrives.
+    await new Promise((r) => setTimeout(r, 50));
+    const overflow = new WebSocket(baseWsUrl, { headers: { cookie }, origin: TRUSTED_ORIGIN });
+    const closeCode = await new Promise<number>((resolve) => {
+      overflow.once('close', (code) => resolve(code));
+    });
+    expect(closeCode).toBe(1008);
+    for (const ws of sockets) ws.close();
+  });
+
+  it('periodic pushes include a bounded persisting checkpoint', async () => {
+    const { cookie, userId } = await authedUserWithGame('wscheck@x.com');
+    const before = await loadSnapshot(pool, userId);
+    expect(before).not.toBeNull();
+    const initialSavedAt = before!.savedAt;
+
+    const ckPool = testPool();
+    const ckApp = buildTestApp(ckPool, { wsStatePushIntervalMs: 20, wsCheckpointIntervalMs: 80 });
+    await ckApp.listen({ host: '127.0.0.1', port: 0 });
+    const addr = ckApp.server.address() as AddressInfo;
+    const url = `ws://127.0.0.1:${addr.port}/api/game/ws`;
+    const ws = new WebSocket(url, { headers: { cookie }, origin: TRUSTED_ORIGIN });
+    await awaitOpen(ws);
+    await awaitMessage(ws); // consume initial state
+
+    // Wait long enough for at least one periodic tick to decide to checkpoint.
+    await new Promise((r) => setTimeout(r, 250));
+
+    const after = await loadSnapshot(ckPool, userId);
+    expect(after).not.toBeNull();
+    expect(after!.savedAt).toBeGreaterThan(initialSavedAt);
+
+    ws.close();
+    await ckApp.close();
+    await ckPool.end();
   });
 });
 

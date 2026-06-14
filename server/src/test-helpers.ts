@@ -1,5 +1,5 @@
 import { createPool, type Pool } from './db.js';
-import { assertTestDatabase } from './config.js';
+import { assertTestDatabase, DEFAULT_ALLOWED_WS_ORIGINS } from './config.js';
 import { buildApp } from './app.js';
 import type { FastifyInstance } from 'fastify';
 
@@ -16,14 +16,16 @@ export async function resetDb(pool: Pool): Promise<void> {
 
 export function buildTestApp(
   pool: Pool,
-  opts: { wsStatePushIntervalMs?: number; wsIntentRateLimit?: number; wsIntentRateWindowMs?: number } = {},
+  opts: { wsStatePushIntervalMs?: number; wsIntentRateLimit?: number; wsIntentRateWindowMs?: number; wsCheckpointIntervalMs?: number } = {},
 ): FastifyInstance {
   return buildApp({
     pool,
     cookieSecure: false,
+    allowedWsOrigins: DEFAULT_ALLOWED_WS_ORIGINS,
     authRateLimitMax: 100000,
     wsStatePushIntervalMs: opts.wsStatePushIntervalMs,
     wsIntentRateLimit: opts.wsIntentRateLimit,
     wsIntentRateWindowMs: opts.wsIntentRateWindowMs,
+    wsCheckpointIntervalMs: opts.wsCheckpointIntervalMs,
   });
 }
