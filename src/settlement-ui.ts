@@ -39,7 +39,7 @@ import {
 } from './settlement.js';
 import { tierForLevel } from './skilltree.js';
 import { VISION_BLUE, type IslandSpec, type WorldState } from './world.js';
-import { unwrapGatewayResult, type MutationGateway } from './mutation-gateway.js';
+import { type MutationGateway } from './mutation-gateway.js';
 
 function styled(el: HTMLElement, css: string): void {
   el.style.cssText = css;
@@ -1075,9 +1075,24 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     targetId = targetSpec.id;
     if (kind === 'anchor') {
       if (!originId) return { ok: false, reason: 'no origin' };
-      const res = deps.gateway
-        ? unwrapGatewayResult(deps.gateway.settleViaSpacetime(originId, targetId, nowMs))
-        : settleViaSpacetimeAnchor(deps.world, deps.islandStates, originId, targetId, nowMs);
+      const gatewayResult = deps.gateway
+        ? deps.gateway.settleViaSpacetime(originId, targetId, nowMs)
+        : undefined;
+      if (gatewayResult instanceof Promise) {
+        void (async () => {
+          const res = await gatewayResult;
+          if (!res.ok) {
+            statusEl.textContent = `rejected: ${res.reason}`;
+            statusEl.style.color = 'var(--ri-danger)';
+            return;
+          }
+          deps.onInstantSettled?.();
+          setLaunchMode(false);
+          refresh(nowMs);
+        })();
+        return { ok: false };
+      }
+      const res = gatewayResult ?? settleViaSpacetimeAnchor(deps.world, deps.islandStates, originId, targetId, nowMs);
       if (res.ok) {
         deps.onInstantSettled?.();
         setLaunchMode(false);
@@ -1093,29 +1108,41 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     // different island than the dropdown selection, so compute it here at
     // click time rather than trusting the refresh()-time preview.
     const launchFuel = computeFuel(originSpec, targetSpec, tuningFor(kind, selectedTier).tilesPerFuel);
-    const r = deps.gateway
-      ? unwrapGatewayResult(
-          deps.gateway.dispatchSettler(
-            originSpec.id,
-            targetSpec.id,
-            kind,
-            selectedTier,
-            launchFuel,
-            kitCount,
-            nowMs,
-          ),
-        )
-      : dispatchVehicle(
-          deps.world,
-          originSpec,
-          originState,
-          targetSpec,
+    const gatewayResult = deps.gateway
+      ? deps.gateway.dispatchSettler(
+          originSpec.id,
+          targetSpec.id,
           kind,
           selectedTier,
           launchFuel,
           kitCount,
           nowMs,
-        );
+        )
+      : undefined;
+    if (gatewayResult instanceof Promise) {
+      void (async () => {
+        const r = await gatewayResult;
+        if (!r.ok) {
+          statusEl.textContent = `rejected: ${r.reason}`;
+          statusEl.style.color = 'var(--ri-danger)';
+          return;
+        }
+        setLaunchMode(false);
+        refresh(nowMs);
+      })();
+      return { ok: false };
+    }
+    const r = gatewayResult ?? dispatchVehicle(
+      deps.world,
+      originSpec,
+      originState,
+      targetSpec,
+      kind,
+      selectedTier,
+      launchFuel,
+      kitCount,
+      nowMs,
+    );
     if (r.ok) {
       setLaunchMode(false);
       refresh(nowMs);

@@ -24,7 +24,7 @@ import { effectiveSkillMultipliers } from './skilltree.js';
 import { mountModal, type ModalHandle } from './ui-modal.js';
 import { VISION_BLUE, type WorldState } from './world.js';
 import { getToastHandle } from './toast.js';
-import { unwrapGatewayResult, type MutationGateway } from './mutation-gateway.js';
+import { type MutationGateway } from './mutation-gateway.js';
 
 export interface OrbitalUiHandle {
   show(): void;
@@ -277,18 +277,44 @@ export function mountOrbitalUi(
     nowMs: number,
   ): { ok: boolean; reason?: string } {
     if (!armed) return { ok: false, reason: 'not-armed' };
-    const result = deps.gateway
-      ? unwrapGatewayResult(
-          deps.gateway.launchSatellite(armed.islandId, armed.variant, targetWorldTileX, targetWorldTileY, nowMs),
-        )
-      : launchSatellite(
-          deps.world,
-          armed.islandId,
-          armed.variant,
-          targetWorldTileX,
-          targetWorldTileY,
-          nowMs,
-        );
+    const armedCapture = armed;
+    const gatewayResult = deps.gateway
+      ? deps.gateway.launchSatellite(armedCapture.islandId, armedCapture.variant, targetWorldTileX, targetWorldTileY, nowMs)
+      : undefined;
+    if (gatewayResult instanceof Promise) {
+      void (async () => {
+        const result = await gatewayResult;
+        const toast = getToastHandle();
+        if (result.ok) {
+          const msg = `Launched ${armedCapture.variant} sat from ${nameForIsland(deps.world, armedCapture.islandId)}`;
+          flash(msg);
+          toast?.show(msg, 'success');
+          setLaunchMode(false);
+          modal.show();
+          render();
+          return;
+        }
+        const failReason = result.reason ?? 'unknown';
+        const label = FAIL_REASON_LABEL[failReason] ?? failReason;
+        const msg = `Launch failed: ${label}`;
+        flash(msg);
+        toast?.show(msg, 'failure');
+        if (failReason !== 'target-at-source' && failReason !== 'target-out-of-range') {
+          setLaunchMode(false);
+          modal.show();
+          render();
+        }
+      })();
+      return { ok: false };
+    }
+    const result = gatewayResult ?? launchSatellite(
+      deps.world,
+      armedCapture.islandId,
+      armedCapture.variant,
+      targetWorldTileX,
+      targetWorldTileY,
+      nowMs,
+    );
     const toast = getToastHandle();
     if (result.ok) {
       const msg = `Launched ${armed.variant} sat from ${nameForIsland(deps.world, armed.islandId)}`;
@@ -427,10 +453,10 @@ export function mountOrbitalUi(
         upgradeBtn.style.cursor = 'not-allowed';
         upgradeBtn.title = 'Missing materials';
       }
-      upgradeBtn.addEventListener('click', () => {
+      upgradeBtn.addEventListener('click', async () => {
         if (!canAfford) return;
         const r = deps.gateway
-          ? unwrapGatewayResult(deps.gateway.upgradeSpaceport(state.id))
+          ? await deps.gateway.upgradeSpaceport(state.id)
           : upgradeSpaceport(deps.world, state.id);
         const toast = getToastHandle();
         if (r.ok) {

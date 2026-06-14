@@ -124,7 +124,7 @@ import { mountBuildingAlertsOverlay } from './building-alerts-overlay.js';
 import { mountDayNightTint } from './daynight-tint.js';
 import { showMapPicker } from './map-picker.js';
 import { tickVehicles } from './settlement.js';
-import { makeLocalGateway, makeRemoteGateway, unwrapGatewayResult } from './mutation-gateway.js';
+import { makeLocalGateway, makeRemoteGateway } from './mutation-gateway.js';
 import { mountAuthScreen } from './auth-ui.js';
 import { connectGameServer, gameSocketUrl, type GameServerClient } from './server-client.js';
 import { deserializeWorld, type SaveSnapshot } from './persistence.js';
@@ -1398,8 +1398,22 @@ async function main(): Promise<void> {
     gateway,
     getRatesContext: (islandId: string) => lastIslandCtx.get(islandId),
     onDemolish: (target: InspectorTarget) => {
-      const result = unwrapGatewayResult(gateway.demolishBuilding(target.spec.id, target.building.id));
-      if (!result.ok) return;
+      const gatewayResult = gateway.demolishBuilding(target.spec.id, target.building.id);
+      if (gatewayResult instanceof Promise) {
+        void (async () => {
+          const result = await gatewayResult;
+          if (!result.ok) return;
+          drainRoutesForBuilding(worldState, target.building.id);
+          inspector.close();
+          selectedSpec = null;
+          hoveredBuilding = null;
+          repaintHover();
+          repaintSelection();
+          rebuildWorldLayers();
+        })();
+        return;
+      }
+      if (!gatewayResult.ok) return;
       // A transport building's route drains when the building is removed —
       // in-flight cargo finishes, then tickRoutes prunes it.
       drainRoutesForBuilding(worldState, target.building.id);
@@ -1423,20 +1437,26 @@ async function main(): Promise<void> {
     onSetActiveFloors: (target: InspectorTarget, newDisabledFloors: number) => {
       const b = target.building;
       const before = activeFloors(b);
-      unwrapGatewayResult(gateway.setBuildingActiveFloors(target.spec.id, b.id, newDisabledFloors));
-      const after = activeFloors(b);
-      // p_routes_disabled_source=route_drains_and_removes: drain routes ONLY
-      // when active floors cross to fully-off. In-flight cargo finishes
-      // (tickRoutes prunes the route once inFlight.length === 0), and
-      // re-enabling does NOT restore the routes — the player must reconfigure
-      // them. Same behaviour as demolish (main.ts:1230).
-      if (before > 0 && after === 0) {
-        drainRoutesForBuilding(worldState, b.id);
+      const gatewayResult = gateway.setBuildingActiveFloors(target.spec.id, b.id, newDisabledFloors);
+      function finish(): void {
+        const after = activeFloors(b);
+        if (before > 0 && after === 0) {
+          drainRoutesForBuilding(worldState, b.id);
+        }
+        rebuildWorldLayers();
+        buildingAlertsOverlay.invalidate();
+        inspector.refresh();
       }
-      // Rebuild world layers so building-alerts-overlay re-paints the cue.
-      rebuildWorldLayers();
-      buildingAlertsOverlay.invalidate();
-      inspector.refresh();
+      if (gatewayResult instanceof Promise) {
+        void (async () => {
+          const result = await gatewayResult;
+          if (!result.ok) return;
+          finish();
+        })();
+        return;
+      }
+      if (!gatewayResult.ok) return;
+      finish();
     },
     onSetForceRun: (target: InspectorTarget, value: boolean) => {
       // §4.6 Force Run: keep producing for XP at a full output bin. Pure
@@ -1444,16 +1464,39 @@ async function main(): Promise<void> {
       // rebuild is needed. Store `undefined` when off to keep saves clean
       // (absent ≡ off). The periodic autosave + visibilitychange save read
       // live `worldState`, so mutating the building object is enough to persist.
-      unwrapGatewayResult(gateway.setForceRun(target.spec.id, target.building.id, value));
-      buildingAlertsOverlay.invalidate(); // repaint the green level badge now
-      inspector.refresh();
+      const gatewayResult = gateway.setForceRun(target.spec.id, target.building.id, value);
+      function finish(): void {
+        buildingAlertsOverlay.invalidate(); // repaint the green level badge now
+        inspector.refresh();
+      }
+      if (gatewayResult instanceof Promise) {
+        void (async () => {
+          const result = await gatewayResult;
+          if (!result.ok) return;
+          finish();
+        })();
+        return;
+      }
+      if (!gatewayResult.ok) return;
+      finish();
     },
     onUpgradeFloor: (target: InspectorTarget) => {
-      const result = unwrapGatewayResult(gateway.applyUpgrade(target.spec.id, target.building.id));
-      if (!result.ok) return;
-      rebuildWorldLayers();
-      buildingAlertsOverlay.invalidate();
-      inspector.refresh();
+      const gatewayResult = gateway.applyUpgrade(target.spec.id, target.building.id);
+      function finish(): void {
+        rebuildWorldLayers();
+        buildingAlertsOverlay.invalidate();
+        inspector.refresh();
+      }
+      if (gatewayResult instanceof Promise) {
+        void (async () => {
+          const result = await gatewayResult;
+          if (!result.ok) return;
+          finish();
+        })();
+        return;
+      }
+      if (!gatewayResult.ok) return;
+      finish();
     },
     // §3.4 Land Reclamation: mutate spec/state via the pure helper, then
     // rebuild the world layer so the new ellipse mask propagates to
@@ -1462,9 +1505,21 @@ async function main(): Promise<void> {
     // the Hub itself doesn't move — the inspector stays open on the
     // same building with refreshed numbers.
     onExpandIsland: (target: InspectorTarget, axis: Axis) => {
-      unwrapGatewayResult(gateway.expandIsland(target.spec.id, axis));
-      rebuildWorldLayers();
-      inspector.refresh();
+      const gatewayResult = gateway.expandIsland(target.spec.id, axis);
+      function finish(): void {
+        rebuildWorldLayers();
+        inspector.refresh();
+      }
+      if (gatewayResult instanceof Promise) {
+        void (async () => {
+          const result = await gatewayResult;
+          if (!result.ok) return;
+          finish();
+        })();
+        return;
+      }
+      if (!gatewayResult.ok) return;
+      finish();
     },
     // Island display-name rename. The inspector already mutated
     // `target.spec.name` via the pure `renameIsland` helper; this callback
@@ -1848,8 +1903,8 @@ async function main(): Promise<void> {
   // is present and an offer has spawned. Acceptance mutates the island's inventory
   // via applyOffer and removes the offer from the runtime list.
   const tradeUi = mountTradeUi(
-    (offer) => {
-      const result = unwrapGatewayResult(gateway.acceptTrade(offer));
+    async (offer) => {
+      const result = await gateway.acceptTrade(offer);
       if (!result.ok) return;
       const st = islandStates.get(offer.islandId);
       if (!st) return;

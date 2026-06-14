@@ -24,7 +24,7 @@ import {
 } from './routes.js';
 import { type IslandSpec, type WorldState } from './world.js';
 import { BUILDING_DEFS } from './building-defs.js';
-import { unwrapGatewayResult, type MutationGateway } from './mutation-gateway.js';
+import { type MutationGateway } from './mutation-gateway.js';
 import { activeFloorLevel, floorEffectMul } from './buildings.js';
 import type { RouteRenderer } from './routes-renderer.js';
 
@@ -570,7 +570,7 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
   }
   refreshFormReadout();
 
-  function commissionRoute(): void {
+  async function commissionRoute(): Promise<void> {
     const fromId = fromSel.value;
     const toId = toSel.value;
     const cargoChoice = cargoSel.value;
@@ -587,8 +587,11 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     const dist = Math.sqrt(dx * dx + dy * dy);
     const isAny = cargoChoice === '__any__';
     if (deps.gateway) {
-      const res = unwrapGatewayResult(
-        deps.gateway.createRoute(fromId, toId, building.id, isAny ? null : (cargoChoice as ResourceId)),
+      const res = await deps.gateway.createRoute(
+        fromId,
+        toId,
+        building.id,
+        isAny ? null : (cargoChoice as ResourceId),
       );
       if (!res.ok) return;
     } else {
@@ -710,9 +713,9 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
       delBtn.title = 'delete route — finishes in-flight cargo, then removes';
       delBtn.classList.add('ri-delbtn');
       styled(delBtn, ['width: 16px', 'height: 16px', 'line-height: 0', 'font-size: 10px'].join(';'));
-      delBtn.addEventListener('click', () => {
+      delBtn.addEventListener('click', async () => {
         if (deps.gateway) {
-          unwrapGatewayResult(deps.gateway.deleteRoute(route.id));
+          await deps.gateway.deleteRoute(route.id);
         } else if (route.inFlight.length === 0) {
           // Nothing to drain — remove immediately (covers never-dispatched,
           // instant-transit, and power-link routes).
@@ -818,11 +821,11 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
       modeSel.appendChild(o);
     }
     modeSel.addEventListener('mousedown', (e) => { e.stopPropagation(); });
-    modeSel.addEventListener('change', (e) => {
+    modeSel.addEventListener('change', async (e) => {
       e.stopPropagation();
       const mode = modeSel.value as Route['mode'];
       if (deps.gateway) {
-        unwrapGatewayResult(deps.gateway.setRouteMode(route.id, mode));
+        await deps.gateway.setRouteMode(route.id, mode);
       } else {
         route.mode = mode;
       }
@@ -862,11 +865,11 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
         w.style.cssText = 'width:42px;background:var(--ri-panel-solid);'
           + 'color:var(--ri-accent);border:1px solid var(--ri-accent-dim);font-size:11px;';
         w.addEventListener('mousedown', (e) => { e.stopPropagation(); });
-        w.addEventListener('change', (e) => {
+        w.addEventListener('change', async (e) => {
           e.stopPropagation();
           const v = Math.max(1, Math.floor(Number(w.value) || 1));
           if (deps.gateway) {
-            unwrapGatewayResult(deps.gateway.setCargoWeight(route.id, index, v));
+            await deps.gateway.setCargoWeight(route.id, index, v);
           } else {
             route.cargo[index] = { ...entry, weight: v };
           }
@@ -883,12 +886,12 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
       floor.style.cssText = 'width:54px;background:var(--ri-panel-solid);'
         + 'color:var(--ri-accent);border:1px solid var(--ri-accent-dim);font-size:11px;';
       floor.addEventListener('mousedown', (e) => { e.stopPropagation(); });
-      floor.addEventListener('change', (e) => {
+      floor.addEventListener('change', async (e) => {
         e.stopPropagation();
         const raw = floor.value.trim();
         const pct = raw === '' ? undefined : Math.min(100, Math.max(0, Number(raw) || 0));
         if (deps.gateway) {
-          unwrapGatewayResult(deps.gateway.setCargoFloorPct(route.id, index, pct));
+          await deps.gateway.setCargoFloorPct(route.id, index, pct);
         } else {
           const next: typeof entry = { ...entry };
           if (pct === undefined) delete (next as { sourceFloorPct?: number }).sourceFloorPct;
@@ -905,10 +908,10 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
         + 'border:1px solid var(--ri-accent-dim);border-radius:2px;padding:0 6px;'
         + 'font-size:11px;line-height:14px;';
       del.addEventListener('mousedown', (e) => { e.stopPropagation(); });
-      del.addEventListener('click', (e) => {
+      del.addEventListener('click', async (e) => {
         e.stopPropagation();
         if (deps.gateway) {
-          unwrapGatewayResult(deps.gateway.setRouteCargo(route.id, route.cargo.filter((_, i) => i !== index)));
+          await deps.gateway.setRouteCargo(route.id, route.cargo.filter((_, i) => i !== index));
         } else {
           route.cargo = route.cargo.filter((_, i) => i !== index);
         }
@@ -962,12 +965,12 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
       + 'padding:2px 8px;border-radius:2px;';
     addBtn.disabled = remaining.length === 0 && haveAll;
     if (addBtn.disabled) addBtn.style.opacity = '0.5';
-    addBtn.addEventListener('click', (e) => {
+    addBtn.addEventListener('click', async (e) => {
       e.stopPropagation();
       const chosen = addSel.value as ResourceId | 'all';
       if (!chosen || (chosen !== 'all' && have.has(chosen))) return;
       if (deps.gateway) {
-        unwrapGatewayResult(deps.gateway.setRouteCargo(route.id, [...route.cargo, { resourceId: chosen }]));
+        await deps.gateway.setRouteCargo(route.id, [...route.cargo, { resourceId: chosen }]);
       } else {
         route.cargo = [...route.cargo, { resourceId: chosen }];
       }
@@ -978,14 +981,14 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     container.appendChild(addRow);
   }
 
-  function handleCargoDrop(e: DragEvent, route: Route, rerender: () => void) {
+  async function handleCargoDrop(e: DragEvent, route: Route, rerender: () => void) {
     e.preventDefault();
     const src = Number(e.dataTransfer?.getData('text/plain'));
     const dstLi = e.currentTarget as HTMLElement;
     const dst = Number(dstLi.dataset.index);
     if (src === dst || Number.isNaN(src) || Number.isNaN(dst)) return;
     if (deps.gateway) {
-      unwrapGatewayResult(deps.gateway.reorderRouteCargo(route.id, src, dst));
+      await deps.gateway.reorderRouteCargo(route.id, src, dst);
     } else {
       route.cargo = reorderPriorityList(route.cargo, src, dst) as CargoEntry[];
     }

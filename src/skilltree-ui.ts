@@ -12,7 +12,7 @@ import {
   tierResetCost,
 } from './tier-reset.js';
 import { mountModal } from './ui-modal.js';
-import { unwrapGatewayResult, type MutationGateway } from './mutation-gateway.js';
+import { type MutationGateway } from './mutation-gateway.js';
 
 export interface SkillTreeUi {
   readonly el: HTMLDivElement;
@@ -154,7 +154,7 @@ export function mountSkillTreeUi(
       tierResetBtn.style.color = 'var(--ri-warn)';
       tierResetBtn.style.borderColor = 'var(--ri-warn)';
       tierResetBtn.style.flex = '0 0 auto';
-      tierResetBtn.addEventListener('click', () => {
+      tierResetBtn.addEventListener('click', async () => {
         const state = getState();
         const now = performance.now();
         const r = canTierReset(state, now);
@@ -175,7 +175,7 @@ export function mountSkillTreeUi(
           return;
         }
         if (deps.gateway) {
-          const res = unwrapGatewayResult(deps.gateway.tierReset(state.id, now));
+          const res = await deps.gateway.tierReset(state.id, now);
           if (!res.ok) {
             tierResetBtn.blur();
             return;

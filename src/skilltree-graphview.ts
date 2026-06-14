@@ -23,7 +23,7 @@ import {
   KEYSTONE_TARGET_NODE_IDS,
   type BranchId,
 } from './skilltree.js';
-import { unwrapGatewayResult, type MutationGateway } from './mutation-gateway.js';
+import { type MutationGateway } from './mutation-gateway.js';
 import { CRYSTAL_CATALOG } from './skilltree-crystals.js';
 import { computeSkillGraphLayout, type SkillGraphLayout } from './skilltree-layout.js';
 import type { IslandState } from './economy.js';
@@ -345,7 +345,7 @@ export function mountSkillGraphView(
   }
   function isVisible(): boolean { return visible; }
 
-  function handleNodeClick(nodeId: GNodeId): void {
+  async function handleNodeClick(nodeId: GNodeId): Promise<void> {
     const state = deps.getState();
     if (state.unlockedNodes.has(nodeId)) return;
     // Keystones are AND-gated (§9.3): bought via buyKeystone, which requires
@@ -355,7 +355,7 @@ export function mountSkillGraphView(
     if (ks) {
       if (!canBuyKeystone(ks, state)) return;
       if (deps.gateway) {
-        const res = unwrapGatewayResult(deps.gateway.buyKeystone(state.id, nodeId));
+        const res = await deps.gateway.buyKeystone(state.id, nodeId);
         if (!res.ok) return;
       } else {
         try { buyKeystone(ks, state); } catch { return; }
@@ -368,7 +368,7 @@ export function mountSkillGraphView(
     // path otherwise, auto-owning intermediates.
     const graph = effectiveGraph(state);
     if (deps.gateway) {
-      const res = unwrapGatewayResult(deps.gateway.unlockSkillNode(state.id, nodeId));
+      const res = await deps.gateway.unlockSkillNode(state.id, nodeId);
       if (!res.ok) return;
     } else {
       try { buyNode(graph, state, nodeId); } catch { return; }
@@ -819,9 +819,9 @@ export function mountSkillGraphView(
         row.style.marginBottom = '6px';
         row.style.textAlign = 'left';
         row.textContent = `${crystal.displayName} (×${(state.inventory as Record<string, number>)[crystal.id as string] ?? 0})`;
-        row.addEventListener('click', () => {
+        row.addEventListener('click', async () => {
           if (deps.gateway) {
-            const res = unwrapGatewayResult(deps.gateway.bindCrystal(state.id, socketId, crystal.id));
+            const res = await deps.gateway.bindCrystal(state.id, socketId, crystal.id);
             if (!res.ok) return;
           } else {
             bindCrystal(state, socketId, crystal.id);
@@ -841,7 +841,7 @@ export function mountSkillGraphView(
       unbindBtn.style.marginTop = '10px';
       unbindBtn.style.textAlign = 'left';
       unbindBtn.textContent = 'Unbind (returns crystal to inventory)';
-      unbindBtn.addEventListener('click', () => {
+      unbindBtn.addEventListener('click', async () => {
         const refund = computeMiniTreeRefund(state, socketId, boundCrystalId);
         if (refund.nodeCount > 0) {
           const ok = confirm(
@@ -850,7 +850,7 @@ export function mountSkillGraphView(
           if (!ok) return;
         }
         if (deps.gateway) {
-          const res = unwrapGatewayResult(deps.gateway.unbindCrystal(state.id, socketId));
+          const res = await deps.gateway.unbindCrystal(state.id, socketId);
           if (!res.ok) return;
         } else {
           unbindCrystal(state, socketId);

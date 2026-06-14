@@ -64,7 +64,7 @@ import {
   type WorldState,
 } from './world.js';
 import { editIslandBiome, UNIVERSE_EDITOR_COST } from './universe-editor.js';
-import { unwrapGatewayResult, type MutationGateway } from './mutation-gateway.js';
+import { type MutationGateway } from './mutation-gateway.js';
 import { mountPanel, Zone } from './ui-zones.js';
 import { fmtPower } from './format.js';
 
@@ -789,9 +789,19 @@ export function mountInspectorUi(
     // creditStorageCaps in economy.ts will credit the current cargoLabel
     // at completion. Skipping cap arithmetic here prevents both the
     // phantom-strip (old label) and the double-credit (new label) bug.
-    if (deps.gateway) {
-      const res = unwrapGatewayResult(deps.gateway.relabelCargo(target.spec.id, b.id, newLabel));
-      if (!res.ok) return;
+    const gatewayResult = deps.gateway
+      ? deps.gateway.relabelCargo(target.spec.id, b.id, newLabel)
+      : undefined;
+    if (gatewayResult instanceof Promise) {
+      void (async () => {
+        const res = await gatewayResult;
+        if (!res.ok) return;
+        pendingRelabel = null;
+      })();
+      return;
+    }
+    if (gatewayResult) {
+      if (!gatewayResult.ok) return;
     } else {
       applyRelabelStorageCap(target.state, b, def, oldLabel, newLabel);
       b.cargoLabel = newLabel;
