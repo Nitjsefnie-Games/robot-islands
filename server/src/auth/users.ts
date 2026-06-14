@@ -13,7 +13,7 @@ export async function createUser(pool: Pool, email: string, passwordHash: string
       'INSERT INTO users (email, password) VALUES ($1, $2) RETURNING id, email',
       [email, passwordHash],
     );
-    return res.rows[0]!;
+    return res.rows[0]!; // INSERT...RETURNING always yields exactly one row
   } catch (err) {
     if (typeof err === 'object' && err !== null && (err as { code?: string }).code === '23505') {
       throw new EmailTakenError();
