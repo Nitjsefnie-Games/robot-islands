@@ -5,8 +5,11 @@ import { createUser } from '../auth/users.js';
 import { saveSnapshot, loadSnapshot } from './persistence.js';
 import { loadAndCatchUp, catchUp } from './runtime.js';
 import { createInitialSnapshot } from './new-game.js';
-import { SCHEMA_VERSION, type SaveSnapshot } from '../../../src/persistence.js';
+import { createNewGame } from '../../../src/new-game.js';
+import { serializeWorld, SCHEMA_VERSION, type SaveSnapshot } from '../../../src/persistence.js';
 import type { ModifierId } from '../../../src/biomes.js';
+import type { IslandSpec } from '../../../src/world.js';
+import type { SettlementVehicle } from '../../../src/settlement.js';
 
 const pool = testPool();
 beforeEach(() => resetDb(pool));
@@ -118,6 +121,57 @@ describe('runtime loadAndCatchUp', () => {
     const afterWrite = await loadSnapshot(pool, uid);
     expect(afterWrite!.savedAt).toBeGreaterThan(snap.savedAt);
     expect(JSON.stringify(afterWrite)).not.toBe(before);
+  });
+
+  it('advances world systems during catch-up (in-flight settlement vehicle arrives)', async () => {
+    const uid = await aUser();
+    const launchMs = Date.now() - 60_000;
+    const { world, islandStates } = createNewGame(launchMs);
+
+    // Synthetic discovered target for the vehicle to settle.
+    const targetSpec: IslandSpec = {
+      id: 'target',
+      name: 'target',
+      biome: 'plains',
+      cx: 30,
+      cy: 0,
+      majorRadius: 5,
+      minorRadius: 5,
+      populated: false,
+      discovered: true,
+      buildings: [],
+      modifiers: [],
+    };
+    world.islands.push(targetSpec);
+
+    const vehicle: SettlementVehicle = {
+      id: 'v-test-1',
+      kind: 'ship',
+      tier: 1,
+      from: 'home',
+      target: 'target',
+      fuelLoaded: 60,
+      foundationKitCount: 1,
+      speed: 0.25,
+      launchTime: launchMs,
+      expectedArrivalTime: launchMs + 120_000,
+      weatherMultiplier: 0,
+      fuelResource: 'biofuel',
+      failureRate: 0,
+      status: 'active',
+    };
+    world.vehicles.push(vehicle);
+
+    const snap = serializeWorld(world, islandStates, launchMs, launchMs);
+    await saveSnapshot(pool, uid, snap);
+
+    const game = await loadAndCatchUp(pool, uid, launchMs + 130_000);
+    expect(game).not.toBeNull();
+    const advancedVehicle = game!.world.vehicles.find((v) => v.id === vehicle.id);
+    expect(advancedVehicle).toBeDefined();
+    expect(advancedVehicle!.status).toBe('arrived');
+    expect(game!.world.islands.find((i) => i.id === 'target')!.populated).toBe(true);
+    expect(game!.islandStates.has('target')).toBe(true);
   });
 
   it('migrates an older-version snapshot on load and re-persists at the current version', async () => {
