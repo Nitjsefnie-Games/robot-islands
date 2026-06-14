@@ -179,6 +179,33 @@ describe('serializeWorld', () => {
     expect(new Set(entry.state.unlockedNodes)).toEqual(new Set(['mining.1', 'storage.2']));
   });
 
+  it('does NOT persist the §2.6 crossed-cell path on in-flight batches (recomputed at delivery)', () => {
+    const world = makeInitialWorld(0);
+    // A live batch + a legacy batch that still carries a `crossedCells` array
+    // from a pre-refactor save. Both must serialize WITHOUT the path data.
+    world.routes.push({
+      id: 'r1', from: 'home', to: 'b', type: 'cargo', capacityPerSec: 0.5,
+      mode: 'priority', cargo: [{ resourceId: 'iron_ore' }], transitTimeSec: 10,
+      inFlight: [
+        { resourceId: 'iron_ore', amount: 3, arrivalTime: 5000, dispatchTime: 0, id: 'b0' },
+        {
+          resourceId: 'iron_ore', amount: 2, arrivalTime: 6000, dispatchTime: 0, id: 'b1',
+          // legacy stored path — must be scrubbed by serializeWorld
+          crossedCells: [{ cx: 0, cy: 0, transitFraction: 0.5 }],
+        } as unknown as (typeof world.routes)[number]['inFlight'][number],
+      ],
+    });
+    const snap = serializeWorld(world, new Map(), 0);
+    const route = snap.world.routes.find((r) => r.id === 'r1');
+    expect(route).toBeDefined();
+    expect(route!.inFlight).toHaveLength(2);
+    for (const b of route!.inFlight) {
+      expect((b as { crossedCells?: unknown }).crossedCells).toBeUndefined();
+    }
+    // The whole serialized blob is free of the field.
+    expect(JSON.stringify(snap)).not.toContain('crossedCells');
+  });
+
 });
 
 // ---------------------------------------------------------------------------
