@@ -2006,6 +2006,8 @@ There is no automatic 1Hz / 30Hz / 60Hz background process advancing islands. Tr
 
 *Implementation note (2026-06-10):* the client ticker advances populated islands at a fixed 5 Hz cadence (`ECONOMY_TICK_MS = 200` in `economy-clock.ts`) rather than once per render frame — the §15.3 integrator is cadence-agnostic, so this is purely a wiring choice in `main.ts`, and the named constant is the seam a future authoritative server takes over.
 
+*Implementation note (server catch-up):* in REMOTE mode the authoritative server advances BOTH the per-island economy (`advanceWorldEconomy`) and the global/world-system ticks (`advanceWorldSystems` — drones, routes, satellites/debris/sweepers/comm/repair, sonar buoys, settlement vehicles, and island merges) during `loadAndCatchUp` and `catchUp`. The world-system advance runs in bounded steps (`WS_SYSTEMS_STEP_MS` / `WS_SYSTEMS_MAX_STEPS`) so very long offline gaps do not run unboundedly or over-scale time-dependent hazards such as debris/Kessler and sweeper cleanup.
+
 ### 15.3 Per-Island Advancement (Event-Driven Piecewise Integration)
 
 ```typescript
@@ -2223,6 +2225,10 @@ It is being delivered in slices, each with its own design + plan under
     arguments to `deserializeWorld` and `advanceWorldEconomy`, so the perf shift
     collapses to the real elapsed time since the last save (which is stamped
     wall == perf). This is the same code path for a 1-second or a 30-day gap.
+  - World-system catch-up (transport/orbital/merge) is performed by the shared
+    `advanceWorldSystems` helper in bounded steps, so very long offline gaps
+    resolve transport on a coarser (bounded) cadence rather than running
+    unboundedly or over-scaling debris/sweeper accrual.
   - The server reuses the client's pure layer unchanged: `serializeWorld`,
     `deserializeWorld`, `advanceWorldEconomy`, and `createNewGame` are imported
     from `src/` via `tsx` (the server's runtime is `tsx src/index.ts`); no DOM

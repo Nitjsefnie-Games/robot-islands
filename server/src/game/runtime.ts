@@ -2,6 +2,7 @@
 import type { Queryable } from '../db.js';
 import type { IslandState } from '../../../src/economy.js';
 import { advanceWorldEconomy } from '../../../src/economy-advance.js';
+import { advanceWorldSystems } from '../../../src/world-systems-advance.js';
 import { deserializeWorld, serializeWorld, type SaveSnapshot } from '../../../src/persistence.js';
 import type { WorldState } from '../../../src/world.js';
 import { loadSnapshot, saveSnapshot } from './persistence.js';
@@ -41,6 +42,12 @@ export function catchUp(snapshot: SaveSnapshot | null, now: number): LiveGame | 
   // `now` is both perf and wall clock (matching deserializeWorld above), so
   // each island's lastTick gap collapses to the real elapsed offline time.
   advanceWorldEconomy(world, islandStates, now, now);
+  // Advance transport/orbital/merge systems over the offline gap as well.
+  // The client runs these inline in src/main.ts; the server uses the shared
+  // pure helper so REMOTE saves don't freeze drones, routes, vehicles, sats,
+  // or island merges during catch-up. Result is discarded — the server doesn't
+  // render. Wall timestamps are already wall-epoch here, so wallOffsetMs = 0.
+  advanceWorldSystems(world, islandStates, snapshot.savedAt, now, 0);
   return { world, islandStates };
 }
 
