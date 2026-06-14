@@ -15,5 +15,5 @@ export async function resetDb(pool: Pool): Promise<void> {
 }
 
 export function buildTestApp(pool: Pool): FastifyInstance {
-  return buildApp({ pool, cookieSecure: false });
+  return buildApp({ pool, cookieSecure: false, authRateLimitMax: 100000 });
 }
