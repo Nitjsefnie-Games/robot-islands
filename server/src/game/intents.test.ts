@@ -17,6 +17,9 @@ import { saveSnapshot, loadSnapshot } from './persistence.js';
 import { createInitialSnapshot } from './new-game.js';
 import { applyIntent } from './intent-runner.js';
 import type { SaveSnapshot } from '../../../src/persistence.js';
+import { serializeWorld } from '../../../src/persistence.js';
+import { createNewGame } from '../../../src/new-game.js';
+import { makeInitialIslandState } from '../../../src/world.js';
 
 const pool = testPool();
 beforeEach(() => resetDb(pool));
@@ -247,7 +250,7 @@ describe('dispatch-drone', () => {
     expect(ack).toMatchObject({ ok: true, seq: 2 });
 
     const after = await loadSnapshot(pool, uid);
-    expect((after!.world as { drones: unknown[] }).drones.length).toBe(1);
+    expect(after!.world.drones.length).toBe(1);
     // Fuel was spent at launch.
     const fuelAfter = ((await homeState(uid)).inventory as Record<string, number>).biofuel;
     expect(fuelAfter).toBe(90);
@@ -269,17 +272,31 @@ describe('dispatch-drone', () => {
 });
 
 describe('create-route', () => {
-  it('legal: creates a route from a transport building', async () => {
+  // A fresh game populates only `home`. Routes per §2.4 connect SETTLED
+  // islands and the routes-UI only ever offers populated endpoints, so the
+  // create-route handler requires BOTH endpoints populated. Build a snapshot
+  // that marks a second island (`gen-1--3`) populated AND gives it a runtime
+  // state, so a home→colony cargo route is a LEGAL distinct destination.
+  const COLONY_ID = 'gen-1--3';
+  async function aUserWithTwoPopulatedIslands(now: number): Promise<string> {
+    const { world, islandStates } = createNewGame(now);
+    const colony = world.islands.find((s) => s.id === COLONY_ID)!;
+    colony.populated = true;
+    colony.discovered = true;
+    islandStates.set(COLONY_ID, makeInitialIslandState(colony, now));
+    world.islandStates = islandStates;
+    return userWithSnapshot(serializeWorld(world, islandStates, now, now));
+  }
+
+  it('legal: creates a route between two populated islands', async () => {
     const now = Date.now();
-    const uid = await aUserWithGame();
+    const uid = await aUserWithTwoPopulatedIslands(now);
     const dockId = await placeBuilding(uid, 'dock', 0, 0, now);
-    // `gen-1--3` is a generated (unpopulated) island present in the starter
-    // world — a valid distinct destination for a cargo route.
     const ack = await applyIntent(
       pool, uid,
       {
         type: 'create-route',
-        payload: { fromIslandId: 'home', toIslandId: 'gen-1--3', buildingId: dockId },
+        payload: { fromIslandId: 'home', toIslandId: COLONY_ID, buildingId: dockId },
         seq: 2,
       },
       now,
@@ -287,9 +304,26 @@ describe('create-route', () => {
     expect(ack).toMatchObject({ ok: true, seq: 2 });
 
     const after = await loadSnapshot(pool, uid);
-    const routes = (after!.world as { routes: Array<Record<string, unknown>> }).routes;
+    const routes = after!.world.routes;
     expect(routes.length).toBe(1);
-    expect(routes[0]).toMatchObject({ from: 'home', to: 'gen-1--3', sourceBuildingId: dockId });
+    expect(routes[0]).toMatchObject({ from: 'home', to: COLONY_ID, sourceBuildingId: dockId });
+  });
+
+  it('illegal: unpopulated destination is rejected, save unchanged', async () => {
+    const now = Date.now();
+    // Fresh game: `gen-1--3` is present but UNPOPULATED. Routing to it must be
+    // rejected (anti-cheat: the routes-UI never offers unpopulated endpoints).
+    const uid = await aUserWithGame();
+    const dockId = await placeBuilding(uid, 'dock', 0, 0, now);
+    await expectRejectNoChange(
+      uid,
+      {
+        type: 'create-route',
+        payload: { fromIslandId: 'home', toIslandId: COLONY_ID, buildingId: dockId },
+        seq: 9,
+      },
+      now,
+    );
   });
 
   it('illegal: from===to is rejected, save unchanged', async () => {
@@ -344,6 +378,26 @@ describe('unlock-skill-node', () => {
     await expectRejectNoChange(
       uid,
       { type: 'unlock-skill-node', payload: { islandId: 'home', nodeId: 'mining.recipeRate.1' }, seq: 9 },
+      now,
+    );
+  });
+
+  it('illegal: a keystone target is rejected, save unchanged', async () => {
+    const now = Date.now();
+    // Even with ample SP, a keystone node must NOT be purchasable via this
+    // intent: buyNode throws for keystones (they are bought via buyKeystone),
+    // and the no-throw handler contract forbids relying on the runner backstop.
+    // The handler rejects keystones explicitly before any buyNode path.
+    const uid = await aUserAtLevel5(100);
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'unlock-skill-node', payload: { islandId: 'home', nodeId: 'mining.keystone.veinmaster' }, seq: 2 },
+      now,
+    );
+    expect(ack.ok).toBe(false);
+    await expectRejectNoChange(
+      uid,
+      { type: 'unlock-skill-node', payload: { islandId: 'home', nodeId: 'mining.keystone.veinmaster' }, seq: 9 },
       now,
     );
   });
