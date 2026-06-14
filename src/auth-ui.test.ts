@@ -84,11 +84,13 @@ describe('mountAuthScreen', () => {
   });
 
   it('shows a 401 error and does not call onAuthed', async () => {
+    // The server returns a JSON error body ({ error: '…' }); the banner must
+    // render that message, not the raw JSON string.
     fetchImpl.mockResolvedValue({
       ok: false,
       status: 401,
-      text: async () => 'Invalid credentials',
-    } as Response);
+      json: async () => ({ error: 'Invalid credentials' }),
+    } as unknown as Response);
 
     const root = mount();
     typeInto(getInput(root, 'Email'), 'bad@example.com');
@@ -99,6 +101,29 @@ describe('mountAuthScreen', () => {
       const errorEl = root.querySelector('[role="alert"]');
       expect(errorEl).not.toBeNull();
       expect(errorEl!.textContent).toContain('Invalid credentials');
+    });
+
+    expect(onAuthed).not.toHaveBeenCalled();
+  });
+
+  it('falls back to a generic message when the error body is not JSON', async () => {
+    fetchImpl.mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: async () => {
+        throw new Error('not json');
+      },
+    } as unknown as Response);
+
+    const root = mount();
+    typeInto(getInput(root, 'Email'), 'bad@example.com');
+    typeInto(getInput(root, 'Password'), 'wrong');
+    getButton(root, 'Submit').click();
+
+    await vi.waitFor(() => {
+      const errorEl = root.querySelector('[role="alert"]');
+      expect(errorEl).not.toBeNull();
+      expect(errorEl!.textContent).toContain('Request failed (500)');
     });
 
     expect(onAuthed).not.toHaveBeenCalled();
