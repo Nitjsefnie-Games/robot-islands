@@ -3,6 +3,7 @@ import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
 import type { Pool } from './db.js';
 import { registerAuthRoutes } from './auth/routes.js';
+import { registerGameRoutes } from './game/routes.js';
 
 export interface AppOptions { readonly pool: Pool; readonly cookieSecure: boolean; readonly authRateLimitMax?: number; }
 
@@ -24,6 +25,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     });
     registerAuthRoutes(instance, opts.pool, opts.cookieSecure);
   });
+  registerGameRoutes(app, opts.pool);
   app.get('/health', async () => ({ ok: true }));
   return app;
 }
