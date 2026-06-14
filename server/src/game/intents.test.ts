@@ -271,6 +271,76 @@ describe('dispatch-drone', () => {
       now,
     );
   });
+
+  // Migration regression: the dispatch-drone handler dropped waypoints +
+  // selectedTier, so a T5 path-drawn drone became a straight-line default
+  // drone and the tier picker was ignored. Validation must now accept/reject
+  // the new fields by shape.
+  it('illegal: out-of-range selectedTier is rejected', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'dispatch-drone', payload: { islandId: 'home', originX: 0, originY: 0, dirX: 1, dirY: 0, fuelLoaded: 10, selectedTier: 99 }, seq: 3 },
+      now,
+    );
+    expect(ack.ok).toBe(false);
+  });
+
+  it('illegal: malformed waypoints array is rejected', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'dispatch-drone', payload: { islandId: 'home', originX: 0, originY: 0, dirX: 1, dirY: 0, fuelLoaded: 10, waypoints: [{ x: 1 }] }, seq: 3 },
+      now,
+    );
+    expect(ack.ok).toBe(false);
+  });
+});
+
+// Migration regression (user-reported): the place-building intent destructured
+// only {islandId,defId,x,y,rotation} and forwarded NO cargoLabel to the pure
+// placeBuilding, so every generic-storage building (Crate/Warehouse) was
+// labeled the iron_ore DEFAULT_CARGO_LABEL regardless of the player's §4.6
+// picker pick. REMOTE is the default boot mode, so the picker was cosmetic.
+describe('place-building cargoLabel forwarding (§4.6 picker)', () => {
+  it('forwards the picker cargoLabel to the minted generic-storage building', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'place-building', payload: { islandId: 'home', defId: 'crate', x: 0, y: 0, rotation: 0, cargoLabel: 'wood' }, seq: 1 },
+      now,
+    );
+    expect(ack.ok).toBe(true);
+    const b = (await homeBuildings(uid)).find((bb) => bb.defId === 'crate')!;
+    expect(b.cargoLabel).toBe('wood'); // NOT the iron_ore default
+  });
+
+  it('falls back to the iron_ore default when no cargoLabel is supplied', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'place-building', payload: { islandId: 'home', defId: 'crate', x: 0, y: 0, rotation: 0 }, seq: 1 },
+      now,
+    );
+    expect(ack.ok).toBe(true);
+    const b = (await homeBuildings(uid)).find((bb) => bb.defId === 'crate')!;
+    expect(b.cargoLabel).toBe('iron_ore');
+  });
+
+  it('rejects an invalid cargoLabel by shape', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'place-building', payload: { islandId: 'home', defId: 'crate', x: 0, y: 0, rotation: 0, cargoLabel: 'not_a_resource' }, seq: 1 },
+      now,
+    );
+    expect(ack.ok).toBe(false);
+  });
 });
 
 describe('create-route', () => {
