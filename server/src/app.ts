@@ -11,8 +11,13 @@ export function buildApp(opts: AppOptions): FastifyInstance {
   app.register(cookie);
   app.register(rateLimit, { max: 100, timeWindow: '1 minute' });
   app.register(async (instance) => {
-    // Tighter limit on auth endpoints. Relaxed in plain-HTTP dev/test so the
-    // integration suite can run multiple requests against the same app.
+    // Tighter limit on auth endpoints (per-IP). Overridable via
+    // opts.authRateLimitMax (tests pass a high value so the suite doesn't 429).
+    // NOTE: when this server runs behind the nginx/Cloudflare reverse proxy
+    // (later deployment slice), set Fastify `trustProxy` to the real trusted
+    // hop — otherwise req.ip is the proxy (127.0.0.1) for every request and the
+    // per-IP limit collapses to one global bucket. Do NOT enable trustProxy
+    // until the proxy is actually in front (an unset X-Forwarded-For is spoofable).
     await instance.register(rateLimit, {
       max: opts.authRateLimitMax ?? 10,
       timeWindow: '1 minute',

@@ -44,7 +44,16 @@ export function registerAuthRoutes(app: FastifyInstance, pool: Pool, cookieSecur
 
   app.post<{ Body: Creds }>('/api/auth/login', { schema: { body: credentialsSchema } }, async (req, reply) => {
     const user = await findByEmail(pool, req.body.email);
-    const ok = user ? verifyPassword(user.password, req.body.password) : (verifyPassword(DUMMY_HASH, req.body.password), false);
+    // Constant-work: an unknown email still runs one scrypt verify against a
+    // dummy hash so response time doesn't reveal whether the email exists.
+    // DUMMY_HASH MUST use the current default scrypt params (see password.ts) so
+    // this dummy verify costs the same as the real wrong-password path.
+    let ok = false;
+    if (user) {
+      ok = verifyPassword(user.password, req.body.password);
+    } else {
+      verifyPassword(DUMMY_HASH, req.body.password);
+    }
     if (!user || !ok) return reply.code(401).send({ error: 'invalid email or password' });
     setSessionCookie(reply, await issueSession(user.id), cookieOpts);
     return reply.code(200).send({ id: user.id, email: user.email });
