@@ -124,7 +124,11 @@ import { mountBuildingAlertsOverlay } from './building-alerts-overlay.js';
 import { mountDayNightTint } from './daynight-tint.js';
 import { showMapPicker } from './map-picker.js';
 import { tickVehicles } from './settlement.js';
-import { makeLocalGateway, unwrapGatewayResult } from './mutation-gateway.js';
+import { makeLocalGateway, makeRemoteGateway, unwrapGatewayResult } from './mutation-gateway.js';
+import { mountAuthScreen } from './auth-ui.js';
+import { connectGameServer, gameSocketUrl, type GameServerClient } from './server-client.js';
+import { deserializeWorld, type SaveSnapshot } from './persistence.js';
+import { isRemoteBootEnabled } from './remote-boot.js';
 import { checkDismissals, currentStep, markBumpClaimed, markCompleted, markShown, xpBumpPercentForCompletion } from './tutorial.js';
 import { refreshTutorialHint } from './tutorial-ui.js';
 
@@ -161,19 +165,6 @@ async function main(): Promise<void> {
   world.label = 'world';
   app.stage.addChild(world);
 
-  // World state — mutable wrapper around the seed island data + the in-flight
-  // drone fleet. `discovered` flags flip when drones return; `drones` mutates
-  // on dispatch and tick. Renderer reads from here.
-  //
-  // §15.6 persistence: try loadWorld() first; on a valid current-version
-  // snapshot restore both worldState and islandStates, else fall back to the
-  // demo-seed path (makeInitialWorld + per-spec makeInitialIslandState).
-  const restored = await loadWorld();
-  // Fresh-game path is the pure `createNewGame` module (shared with the
-  // authoritative server). Build it ONCE so the world + per-island states are
-  // the same objects (createNewGame already wires world.islandStates).
-  const fresh = restored ? null : createNewGame(performance.now());
-  const worldState: WorldState = restored ? restored.world : fresh!.world;
   // §15.1 / §2.6 wall-clock anchor for WEATHER sampling. Captured ONCE per
   // session: every production `weather()` consumer samples at
   // `perfTs + weatherWallOffsetMs` (see `weatherClockMs`) so the weather
@@ -188,13 +179,124 @@ async function main(): Promise<void> {
   // world; applied below after the camera is constructed.
   const restoredPrefs = await loadPrefs();
 
+  // Slice 4 REMOTE boot branch. LOCAL is the default; REMOTE is gated by
+  // `ri_server=1` in localStorage or `?server=1` in the URL. In REMOTE mode the
+  // authoritative server owns the sim and pushes full snapshots over WS; the
+  // client only renders. The LOCAL path is unchanged.
+  const isRemote = isRemoteBootEnabled();
+
+  type RemoteBootResult = {
+    client: GameServerClient;
+    snapshot: SaveSnapshot;
+    setOnState(handler: (snapshot: SaveSnapshot) => void): void;
+  };
+
+  /** Authenticate (if necessary), open the game WebSocket, and wait for the
+   *  first server-pushed snapshot. If the account has no game yet, POST
+   *  `/api/game/new` and wait for the state that follows. The returned
+   *  `setOnState` lets main wire the subsequent-state handler after the render
+   *  machinery is live. */
+  async function bootRemoteClient(): Promise<RemoteBootResult> {
+    // If the browser already has a valid session cookie, skip the auth screen.
+    try {
+      const me = await fetch('/api/auth/me', { credentials: 'include' });
+      if (!me.ok) {
+        await showAuthScreen();
+      }
+    } catch {
+      await showAuthScreen();
+    }
+
+    return new Promise<RemoteBootResult>((resolve, reject) => {
+      let client: GameServerClient | null = null;
+      let gotFirst = false;
+      let onStateHandler: ((snapshot: SaveSnapshot) => void) | null = null;
+
+      const onState = (snapshot: unknown | null) => {
+        if (!gotFirst) {
+          if (snapshot) {
+            gotFirst = true;
+            resolve({
+              client: client!,
+              snapshot: snapshot as SaveSnapshot,
+              setOnState(handler) {
+                onStateHandler = handler;
+              },
+            });
+          } else {
+            // Account has no saved game yet — ask the server to mint one, then
+            // keep waiting for the next `state` frame.
+            fetch('/api/game/new', { method: 'POST', credentials: 'include' })
+              .then(async (r) => {
+                if (!r.ok) throw new Error(`POST /api/game/new failed: ${r.status} ${await r.text()}`);
+              })
+              .catch(reject);
+          }
+        } else {
+          onStateHandler?.(snapshot as SaveSnapshot);
+        }
+      };
+
+      client = connectGameServer({ url: gameSocketUrl(), onState });
+    });
+  }
+
+  async function showAuthScreen(): Promise<void> {
+    return new Promise<void>((resolve) => {
+      const screen = mountAuthScreen({
+        onAuthed: () => {
+          screen.remove();
+          resolve();
+        },
+      });
+      document.body.appendChild(screen);
+    });
+  }
+
+  // World state — mutable wrapper around the seed island data + the in-flight
+  // drone fleet. `discovered` flags flip when drones return; `drones` mutates
+  // on dispatch and tick. Renderer reads from here.
+  //
+  // §15.6 persistence: LOCAL path tries loadWorld() first; on a valid
+  // current-version snapshot restore both worldState and islandStates, else
+  // fall back to the demo-seed path (makeInitialWorld + per-spec
+  // makeInitialIslandState). REMOTE path receives the initial snapshot from
+  // the server over WS and never touches IDB.
+  let worldState: WorldState;
+  let islandStates: Map<string, IslandState>;
+  let restored: Awaited<ReturnType<typeof loadWorld>> | null = null;
+  let fresh: ReturnType<typeof createNewGame> | null = null;
+  let remoteClient: GameServerClient | null = null;
+  let setRemoteOnState: ((handler: (snapshot: SaveSnapshot) => void) => void) | null = null;
+
+  if (isRemote) {
+    const remote = await bootRemoteClient();
+    remoteClient = remote.client;
+    setRemoteOnState = remote.setOnState;
+    const d = deserializeWorld(remote.snapshot, Date.now(), Date.now());
+    worldState = d.world;
+    islandStates = d.islandStates;
+  } else {
+    restored = await loadWorld();
+    // Fresh-game path is the pure `createNewGame` module (shared with the
+    // authoritative server). Build it ONCE so the world + per-island states are
+    // the same objects (createNewGame already wires world.islandStates).
+    fresh = restored ? null : createNewGame(performance.now());
+    worldState = restored ? restored.world : fresh!.world;
+    islandStates = restored ? restored.islandStates : fresh!.islandStates;
+  }
+
+  worldState.islandStates = islandStates;
+
   if (worldState.playerLat == null || worldState.playerLon == null) {
     await new Promise<void>((resolve) => {
       showMapPicker({
         onPick: (lat, lon) => {
           worldState.playerLat = lat;
           worldState.playerLon = lon;
-          void saveWorld(worldState, restored?.islandStates ?? new Map());
+          if (!isRemote) {
+            void saveWorld(worldState, restored?.islandStates ?? new Map());
+          }
           resolve();
         },
       });
@@ -949,10 +1051,13 @@ async function main(): Promise<void> {
   // between any two populated islands; `hud.ts` paints every populated one.
   // Fresh-game path: per-island state from `createNewGame` (§3.7 starter
   // contract — home + new colonies start EMPTY). Restored saves use whatever
-  // the player had at last save.
-  const islandStates: Map<string, IslandState> = restored
-    ? restored.islandStates
-    : fresh!.islandStates;
+  // the player had at last save. REMOTE already received the map from the
+  // server snapshot during boot.
+  if (!isRemote) {
+    islandStates = restored
+      ? restored.islandStates
+      : fresh!.islandStates;
+  }
   // Sanity gate: home state must exist after init.
   if (!islandStates.get('home')) {
     throw new Error('main: home island state missing after init');
@@ -964,9 +1069,11 @@ async function main(): Promise<void> {
   const islandSpecsById = new Map<string, IslandSpec>();
   for (const s of worldState.islands) islandSpecsById.set(s.id, s);
 
-  // Slice 4 mutation gateway — LOCAL default. REMOTE is wired but not booted
-  // yet; panels receive this and route all mutations through it.
-  const gateway = makeLocalGateway(worldState, islandStates, {});
+  // Slice 4 mutation gateway — LOCAL default. REMOTE receives the WS client
+  // and forwards intents to the authoritative server.
+  const gateway = isRemote && remoteClient
+    ? makeRemoteGateway(remoteClient)
+    : makeLocalGateway(worldState, islandStates, {});
 
   // -----------------------------------------------------------------------
   // Active island selection — §3 (no island privileged in code)
@@ -1687,12 +1794,16 @@ async function main(): Promise<void> {
   // panel's getLastSavedAt closure can read the live value; this block
   // owns the writes via triggerSave.
   const triggerSave = (): void => {
-    void saveWorld(worldState, islandStates);
+    if (!isRemote) {
+      void saveWorld(worldState, islandStates);
+    }
     // Flush any pending prefs save synchronously alongside the world save —
     // ensures the 30s autosave and the visibility-change save always land
     // a fresh prefs blob even if the debounce timer was mid-flight.
     flushPrefsSave();
-    lastSaveAt = performance.now();
+    if (!isRemote) {
+      lastSaveAt = performance.now();
+    }
   };
   // The autosave timer fires triggerSave; the closure captures the live
   // worldState/islandStates bindings (which are themselves stable references
@@ -1702,6 +1813,7 @@ async function main(): Promise<void> {
   let saveTimerId: number | null = null;
   function armSaveTimer(): void {
     if (saveTimerId !== null) clearInterval(saveTimerId);
+    if (isRemote) return; // server owns persistence in REMOTE mode
     saveTimerId = window.setInterval(triggerSave, saveIntervalSec * 1000);
   }
   armSaveTimer();
@@ -1823,6 +1935,50 @@ async function main(): Promise<void> {
   let lastNcState = computeNcState(worldState);
   const islandPower = new Map<string, PowerBalance>();
   const islandNets = new Map<string, Record<ResourceId, number>>();
+
+  /** Apply a server-pushed snapshot in REMOTE mode: swap the world/state refs
+   *  the renderers read, rebuild derived lookup tables, recompute retained
+   *  rates for the HUD/inspector, and repaint the world layers. */
+  function applyRemoteSnapshot(snapshot: SaveSnapshot): void {
+    const nowWall = Date.now();
+    const d = deserializeWorld(snapshot, nowWall, nowWall);
+    worldState = d.world;
+    islandStates = d.islandStates;
+    worldState.islandStates = islandStates;
+
+    islandSpecsById.clear();
+    modifierMulsById.clear();
+    for (const spec of worldState.islands) {
+      islandSpecsById.set(spec.id, spec);
+      modifierMulsById.set(spec.id, effectiveModifierMultipliers(spec.modifiers));
+    }
+
+    if (!islandStates.has(activeIslandId)) {
+      activeIslandId = 'home';
+    }
+    if (!islandStates.has(activeIslandId)) {
+      for (const id of islandStates.keys()) {
+        activeIslandId = id;
+        break;
+      }
+    }
+
+    refreshRetainedRates(nowWall);
+
+    lastVisionSig = visionSourcesSignature(
+      computeVisionSources(worldState.islands.filter((s) => s.populated)),
+    );
+
+    rebuildWorldLayers();
+  }
+
+  if (isRemote) {
+    // Prime retained HUD/inspector outputs from the initial server snapshot;
+    // subsequent snapshots are handled by the WS callback wired below.
+    refreshRetainedRates(Date.now());
+    setRemoteOnState!(applyRemoteSnapshot);
+  }
+
   /** The economy advance (5 Hz, gated by `shouldTick` in the ticker below).
    *  Everything in here runs at ECONOMY_TICK_MS cadence: NC/lattice/cable/
    *  solar precomputes, the per-island advanceIsland + computeRates loop,
@@ -2109,6 +2265,90 @@ async function main(): Promise<void> {
       islandPower.set(activeS.id, activePower);
     }
   };
+
+  /** REMOTE-mode rate refresh. The server owns the simulation and pushes full
+   *  snapshots; the client recomputes the derived HUD/inspector rates from the
+   *  snapshot so panels repaint without running the economy advance locally. */
+  function refreshRetainedRates(nowWall: number): void {
+    const ncState = computeNcState(worldState);
+    lastNcState = ncState;
+    const ncBuffFor = (s: IslandState): number =>
+      tierForLevel(s.level) >= 3 ? ncState.globalProductionBuff : 1;
+
+    const unifiedInv = latticeInventory(worldState);
+    const unifiedCaps = latticeStorageCaps(worldState);
+    const crossIslandById = new Map<string, PlacedBuilding[]>();
+    if (worldState.latticeActive) {
+      for (const id of worldState.latticeNodeIslands) {
+        const neighbors = crossIslandNeighbors(worldState, id);
+        if (neighbors) crossIslandById.set(id, neighbors);
+      }
+    }
+
+    const solarBoostByIsland = new Map<string, number>();
+    for (const spec of worldState.islands) {
+      if (!spec.populated) continue;
+      solarBoostByIsland.set(
+        spec.id,
+        effectiveSolarBoostFor(worldState, { x: spec.cx, y: spec.cy }),
+      );
+    }
+
+    const cableLocalCtxFor = (id: string): RatesContext => {
+      const spec = islandSpecsById.get(id);
+      const stForCtx = islandStates.get(id);
+      return {
+        modifierMul: modifierMulFor(id),
+        ncBuff: stForCtx ? ncBuffFor(stForCtx) : undefined,
+        activeBonusMul: activeBonusMul(worldState),
+        terrainAt: spec?.terrainAt,
+        solarBoost: solarBoostByIsland.get(id),
+      };
+    };
+    const cableBalances = computeCableNetworkBalance(
+      worldState,
+      islandStates,
+      cableLocalCtxFor,
+      performance.now(),
+      nowWall,
+    );
+    const sharedNetwork = computeSharedNetworkState(worldState);
+
+    for (const s of islandStates.values()) {
+      const spec = islandSpecsById.get(s.id);
+      const isLatticeIsland = unifiedInv !== undefined && worldState.latticeNodeIslands.includes(s.id);
+      const isNetParticipant = sharedNetwork.participantIds.has(s.id);
+      const crossIsland = crossIslandById.get(s.id);
+      const cableComponent = cableBalances.get(s.id);
+      const geothermalActive = spec?.modifiers.includes('geothermal_active') === true;
+      const sharedInventory = isNetParticipant && !isLatticeIsland
+        ? Object.fromEntries(sharedNetwork.sharedInventory) as Record<ResourceId, number>
+        : undefined;
+      const sharedCaps = isNetParticipant && !isLatticeIsland
+        ? Object.fromEntries(sharedNetwork.sharedStorageCap) as Record<ResourceId, number>
+        : undefined;
+
+      const ctx: RatesContext = {
+        modifierMul: modifierMulFor(s.id),
+        ncBuff: ncBuffFor(s),
+        activeBonusMul: activeBonusMul(worldState),
+        terrainAt: spec?.terrainAt,
+        inventory: isLatticeIsland ? unifiedInv : sharedInventory,
+        crossIsland,
+        caps: isLatticeIsland ? unifiedCaps : sharedCaps,
+        cableComponent,
+        geothermalActive,
+        solarBoost: solarBoostByIsland.get(s.id),
+        accelerationMul: s.accelerationRemainingMin > 0 ? 3 : 1,
+        world: worldState,
+      };
+      lastIslandCtx.set(s.id, ctx);
+      const { net, power } = computeRates(s, ctx, undefined, nowWall);
+      islandNets.set(s.id, net);
+      islandPower.set(s.id, power);
+    }
+  }
+
   app.ticker.add(() => {
     let dx = 0;
     let dy = 0;
@@ -2148,179 +2388,181 @@ async function main(): Promise<void> {
     // and the precomputes that exist solely to feed it run only when the
     // cadence elapses (or a structural event forces a tick). See
     // economy-clock.ts (ECONOMY_TICK_MS — the server-migration seam).
-    if (forceEconomyTick || shouldTick(now, lastEconomyTickMs)) {
-      lastEconomyTickMs = now;
-      forceEconomyTick = false;
-      advanceEconomy(now, nowWall);
-      // §2.2 vision discovers islands live (vision-discovery.ts), AND the
-      // cached ocean/fog layers must repaint whenever the vision-source set
-      // changes — a Lighthouse finishing construction / upgrading / relocating
-      // extends the halo over already-known territory with no new discovery,
-      // which the discovery signal alone misses. Rebuild on either signal.
-      const newlyDiscovered = discoverIslandsInVision(worldState);
-      const visionSig = visionSourcesSignature(
-        computeVisionSources(worldState.islands.filter((s) => s.populated)),
+    if (!isRemote) {
+      if (forceEconomyTick || shouldTick(now, lastEconomyTickMs)) {
+        lastEconomyTickMs = now;
+        forceEconomyTick = false;
+        advanceEconomy(now, nowWall);
+        // §2.2 vision discovers islands live (vision-discovery.ts), AND the
+        // cached ocean/fog layers must repaint whenever the vision-source set
+        // changes — a Lighthouse finishing construction / upgrading / relocating
+        // extends the halo over already-known territory with no new discovery,
+        // which the discovery signal alone misses. Rebuild on either signal.
+        const newlyDiscovered = discoverIslandsInVision(worldState);
+        const visionSig = visionSourcesSignature(
+          computeVisionSources(worldState.islands.filter((s) => s.populated)),
+        );
+        const visionChanged = visionSig !== lastVisionSig;
+        lastVisionSig = visionSig;
+        if (newlyDiscovered.length > 0 || visionChanged) {
+          rebuildWorldLayers();
+        }
+      }
+      // Trade offer lifecycle. Online = tab visible (visibilityState === 'visible').
+      // hasFocus() was previously also required but dropped on owner request 2026-06-10
+      // — visibility alone is the activity signal. onlineDtMs is the capped online
+      // time elapsed this frame and is 0 when not online, so the persisted cooldown
+      // only burns down on visible time. Called every frame so expiry pruning stays current.
+      const tradeOnline = document.visibilityState === 'visible';
+      const onlineDtMs = tradeOnline ? Math.min(elapsedSec * 1000, ONLINE_DT_CAP_MS) : 0;
+      // §9.9 active-play bonus: same online condition as trades; the module
+      // internally clamps accrual and decays the unfocused remainder, so the
+      // RAW frame dt goes in (NOT onlineDtMs — decay needs the full interval).
+      tickActiveBonus(worldState, tradeOnline, elapsedSec * 1000);
+      tickTradeOffers(
+        tradeRuntime,
+        islandStates,
+        worldState.seed,
+        (state) => tuningFor(effectiveSkillMultipliers(state)),
+        now,
+        onlineDtMs,
       );
-      const visionChanged = visionSig !== lastVisionSig;
-      lastVisionSig = visionSig;
-      if (newlyDiscovered.length > 0 || visionChanged) {
+      // §3.6 Island Joining: AFTER economy advances, walk pairs of populated
+      // islands for ellipse overlaps. At most ONE merge runs per tick — the
+      // pair with the largest combined tile count wins; remaining overlaps
+      // re-evaluate on the next tick once the merged identity has new geometry.
+      // Triggered most often by Land Reclamation Hub expanding an island into
+      // a neighbor; cheap when no overlaps exist (O(N²) per tick, N is small).
+      const merge = findNextMerge(worldState, islandStates);
+      if (merge) {
+        // Snapshot the active-island id BEFORE merge: if the active island is
+        // being absorbed, the UI needs to redirect to the absorber so the HUD
+        // doesn't read a deleted state on this very frame.
+        const absorbedId = merge.absorbed.id;
+        performMerge(worldState, islandStates, merge.absorber, merge.absorbed);
+        // Update the lookup tables: absorbed spec is gone, absorber's modifiers
+        // are unchanged (per §3.6, absorbed's modifiers are voided). Drop the
+        // absorbed entries.
+        islandSpecsById.delete(absorbedId);
+        modifierMulsById.delete(absorbedId);
+        lastIslandCtx.delete(absorbedId);
+        islandNets.delete(absorbedId);
+        islandPower.delete(absorbedId);
+        // Re-minted buildings change the absorber's rates — pull the next
+        // economy tick forward so the retained HUD data doesn't lag the merge.
+        forceEconomyTick = true;
+        if (activeIslandId === absorbedId) {
+          activeIslandId = merge.absorber.id;
+        }
+        // §15.4 / §3.6 merge: after performMerge the absorbed island's buildings
+        // are re-minted with shifted ids into the absorber. If the inspector or
+        // hover state points at a building id that no longer resolves (was
+        // re-minted during the merge), clear both so repaintSelection's
+        // stale-selection guard fires cleanly rather than leaving a ghost outline.
+        const selectedIslandIdNow = inspector.getSelectedIslandId();
+        const selectedBuildingIdNow = inspector.getSelectedBuildingId();
+        if (selectedIslandIdNow !== null && selectedBuildingIdNow !== null) {
+          const owningSpec = islandSpecsById.get(selectedIslandIdNow);
+          const stillExists = owningSpec?.buildings.some((b) => b.id === selectedBuildingIdNow) ?? false;
+          if (!stillExists) {
+            inspector.close();
+            selectedSpec = null;
+          }
+        }
+        if (hoveredBuilding) {
+          const hovSpec = islandSpecsById.get(hoveredBuilding.spec.id);
+          const stillHovered = hovSpec?.buildings.some((b) => b.id === hoveredBuilding!.building.id) ?? false;
+          if (!stillHovered) {
+            hoveredBuilding = null;
+            repaintHover();
+          }
+        }
         rebuildWorldLayers();
       }
-    }
-    // Trade offer lifecycle. Online = tab visible (visibilityState === 'visible').
-    // hasFocus() was previously also required but dropped on owner request 2026-06-10
-    // — visibility alone is the activity signal. onlineDtMs is the capped online
-    // time elapsed this frame and is 0 when not online, so the persisted cooldown
-    // only burns down on visible time. Called every frame so expiry pruning stays current.
-    const tradeOnline = document.visibilityState === 'visible';
-    const onlineDtMs = tradeOnline ? Math.min(elapsedSec * 1000, ONLINE_DT_CAP_MS) : 0;
-    // §9.9 active-play bonus: same online condition as trades; the module
-    // internally clamps accrual and decays the unfocused remainder, so the
-    // RAW frame dt goes in (NOT onlineDtMs — decay needs the full interval).
-    tickActiveBonus(worldState, tradeOnline, elapsedSec * 1000);
-    tickTradeOffers(
-      tradeRuntime,
-      islandStates,
-      worldState.seed,
-      (state) => tuningFor(effectiveSkillMultipliers(state)),
-      now,
-      onlineDtMs,
-    );
-    // §3.6 Island Joining: AFTER economy advances, walk pairs of populated
-    // islands for ellipse overlaps. At most ONE merge runs per tick — the
-    // pair with the largest combined tile count wins; remaining overlaps
-    // re-evaluate on the next tick once the merged identity has new geometry.
-    // Triggered most often by Land Reclamation Hub expanding an island into
-    // a neighbor; cheap when no overlaps exist (O(N²) per tick, N is small).
-    const merge = findNextMerge(worldState, islandStates);
-    if (merge) {
-      // Snapshot the active-island id BEFORE merge: if the active island is
-      // being absorbed, the UI needs to redirect to the absorber so the HUD
-      // doesn't read a deleted state on this very frame.
-      const absorbedId = merge.absorbed.id;
-      performMerge(worldState, islandStates, merge.absorber, merge.absorbed);
-      // Update the lookup tables: absorbed spec is gone, absorber's modifiers
-      // are unchanged (per §3.6, absorbed's modifiers are voided). Drop the
-      // absorbed entries.
-      islandSpecsById.delete(absorbedId);
-      modifierMulsById.delete(absorbedId);
-      lastIslandCtx.delete(absorbedId);
-      islandNets.delete(absorbedId);
-      islandPower.delete(absorbedId);
-      // Re-minted buildings change the absorber's rates — pull the next
-      // economy tick forward so the retained HUD data doesn't lag the merge.
-      forceEconomyTick = true;
-      if (activeIslandId === absorbedId) {
-        activeIslandId = merge.absorber.id;
+      // Drones tick AFTER economy so any biofuel changes from this frame
+      // are visible to the dispatch UI on the same frame; drone returns
+      // are processed independent of economy state.
+      //
+      // §11 telemetry: pass `lastFrameMs` so the tick can compute the
+      // per-tick capsule corridor from the drone's prev-tick position.
+      // Rebuild render layers when either an island flips `discovered` OR
+      // new cells got revealed (so the fog overlay / DISCOVERED_BLUE
+      // squares update mid-flight, not just on return).
+      const droneResult = tickDrones(worldState, now, prevFrameMs);
+      if (
+        droneResult.newlyDiscoveredIslandIds.length > 0 ||
+        droneResult.revealedCellsAdded > 0
+      ) {
+        rebuildWorldLayers();
       }
-      // §15.4 / §3.6 merge: after performMerge the absorbed island's buildings
-      // are re-minted with shifted ids into the absorber. If the inspector or
-      // hover state points at a building id that no longer resolves (was
-      // re-minted during the merge), clear both so repaintSelection's
-      // stale-selection guard fires cleanly rather than leaving a ghost outline.
-      const selectedIslandIdNow = inspector.getSelectedIslandId();
-      const selectedBuildingIdNow = inspector.getSelectedBuildingId();
-      if (selectedIslandIdNow !== null && selectedBuildingIdNow !== null) {
-        const owningSpec = islandSpecsById.get(selectedIslandIdNow);
-        const stillExists = owningSpec?.buildings.some((b) => b.id === selectedBuildingIdNow) ?? false;
-        if (!stillExists) {
-          inspector.close();
-          selectedSpec = null;
+      if (droneResult.lost.length > 0) {
+        for (const d of droneResult.lost) {
+          console.log(`Drone lost: ${d.id}`);
         }
       }
-      if (hoveredBuilding) {
-        const hovSpec = islandSpecsById.get(hoveredBuilding.spec.id);
-        const stillHovered = hovSpec?.buildings.some((b) => b.id === hoveredBuilding!.building.id) ?? false;
-        if (!stillHovered) {
-          hoveredBuilding = null;
-          repaintHover();
+      tickRoutes(worldState, islandStates, now, elapsedSec, weatherWallOffsetMs);
+
+      // §14 orbital tick chores. Order matters:
+      //   1. Movement first (sats arrive / are lost in transit; cell occupancy
+      //      changes for subsequent debris/cleanup).
+      //   2. Sweeper cleanup before debris ticks so sat-cleared cells don't
+      //      generate hits this same tick.
+      //   3. Debris ticks (lodge / destruction / Kessler cascade).
+      //   4. Scanner discovery using the post-movement sat positions.
+      //   5. Comm packet propagation.
+      //   6. Repair drone arrivals (existing — keep last so a successful arrival
+      //      sees the freshly-cleaned/destroyed satellite state).
+      const orbitalDeltaMs = now - prevFrameMs;
+      tickSatMovement(worldState, now);
+      tickSweeperCleanup(worldState, orbitalDeltaMs);
+      tickDebris(worldState, now, orbitalDeltaMs);
+      tickScannerDiscovery(worldState, orbitalDeltaMs, now);
+      tickCommPackets(worldState);
+      tickRepairDrones(worldState, now);
+
+      // Ocean-layer §5 — Sonar Buoy depth-discovery. Idempotent (Set writes),
+      // cheap (per-buoy disk is ≤81 cells at the placeholder radius of 4).
+      // Order: after the scanner-sat tick so both depth-revealing systems run
+      // in the same frame and any cell newly covered by either is visible to
+      // the fog/glyph overlay rebuilt below.
+      tickSonarBuoys(worldState);
+
+      // Step-12 / §12: settlement vehicles tick after drones so a frame can
+      // see new discoveries AND a brand-new arrival in the same pass. On
+      // arrival, `tickVehicles` flips `target.populated`, places a Cargo
+      // Dock / Helipad, and inserts a fresh IslandState into the map. We
+      // register the new modifier-multiplier cache entry and rebuild render
+      // layers so the colony becomes visible immediately.
+      const vehicleResult = tickVehicles(worldState, islandStates, now, weatherWallOffsetMs);
+      if (vehicleResult.arrivals.length > 0) {
+        for (const arr of vehicleResult.arrivals) {
+          const newSpec = islandSpecsById.get(arr.targetIslandId);
+          if (newSpec) {
+            modifierMulsById.set(
+              arr.targetIslandId,
+              effectiveModifierMultipliers(newSpec.modifiers),
+            );
+          }
+        }
+        // The freshly-populated island isn't in the retained islandNets /
+        // islandPower maps yet — force the next economy tick so it's selectable
+        // with live data immediately instead of up to ECONOMY_TICK_MS later.
+        forceEconomyTick = true;
+        rebuildWorldLayers();
+      }
+      if (vehicleResult.lost.length > 0) {
+        for (const f of vehicleResult.lost) {
+          console.log(`Settlement vehicle lost to weather: ${f.kind} → ${f.targetIslandId}`);
         }
       }
-      rebuildWorldLayers();
-    }
-    // Drones tick AFTER economy so any biofuel changes from this frame
-    // are visible to the dispatch UI on the same frame; drone returns
-    // are processed independent of economy state.
-    //
-    // §11 telemetry: pass `lastFrameMs` so the tick can compute the
-    // per-tick capsule corridor from the drone's prev-tick position.
-    // Rebuild render layers when either an island flips `discovered` OR
-    // new cells got revealed (so the fog overlay / DISCOVERED_BLUE
-    // squares update mid-flight, not just on return).
-    const droneResult = tickDrones(worldState, now, prevFrameMs);
-    if (
-      droneResult.newlyDiscoveredIslandIds.length > 0 ||
-      droneResult.revealedCellsAdded > 0
-    ) {
-      rebuildWorldLayers();
-    }
-    if (droneResult.lost.length > 0) {
-      for (const d of droneResult.lost) {
-        console.log(`Drone lost: ${d.id}`);
-      }
-    }
-    tickRoutes(worldState, islandStates, now, elapsedSec, weatherWallOffsetMs);
-
-    // §14 orbital tick chores. Order matters:
-    //   1. Movement first (sats arrive / are lost in transit; cell occupancy
-    //      changes for subsequent debris/cleanup).
-    //   2. Sweeper cleanup before debris ticks so sat-cleared cells don't
-    //      generate hits this same tick.
-    //   3. Debris ticks (lodge / destruction / Kessler cascade).
-    //   4. Scanner discovery using the post-movement sat positions.
-    //   5. Comm packet propagation.
-    //   6. Repair drone arrivals (existing — keep last so a successful arrival
-    //      sees the freshly-cleaned/destroyed satellite state).
-    const orbitalDeltaMs = now - prevFrameMs;
-    tickSatMovement(worldState, now);
-    tickSweeperCleanup(worldState, orbitalDeltaMs);
-    tickDebris(worldState, now, orbitalDeltaMs);
-    tickScannerDiscovery(worldState, orbitalDeltaMs, now);
-    tickCommPackets(worldState);
-    tickRepairDrones(worldState, now);
-
-    // Ocean-layer §5 — Sonar Buoy depth-discovery. Idempotent (Set writes),
-    // cheap (per-buoy disk is ≤81 cells at the placeholder radius of 4).
-    // Order: after the scanner-sat tick so both depth-revealing systems run
-    // in the same frame and any cell newly covered by either is visible to
-    // the fog/glyph overlay rebuilt below.
-    tickSonarBuoys(worldState);
-
-    // Step-12 / §12: settlement vehicles tick after drones so a frame can
-    // see new discoveries AND a brand-new arrival in the same pass. On
-    // arrival, `tickVehicles` flips `target.populated`, places a Cargo
-    // Dock / Helipad, and inserts a fresh IslandState into the map. We
-    // register the new modifier-multiplier cache entry and rebuild render
-    // layers so the colony becomes visible immediately.
-    const vehicleResult = tickVehicles(worldState, islandStates, now, weatherWallOffsetMs);
-    if (vehicleResult.arrivals.length > 0) {
-      for (const arr of vehicleResult.arrivals) {
-        const newSpec = islandSpecsById.get(arr.targetIslandId);
-        if (newSpec) {
-          modifierMulsById.set(
-            arr.targetIslandId,
-            effectiveModifierMultipliers(newSpec.modifiers),
-          );
+      if (vehicleResult.failures.length > 0) {
+        // Minimal first-step: log to console. Future step can add UI toast.
+        for (const f of vehicleResult.failures) {
+          console.log(`Settlement vehicle mechanical failure: ${f.kind} → ${f.targetIslandId}`);
         }
       }
-      // The freshly-populated island isn't in the retained islandNets /
-      // islandPower maps yet — force the next economy tick so it's selectable
-      // with live data immediately instead of up to ECONOMY_TICK_MS later.
-      forceEconomyTick = true;
-      rebuildWorldLayers();
-    }
-    if (vehicleResult.lost.length > 0) {
-      for (const f of vehicleResult.lost) {
-        console.log(`Settlement vehicle lost to weather: ${f.kind} → ${f.targetIslandId}`);
-      }
-    }
-    if (vehicleResult.failures.length > 0) {
-      // Minimal first-step: log to console. Future step can add UI toast.
-      for (const f of vehicleResult.failures) {
-        console.log(`Settlement vehicle mechanical failure: ${f.kind} → ${f.targetIslandId}`);
-      }
-    }
 
+    }
     const activeS = activeState();
     const activeP = activeSpec();
     // Last-tick rates/power for the active island (retained across frames —
@@ -2402,42 +2644,46 @@ async function main(): Promise<void> {
     // hoveredBuilding is unchanged (one Graphics.clear + redraw at most).
     repaintHover();
 
-    // Phase 7 §05 — tutorial polling. Runs once per frame; predicates are O(1)
-    // reads off the world, so the cost is negligible.
-    // Stamp the first-show time for the current step BEFORE checking
-    // dismissals, so concept-step TTLs (which measure elapsed-since-shown)
-    // start counting the moment a step is surfaced. markShown is idempotent,
-    // so re-stamping every frame is a no-op after the first show.
-    const shownStep = currentStep(worldState);
-    if (shownStep) markShown(worldState, shownStep.id);
-    const dismissedSteps = checkDismissals(worldState);
-    if (dismissedSteps.length > 0) {
-      const home = worldState.islandStates?.get('home');
-      // Gate the one-shot XP bump on the PERMANENT xpBumpClaimed ledger (not the
-      // resettable `completed` set), and index the 1%..N% ramp off the permanent
-      // claimed-count. restart()/skipAll preserve/fill the ledger, so a reset
-      // tutorial re-completing its still-satisfied objectives grants no XP.
-      let claimedCount = worldState.tutorialState?.xpBumpClaimed?.size ?? 0;
-      for (let i = 0; i < dismissedSteps.length; i++) {
-        const id = dismissedSteps[i]!;
-        const already = worldState.tutorialState?.xpBumpClaimed?.has(id) ?? false;
-        markCompleted(worldState, id);
-        if (already) continue;            // bump already paid -> no XP
-        claimedCount += 1;
-        const pct = xpBumpPercentForCompletion(claimedCount);
-        if (home) home.xp += (pct / 100) * xpForLevel(home.level + 1);
-        markBumpClaimed(worldState, id);
+    if (!isRemote) {
+      // Phase 7 §05 — tutorial polling. Runs once per frame; predicates are O(1)
+      // reads off the world, so the cost is negligible.
+      // Stamp the first-show time for the current step BEFORE checking
+      // dismissals, so concept-step TTLs (which measure elapsed-since-shown)
+      // start counting the moment a step is surfaced. markShown is idempotent,
+      // so re-stamping every frame is a no-op after the first show.
+      const shownStep = currentStep(worldState);
+      if (shownStep) markShown(worldState, shownStep.id);
+      const dismissedSteps = checkDismissals(worldState);
+      if (dismissedSteps.length > 0) {
+        const home = worldState.islandStates?.get('home');
+        // Gate the one-shot XP bump on the PERMANENT xpBumpClaimed ledger (not the
+        // resettable `completed` set), and index the 1%..N% ramp off the permanent
+        // claimed-count. restart()/skipAll preserve/fill the ledger, so a reset
+        // tutorial re-completing its still-satisfied objectives grants no XP.
+        let claimedCount = worldState.tutorialState?.xpBumpClaimed?.size ?? 0;
+        for (let i = 0; i < dismissedSteps.length; i++) {
+          const id = dismissedSteps[i]!;
+          const already = worldState.tutorialState?.xpBumpClaimed?.has(id) ?? false;
+          markCompleted(worldState, id);
+          if (already) continue;            // bump already paid -> no XP
+          claimedCount += 1;
+          const pct = xpBumpPercentForCompletion(claimedCount);
+          if (home) home.xp += (pct / 100) * xpForLevel(home.level + 1);
+          markBumpClaimed(worldState, id);
+        }
       }
     }
     refreshTutorialHint(worldState);
 
-    // recentBuildAttempts TTL — 5 s window
-    if (worldState.recentBuildAttempts.size > 0) {
-      const now = performance.now();
-      for (const [defId, ts] of worldState.recentBuildAttemptTs) {
-        if (now - ts > 5000) {
-          worldState.recentBuildAttempts.delete(defId);
-          worldState.recentBuildAttemptTs.delete(defId);
+    if (!isRemote) {
+      // recentBuildAttempts TTL — 5 s window
+      if (worldState.recentBuildAttempts.size > 0) {
+        const now = performance.now();
+        for (const [defId, ts] of worldState.recentBuildAttemptTs) {
+          if (now - ts > 5000) {
+            worldState.recentBuildAttempts.delete(defId);
+            worldState.recentBuildAttemptTs.delete(defId);
+          }
         }
       }
     }
