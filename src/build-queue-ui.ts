@@ -12,6 +12,7 @@
 //     "every button through the registry" contract without a payload parameter).
 
 import { BUILDING_DEFS } from './building-defs.js';
+import { unwrapGatewayResult, type MutationGateway } from './mutation-gateway.js';
 import { constructionProgress } from './construction.js';
 import { rawFloorLevel } from './buildings.js';
 import type { BuildJob, IslandState } from './economy.js';
@@ -33,6 +34,9 @@ export interface BuildQueueDeps {
   getSpec(): IslandSpec;
   /** Returns the currently-active island state (called on every refresh). */
   getState(): IslandState;
+  /** Mutation gateway — optional so tests can keep wiring only the fields
+   *  they already have. */
+  gateway?: MutationGateway;
   /**
    * Called after a successful cancelConstruction mutation so the caller can
    * rebuild world layers + trigger persistence save. Mirrors the
@@ -99,7 +103,9 @@ export function mountBuildQueuePanel(
     if (buildingId === null) return;
     const spec = deps.getSpec();
     const state = deps.getState();
-    const result = cancelConstruction(spec, state, buildingId);
+    const result = deps.gateway
+      ? unwrapGatewayResult(deps.gateway.cancelConstruction(spec.id, buildingId))
+      : cancelConstruction(spec, state, buildingId);
     if (!result.ok) return;
     deps.onCancel(spec.id);
     refresh();

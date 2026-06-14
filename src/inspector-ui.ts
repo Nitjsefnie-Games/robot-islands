@@ -64,6 +64,7 @@ import {
   type WorldState,
 } from './world.js';
 import { editIslandBiome, UNIVERSE_EDITOR_COST } from './universe-editor.js';
+import { unwrapGatewayResult, type MutationGateway } from './mutation-gateway.js';
 import { mountPanel, Zone } from './ui-zones.js';
 import { fmtPower } from './format.js';
 
@@ -172,6 +173,10 @@ export interface InspectorUi {
 }
 
 export interface InspectorDeps {
+  /** Mutation gateway — optional so tests can keep wiring only the fields
+   *  they already have. When present, storage-label relabel routes through
+   *  the gateway; otherwise the pure helper is called directly. */
+  gateway?: MutationGateway;
   /** Live world reference — needed by the §13.3 Universe Editor flow which
    *  mutates the active island's spec biome and re-rolls modifiers in
    *  place. The inspector only reads `deps.world.seed` + walks
@@ -784,8 +789,13 @@ export function mountInspectorUi(
     // creditStorageCaps in economy.ts will credit the current cargoLabel
     // at completion. Skipping cap arithmetic here prevents both the
     // phantom-strip (old label) and the double-credit (new label) bug.
-    applyRelabelStorageCap(target.state, b, def, oldLabel, newLabel);
-    b.cargoLabel = newLabel;
+    if (deps.gateway) {
+      const res = unwrapGatewayResult(deps.gateway.relabelCargo(target.spec.id, b.id, newLabel));
+      if (!res.ok) return;
+    } else {
+      applyRelabelStorageCap(target.state, b, def, oldLabel, newLabel);
+      b.cargoLabel = newLabel;
+    }
     pendingRelabel = null;
   }
 
