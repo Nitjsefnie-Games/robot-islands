@@ -25,22 +25,118 @@ import {
   cancelConstruction,
   applyUpgrade,
   setBuildingActiveFloors,
+  relocateBuilding,
+  applyRelabelStorageCap,
 } from '../../../src/placement.js';
 import { displayedFloorLevel } from '../../../src/floor-levels.js';
-import { dispatchDrone } from '../../../src/drones.js';
+import { dispatchDrone, firePulse } from '../../../src/drones.js';
 import {
   createRouteFromBuilding,
   routeProfileForBuilding,
   islandHasTeleporterPad,
+  reorderPriorityList,
 } from '../../../src/routes.js';
-import { buyNode, nodePurchaseStatus, keystonePrereqFor, DEFAULT_GRAPH } from '../../../src/skilltree.js';
-import type { ResourceId } from '../../../src/recipes.js';
+import {
+  buyNode,
+  nodePurchaseStatus,
+  keystonePrereqFor,
+  DEFAULT_GRAPH,
+  canBuyKeystone,
+  buyKeystone,
+  bindCrystal,
+  unbindCrystal,
+} from '../../../src/skilltree.js';
+import { CRYSTAL_CATALOG } from '../../../src/skilltree-crystals.js';
+import { canTierReset, executeTierReset } from '../../../src/tier-reset.js';
+import {
+  dispatchVehicle,
+  settleViaSpacetimeAnchor,
+  type VehicleKind,
+  type VehicleTier,
+} from '../../../src/settlement.js';
+import {
+  launchSatellite,
+  upgradeSpaceport,
+  requestSatMove,
+  dispatchRepairDrone,
+  type SatelliteVariant,
+} from '../../../src/orbital.js';
+import { expandIsland, canExpandIsland, type Axis } from '../../../src/land-reclamation.js';
+import { ALL_RESOURCES, type ResourceId } from '../../../src/recipes.js';
 import type { Rotation } from '../../../src/shape-mask.js';
+import { CARGO_WILDCARD, type CargoEntry, type CargoMode } from '../../../src/route-cargo.js';
+import type { CrystalId } from '../../../src/skilltree-graph.js';
 
 export type IntentResult = { ok: true } | { ok: false; error: string };
 
 export interface IntentHandler {
   apply(game: LiveGame, payload: unknown, now: number): IntentResult;
+}
+
+function isValidResourceId(v: unknown): v is ResourceId {
+  return typeof v === 'string' && (ALL_RESOURCES as ReadonlyArray<string>).includes(v);
+}
+
+function isValidCargoMode(v: unknown): v is CargoMode {
+  return v === 'priority' || v === 'waterfall' || v === 'split' || v === 'balanced';
+}
+
+function isValidVehicleKind(v: unknown): v is VehicleKind {
+  return v === 'ship' || v === 'helicopter';
+}
+
+function isValidVehicleTier(v: unknown): v is VehicleTier {
+  return typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= 4;
+}
+
+function isValidSatelliteVariant(v: unknown): v is SatelliteVariant {
+  return v === 'scanner' || v === 'sweeper' || v === 'relay' || v === 'mirror';
+}
+
+function resolveRoute(game: LiveGame, routeId: string) {
+  return game.world.routes.find((r) => r.id === routeId);
+}
+
+/** Authoritative cargo-array validation: each entry must name a real resource
+ *  (or the 'all' wildcard), weights must be positive, floor percentages in
+ *  [0,100], and at most one wildcard/duplicate explicit resource may appear —
+ *  mirroring the routes-UI invariants. */
+function validateCargoList(cargo: unknown): { ok: true; list: CargoEntry[] } | { ok: false; error: string } {
+  if (!Array.isArray(cargo)) return { ok: false, error: 'cargo must be an array' };
+  const list: CargoEntry[] = [];
+  const seen = new Set<string>();
+  let seenAll = false;
+  for (const entry of cargo) {
+    if (!isRecord(entry)) return { ok: false, error: 'cargo entry must be an object' };
+    const { resourceId, weight, sourceFloorPct } = entry;
+    if (typeof resourceId !== 'string') return { ok: false, error: 'cargo entry resourceId must be a string' };
+    if (resourceId !== CARGO_WILDCARD && !isValidResourceId(resourceId)) {
+      return { ok: false, error: `unknown cargo resourceId ${resourceId}` };
+    }
+    if (resourceId === CARGO_WILDCARD) {
+      if (seenAll) return { ok: false, error: 'only one all wildcard allowed' };
+      seenAll = true;
+    } else {
+      if (seen.has(resourceId)) return { ok: false, error: `duplicate cargo resourceId ${resourceId}` };
+      seen.add(resourceId);
+    }
+    if (weight !== undefined) {
+      if (typeof weight !== 'number' || !Number.isFinite(weight) || weight <= 0) {
+        return { ok: false, error: 'cargo weight must be positive' };
+      }
+    }
+    if (sourceFloorPct !== undefined) {
+      if (typeof sourceFloorPct !== 'number' || !Number.isFinite(sourceFloorPct) || sourceFloorPct < 0 || sourceFloorPct > 100) {
+        return { ok: false, error: 'cargo sourceFloorPct must be 0..100' };
+      }
+    }
+    list.push({
+      resourceId,
+      ...(weight !== undefined ? { weight } : {}),
+      ...(sourceFloorPct !== undefined ? { sourceFloorPct } : {}),
+    } as CargoEntry);
+  }
+  return { ok: true, list };
 }
 
 /** Resolve `{ spec, state }` for an island id against authoritative game state,
@@ -348,4 +444,465 @@ export const INTENTS: Record<string, IntentHandler> = {
       return { ok: true };
     },
   },
+
+  // relocate-building — §4 building move. Player supplies
+  // { islandId, buildingId, x, y, rotation? }. `relocateBuilding` self-validates
+  // geometry/tier/terrain via `validatePlacement` and charges a half-fee from
+  // authoritative inventory; the handler only validates payload shape.
+  'relocate-building': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { islandId, buildingId, x, y, rotation } = payload;
+      if (typeof islandId !== 'string') return { ok: false, error: 'islandId must be a string' };
+      if (typeof buildingId !== 'string') return { ok: false, error: 'buildingId must be a string' };
+      if (typeof x !== 'number' || !Number.isInteger(x)) return { ok: false, error: 'x must be an integer' };
+      if (typeof y !== 'number' || !Number.isInteger(y)) return { ok: false, error: 'y must be an integer' };
+      if (rotation !== undefined && rotation !== 0 && rotation !== 1 && rotation !== 2 && rotation !== 3) {
+        return { ok: false, error: 'rotation must be 0..3' };
+      }
+      const island = resolveIsland(game, islandId);
+      if (!island) return { ok: false, error: 'unknown island' };
+      const rot = (rotation ?? 0) as Rotation;
+      const r = relocateBuilding(island.spec, island.state, buildingId, x, y, rot);
+      if (!r.ok) return { ok: false, error: r.reason ?? 'relocate failed' };
+      return { ok: true };
+    },
+  },
+
+  // set-force-run — §4.6 per-building production override. Player supplies
+  // { islandId, buildingId, forceRun: boolean }. No cost; authoritative pre-
+  // check is just building existence/ownership on the island.
+  'set-force-run': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { islandId, buildingId, forceRun } = payload;
+      if (typeof islandId !== 'string') return { ok: false, error: 'islandId must be a string' };
+      if (typeof buildingId !== 'string') return { ok: false, error: 'buildingId must be a string' };
+      if (typeof forceRun !== 'boolean') return { ok: false, error: 'forceRun must be a boolean' };
+      const island = resolveIsland(game, islandId);
+      if (!island) return { ok: false, error: 'unknown island' };
+      const b = island.spec.buildings.find((bb) => bb.id === buildingId);
+      if (!b) return { ok: false, error: 'not-found' };
+      b.forceRun = forceRun ? true : undefined;
+      return { ok: true };
+    },
+  },
+
+  // relabel-cargo — §4.6 generic-storage cargo label change. Player supplies
+  // { islandId, buildingId, newLabel }. `applyRelabelStorageCap` moves the
+  // storage-cap contribution from the old label to the new one; the handler
+  // validates the building is generic-storage and the new label is a real
+  // ResourceId, then updates `building.cargoLabel`.
+  'relabel-cargo': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { islandId, buildingId, newLabel } = payload;
+      if (typeof islandId !== 'string') return { ok: false, error: 'islandId must be a string' };
+      if (typeof buildingId !== 'string') return { ok: false, error: 'buildingId must be a string' };
+      if (typeof newLabel !== 'string' || !isValidResourceId(newLabel)) {
+        return { ok: false, error: 'newLabel must be a valid resource id' };
+      }
+      const island = resolveIsland(game, islandId);
+      if (!island) return { ok: false, error: 'unknown island' };
+      const b = island.spec.buildings.find((bb) => bb.id === buildingId);
+      if (!b) return { ok: false, error: 'not-found' };
+      const def = BUILDING_DEFS[b.defId];
+      if (!def.storage || def.storage.category !== 'generic') {
+        return { ok: false, error: 'building is not generic storage' };
+      }
+      applyRelabelStorageCap(island.state, b, def, b.cargoLabel, newLabel);
+      b.cargoLabel = newLabel;
+      return { ok: true };
+    },
+  },
+
+  // expand-island — §3.4 Land Reclamation Hub action. Player supplies
+  // { islandId, axis: 'major'|'minor' }. `expandIsland` self-validates via
+  // `canExpandIsland` (hub presence, biome cap, inventory) and deducts cost
+  // from authoritative inventory, so no separate handler affordability pre-
+  // check is needed beyond shape validation.
+  'expand-island': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { islandId, axis } = payload;
+      if (typeof islandId !== 'string') return { ok: false, error: 'islandId must be a string' };
+      if (axis !== 'major' && axis !== 'minor') return { ok: false, error: 'axis must be major or minor' };
+      const island = resolveIsland(game, islandId);
+      if (!island) return { ok: false, error: 'unknown island' };
+      // Authoritative gate mirror: expandIsland is a no-op when canExpandIsland
+      // fails, but we surface the reason instead of silently succeeding.
+      const can = canExpandIsland(island.spec, island.state, axis as Axis);
+      if (!can.ok) return { ok: false, error: can.reason ?? 'expand failed' };
+      expandIsland(island.spec, island.state, axis as Axis);
+      return { ok: true };
+    },
+  },
+
+  // cancel-queued-upgrade — §4.8/§9.3 LIFO queued-upgrade cancel. Player supplies
+  // { islandId, buildingId }. Refunding intent; `cancelConstruction` peels the
+  // newest queued upgrade job first, then falls back to running fresh-placement
+  // cancel. No separate affordability gate.
+  'cancel-queued-upgrade': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { islandId, buildingId } = payload;
+      if (typeof islandId !== 'string') return { ok: false, error: 'islandId must be a string' };
+      if (typeof buildingId !== 'string') return { ok: false, error: 'buildingId must be a string' };
+      const island = resolveIsland(game, islandId);
+      if (!island) return { ok: false, error: 'unknown island' };
+      const r = cancelConstruction(island.spec, island.state, buildingId);
+      if (!r.ok) return { ok: false, error: r.reason ?? 'cancel failed' };
+      return { ok: true };
+    },
+  },
+
+  // fire-t4-pulse — §11.5 T4 omnidirectional discovery pulse. Player supplies
+  // { islandId }. `firePulse` self-validates launch-tower presence, tier-4
+  // island, and `cryogenic_hydrogen` fuel on hand; the handler only validates
+  // island existence.
+  'fire-t4-pulse': {
+    apply(game: LiveGame, payload: unknown, now: number): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { islandId } = payload;
+      if (typeof islandId !== 'string') return { ok: false, error: 'islandId must be a string' };
+      const island = resolveIsland(game, islandId);
+      if (!island) return { ok: false, error: 'unknown island' };
+      const r = firePulse(game.world, island.state, now);
+      if (!r.ok) return { ok: false, error: r.reason ?? 'pulse failed' };
+      return { ok: true };
+    },
+  },
+
+  // delete-route — §2.4 soft-delete a route. Player supplies { routeId }.
+  // Authoritative pre-check: the route must exist. `draining = true` stops new
+  // dispatch and lets in-flight cargo land before tickRoutes prunes it.
+  'delete-route': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { routeId } = payload;
+      if (typeof routeId !== 'string') return { ok: false, error: 'routeId must be a string' };
+      const route = resolveRoute(game, routeId);
+      if (!route) return { ok: false, error: 'route not found' };
+      route.draining = true;
+      return { ok: true };
+    },
+  },
+
+  // set-route-mode — change how a route divides capacity across cargo. Player
+  // supplies { routeId, mode }. Validates mode is a real CargoMode and the
+  // route exists.
+  'set-route-mode': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { routeId, mode } = payload;
+      if (typeof routeId !== 'string') return { ok: false, error: 'routeId must be a string' };
+      if (!isValidCargoMode(mode)) return { ok: false, error: 'invalid cargo mode' };
+      const route = resolveRoute(game, routeId);
+      if (!route) return { ok: false, error: 'route not found' };
+      route.mode = mode;
+      return { ok: true };
+    },
+  },
+
+  // set-cargo-weight — split-mode weight for one cargo entry. Player supplies
+  // { routeId, cargoIndex, weight }. Validates the route, index bounds, and
+  // positive weight.
+  'set-cargo-weight': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { routeId, cargoIndex, weight } = payload;
+      if (typeof routeId !== 'string') return { ok: false, error: 'routeId must be a string' };
+      if (typeof cargoIndex !== 'number' || !Number.isInteger(cargoIndex) || cargoIndex < 0) {
+        return { ok: false, error: 'cargoIndex must be a non-negative integer' };
+      }
+      if (typeof weight !== 'number' || !Number.isFinite(weight) || weight <= 0) {
+        return { ok: false, error: 'weight must be positive' };
+      }
+      const route = resolveRoute(game, routeId);
+      if (!route) return { ok: false, error: 'route not found' };
+      if (cargoIndex >= route.cargo.length) return { ok: false, error: 'cargoIndex out of range' };
+      route.cargo[cargoIndex] = { ...route.cargo[cargoIndex]!, weight };
+      return { ok: true };
+    },
+  },
+
+  // set-cargo-floor-pct — source-floor gate for one cargo entry. Player supplies
+  // { routeId, cargoIndex, sourceFloorPct }. Validates 0..100.
+  'set-cargo-floor-pct': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { routeId, cargoIndex, sourceFloorPct } = payload;
+      if (typeof routeId !== 'string') return { ok: false, error: 'routeId must be a string' };
+      if (typeof cargoIndex !== 'number' || !Number.isInteger(cargoIndex) || cargoIndex < 0) {
+        return { ok: false, error: 'cargoIndex must be a non-negative integer' };
+      }
+      if (typeof sourceFloorPct !== 'number' || !Number.isFinite(sourceFloorPct) || sourceFloorPct < 0 || sourceFloorPct > 100) {
+        return { ok: false, error: 'sourceFloorPct must be 0..100' };
+      }
+      const route = resolveRoute(game, routeId);
+      if (!route) return { ok: false, error: 'route not found' };
+      if (cargoIndex >= route.cargo.length) return { ok: false, error: 'cargoIndex out of range' };
+      const entry = route.cargo[cargoIndex]!;
+      route.cargo[cargoIndex] = { resourceId: entry.resourceId, weight: entry.weight, sourceFloorPct };
+      return { ok: true };
+    },
+  },
+
+  // reorder-route-cargo — priority/waterfall ordering. Player supplies
+  // { routeId, srcIndex, dstIndex }. Uses the same `reorderPriorityList` helper
+  // as the routes-UI.
+  'reorder-route-cargo': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { routeId, srcIndex, dstIndex } = payload;
+      if (typeof routeId !== 'string') return { ok: false, error: 'routeId must be a string' };
+      if (typeof srcIndex !== 'number' || !Number.isInteger(srcIndex) || srcIndex < 0) {
+        return { ok: false, error: 'srcIndex must be a non-negative integer' };
+      }
+      if (typeof dstIndex !== 'number' || !Number.isInteger(dstIndex) || dstIndex < 0) {
+        return { ok: false, error: 'dstIndex must be a non-negative integer' };
+      }
+      const route = resolveRoute(game, routeId);
+      if (!route) return { ok: false, error: 'route not found' };
+      if (srcIndex >= route.cargo.length || dstIndex >= route.cargo.length) {
+        return { ok: false, error: 'index out of range' };
+      }
+      route.cargo = reorderPriorityList(route.cargo, srcIndex, dstIndex) as CargoEntry[];
+      return { ok: true };
+    },
+  },
+
+  // set-route-cargo — replace the whole cargo list (add/remove). Player supplies
+  // { routeId, cargo: CargoEntry[] }. The server validates every entry against
+  // the authoritative resource catalog and the no-duplicate/no-multi-wildcard
+  // invariant before replacing.
+  'set-route-cargo': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { routeId, cargo } = payload;
+      if (typeof routeId !== 'string') return { ok: false, error: 'routeId must be a string' };
+      const route = resolveRoute(game, routeId);
+      if (!route) return { ok: false, error: 'route not found' };
+      const v = validateCargoList(cargo);
+      if (!v.ok) return { ok: false, error: v.error };
+      route.cargo = v.list;
+      return { ok: true };
+    },
+  },
+
+  // buy-keystone — §9.3 AND-prereq keystone purchase. Player supplies
+  // { islandId, nodeId }. `buyKeystone` throws on illegal requests, so the
+  // handler pre-checks with `canBuyKeystone` against authoritative state (all
+  // prereq nodes owned + enough unspent SP) before deducting SP.
+  'buy-keystone': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { islandId, nodeId } = payload;
+      if (typeof islandId !== 'string') return { ok: false, error: 'islandId must be a string' };
+      if (typeof nodeId !== 'string') return { ok: false, error: 'nodeId must be a string' };
+      const island = resolveIsland(game, islandId);
+      if (!island) return { ok: false, error: 'unknown island' };
+      const ks = keystonePrereqFor(nodeId);
+      if (ks === undefined) return { ok: false, error: 'not a keystone' };
+      if (!canBuyKeystone(ks, island.state)) return { ok: false, error: 'prereqs or sp not met' };
+      buyKeystone(ks, island.state);
+      return { ok: true };
+    },
+  },
+
+  // bind-crystal — §9.3 graft-socket binding. Player supplies
+  // { islandId, socketId, crystalId }. Consumes one crystal from authoritative
+  // inventory and refunds any previously-bound crystal + mini-tree SP. The pure
+  // `bindCrystal` throws on bad input, so the handler pre-checks socket/crystal
+  // existence, sub-path eligibility, and inventory.
+  'bind-crystal': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { islandId, socketId, crystalId } = payload;
+      if (typeof islandId !== 'string') return { ok: false, error: 'islandId must be a string' };
+      if (typeof socketId !== 'string') return { ok: false, error: 'socketId must be a string' };
+      if (typeof crystalId !== 'string') return { ok: false, error: 'crystalId must be a string' };
+      const island = resolveIsland(game, islandId);
+      if (!island) return { ok: false, error: 'unknown island' };
+      const socket = DEFAULT_GRAPH.graftSockets.find((s) => s.id === socketId);
+      if (!socket) return { ok: false, error: 'unknown socket' };
+      const crystal = CRYSTAL_CATALOG.find((c) => c.id === crystalId);
+      if (!crystal) return { ok: false, error: 'unknown crystal' };
+      if (!crystal.eligibleSubPaths.includes(socket.subPathId)) {
+        return { ok: false, error: 'crystal ineligible for socket sub-path' };
+      }
+      const rid = crystalId as ResourceId;
+      if ((island.state.inventory[rid] ?? 0) <= 0) {
+        return { ok: false, error: 'crystal not in inventory' };
+      }
+      bindCrystal(island.state, socketId, crystalId as CrystalId);
+      return { ok: true };
+    },
+  },
+
+  // unbind-crystal — §9.3 graft-socket unbinding. Player supplies
+  // { islandId, socketId }. Returns the bound crystal to authoritative inventory
+  // and refunds mini-tree SP via `unbindCrystal` (no-op if socket empty).
+  'unbind-crystal': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { islandId, socketId } = payload;
+      if (typeof islandId !== 'string') return { ok: false, error: 'islandId must be a string' };
+      if (typeof socketId !== 'string') return { ok: false, error: 'socketId must be a string' };
+      const island = resolveIsland(game, islandId);
+      if (!island) return { ok: false, error: 'unknown island' };
+      unbindCrystal(island.state, socketId);
+      return { ok: true };
+    },
+  },
+
+  // tier-reset — §9.7 revert a T3+ island to T1, refunding spent SP. Player
+  // supplies { islandId }. `executeTierReset` trusts its caller (it can drive
+  // inventory negative and bypass the cooldown), so the handler pre-checks with
+  // `canTierReset` against authoritative state before applying.
+  'tier-reset': {
+    apply(game: LiveGame, payload: unknown, now: number): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { islandId } = payload;
+      if (typeof islandId !== 'string') return { ok: false, error: 'islandId must be a string' };
+      const island = resolveIsland(game, islandId);
+      if (!island) return { ok: false, error: 'unknown island' };
+      const can = canTierReset(island.state, now);
+      if (!can.ok) return { ok: false, error: can.reason ?? 'tier reset failed' };
+      executeTierReset(island.state, now);
+      return { ok: true };
+    },
+  },
+
+  // dispatch-settler — §12.6 launch a ship/helicopter to settle a discovered,
+  // unpopulated island. Player supplies { originIslandId, targetIslandId, kind,
+  // tier, fuelLoaded, foundationKitCount }. `dispatchVehicle` self-validates
+  // launch building, fuel grade/amount, kit count, range, and one-in-flight cap;
+  // the handler validates payload shape and endpoint existence/ownership.
+  'dispatch-settler': {
+    apply(game: LiveGame, payload: unknown, now: number): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { originIslandId, targetIslandId, kind, tier, fuelLoaded, foundationKitCount } = payload;
+      if (typeof originIslandId !== 'string') return { ok: false, error: 'originIslandId must be a string' };
+      if (typeof targetIslandId !== 'string') return { ok: false, error: 'targetIslandId must be a string' };
+      if (!isValidVehicleKind(kind)) return { ok: false, error: 'kind must be ship or helicopter' };
+      if (!isValidVehicleTier(tier)) return { ok: false, error: 'tier must be 1..4' };
+      if (typeof fuelLoaded !== 'number' || !Number.isFinite(fuelLoaded) || fuelLoaded <= 0) {
+        return { ok: false, error: 'fuelLoaded must be positive' };
+      }
+      if (typeof foundationKitCount !== 'number' || !Number.isInteger(foundationKitCount) || foundationKitCount < 1) {
+        return { ok: false, error: 'foundationKitCount must be a positive integer' };
+      }
+      if (originIslandId === targetIslandId) return { ok: false, error: 'origin and target must differ' };
+      const origin = resolveIsland(game, originIslandId);
+      if (!origin) return { ok: false, error: 'unknown origin island' };
+      const targetSpec = game.world.islands.find((s) => s.id === targetIslandId);
+      if (!targetSpec) return { ok: false, error: 'unknown target island' };
+      if (!targetSpec.discovered) return { ok: false, error: 'target not discovered' };
+      if (targetSpec.populated) return { ok: false, error: 'target already populated' };
+      const r = dispatchVehicle(
+        game.world, origin.spec, origin.state, targetSpec,
+        kind, tier, fuelLoaded, foundationKitCount, now,
+      );
+      if (!r.ok) return { ok: false, error: r.reason };
+      return { ok: true };
+    },
+  },
+
+  // settle-via-spacetime — §12.6 instant T5 settlement via Spacetime Anchor.
+  // Player supplies { originIslandId, targetIslandId }. `settleViaSpacetimeAnchor`
+  // self-validates the anchor, refined kit, and target eligibility, then
+  // populates the target.
+  'settle-via-spacetime': {
+    apply(game: LiveGame, payload: unknown, now: number): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { originIslandId, targetIslandId } = payload;
+      if (typeof originIslandId !== 'string') return { ok: false, error: 'originIslandId must be a string' };
+      if (typeof targetIslandId !== 'string') return { ok: false, error: 'targetIslandId must be a string' };
+      if (originIslandId === targetIslandId) return { ok: false, error: 'origin and target must differ' };
+      const origin = resolveIsland(game, originIslandId);
+      if (!origin) return { ok: false, error: 'unknown origin island' };
+      const targetSpec = game.world.islands.find((s) => s.id === targetIslandId);
+      if (!targetSpec) return { ok: false, error: 'unknown target island' };
+      if (!targetSpec.discovered) return { ok: false, error: 'target not discovered' };
+      if (targetSpec.populated) return { ok: false, error: 'target already populated' };
+      const r = settleViaSpacetimeAnchor(game.world, game.islandStates, originIslandId, targetIslandId, now);
+      if (!r.ok) return { ok: false, error: r.reason };
+      return { ok: true };
+    },
+  },
+
+  // launch-satellite — §14.2 T6 orbital launch. Player supplies
+  // { islandId, variant, targetX, targetY }. `launchSatellite` self-validates
+  // spaceport, ascendant core, payload resources, target range, and the success
+  // roll; deducts cost and (on success) appends a satellite.
+  'launch-satellite': {
+    apply(game: LiveGame, payload: unknown, now: number): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { islandId, variant, targetX, targetY } = payload;
+      if (typeof islandId !== 'string') return { ok: false, error: 'islandId must be a string' };
+      if (!isValidSatelliteVariant(variant)) return { ok: false, error: 'variant must be scanner, sweeper, relay, or mirror' };
+      if (typeof targetX !== 'number' || !Number.isFinite(targetX)) return { ok: false, error: 'targetX must be finite' };
+      if (typeof targetY !== 'number' || !Number.isFinite(targetY)) return { ok: false, error: 'targetY must be finite' };
+      const r = launchSatellite(game.world, islandId, variant, targetX, targetY, now);
+      if (!r.ok) return { ok: false, error: r.reason };
+      return { ok: true };
+    },
+  },
+
+  // upgrade-spaceport — §14.2 Spaceport tier upgrade. Player supplies
+  // { islandId }. `upgradeSpaceport` self-validates spaceport presence and
+  // resource cost, then bumps the building tier.
+  'upgrade-spaceport': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { islandId } = payload;
+      if (typeof islandId !== 'string') return { ok: false, error: 'islandId must be a string' };
+      const r = upgradeSpaceport(game.world, islandId);
+      if (!r.ok) return { ok: false, error: r.reason };
+      return { ok: true };
+    },
+  },
+
+  // move-satellite — §14.6 in-orbit relocation. Player supplies
+  // { satId, targetX, targetY }. `requestSatMove` self-validates sat existence,
+  // not-already-moving, not-pending-repair, locked, and onboard fuel sufficiency.
+  'move-satellite': {
+    apply(game: LiveGame, payload: unknown, now: number): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { satId, targetX, targetY } = payload;
+      if (typeof satId !== 'string') return { ok: false, error: 'satId must be a string' };
+      if (typeof targetX !== 'number' || !Number.isFinite(targetX)) return { ok: false, error: 'targetX must be finite' };
+      if (typeof targetY !== 'number' || !Number.isFinite(targetY)) return { ok: false, error: 'targetY must be finite' };
+      const r = requestSatMove(game.world, satId, targetX, targetY, now);
+      if (!r.ok) return { ok: false, error: r.reason };
+      return { ok: true };
+    },
+  },
+
+  // dispatch-repair-drone — §14.12 send a repair drone to a satellite. Player
+  // supplies { islandId, satId }. `dispatchRepairDrone` self-validates the
+  // spaceport, ascendant core, repair pack, and antimatter propellant, then
+  // appends a RepairDrone.
+  'dispatch-repair-drone': {
+    apply(game: LiveGame, payload: unknown, now: number): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { islandId, satId } = payload;
+      if (typeof islandId !== 'string') return { ok: false, error: 'islandId must be a string' };
+      if (typeof satId !== 'string') return { ok: false, error: 'satId must be a string' };
+      const r = dispatchRepairDrone(game.world, islandId, satId, now);
+      if (!r.ok) return { ok: false, error: r.reason };
+      return { ok: true };
+    },
+  },
+
+  // UNWIRED: convert-to-servitor. The pure entry function lives in
+  // `src/buildings.ts`, which imports `pixi.js` for rendering. Importing it into
+  // the server would drag the renderer into the authoritative layer, violating
+  // the pure/render split. Left for a future slice that extracts or mirrors the
+  // pure logic without the PixiJS dependency.
+  //
+  // UNWIRED: reject-trade. Trade offers are runtime-only and unpersisted on the
+  // client; there is no authoritative offer state server-side to validate
+  // against. Wired only when server-deterministic trade offers land.
 };
