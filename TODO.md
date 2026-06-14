@@ -43,7 +43,13 @@ Hardening note carried from the perf-audit era: the pervasive
 the sensitive trust surface once state crosses a network boundary —
 fold into the migration spec.
 
-### Status — IN PROGRESS (2026-06-14): 4 of 5 slices delivered + deployed
+### Status — (2026-06-14): migration SECURITY-COMPLETE; 4 slices deployed, slice 5 objective met
+
+Server-authoritative migration is functionally + security complete: the server
+owns all state, validates every mutation by re-running the pure rules, and the
+client (REMOTE default) cannot forge state. Slices 1–4 deployed + reviewed +
+browser-verified live; slice 5's trust objective met by the architecture
+(finding doc). Residual items below are non-security code-health/product.
 
 Owner said go (2026-06-14). Decomposed into 5 slices; each ran
 brainstorm → spec → plan → implement → Opus spec-review + code-review,
@@ -73,10 +79,20 @@ plans published to docs-hub under `robot-islands/`.
   back to a fresh server game. Import/export save buttons removed from the
   settings panel (TODO #8). Fastify `trustProxy` enabled and the auth
   rate-limit is tested. SPEC §15.6 fully superseded and Appendix C expanded.
-- ⏭ **Slice 5 — Trust-surface hardening** (NOT started). Harden the
-  `as unknown as` readonly-mutation casts + the trade/XP paths (the
-  hardening note above); harden pure fns that currently trust their
-  caller (slice-3 handlers added authoritative pre-checks as a stopgap).
+- ✅ **Slice 5 — Trust-surface hardening: SECURITY OBJECTIVE MET by the
+  slices 1–4 architecture** (independent audit, 2026-06-14 — see
+  `docs/superpowers/specs/2026-06-14-slice5-trust-hardening-finding.md`).
+  The hardening note above predicted the trust surface *before* the cutover
+  existed; the audit found it already addressed: XP is fully
+  server-authoritative (no client forge path); trade has no server-trust
+  hole (accept-trade unwired = product gap, not security); and the
+  anticipated readonly-mutation casts on security state DON'T EXIST — the 78
+  production `as unknown as` casts are migration plumbing (persistence.ts) +
+  UI (main.ts), i.e. code-health. The server-authoritative model + validated
+  intents (slices 1–4, reviewed; one anti-cheat hole found+fixed) ARE the
+  hardening. Residual is non-security, tracked: type the persistence
+  migration chain (code-health), wire accept-trade via server-deterministic
+  offers (product), the main.ts orbitalUi cast (tiny).
 
 Open follow-ups (server-side, no client/product decisions needed):
 - Wire the 21 non-core intents (same dispatch pattern as slice 3).
