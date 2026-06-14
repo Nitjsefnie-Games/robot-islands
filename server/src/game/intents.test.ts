@@ -1,6 +1,7 @@
 // server/src/game/intents.test.ts
 //
-// Per-intent coverage for the 8 intents wired in slice-3 Task 2 (the
+// Per-intent coverage for the intents wired in slice-3 Task 2 and the
+// Part 2 transport/tech intents. (the
 // `place-building` reference intent is covered in intent-runner.test.ts). Each
 // intent gets a pair: a LEGAL call -> ok:true + the expected authoritative
 // mutation (asserted via reloaded snapshot), and an ILLEGAL/malformed call ->
@@ -20,6 +21,7 @@ import type { SaveSnapshot } from '../../../src/persistence.js';
 import { serializeWorld } from '../../../src/persistence.js';
 import { createNewGame } from '../../../src/new-game.js';
 import { makeInitialIslandState } from '../../../src/world.js';
+import type { ResourceId } from '../../../src/recipes.js';
 
 const pool = testPool();
 beforeEach(() => resetDb(pool));
@@ -398,6 +400,848 @@ describe('unlock-skill-node', () => {
     await expectRejectNoChange(
       uid,
       { type: 'unlock-skill-node', payload: { islandId: 'home', nodeId: 'mining.keystone.veinmaster' }, seq: 9 },
+      now,
+    );
+  });
+});
+
+
+/** Build a fresh game, apply in-memory mutations, persist it, and return the
+ *  user id. Useful for setting up high-tier buildings / resources without
+ *  going through the place-building cost/queue path. */
+async function aUserWithModifiedGame(
+  now: number,
+  mod: (world: any, islandStates: any) => void,
+): Promise<string> {
+  const { world, islandStates } = createNewGame(now);
+  mod(world, islandStates);
+  return userWithSnapshot(serializeWorld(world, islandStates, now, now) as SaveSnapshot);
+}
+
+/** Return the serialized snapshot's home island spec. */
+async function homeSpec(uid: string): Promise<any> {
+  const snap = await loadSnapshot(pool, uid);
+  return snap!.world.islands.find((s: any) => s.id === 'home');
+}
+
+/** Return the serialized snapshot's world object. */
+async function worldSnap(uid: string): Promise<any> {
+  return (await loadSnapshot(pool, uid))!.world;
+}
+
+
+describe('relocate-building', () => {
+  it('legal: moves an existing building to a new tile', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+    const id = await placeBuilding(uid, 'workshop', 0, 0, now);
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'relocate-building', payload: { islandId: 'home', buildingId: id, x: 1, y: 0, rotation: 0 }, seq: 2 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 2 });
+
+    const buildings = await homeBuildings(uid);
+    const b = buildings.find((bb) => bb.id === id)!;
+    expect(b.x).toBe(1);
+    expect(b.y).toBe(0);
+  });
+
+  it('illegal: unknown buildingId is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+    await expectRejectNoChange(
+      uid,
+      { type: 'relocate-building', payload: { islandId: 'home', buildingId: 'nope', x: 1, y: 0 }, seq: 9 },
+      now,
+    );
+  });
+});
+
+describe('set-force-run', () => {
+  it('legal: toggles the force-run flag on a building', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+    const id = await placeBuilding(uid, 'workshop', 0, 0, now);
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'set-force-run', payload: { islandId: 'home', buildingId: id, forceRun: true }, seq: 2 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 2 });
+
+    const buildings = await homeBuildings(uid);
+    const b = buildings.find((bb) => bb.id === id)!;
+    expect(b.forceRun).toBe(true);
+  });
+
+  it('illegal: non-boolean forceRun is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+    const id = await placeBuilding(uid, 'workshop', 0, 0, now);
+    await expectRejectNoChange(
+      uid,
+      { type: 'set-force-run', payload: { islandId: 'home', buildingId: id, forceRun: 'yes' }, seq: 9 },
+      now,
+    );
+  });
+});
+
+describe('relabel-cargo', () => {
+  it('legal: changes the cargo label of a generic-storage building', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
+      const home = world.islands.find((s: any) => s.id === 'home');
+      const state = islandStates.get('home');
+      home.buildings.push({
+        id: 'crate-1', defId: 'crate', x: 0, y: 0,
+        constructionRemainingMs: 0, placedAt: now,
+      });
+      state.buildings = home.buildings;
+    });
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'relabel-cargo', payload: { islandId: 'home', buildingId: 'crate-1', newLabel: 'wood' }, seq: 2 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 2 });
+
+    const b = (await homeBuildings(uid)).find((bb) => bb.id === 'crate-1')!;
+    expect(b.cargoLabel).toBe('wood');
+  });
+
+  it('illegal: invalid resource label is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
+      const home = world.islands.find((s: any) => s.id === 'home');
+      const state = islandStates.get('home');
+      home.buildings.push({
+        id: 'crate-1', defId: 'crate', x: 0, y: 0,
+        constructionRemainingMs: 0, placedAt: now,
+      });
+      state.buildings = home.buildings;
+    });
+    await expectRejectNoChange(
+      uid,
+      { type: 'relabel-cargo', payload: { islandId: 'home', buildingId: 'crate-1', newLabel: 'not-a-resource' }, seq: 9 },
+      now,
+    );
+  });
+});
+
+describe('expand-island', () => {
+  it('legal: expands the island radius and deducts cost', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
+      const home = world.islands.find((s: any) => s.id === 'home');
+      const state = islandStates.get('home');
+      state.level = 5;
+      state.inventory.steel_beam = 10000;
+      state.inventory.concrete = 10000;
+      home.buildings.push({
+        id: 'hub-1', defId: 'land_reclamation_hub', x: 2, y: 0,
+        constructionRemainingMs: 0, placedAt: now,
+      });
+      state.buildings = home.buildings;
+    });
+    const before = (await homeSpec(uid)).majorRadius;
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'expand-island', payload: { islandId: 'home', axis: 'major' }, seq: 2 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 2 });
+
+    expect((await homeSpec(uid)).majorRadius).toBe(before + 1);
+  });
+
+  it('illegal: expansion without a hub is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+    await expectRejectNoChange(
+      uid,
+      { type: 'expand-island', payload: { islandId: 'home', axis: 'major' }, seq: 9 },
+      now,
+    );
+  });
+});
+
+describe('cancel-queued-upgrade', () => {
+  it('legal: removes the newest queued upgrade job', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+    const id = await placeBuilding(uid, 'workshop', 0, 0, now);
+    const up1 = await applyIntent(pool, uid, { type: 'upgrade-building', payload: { islandId: 'home', buildingId: id }, seq: 2 }, now);
+    expect(up1.ok).toBe(true);
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'cancel-queued-upgrade', payload: { islandId: 'home', buildingId: id }, seq: 3 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 3 });
+
+    const jobs = ((await homeState(uid)).buildJobs ?? []) as Array<Record<string, unknown>>;
+    expect(jobs.some((j) => j.kind === 'upgrade')).toBe(false);
+  });
+
+  it('illegal: unknown buildingId is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+    await expectRejectNoChange(
+      uid,
+      { type: 'cancel-queued-upgrade', payload: { islandId: 'home', buildingId: 'nope' }, seq: 9 },
+      now,
+    );
+  });
+});
+
+describe('fire-t4-pulse', () => {
+  it('legal: fires a pulse and spends cryogenic hydrogen', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
+      const home = world.islands.find((s: any) => s.id === 'home');
+      const state = islandStates.get('home');
+      state.level = 30;
+      state.inventory.cryogenic_hydrogen = 100;
+      home.buildings.push({
+        id: 'tower-1', defId: 'launch_tower', x: 0, y: 0,
+        constructionRemainingMs: 0, placedAt: now,
+      });
+      state.buildings = home.buildings;
+    });
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'fire-t4-pulse', payload: { islandId: 'home' }, seq: 2 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 2 });
+
+    const fuelAfter = ((await homeState(uid)).inventory as Record<string, number>).cryogenic_hydrogen;
+    expect(fuelAfter).toBe(90);
+  });
+
+  it('illegal: no launch tower is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+    await expectRejectNoChange(
+      uid,
+      { type: 'fire-t4-pulse', payload: { islandId: 'home' }, seq: 9 },
+      now,
+    );
+  });
+});
+
+
+describe('route management', () => {
+  const COLONY_ID = 'gen-1--3';
+  async function aUserWithTwoPopulatedIslands(now: number): Promise<string> {
+    const { world, islandStates } = createNewGame(now);
+    const colony = world.islands.find((s: any) => s.id === COLONY_ID)!;
+    colony.populated = true;
+    colony.discovered = true;
+    islandStates.set(COLONY_ID, makeInitialIslandState(colony, now));
+    world.islandStates = islandStates;
+    return userWithSnapshot(serializeWorld(world, islandStates, now, now) as SaveSnapshot);
+  }
+
+  async function makeRoute(uid: string, now: number): Promise<string> {
+    const dockId = await placeBuilding(uid, 'dock', 0, 0, now);
+    const ack = await applyIntent(
+      pool, uid,
+      {
+        type: 'create-route',
+        payload: { fromIslandId: 'home', toIslandId: COLONY_ID, buildingId: dockId, filterResource: 'wood' },
+        seq: 2,
+      },
+      now,
+    );
+    expect(ack.ok).toBe(true);
+    const snap = await loadSnapshot(pool, uid);
+    return snap!.world.routes[0].id as string;
+  }
+
+  it('delete-route: marks an existing route as draining', async () => {
+    const now = Date.now();
+    const uid = await aUserWithTwoPopulatedIslands(now);
+    const routeId = await makeRoute(uid, now);
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'delete-route', payload: { routeId }, seq: 3 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 3 });
+
+    const routes = (await worldSnap(uid)).routes;
+    expect(routes[0].draining).toBe(true);
+  });
+
+  it('set-route-mode: changes the cargo allocation mode', async () => {
+    const now = Date.now();
+    const uid = await aUserWithTwoPopulatedIslands(now);
+    const routeId = await makeRoute(uid, now);
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'set-route-mode', payload: { routeId, mode: 'balanced' }, seq: 3 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 3 });
+
+    const routes = (await worldSnap(uid)).routes;
+    expect(routes[0].mode).toBe('balanced');
+  });
+
+  it('set-cargo-weight: updates the weight of a cargo entry', async () => {
+    const now = Date.now();
+    const uid = await aUserWithTwoPopulatedIslands(now);
+    const routeId = await makeRoute(uid, now);
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'set-cargo-weight', payload: { routeId, cargoIndex: 0, weight: 7 }, seq: 3 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 3 });
+
+    const routes = (await worldSnap(uid)).routes;
+    expect(routes[0].cargo[0].weight).toBe(7);
+  });
+
+  it('set-cargo-floor-pct: sets the source-floor percentage', async () => {
+    const now = Date.now();
+    const uid = await aUserWithTwoPopulatedIslands(now);
+    const routeId = await makeRoute(uid, now);
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'set-cargo-floor-pct', payload: { routeId, cargoIndex: 0, sourceFloorPct: 25 }, seq: 3 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 3 });
+
+    const routes = (await worldSnap(uid)).routes;
+    expect(routes[0].cargo[0].sourceFloorPct).toBe(25);
+  });
+
+  it('set-route-cargo: replaces the cargo list after validation', async () => {
+    const now = Date.now();
+    const uid = await aUserWithTwoPopulatedIslands(now);
+    const routeId = await makeRoute(uid, now);
+
+    const ack = await applyIntent(
+      pool, uid,
+      {
+        type: 'set-route-cargo',
+        payload: {
+          routeId,
+          cargo: [
+            { resourceId: 'wood', weight: 2 },
+            { resourceId: 'stone', weight: 3, sourceFloorPct: 10 },
+          ],
+        },
+        seq: 3,
+      },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 3 });
+
+    const cargo = (await worldSnap(uid)).routes[0].cargo;
+    expect(cargo).toHaveLength(2);
+    expect(cargo[0]).toMatchObject({ resourceId: 'wood', weight: 2 });
+    expect(cargo[1]).toMatchObject({ resourceId: 'stone', weight: 3, sourceFloorPct: 10 });
+  });
+
+  it('reorder-route-cargo: moves a cargo entry in the priority list', async () => {
+    const now = Date.now();
+    const uid = await aUserWithTwoPopulatedIslands(now);
+    const routeId = await makeRoute(uid, now);
+
+    const setAck = await applyIntent(
+      pool, uid,
+      {
+        type: 'set-route-cargo',
+        payload: {
+          routeId,
+          cargo: [
+            { resourceId: 'wood', weight: 1 },
+            { resourceId: 'stone', weight: 1 },
+          ],
+        },
+        seq: 3,
+      },
+      now,
+    );
+    expect(setAck.ok).toBe(true);
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'reorder-route-cargo', payload: { routeId, srcIndex: 0, dstIndex: 1 }, seq: 4 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 4 });
+
+    const cargo = (await worldSnap(uid)).routes[0].cargo;
+    expect(cargo[0].resourceId).toBe('stone');
+    expect(cargo[1].resourceId).toBe('wood');
+  });
+
+  it('illegal: invalid cargo mode is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithTwoPopulatedIslands(now);
+    const routeId = await makeRoute(uid, now);
+    await expectRejectNoChange(
+      uid,
+      { type: 'set-route-mode', payload: { routeId, mode: 'nonsense' }, seq: 9 },
+      now,
+    );
+  });
+
+  it('illegal: duplicate resources in cargo list are rejected', async () => {
+    const now = Date.now();
+    const uid = await aUserWithTwoPopulatedIslands(now);
+    const routeId = await makeRoute(uid, now);
+    await expectRejectNoChange(
+      uid,
+      {
+        type: 'set-route-cargo',
+        payload: { routeId, cargo: [{ resourceId: 'wood' }, { resourceId: 'wood' }] },
+        seq: 9,
+      },
+      now,
+    );
+  });
+});
+
+
+describe('buy-keystone', () => {
+  it('legal: purchases a keystone when prereqs and SP are met', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (_world, islandStates) => {
+      const state = islandStates.get('home');
+      state.unlockedNodes = new Set(['mining.notable.deepVein', 'mining.notable.blastOptimization']);
+      state.unspentSkillPoints = 100;
+    });
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'buy-keystone', payload: { islandId: 'home', nodeId: 'mining.keystone.veinmaster' }, seq: 2 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 2 });
+
+    const state = await homeState(uid);
+    expect((state.unlockedNodes as string[])).toContain('mining.keystone.veinmaster');
+    expect(state.unspentSkillPoints).toBe(88); // 100 - cost(12)
+  });
+
+  it('illegal: a non-keystone target is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (_world, islandStates) => {
+      const state = islandStates.get('home');
+      state.unlockedNodes = new Set();
+      state.unspentSkillPoints = 100;
+    });
+    await expectRejectNoChange(
+      uid,
+      { type: 'buy-keystone', payload: { islandId: 'home', nodeId: 'mining.recipeRate.1' }, seq: 9 },
+      now,
+    );
+  });
+});
+
+describe('bind-crystal / unbind-crystal', () => {
+  it('legal: binds a crystal from inventory into a graft socket', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (_world, islandStates) => {
+      const state = islandStates.get('home');
+      state.inventory.mining_crystal_t1 = 1;
+    });
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'bind-crystal', payload: { islandId: 'home', socketId: 'gs.ext.mining-1', crystalId: 'mining_crystal_t1' }, seq: 2 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 2 });
+
+    const state = await homeState(uid);
+    expect((state.inventory as Record<string, number>).mining_crystal_t1).toBe(0);
+    const bindings = state.socketBindings as Array<[string, string]>;
+    expect(bindings).toContainEqual(['gs.ext.mining-1', 'mining_crystal_t1']);
+  });
+
+  it('legal: unbind returns the crystal to inventory', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (_world, islandStates) => {
+      const state = islandStates.get('home');
+      state.inventory.mining_crystal_t1 = 1;
+    });
+
+    const bind = await applyIntent(
+      pool, uid,
+      { type: 'bind-crystal', payload: { islandId: 'home', socketId: 'gs.ext.mining-1', crystalId: 'mining_crystal_t1' }, seq: 2 },
+      now,
+    );
+    expect(bind.ok).toBe(true);
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'unbind-crystal', payload: { islandId: 'home', socketId: 'gs.ext.mining-1' }, seq: 3 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 3 });
+
+    const state = await homeState(uid);
+    expect((state.inventory as Record<string, number>).mining_crystal_t1).toBe(1);
+    expect((state.socketBindings as Array<[string, string]>).length).toBe(0);
+  });
+
+  it('illegal: binding an ineligible crystal is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (_world, islandStates) => {
+      const state = islandStates.get('home');
+      state.inventory.forestry_crystal_t1 = 1;
+    });
+    await expectRejectNoChange(
+      uid,
+      { type: 'bind-crystal', payload: { islandId: 'home', socketId: 'gs.ext.mining-1', crystalId: 'forestry_crystal_t1' }, seq: 9 },
+      now,
+    );
+  });
+});
+
+describe('tier-reset', () => {
+  it('legal: resets a T3+ island to level 1 and deducts cost', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (_world, islandStates) => {
+      const state = islandStates.get('home');
+      state.level = 15;
+      state.inventory.steel = 300;
+      state.inventory.gear = 200;
+    });
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'tier-reset', payload: { islandId: 'home' }, seq: 2 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 2 });
+
+    const state = await homeState(uid);
+    expect(state.level).toBe(1);
+    expect((state.inventory as Record<string, number>).steel).toBe(75); // 300 - 225
+    expect((state.inventory as Record<string, number>).gear).toBe(88); // 200 - 112
+  });
+
+  it('illegal: tier-too-low island is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+    await expectRejectNoChange(
+      uid,
+      { type: 'tier-reset', payload: { islandId: 'home' }, seq: 9 },
+      now,
+    );
+  });
+});
+
+
+describe('dispatch-settler', () => {
+  const COLONY_ID = 'gen-1--3';
+  async function aUserReadyToSettle(now: number): Promise<string> {
+    return aUserWithModifiedGame(now, (world, islandStates) => {
+      const home = world.islands.find((s: any) => s.id === 'home');
+      const state = islandStates.get('home');
+      home.buildings.push({
+        id: 'shipyard-1', defId: 'shipyard', x: 0, y: 0,
+        constructionRemainingMs: 0, placedAt: now,
+      });
+      state.buildings = home.buildings;
+      state.inventory.biofuel = 200;
+      state.inventory.foundation_kit = 10;
+      const colony = world.islands.find((s: any) => s.id === COLONY_ID);
+      colony.discovered = true;
+      colony.populated = false;
+    });
+  }
+
+  it('legal: launches a settler ship and deducts fuel/kits', async () => {
+    const now = Date.now();
+    const uid = await aUserReadyToSettle(now);
+
+    const ack = await applyIntent(
+      pool, uid,
+      {
+        type: 'dispatch-settler',
+        payload: { originIslandId: 'home', targetIslandId: COLONY_ID, kind: 'ship', tier: 1, fuelLoaded: 200, foundationKitCount: 1 },
+        seq: 2,
+      },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 2 });
+
+    const world = await worldSnap(uid);
+    expect(world.vehicles.length).toBe(1);
+    const state = await homeState(uid);
+    expect((state.inventory as Record<string, number>).biofuel).toBe(0);
+    expect((state.inventory as Record<string, number>).foundation_kit).toBe(9);
+  });
+
+  it('illegal: an undiscovered target is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
+      const home = world.islands.find((s: any) => s.id === 'home');
+      const state = islandStates.get('home');
+      home.buildings.push({
+        id: 'shipyard-1', defId: 'shipyard', x: 0, y: 0,
+        constructionRemainingMs: 0, placedAt: now,
+      });
+      state.buildings = home.buildings;
+      state.inventory.biofuel = 200;
+      state.inventory.foundation_kit = 10;
+    });
+    await expectRejectNoChange(
+      uid,
+      {
+        type: 'dispatch-settler',
+        payload: { originIslandId: 'home', targetIslandId: COLONY_ID, kind: 'ship', tier: 1, fuelLoaded: 200, foundationKitCount: 1 },
+        seq: 9,
+      },
+      now,
+    );
+  });
+});
+
+describe('settle-via-spacetime', () => {
+  const COLONY_ID = 'gen-1--3';
+  it('legal: instantly populates a discovered island using a Spacetime Anchor', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
+      const home = world.islands.find((s: any) => s.id === 'home');
+      const state = islandStates.get('home');
+      state.level = 50;
+      state.aiCoreCrafted = true;
+      state.inventory.foundation_kit_refined = 3;
+      home.buildings.push({
+        id: 'anchor-1', defId: 'spacetime_anchor', x: 0, y: 0,
+        constructionRemainingMs: 0, placedAt: now,
+      });
+      state.buildings = home.buildings;
+      const colony = world.islands.find((s: any) => s.id === COLONY_ID);
+      colony.discovered = true;
+      colony.populated = false;
+    });
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'settle-via-spacetime', payload: { originIslandId: 'home', targetIslandId: COLONY_ID }, seq: 2 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 2 });
+
+    const world = await worldSnap(uid);
+    const colony = world.islands.find((s: any) => s.id === COLONY_ID);
+    expect(colony.populated).toBe(true);
+    const state = await homeState(uid);
+    expect((state.inventory as Record<string, number>).foundation_kit_refined).toBe(2);
+  });
+
+  it('illegal: no spacetime anchor is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (world) => {
+      const colony = world.islands.find((s: any) => s.id === COLONY_ID);
+      colony.discovered = true;
+      colony.populated = false;
+    });
+    await expectRejectNoChange(
+      uid,
+      { type: 'settle-via-spacetime', payload: { originIslandId: 'home', targetIslandId: COLONY_ID }, seq: 9 },
+      now,
+    );
+  });
+});
+
+
+describe('orbital intents', () => {
+  function orbitalSnapshot(now: number) {
+    const { world, islandStates } = createNewGame(now);
+    const home = world.islands.find((s: any) => s.id === 'home');
+    const state = islandStates.get('home');
+    state.ascendantCoreCrafted = true;
+    state.unlockedNodes = new Set(['launch.notable.padRedundancy', 'launch.keystone.padMastery']);
+    state.unspentSkillPoints = 100;
+    state.inventory.scanner_sat = 1;
+    state.inventory.orbital_insertion_package = 1;
+    state.inventory.antimatter_propellant = 1;
+    home.buildings.push({
+      id: 'spaceport-1', defId: 'spaceport', x: 0, y: 0,
+      constructionRemainingMs: 0, placedAt: now, tier: 2,
+    });
+    state.buildings = home.buildings;
+    return serializeWorld(world, islandStates, now, now) as SaveSnapshot;
+  }
+
+  it('upgrade-spaceport: bumps an existing Spaceport to tier 2', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (_world, islandStates) => {
+      const home = _world.islands.find((s: any) => s.id === 'home');
+      const state = islandStates.get('home');
+      state.ascendantCoreCrafted = true;
+      home.buildings.push({
+        id: 'spaceport-1', defId: 'spaceport', x: 0, y: 0,
+        constructionRemainingMs: 0, placedAt: now, tier: 1,
+      });
+      state.buildings = home.buildings;
+      state.inventory.phase_converter = 5;
+      state.inventory.memetic_core = 2;
+      state.inventory.cryogenic_hydrogen = 50;
+    });
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'upgrade-spaceport', payload: { islandId: 'home' }, seq: 2 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 2 });
+
+    const b = (await homeBuildings(uid)).find((bb) => bb.id === 'spaceport-1')!;
+    expect(b.tier).toBe(2);
+  });
+
+  it('launch-satellite: legal launch eventually succeeds and appends a satellite', async () => {
+    const now = Date.now();
+    let succeeded = false;
+    // The launch has a deterministic RNG seeded by world.seed + nowMs. With
+    // a T2 Spaceport and both launch-success nodes unlocked the success rate
+    // clamps to 0.99; scan a handful of timestamps to find one that rolls success.
+    for (let i = 0; i < 50 && !succeeded; i++) {
+      const uid = await userWithSnapshot(orbitalSnapshot(now));
+      const ack = await applyIntent(
+        pool, uid,
+        { type: 'launch-satellite', payload: { islandId: 'home', variant: 'scanner', targetX: 100, targetY: 0 }, seq: 2 },
+        now + i,
+      );
+      if (ack.ok) {
+        succeeded = true;
+        const world = await worldSnap(uid);
+        expect(world.satellites.length).toBe(1);
+      }
+    }
+    expect(succeeded).toBe(true);
+  });
+
+  it('launch-satellite: no spaceport is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+    await expectRejectNoChange(
+      uid,
+      { type: 'launch-satellite', payload: { islandId: 'home', variant: 'scanner', targetX: 100, targetY: 0 }, seq: 9 },
+      now,
+    );
+  });
+
+  it('move-satellite: starts an in-orbit relocation', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (world) => {
+      world.satellites.push({
+        id: 'sat-1',
+        variant: 'scanner',
+        spaceportIslandId: 'home',
+        x: 2,
+        y: 2,
+        fuel: 100,
+        locked: true,
+        pendingRepairDroneId: null,
+        lodges: { scan: 0, weather: 0, comm: 0 },
+        buffer: [],
+      } as any);
+    });
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'move-satellite', payload: { satId: 'sat-1', targetX: 100, targetY: 0 }, seq: 2 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 2 });
+
+    const sat = (await worldSnap(uid)).satellites[0];
+    expect(sat.movingTo).toMatchObject({ x: 100, y: 0 });
+    expect(sat.locked).toBe(false);
+  });
+
+  it('move-satellite: unknown sat is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+    await expectRejectNoChange(
+      uid,
+      { type: 'move-satellite', payload: { satId: 'nope', targetX: 100, targetY: 0 }, seq: 9 },
+      now,
+    );
+  });
+
+  it('dispatch-repair-drone: sends a repair drone to a satellite', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
+      const home = world.islands.find((s: any) => s.id === 'home');
+      const state = islandStates.get('home');
+      state.ascendantCoreCrafted = true;
+      home.buildings.push({
+        id: 'spaceport-1', defId: 'spaceport', x: 0, y: 0,
+        constructionRemainingMs: 0, placedAt: now, tier: 1,
+      });
+      state.buildings = home.buildings;
+      state.inventory.repair_pack = 1;
+      state.inventory.antimatter_propellant = 5;
+      world.satellites.push({
+        id: 'sat-1',
+        variant: 'scanner',
+        spaceportIslandId: 'home',
+        x: 2,
+        y: 2,
+        fuel: 100,
+        locked: true,
+        pendingRepairDroneId: null,
+        lodges: { scan: 0.5, weather: 0, comm: 0 },
+        buffer: [],
+      } as any);
+    });
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'dispatch-repair-drone', payload: { islandId: 'home', satId: 'sat-1' }, seq: 2 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 2 });
+
+    const world = await worldSnap(uid);
+    expect(world.repairDrones.length).toBe(1);
+    expect(world.satellites[0].pendingRepairDroneId).toBe(world.repairDrones[0].id);
+  });
+
+  it('dispatch-repair-drone: missing satellite is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
+      const home = world.islands.find((s: any) => s.id === 'home');
+      const state = islandStates.get('home');
+      state.ascendantCoreCrafted = true;
+      home.buildings.push({
+        id: 'spaceport-1', defId: 'spaceport', x: 0, y: 0,
+        constructionRemainingMs: 0, placedAt: now, tier: 1,
+      });
+      state.buildings = home.buildings;
+      state.inventory.repair_pack = 1;
+      state.inventory.antimatter_propellant = 5;
+    });
+    await expectRejectNoChange(
+      uid,
+      { type: 'dispatch-repair-drone', payload: { islandId: 'home', satId: 'nope' }, seq: 9 },
       now,
     );
   });
