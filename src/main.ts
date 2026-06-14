@@ -47,6 +47,7 @@ import { TILE_PX } from './island.js';
 import { computeVisionSources } from './lighthouse.js';
 import { discoverIslandsInVision } from './vision-discovery.js';
 import { visionSourcesSignature } from './vision-source.js';
+import { discoverySignature } from './discovery-signature.js';
 import { mountFeatureGlyphs, renderOcean, renderOceanFogOverlay } from './ocean.js';
 import {
   clampSaveIntervalSec,
@@ -2062,33 +2063,16 @@ async function main(): Promise<void> {
   /** Cheap fingerprint of the world-layer-relevant state for REMOTE rebuild
    *  gating: discovered-island count + revealed-cell count PLUS a structural
    *  fingerprint of every island's rendered geometry (buildings + terrain
-   *  modifiers + populated/discovered flags). `renderIsland` draws building
-   *  sprites and terrain tiles, so a building placed / demolished / moved /
-   *  upgraded / construction-completed, a force-run toggle, an ocean-platform
-   *  pause, a relabel, or a terrain-modifier change must repaint — but in
-   *  REMOTE `applyRemoteSnapshot` is the ONLY rebuild path (the per-frame
-   *  ticker rebuild is `!isRemote`), so the gate has to notice these.
-   *  Construction is folded as a BOOLEAN (`c`/`o`), never the decrementing
-   *  `constructionRemainingMs`, so an in-progress build doesn't churn the gate
-   *  every push — only the ghost→solid transition flips it. Paired with the
-   *  vision-source signature below — the same diff discipline the LOCAL ticker
-   *  uses to avoid re-baking GPU textures on every idle push. */
-  function discoverySignature(): string {
-    let discovered = 0;
-    const parts: string[] = [];
-    for (const s of worldState.islands) {
-      if (s.discovered) discovered++;
-      let seg = `${s.id}:${s.populated ? 1 : 0}:${s.discovered ? 1 : 0}:${s.modifiers.join(',')}#`;
-      for (const b of s.buildings) {
-        seg += `${b.id}@${b.x},${b.y}/${b.rotation ?? 0}:${b.defId}:` +
-          `${(b.constructionRemainingMs ?? 0) > 0 ? 'c' : 'o'}:${b.paused ?? ''}:` +
-          `${b.forceRun ? 'f' : ''}:${b.cargoLabel ?? ''}:${b.anchorIslandId ?? ''};`;
-      }
-      parts.push(seg);
-    }
-    return `${discovered}|${worldState.revealedCells.size}|${parts.join('|')}`;
-  }
-  let lastDiscoverySig = discoverySignature();
+   *  modifiers + populated/discovered flags + ellipse radii + tile overrides).
+   *  `renderIsland` draws building sprites and terrain tiles, so a building
+   *  placed / demolished / moved / upgraded, an island expanded/merged, or a
+   *  terrain-modifier/tile-override change must repaint. Non-visual fields such
+   *  as forceRun, paused, cargoLabel, anchorIslandId and the construction
+   *  boolean are intentionally excluded — they affect overlays/economy, not the
+   *  baked world-layer texture. Paired with the vision-source signature below —
+   *  the same diff discipline the LOCAL ticker uses to avoid re-baking GPU
+   *  textures on every idle push. */
+  let lastDiscoverySig = discoverySignature(worldState);
 
   /** Apply a server-pushed snapshot in REMOTE mode: mutate the live world/state
    *  objects IN PLACE (so every overlay/inspector/panel that captured them by
@@ -2163,7 +2147,7 @@ async function main(): Promise<void> {
     const visionSig = visionSourcesSignature(
       computeVisionSources(worldState.islands.filter((s) => s.populated)),
     );
-    const discoverySig = discoverySignature();
+    const discoverySig = discoverySignature(worldState);
     const changed = visionSig !== lastVisionSig || discoverySig !== lastDiscoverySig;
     lastVisionSig = visionSig;
     lastDiscoverySig = discoverySig;
