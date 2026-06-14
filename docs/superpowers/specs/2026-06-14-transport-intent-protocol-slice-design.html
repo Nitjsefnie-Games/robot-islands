@@ -1,0 +1,189 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Design spec — Server migration slice 3: Transport + intent protocol</title>
+  <style>
+    :root {
+      --ivory:#1B1A17; --slate:#F5F3EC; --clay:#D97757; --oat:#3A352B; --olive:#8FA56E; --rust:#E08B7F;
+      --gray-150:#2E2C27; --gray-300:#3A3833; --gray-500:#8F8D82; --gray-700:#CFCCC2; --white:#252420;
+      --serif:ui-serif,Georgia,serif; --sans:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+      --mono:ui-monospace,'SF Mono',Menlo,monospace; --radius:12px; --border:1.5px solid var(--gray-300);
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:var(--sans); background:var(--ivory); color:var(--gray-700); line-height:1.58; padding:56px 32px 120px; -webkit-font-smoothing:antialiased; }
+    .page { margin:0 auto; max-width:920px; }
+    .eyebrow { font-family:var(--mono); font-size:12px; letter-spacing:0.08em; text-transform:uppercase; color:var(--gray-500); margin-bottom:12px; }
+    h1 { font-family:var(--serif); font-weight:500; font-size:38px; line-height:1.14; color:var(--slate); margin-bottom:18px; letter-spacing:-0.01em; }
+    .context-box { background:var(--gray-150); border:var(--border); border-radius:var(--radius); padding:16px 20px; font-size:14.5px; }
+    .context-box .label { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--gray-500); display:block; margin-bottom:6px; }
+    .summary { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin:24px 0 48px; }
+    @media (max-width:900px){ .summary{ grid-template-columns:repeat(2,1fr); } }
+    .summary .cell { background:var(--white); border:var(--border); border-radius:var(--radius); padding:18px 20px; }
+    .summary .k { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--gray-500); margin-bottom:6px; }
+    .summary .v { font-size:17px; color:var(--slate); font-weight:600; } .summary .v.accent { color:var(--clay); } .summary .v.ok { color:var(--olive); }
+    .decision { background:var(--white); border:var(--border); border-left:4px solid var(--clay); border-radius:var(--radius); padding:22px 26px; margin-bottom:48px; }
+    .decision .d-tag { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.07em; color:var(--clay); margin-bottom:8px; }
+    .decision .d-head { font-family:var(--serif); font-size:22px; font-weight:500; color:var(--slate); margin-bottom:10px; }
+    .decision .d-body { font-size:14.5px; } .decision .d-body + .d-body { margin-top:8px; }
+    section { margin-bottom:52px; scroll-margin-top:20px; }
+    .sec-head { display:flex; align-items:baseline; gap:14px; margin-bottom:8px; }
+    .sec-head .num { font-family:var(--mono); font-size:12px; background:var(--oat); color:var(--slate); padding:3px 9px; border-radius:8px; }
+    .sec-head h2 { font-family:var(--serif); font-weight:500; font-size:25px; color:var(--slate); letter-spacing:-0.01em; }
+    .sec-intro { font-size:14.5px; color:var(--gray-500); margin-bottom:20px; }
+    p.body { font-size:14.5px; margin-bottom:14px; } p.body strong { color:var(--slate); }
+    ul.body { font-size:14.5px; margin:0 0 14px 20px; } ul.body li { margin:6px 0; }
+    code { font-family:var(--mono); font-size:0.88em; background:var(--gray-150); border:1px solid var(--gray-300); border-radius:5px; padding:1px 5px; color:#C9B98A; }
+    pre { font-family:var(--mono); font-size:12.5px; background:var(--gray-150); border:var(--border); border-radius:var(--radius); padding:16px 18px; overflow-x:auto; color:var(--gray-700); margin-bottom:18px; line-height:1.5; }
+    pre code { background:none; border:none; padding:0; color:inherit; font-size:inherit; }
+    .tbl { width:100%; border:var(--border); border-radius:var(--radius); border-collapse:separate; border-spacing:0; overflow:hidden; font-size:13px; margin-bottom:18px; }
+    .tbl th,.tbl td { text-align:left; padding:9px 14px; border-bottom:1px solid var(--gray-300); vertical-align:top; }
+    .tbl th { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:var(--gray-500); background:var(--gray-150); font-weight:600; }
+    .tbl tr:last-child td { border-bottom:none; } .tbl td { color:var(--gray-700); } .tbl td.slate { color:var(--slate); font-weight:600; }
+    .tbl tbody tr:hover { background:var(--gray-150); }
+    .wired { color:var(--olive); font-weight:600; }
+    .risks { border:var(--border); border-radius:var(--radius); overflow:hidden; background:var(--white); }
+    .risks .row { display:grid; grid-template-columns:1.6fr 90px 1.6fr; } @media (max-width:780px){ .risks .row{ grid-template-columns:1fr; } }
+    .risks .row + .row { border-top:var(--border); }
+    .risks .cell { padding:14px 18px; font-size:13.5px; } .risks .cell + .cell { border-left:var(--border); }
+    @media (max-width:780px){ .risks .cell + .cell{ border-left:none; border-top:1px dashed var(--gray-300); } }
+    .risks .head { background:var(--gray-150); font-weight:600; color:var(--slate); font-size:12px; text-transform:uppercase; letter-spacing:0.04em; }
+    .sev { display:inline-block; font-family:var(--mono); font-size:11px; padding:2px 8px; border-radius:6px; font-weight:600; }
+    .sev.high { background:#4A2A1C; color:#F0B79C; } .sev.med { background:var(--oat); color:var(--slate); } .sev.low { background:#2D3A24; color:#B6CC96; }
+    .footer { color:var(--gray-500); font-size:13px; margin-top:56px; padding-top:22px; border-top:1px solid var(--gray-300); }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="eyebrow">Design spec · robot-islands · server migration slice 3 of 5</div>
+    <h1>Transport + intent protocol</h1>
+    <div class="context-box">
+      <span class="label">Context</span>
+      Slices 1–2 gave us accounts and a server that owns + persists game state with offline catch-up.
+      Slice 3 adds the two-way channel: the client sends intents (place, spend, dispatch, trade, …); the
+      server validates each against the same pure rules, applies it authoritatively, persists, and pushes
+      back the projection. This is the anti-cheat core — the client can ask, but only the server's
+      pure-function outcome is real. The browser client is not cut over yet (slice 4).
+    </div>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Slice</div><div class="v accent">3 of 5</div></div>
+      <div class="cell"><div class="k">Intents cataloged</div><div class="v">30</div></div>
+      <div class="cell"><div class="k">Wired this slice</div><div class="v ok">9 core</div></div>
+      <div class="cell"><div class="k">Client changes</div><div class="v ok">None</div></div>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision</div>
+      <div class="d-head">An authenticated WebSocket carrying an intent envelope; a dispatch table validates each intent by RE-RUNNING the existing pure function on authoritative server state, then persists + broadcasts the projection.</div>
+      <div class="d-body">Validation = re-running the pure rule on server state — the client's numbers are never trusted; success/failure comes from the pure function's outcome on authoritative inventory/state. Rejected intents persist nothing.</div>
+      <div class="d-body">Scope: the transport + envelope + validate/persist/broadcast mechanism, wired for a 9-intent core subset, with all 30 cataloged so the rest are a mechanical follow-up. Client cutover is slice 4; hardening under-validating pure functions + the <code>as unknown as</code> casts is slice 5.</div>
+    </div>
+
+    <section id="s1">
+      <div class="sec-head"><span class="num">01</span><h2>Background — verified intent surface</h2></div>
+      <p class="body">A <code>src/</code> audit enumerated <strong>30 player-initiated state-mutating actions</strong> (the wire intents) and the automatic/tick functions that must NOT be intents (<code>advanceIsland</code>, <code>tickDrones</code>, <code>tickRoutes</code>, <code>tickVehicles</code>, <code>tick*</code> orbital, <code>tickTradeOffers</code>, <code>performMerge</code>, …) — those are driven by the server tick loop, never the client. Every mutating action already has a pure entry function the server reuses unchanged (slice-2's cross-workspace import).</p>
+    </section>
+
+    <section id="s2">
+      <div class="sec-head"><span class="num">02</span><h2>Decisions captured</h2></div>
+      <table class="tbl">
+        <thead><tr><th>Decision</th><th>Choice</th><th>Rationale</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">Transport</td><td>WebSocket (@fastify/websocket)</td><td>Bidirectional, low-latency push; matches a live game.</td></tr>
+          <tr><td class="slate">Socket auth</td><td>reuse slice-1 session cookie</td><td>One identity; share the guard logic on upgrade.</td></tr>
+          <tr><td class="slate">Envelope</td><td>{ type, payload, seq } JSON</td><td>Minimal; seq correlates the ack.</td></tr>
+          <tr><td class="slate">Validation</td><td>re-run pure entry fn on authoritative state</td><td>The pure rule IS the validator; client numbers never trusted.</td></tr>
+          <tr><td class="slate">Apply path</td><td>loadAndCatchUp → apply → persist → broadcast</td><td>One authoritative state/account; durable per intent.</td></tr>
+          <tr><td class="slate">Failure</td><td>structured ok:false; nothing persisted</td><td>A rejected intent never mutates/persists.</td></tr>
+          <tr><td class="slate">Coverage</td><td>mechanism + 9 core; all 30 cataloged</td><td>Shippable; rest mechanical.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="s3">
+      <div class="sec-head"><span class="num">03</span><h2>Architecture (server/src/game/)</h2></div>
+      <table class="tbl">
+        <thead><tr><th>File</th><th>Responsibility</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">intents.ts</td><td>Intent catalog + dispatch table: type → { apply(game, payload, now), cost? }; each calls a pure src/ function. No DB/WS.</td></tr>
+          <tr><td class="slate">intent-runner.ts</td><td>applyIntent: loadAndCatchUp → handler → on success persist + return projection; on failure error, persist nothing.</td></tr>
+          <tr><td class="slate">ws.ts</td><td>@fastify/websocket /api/game/ws: authenticate upgrade (cookie), receive envelopes, call runner, send acks/projections; serialize one in-flight intent per account.</td></tr>
+          <tr><td class="slate">app.ts</td><td>Register @fastify/websocket + the ws route.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="s4">
+      <div class="sec-head"><span class="num">04</span><h2>Intent envelope &amp; flow</h2></div>
+      <pre><code>client → server:  { "type":"place-building", "payload":{ islandId, defId, x, y, rotation }, "seq":42 }
+server:           game = loadAndCatchUp(pool, userId, now)     // authoritative
+                  result = INTENTS["place-building"].apply(game, payload, now)  // re-runs placeBuilding
+                  if result.ok:  saveSnapshot(...); broadcast projection
+                  else:          nothing persisted
+server → client:  { "seq":42, "ok":true,  "projection":{...} }
+            or:   { "seq":42, "ok":false, "error":"insufficient resources" }</code></pre>
+      <ul class="body">
+        <li><strong>Authoritative legality</strong>: the handler runs the pure fn on server state; over-spend/illegal → ok:false, nothing persisted. Where a pure fn trusts its caller, the handler adds the minimal affordability pre-check (deeper hardening = slice 5).</li>
+        <li><strong>One in-flight intent per account</strong> so two intents can't race the saves row.</li>
+        <li><strong>Determinism-as-bandwidth</strong>: weather/day-night are NOT sent — the client renders them from (seed, t). Projection carries only non-deterministic authoritative state.</li>
+      </ul>
+    </section>
+
+    <section id="s5">
+      <div class="sec-head"><span class="num">05</span><h2>Intent catalog (30) — wire targets</h2></div>
+      <p class="sec-intro">Core subset wired this slice in <span class="wired">green</span>; the rest share the same dispatch pattern (a tracked mechanical follow-up).</p>
+      <table class="tbl">
+        <thead><tr><th>Intent</th><th>Pure entry (src/…)</th><th>Spends?</th><th>This slice</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">place-building</td><td>placement.ts:placeBuilding</td><td>yes</td><td class="wired">✅</td></tr>
+          <tr><td class="slate">demolish-building</td><td>placement.ts:demolishBuilding</td><td>refunds</td><td class="wired">✅</td></tr>
+          <tr><td class="slate">cancel-construction</td><td>placement.ts:cancelConstruction</td><td>refunds</td><td class="wired">✅</td></tr>
+          <tr><td class="slate">upgrade-building</td><td>placement.ts:applyUpgrade</td><td>yes</td><td class="wired">✅</td></tr>
+          <tr><td class="slate">set-active-floors</td><td>placement.ts:setBuildingActiveFloors</td><td>no</td><td class="wired">✅</td></tr>
+          <tr><td class="slate">accept-trade</td><td>trade.ts:applyOffer</td><td>yes</td><td class="wired">✅</td></tr>
+          <tr><td class="slate">dispatch-drone</td><td>drones.ts:dispatchDrone</td><td>yes</td><td class="wired">✅</td></tr>
+          <tr><td class="slate">create-route</td><td>routes.ts:createRouteFromBuilding</td><td>no</td><td class="wired">✅</td></tr>
+          <tr><td class="slate">unlock-skill-node</td><td>skilltree.ts:buyNode</td><td>yes (SP)</td><td class="wired">✅</td></tr>
+          <tr><td class="slate">+ 21 more</td><td>relocate / force-run / relabel / convert-servitor / expand-island / reject-trade / fire-pulse / route mode·cargo·weight·floor·reorder / delete-route / keystone / crystals / tier-reset / settlers ×2 / orbital ×4 / cancel-queued</td><td>mixed</td><td>follow-up</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="s6">
+      <div class="sec-head"><span class="num">06</span><h2>Trust surface (feeds slice 5)</h2></div>
+      <ul class="body">
+        <li>Several pure fns deduct cost only if the caller checked affordability (the client UI did). Server-side the handler pre-checks affordability from authoritative inventory before applying; slice 5 hardens the functions + the <code>as unknown as</code> readonly-mutation casts.</li>
+        <li><code>accept-trade</code> and the XP path are TODO-flagged sensitive: the handler validates the offer exists in authoritative state and the give-side inventory suffices before applying.</li>
+      </ul>
+    </section>
+
+    <section id="s7">
+      <div class="sec-head"><span class="num">07</span><h2>Testing &amp; verification</h2></div>
+      <ul class="body">
+        <li>Per wired intent: legal applies + mutates expected state; illegal/unaffordable rejected + state &amp; saves unchanged.</li>
+        <li>WS: unauthenticated upgrade rejected; envelope round-trip with matching seq + projection; rejected intent leaves the stored snapshot byte-unchanged; queued intents apply in order (no saves race).</li>
+        <li>Live: a scripted WS client authenticates, sends place-building → ok:true + projection; sends an unaffordable intent → ok:false; psql shows the save advanced only for the accepted intent.</li>
+      </ul>
+    </section>
+
+    <section id="s8">
+      <div class="sec-head"><span class="num">08</span><h2>Risks</h2></div>
+      <div class="risks">
+        <div class="row"><div class="cell head">Risk</div><div class="cell head">Sev</div><div class="cell head">Mitigation</div></div>
+        <div class="row"><div class="cell">A pure fn trusts its caller → server applies an illegal intent.</div><div class="cell"><span class="sev high">HIGH</span></div><div class="cell">Handler pre-checks affordability/legality from authoritative state; rejected intents persist nothing; slice 5 hardens the fns.</div></div>
+        <div class="row"><div class="cell">Concurrent intents race the saves row.</div><div class="cell"><span class="sev med">MED</span></div><div class="cell">ws.ts serializes one in-flight intent per account; load→apply→persist atomic per intent.</div></div>
+        <div class="row"><div class="cell">Pure fn mutates-then-returns-void → hard to detect a half-applied illegal op.</div><div class="cell"><span class="sev med">MED</span></div><div class="cell">Snapshot state before apply; on illegal half-apply, discard the in-memory game (reload) and report error — never persist a partial.</div></div>
+        <div class="row"><div class="cell">WS upgrade auth diverges from the HTTP guard.</div><div class="cell"><span class="sev med">MED</span></div><div class="cell">Factor the cookie→session check so the WS upgrade and makeAuthGuard share it.</div></div>
+        <div class="row"><div class="cell">Scope creep wiring all 30 intents.</div><div class="cell"><span class="sev low">LOW</span></div><div class="cell">Core 9 only; rest tracked as a mechanical follow-up.</div></div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <p>Design spec · generated 2026-06-14 · robot-islands server migration slice 3 of 5 · relates to: TODO.md (#1 anti-cheat, #5 determinism), slices 1–2, SPEC.md Appendix C</p>
+    </div>
+  </div>
+</body>
+</html>
