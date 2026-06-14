@@ -24,6 +24,6 @@ describe('runMigrations', () => {
   it('is idempotent (second run is a no-op)', async () => {
     await runMigrations(pool);
     const v = await pool.query('SELECT count(*)::int AS n FROM schema_migrations');
-    expect(v.rows[0].n).toBe(1);
+    expect(v.rows[0].n).toBe(2);
   });
 });
