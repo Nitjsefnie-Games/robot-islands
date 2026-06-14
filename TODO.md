@@ -43,7 +43,7 @@ Hardening note carried from the perf-audit era: the pervasive
 the sensitive trust surface once state crosses a network boundary —
 fold into the migration spec.
 
-### Status — IN PROGRESS (2026-06-14): 3 of 5 slices delivered + deployed
+### Status — IN PROGRESS (2026-06-14): 4 of 5 slices delivered + deployed
 
 Owner said go (2026-06-14). Decomposed into 5 slices; each ran
 brainstorm → spec → plan → implement → Opus spec-review + code-review,
@@ -66,20 +66,13 @@ plans published to docs-hub under `robot-islands/`.
   (place/demolish/cancel/upgrade/set-active-floors/dispatch-drone/
   create-route/unlock-skill-node); **accept-trade deferred** (offers are
   runtime-only/unpersisted — needs server-deterministic offers).
-- 🔄 **Slice 4 — Client cutover** (BUILT + browser-verified behind a flag;
-  finalization pending). Client modules done + reviewed: `server-client.ts`
-  (WS transport), `auth-ui.ts` (login/signup), `mutation-gateway.ts`
-  (LOCAL default / REMOTE backend), `remote-boot.ts` (flag). All ~28 panel
-  mutations async-routed through the gateway. `main.ts` REMOTE path
-  (`?server=1` or `localStorage.ri_server=1`): auth → WS → deserialize each
-  pushed snapshot → `rebuildWorldLayers` → skip the local sim tick. nginx
-  `/api/` proxy (+WS) added to the islands vhost. **Browser-verified
-  end-to-end** (auth→signup→WS→state push→render→map-picker). LOCAL stays
-  the default so the live game is untouched. Finalization (tasks #21 +
-  follow-ups): auth-ui styling, map-picker lat/lon persistence in REMOTE,
-  flip REMOTE→default, drop import/export save buttons (item 8), Fastify
-  trustProxy, SPEC §15.6 fully-superseded. ALL 30 intents wired server-side
-  (27) bar accept-trade/convert-servitor/reject-trade (justified unwired).
+- ✅ **Slice 4 — Client cutover.** REMOTE is now the default boot mode;
+  LOCAL is the opt-out debug fallback (`?server=0` or
+  `localStorage.ri_server=0`). `main.ts` bootRemoteClient auto-migrates an
+  existing local IndexedDB save via `POST /api/game/import` before falling
+  back to a fresh server game. Import/export save buttons removed from the
+  settings panel (TODO #8). Fastify `trustProxy` enabled and the auth
+  rate-limit is tested. SPEC §15.6 fully superseded and Appendix C expanded.
 - ⏭ **Slice 5 — Trust-surface hardening** (NOT started). Harden the
   `as unknown as` readonly-mutation casts + the trade/XP paths (the
   hardening note above); harden pure fns that currently trust their
@@ -92,9 +85,6 @@ Open follow-ups (server-side, no client/product decisions needed):
 - Pure serialization/world-core seam split (item 6): `persistence.ts`
   pulls render+idb, `world.ts` pulls pixi; server typechecks with a DOM
   lib stopgap until split.
-- Set Fastify `trustProxy` + a rate-limit-triggers test once nginx
-  fronts the server (do NOT enable trustProxy before the proxy is in
-  front — unset X-Forwarded-For is spoofable).
 - Typecheck server test files (`server/tsconfig.json` excludes
   `**/*.test.ts`).
 
