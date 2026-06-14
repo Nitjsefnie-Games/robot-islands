@@ -42,6 +42,10 @@ const DISABLED_RED = 0xE8624A;
 // dot) and always present including L1.
 const LEVEL_BADGE_BG = 0x0a1520;
 const LEVEL_BADGE_FG = 0xd8e6f0;
+// §4.6 Force Run: a force-running building's level badge turns green so the
+// produce-at-cap state is visible on the map without opening the inspector.
+const LEVEL_BADGE_BG_FORCERUN = 0x2ecc71;
+const LEVEL_BADGE_FG_FORCERUN = 0x062a13;
 const LEVEL_BADGE_RADIUS = 6; // px, world-space (zoom-independent via world container)
 
 export interface BuildingAlertsHandle {
@@ -220,16 +224,18 @@ export function mountBuildingAlertsOverlay(
           const inset = r; // badge centre sits one radius from the corner edge
           const cx = brPx - inset;
           const cy = brPy - inset;
+          // §4.6 Force Run: green badge when force-running (produce-at-cap).
+          const forced = b.forceRun === true;
           // Outline disc for contrast on any building colour.
           gfx.circle(cx, cy, r + 1).fill({ color: 0x000000, alpha: 0.65 });
-          gfx.circle(cx, cy, r).fill({ color: LEVEL_BADGE_BG });
+          gfx.circle(cx, cy, r).fill({ color: forced ? LEVEL_BADGE_BG_FORCERUN : LEVEL_BADGE_BG });
           // Number on top — managed in badgeLayer so it's a real glyph.
           const lvText = new Text({
             text: String(displayedFloorLevel(b)),
             style: {
               fontFamily: 'ui-monospace, monospace',
               fontSize: 8,
-              fill: LEVEL_BADGE_FG,
+              fill: forced ? LEVEL_BADGE_FG_FORCERUN : LEVEL_BADGE_FG,
             },
           });
           lvText.anchor.set(0.5);
