@@ -71,7 +71,7 @@ Legend: **L** = live · **P** = partial · **N** = not implemented.
 | §15.3 Piecewise integration | L | Event-driven `findNextCapEvent` with cap/floor/maintenance/construction boundaries; offline-catchup handles 24h+ gaps. |
 | §15.4 Inter-island flow | L | Proportional distribution under contention. |
 | §15.5 Offline math | L | Persisted state survives reload; `lastTick` shifts to current perf-clock domain; weather/toxicity rolls deterministic at any catchup duration. |
-| §15.6 Stack | L | Vite 5 + TypeScript strict + PixiJS 8 + vitest. No React, no backend, fully client-side. **Superseded for state ownership:** the server migration (Appendix C) now runs the authoritative simulation and persistence for server accounts; the browser client still runs locally until the slice-4 cutover. |
+| §15.6 Stack | L | Vite 5 + TypeScript strict + PixiJS 8 + vitest. No React. **Superseded:** the browser client is now display + intent-sender only; the server owns all state/persistence for server accounts (REMOTE default). LOCAL remains as an opt-out debug fallback (see Appendix C). |
 | §15.7 Build order | — | Reference ordering, not a runtime concern. |
 
 \---
@@ -2138,9 +2138,10 @@ Identical code path. When player returns, every island runs `advanceIsland(islan
 * **Language:** TypeScript
 * **Renderer:** PixiJS 8 (canvas-based, sprite-batched)
 * **UI:** Vanilla TypeScript DOM overlay on top of the Pixi canvas (no React/Solid framework)
-* **State:** A plain mutable `WorldState` object (no Zustand); islands advance lazily via `advanceIsland`
-* **Persistence:** IndexedDB via idb-keyval. World state (key `robot-islands:save:v14`, schema version 17) serialized to JSON, saved every 30s and on `visibilitychange`. UI prefs (camera transform only) live in a separate `robot-islands:prefs:v1` key with a 500 ms-debounced write cadence so pan/zoom feels persistent on a quick refresh without churning the main save blob.
-* **No backend:** pure client-side
+* **State model:** A plain mutable `WorldState` object (no Zustand); islands advance lazily via `advanceIsland`. For server accounts the authoritative `WorldState` lives on the server; the browser holds a read-only snapshot and sends intents over a WebSocket.
+* **Persistence (LOCAL fallback):** IndexedDB via idb-keyval. World state (key `robot-islands:save:v14`, schema version 24) serialized to JSON, saved every 30s and on `visibilitychange`. UI prefs (camera transform only) live in a separate `robot-islands:prefs:v1` key with a 500 ms-debounced write cadence so pan/zoom feels persistent on a quick refresh without churning the main save blob.
+* **Persistence (REMOTE default):** The server stores the authoritative `SaveSnapshot` in Postgres (`server/migrations/0002_saves.sql`). The client does not write world state locally.
+* **Client/server split:** REMOTE is the default boot mode. LOCAL is an opt-out debug fallback enabled by `?server=0` or `localStorage.setItem('ri_server', '0')`. See Appendix C for the full client architecture.
 
 ### 15.7 Build Order
 
@@ -2202,8 +2203,7 @@ It is being delivered in slices, each with its own design + plan under
   - The server reuses the client's pure layer unchanged: `serializeWorld`,
     `deserializeWorld`, `advanceIsland`, and `createNewGame` are imported from
     `src/` via `tsx` (the server's runtime is `tsx src/index.ts`); no DOM or
-    renderer is instantiated. The browser client continues to run its own
-    local loop until the slice-4 cutover.
+    renderer is instantiated.
 
 * Slice 3 (transport + intent protocol) is specified in
   `docs/superpowers/specs/2026-06-14-transport-intent-protocol-slice-design.md`.
@@ -2224,15 +2224,44 @@ It is being delivered in slices, each with its own design + plan under
     authoritative server state; client numbers are never trusted. A rejected
     intent persists nothing, and intents are serialized to one in-flight
     intent per connection.
-  - All 30 player intents are cataloged in the slice-3 design doc. Nine are
-    in scope for this slice; eight are wired immediately
-    (`place-building`, `demolish-building`, `cancel-construction`,
-    `upgrade-building`, `set-active-floors`, `dispatch-drone`, `create-route`,
-    `unlock-skill-node`), while `accept-trade` is deferred because trade
-    offers are runtime-only and unpersisted (no authoritative offer to
-    validate — see the follow-up catalog).
   - Weather and day-night are not sent; the client renders them from
     `(seed, t)`.
 
-§15.6's "fully client-side" stack note is superseded for *state ownership* by
-this server migration; see the annotation at §15.6.
+* Slice 4 (client cutover) finalizes the migration.
+  - REMOTE is the default boot mode. LOCAL remains as an opt-out debug
+    fallback, enabled only by `?server=0` in the URL or
+    `localStorage.setItem('ri_server', '0')`. `src/remote-boot.ts` owns the
+    gate.
+  - Boot flow (`src/main.ts`):
+    1. Auth gate: if `/api/auth/me` fails, show the auth screen
+       (`src/auth-ui.ts`) and wait for the player to log in/sign up.
+    2. Open the authenticated WebSocket (`/api/game/ws`) via
+       `src/server-client.ts`.
+    3. The server pushes the initial authoritative snapshot. If it is `null`
+       (no server game yet), the client first tries to migrate any existing
+       local IndexedDB save via `POST /api/game/import`; only if there is no
+       local save or the import fails does it fall back to `POST /api/game/new`.
+    4. Each subsequent server-pushed snapshot replaces the client's world state
+       and triggers a full world-layer rebuild.
+  - Mutation gateway (`src/mutation-gateway.ts`):
+    - LOCAL fallback: methods call the same pure entry functions as before.
+    - REMOTE default: methods forward intents over the WebSocket; the server
+      validates and applies them, then pushes the updated state.
+  - Rendering: the client renders directly from the server-pushed snapshot.
+    The local simulation tick is skipped in REMOTE mode; `lastSaveAt` stays
+    null because persistence is server-side.
+  - Save auto-migration: `POST /api/game/import` (authed, in
+    `server/src/game/routes.ts`) accepts a `{ snapshot }` body, validates it,
+    and persists it. Duplicate import attempts receive 409. This is the one-
+    time path that preserves an existing local save when REMOTE becomes the
+    default.
+  - Settings panel: import/export save buttons are removed (TODO #8). Saves
+    live server-side only; the local "Clear Save" button remains as a debug
+    escape hatch.
+  - Fastify runs with `trustProxy: true` (`server/src/app.ts`) so the auth
+    rate-limit buckets on the real client IP from `X-Forwarded-For` when nginx
+    fronts the service.
+
+§15.6's "fully client-side" stack note is superseded by this server migration;
+the client is now display + intent-sender and the server owns all state and
+persistence. See the annotation at §15.6.
