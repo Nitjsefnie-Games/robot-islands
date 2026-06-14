@@ -4,7 +4,7 @@ The unit is named **`robot-islands-auth.service`** (HTTP on `127.0.0.1:5180`).
 It is intentionally NOT `robot-islands-server.service` — that name is already
 taken by the separate `/root/islands` rewrite (a websocket server on `:8090`).
 
-1. Build: `npm install && npm run build -w server`
+1. Build: `npm install && npm run build -w server` (typecheck only — `tsc --noEmit`; the unit runs the TS directly via tsx, there is no `dist/`)
 2. Create `server/.env` from `.env.example` (set DATABASE_URL, PORT, COOKIE_SECURE=1).
 3. Ensure DBs exist: `su postgres -c 'createdb -O robot_islands robot_islands'`
    (pre-create `pgcrypto`+`citext` extensions if the connecting role is not superuser).
@@ -17,7 +17,10 @@ taken by the separate `/root/islands` rewrite (a websocket server on `:8090`).
 Notes:
 - `/usr/bin/node` on this box is v12 (too old for Fastify 5); the unit uses the
   nvm node at `/root/.nvm/versions/node/v22.22.0/bin/node`, like
-  robot-islands-dev.service.
+  robot-islands-dev.service. It runs the TypeScript entrypoint directly via the
+  tsx loader (`node --import tsx .../server/src/index.ts`) so the server can
+  import the client's pure `src/` layer across the workspace boundary — there is
+  no compiled `dist/` to ship; `npm run build -w server` only typechecks.
 - Migrations run automatically on boot.
 - This unit does NOT replace robot-islands-dev.service (the Vite preview on :5173)
   or robot-islands-server.service (the /root/islands rewrite on :8090).
