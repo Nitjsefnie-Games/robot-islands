@@ -268,6 +268,12 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
    *  captures the counter at dispatch; on resolution it compares against
    *  the current counter and bails if they differ. */
   let beginEpoch = 0;
+  /** True while a remote placement/relocate commit is awaiting its server ack.
+   *  `attemptCommit` early-returns while set so a rapid second click can't
+   *  double-dispatch the place intent (charging cost twice / placing at two
+   *  tiles). Cleared in BOTH the success and failure async branches. LOCAL
+   *  commits resolve synchronously, so this never latches there. */
+  let commitPending = false;
   /** Non-null while relocating an existing building (vs. placing a new one).
    *  Carries the building so the ghost can show the move fee and pass its id
    *  to validatePlacement as ignoreBuildingId. */
@@ -648,6 +654,9 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     oceanReason?: OceanPlacementReason;
   } {
     if (!active || activeDefId === null) return { ok: false };
+    // A previous commit is still awaiting its server ack — ignore this click so
+    // we don't double-dispatch the place/relocate intent.
+    if (commitPending) return { ok: false };
     const def = BUILDING_DEFS[activeDefId];
     function recordRejection(): void {
       const world = deps.getWorld?.();
@@ -710,10 +719,17 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
       // stale-check would fire. The cargo-label `begin()` path already
       // uses `++beginEpoch`; this mirrors it.
       const epoch = ++beginEpoch;
+      // In-flight guard: block a second commit while the picker is open and the
+      // gateway round-trip is pending. Cleared on every resolution branch below.
+      commitPending = true;
       deps.pickAnchor(cands).then(async (picked) => {
-        if (epoch !== beginEpoch) return; // stale
+        if (epoch !== beginEpoch) {
+          commitPending = false;
+          return; // stale
+        }
         if (picked === null) {
           // Cancel — abort placement entirely (mirrors cargo-label cancel).
+          commitPending = false;
           cancel();
           return;
         }
@@ -721,6 +737,7 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
         const anchorSpec = world.islands.find((i) => i.id === picked);
         if (!anchorState || !anchorSpec) {
           // Anchor disappeared between picker open and resolve — defensive.
+          commitPending = false;
           cancel();
           return;
         }
@@ -744,6 +761,7 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
               undefined, // cargoLabelOverride — ocean defs aren't generic-storage
               picked, // anchorIslandId
             );
+        commitPending = false;
         if (result.ok) {
           cancel();
           deps.onPlaced();
@@ -767,8 +785,10 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
         ? deps.gateway.relocateBuilding(targetSpec.id, relocating.id, localX, localY, rotation)
         : undefined;
       if (gatewayResult instanceof Promise) {
+        commitPending = true;
         void (async () => {
           const result = await gatewayResult;
+          commitPending = false;
           if (!result.ok) {
             recordRejection();
             return;
@@ -811,8 +831,10 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
         })
       : undefined;
     if (gatewayResult instanceof Promise) {
+      commitPending = true;
       void (async () => {
         const result = await gatewayResult;
+        commitPending = false;
         if (!result.ok) {
           recordRejection();
           return;

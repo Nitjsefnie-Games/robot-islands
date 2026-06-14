@@ -404,6 +404,105 @@ describe('§15.4 island-qualified building ids', () => {
   });
 });
 
+describe('placement-ui REMOTE in-flight commit guard', () => {
+  // In REMOTE the land/relocate commit dispatches the intent via the gateway
+  // (a Promise) and only exits placement mode in the async success branch.
+  // Without an in-flight guard a rapid second click double-dispatches the
+  // place intent. These tests pin: while a commit is pending, attemptCommit
+  // early-returns and never fires a second gateway call; the guard clears on
+  // both success and failure so a later click can commit again.
+
+  /** A gateway stub exposing only the methods the land/relocate path uses,
+   *  with a manually-resolvable placeBuilding promise and a call counter. */
+  function deferredGateway(): {
+    gateway: import('./mutation-gateway.js').MutationGateway;
+    placeCalls: () => number;
+    resolveNext: (result: { ok: boolean; error?: string }) => void;
+  } {
+    let placeCalls = 0;
+    let pendingResolve: ((r: { ok: boolean; error?: string }) => void) | null = null;
+    const stub = {
+      placeBuilding() {
+        placeCalls++;
+        return new Promise<{ ok: boolean; error?: string }>((resolve) => {
+          pendingResolve = resolve;
+        });
+      },
+    } as unknown as import('./mutation-gateway.js').MutationGateway;
+    return {
+      gateway: stub,
+      placeCalls: () => placeCalls,
+      resolveNext: (result) => {
+        pendingResolve?.(result);
+        pendingResolve = null;
+      },
+    };
+  }
+
+  it('ignores a second commit click while the first is awaiting its ack', async () => {
+    const spec = makeSpec();
+    const state = makeState(spec);
+    let placedCalled = 0;
+    const dg = deferredGateway();
+    const ui = mountPlacementUi({
+      getTargetSpec: () => spec,
+      getTargetState: () => state,
+      screenToWorldTile: (x, y) => ({ x, y }),
+      onPlaced: () => {
+        placedCalled++;
+      },
+      gateway: dg.gateway,
+    });
+    ui.begin('mine');
+    expect(ui.isActive()).toBe(true);
+
+    // First click dispatches the (pending) gateway intent.
+    const r1 = ui.attemptCommit();
+    expect(r1.ok).toBe(false); // async; success arrives via callback
+    expect(dg.placeCalls()).toBe(1);
+    // Still active (the async cancel() hasn't landed) — but a second click must
+    // NOT double-dispatch.
+    expect(ui.isActive()).toBe(true);
+    const r2 = ui.attemptCommit();
+    expect(r2.ok).toBe(false);
+    expect(dg.placeCalls()).toBe(1); // guard held — no second dispatch
+
+    // Resolve the first intent successfully → placement exits, onPlaced fires once.
+    dg.resolveNext({ ok: true });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(placedCalled).toBe(1);
+    expect(ui.isActive()).toBe(false);
+  });
+
+  it('clears the guard on a failed commit so the player can retry', async () => {
+    const spec = makeSpec();
+    const state = makeState(spec);
+    const dg = deferredGateway();
+    const ui = mountPlacementUi({
+      getTargetSpec: () => spec,
+      getTargetState: () => state,
+      screenToWorldTile: (x, y) => ({ x, y }),
+      onPlaced: () => {},
+      gateway: dg.gateway,
+    });
+    ui.begin('mine');
+    ui.attemptCommit();
+    expect(dg.placeCalls()).toBe(1);
+
+    // First commit fails (e.g. server rejected / transport error).
+    dg.resolveNext({ ok: false, error: 'insufficient-resources' });
+    await Promise.resolve();
+    await Promise.resolve();
+    // Placement stays armed on failure (the player can re-aim and retry).
+    expect(ui.isActive()).toBe(true);
+
+    // A subsequent click is no longer blocked — the guard cleared.
+    ui.attemptCommit();
+    expect(dg.placeCalls()).toBe(2);
+  });
+});
+
 describe('terrain_modifier placement-ui brush commit', () => {
   it('commits a terrain_modifier with terrainShotRemainingMs = SHOT_DURATION_MS', async () => {
     const spec = makeSpec();

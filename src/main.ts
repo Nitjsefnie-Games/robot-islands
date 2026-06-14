@@ -236,12 +236,23 @@ async function main(): Promise<void> {
       }
       // No local save or import failed — ask the server to mint a fresh game.
       const r = await fetch('/api/game/new', { method: 'POST', credentials: 'include' });
-      if (!r.ok) throw new Error(`POST /api/game/new failed: ${r.status} ${await r.text()}`);
+      // A 409 means a game already exists (e.g. a concurrent import already
+      // created it). Treat that as success-equivalent rather than a fatal
+      // throw — the next state push carries the existing game.
+      if (!r.ok && r.status !== 409) {
+        throw new Error(`POST /api/game/new failed: ${r.status} ${await r.text()}`);
+      }
     }
 
     return new Promise<RemoteBootResult>((resolve, reject) => {
       let client: GameServerClient | null = null;
       let gotFirst = false;
+      // One-shot guard: the server re-pushes a null snapshot every 1s until a
+      // game exists. If importLocalSaveOrCreate takes longer than that interval,
+      // a second null push would re-fire the import (which then 409s and bricks
+      // boot). Latch on first entry so subsequent null pushes are ignored while
+      // the import is in flight.
+      let importStarted = false;
       let onStateHandler: ((snapshot: SaveSnapshot) => void) | null = null;
 
       const onState = (snapshot: unknown | null) => {
@@ -255,9 +266,10 @@ async function main(): Promise<void> {
                 onStateHandler = handler;
               },
             });
-          } else {
+          } else if (!importStarted) {
             // Account has no saved game yet — migrate local save if possible,
             // then keep waiting for the next `state` frame.
+            importStarted = true;
             importLocalSaveOrCreate().catch(reject);
           }
         } else {
@@ -460,7 +472,7 @@ async function main(): Promise<void> {
   const hoverTooltip = mountHoverTooltip(document.body);
   // Toast surface (top-center transient banners) — singleton, used by the
   // §14 launch flow and any future "global event" notifier.
-  mountToastSurface(document.body);
+  const toast = mountToastSurface(document.body);
 
   // Cell grid (debug). Above ocean+islands so lines stay visible when toggled.
   const gridLayer = renderCellGrid(WORLD_HALF_SIZE_TILES);
@@ -1944,6 +1956,15 @@ async function main(): Promise<void> {
   // via applyOffer and removes the offer from the runtime list.
   const tradeUi = mountTradeUi(
     async (offer) => {
+      // §trade in REMOTE (server-authoritative): the server implements no
+      // accept-trade intent, so accepting can't persist. Rather than silently
+      // no-op (or mutate local state that the next server snapshot reverts),
+      // surface a clear message. tickTradeOffers is gated to LOCAL, so offers
+      // never spawn in REMOTE today — this guard is defense-in-depth.
+      if (isRemote) {
+        toast.show('Trade is unavailable in online mode.', 'info');
+        return;
+      }
       const result = await gateway.acceptTrade(offer);
       if (!result.ok) return;
       const st = islandStates.get(offer.islandId);
@@ -1959,6 +1980,13 @@ async function main(): Promise<void> {
       tradeRuntime.offers = tradeRuntime.offers.filter((o) => o.id !== offer.id);
     },
     (offer) => {
+      // §trade in REMOTE: reject would mutate local island state directly,
+      // bypassing the gateway (reverted on the next server snapshot). Surface
+      // the same "unavailable online" message instead of a silent local write.
+      if (isRemote) {
+        toast.show('Trade is unavailable in online mode.', 'info');
+        return;
+      }
       const st = islandStates.get(offer.islandId);
       if (!st) return;
       // Manual reject counts as a timely reaction: it compounds cadence but
@@ -2031,15 +2059,54 @@ async function main(): Promise<void> {
   const islandPower = new Map<string, PowerBalance>();
   const islandNets = new Map<string, Record<ResourceId, number>>();
 
-  /** Apply a server-pushed snapshot in REMOTE mode: swap the world/state refs
-   *  the renderers read, rebuild derived lookup tables, recompute retained
-   *  rates for the HUD/inspector, and repaint the world layers. */
+  /** Cheap fingerprint of the world-layer-relevant discovery state for REMOTE
+   *  rebuild gating: discovered-island count + revealed-cell count. When this
+   *  shifts (a drone returned server-side, antenna scan widened coverage) the
+   *  cached fog/ocean layers are stale and must repaint. Paired with the
+   *  vision-source signature below — the same diff discipline the LOCAL ticker
+   *  uses to avoid re-baking GPU textures on every push. */
+  function discoverySignature(): string {
+    let discovered = 0;
+    for (const s of worldState.islands) if (s.discovered) discovered++;
+    return `${discovered}|${worldState.revealedCells.size}`;
+  }
+  let lastDiscoverySig = discoverySignature();
+
+  /** Apply a server-pushed snapshot in REMOTE mode: mutate the live world/state
+   *  objects IN PLACE (so every overlay/inspector/panel that captured them by
+   *  reference at mount observes the update), rebuild derived lookup tables,
+   *  recompute retained rates for the HUD/inspector, and repaint the world
+   *  layers only when vision/discovery actually changed. */
   function applyRemoteSnapshot(snapshot: SaveSnapshot): void {
     const nowWall = Date.now();
     const d = deserializeWorld(snapshot, nowWall, nowWall);
-    worldState = d.world;
-    islandStates = d.islandStates;
+
+    // Mutate the EXISTING worldState in place rather than reassigning the
+    // binding. Subsystems (weather/satellite/antenna overlays, inspector,
+    // orbital/drones/routes/settlement panels) captured the boot-time
+    // worldState object by reference and never re-bind; reassigning would
+    // orphan them on permanently-frozen data. Object.assign copies every
+    // enumerable field the deserialized world carries (islands, drones,
+    // routes, vehicles, satellites, repairDrones, debrisFields, revealedCells,
+    // tutorialState, endgameState, latticeActive, latticeNodeIslands,
+    // activeBonusMs, commPackets, oceanCells, depthRevealedCells, totalCo2Kg,
+    // playerLat/Lon, generatedCells, recentBuildAttempts*, seed) onto the live
+    // object. `recentBuildAttempts`/`recentBuildAttemptTs` come back fresh-empty
+    // from deserialize (NOT-persisted client-local sets) — overwriting them is
+    // fine (the server snapshot has no opinion on them).
+    Object.assign(worldState, d.world);
+    // Keep the islandStates back-link pointing at the live Map (below).
     worldState.islandStates = islandStates;
+
+    // Reconcile the EXISTING islandStates Map in place (don't replace the Map
+    // object — panels captured this exact Map reference). Delete keys the
+    // server no longer reports, set/update the ones it does.
+    for (const id of [...islandStates.keys()]) {
+      if (!d.islandStates.has(id)) islandStates.delete(id);
+    }
+    for (const [id, st] of d.islandStates) {
+      islandStates.set(id, st);
+    }
 
     // The server snapshot does not own the player's real-world location; restore
     // any client-local lat/lon preference so the map picker doesn't reappear.
@@ -2071,11 +2138,21 @@ async function main(): Promise<void> {
 
     refreshRetainedRates(nowWall);
 
-    lastVisionSig = visionSourcesSignature(
+    // §2.2 rebuild discipline: only re-bake the ocean/island/fog GPU textures
+    // when the vision-source set OR the discovery/revealed-cell state actually
+    // changed. The server pushes a full snapshot every 1s plus per-intent;
+    // unconditionally rebuilding churned the GPU at a steady 1 Hz at idle.
+    const visionSig = visionSourcesSignature(
       computeVisionSources(worldState.islands.filter((s) => s.populated)),
     );
+    const discoverySig = discoverySignature();
+    const changed = visionSig !== lastVisionSig || discoverySig !== lastDiscoverySig;
+    lastVisionSig = visionSig;
+    lastDiscoverySig = discoverySig;
 
-    rebuildWorldLayers();
+    if (changed) {
+      rebuildWorldLayers();
+    }
   }
 
   if (isRemote) {

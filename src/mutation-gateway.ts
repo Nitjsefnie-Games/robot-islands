@@ -525,7 +525,17 @@ export function makeLocalGateway(
 
 export function makeRemoteGateway(client: GameServerClient): MutationGateway {
   async function send<T = void>(type: string, payload: unknown): Promise<GatewayResult<T>> {
-    const ack = await client.sendIntent(type, payload);
+    // sendIntent REJECTS (not resolves {ok:false}) on intent timeout, a
+    // not-open socket, or a socket close before ack. Catch those here so the
+    // gateway contract is ALWAYS a resolved GatewayResult — panel callsites'
+    // `if (!result.ok) return` guards then cover transport failures uniformly
+    // instead of throwing an unhandled rejection inside their void async IIFEs.
+    let ack: Awaited<ReturnType<typeof client.sendIntent>>;
+    try {
+      ack = await client.sendIntent(type, payload);
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) };
+    }
     if (ack.ok) return { ok: true } as GatewayResult<T>;
     return { ok: false, error: ack.error };
   }

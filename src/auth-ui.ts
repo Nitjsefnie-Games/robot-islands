@@ -168,8 +168,14 @@ export function mountAuthScreen(opts: MountAuthScreenOptions): HTMLElement {
       if (response.ok) {
         onAuthed();
       } else {
-        const text = await response.text();
-        errorEl.textContent = text || `Request failed (${response.status})`;
+        // The server returns JSON error bodies ({ error: '…' }). Prefer the
+        // message field so the banner shows a clean string, not raw JSON.
+        const body = (await response.json().catch(() => null)) as unknown;
+        const errMsg =
+          body && typeof body === 'object' && typeof (body as Record<string, unknown>).error === 'string'
+            ? ((body as Record<string, unknown>).error as string)
+            : null;
+        errorEl.textContent = errMsg ?? `Request failed (${response.status})`;
       }
     } catch (err) {
       errorEl.textContent = err instanceof Error ? err.message : 'Network error';
