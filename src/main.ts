@@ -313,7 +313,7 @@ async function main(): Promise<void> {
     const remote = await bootRemoteClient();
     remoteClient = remote.client;
     setRemoteOnState = remote.setOnState;
-    const d = deserializeWorld(remote.snapshot, Date.now(), Date.now());
+    const d = deserializeWorld(remote.snapshot, Date.now(), performance.now());
     worldState = d.world;
     islandStates = d.islandStates;
     // The server snapshot does not own the player's real-world location; restore
@@ -2097,7 +2097,7 @@ async function main(): Promise<void> {
    *  layers only when vision/discovery actually changed. */
   function applyRemoteSnapshot(snapshot: SaveSnapshot): void {
     const nowWall = Date.now();
-    const d = deserializeWorld(snapshot, nowWall, nowWall);
+    const d = deserializeWorld(snapshot, nowWall, performance.now());
 
     // Mutate the EXISTING worldState in place rather than reassigning the
     // binding. Subsystems (weather/satellite/antenna overlays, inspector,

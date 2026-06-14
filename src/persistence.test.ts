@@ -894,6 +894,52 @@ describe('drone and route timestamp remapping', () => {
     expect(b.arrivalTime - b.dispatchTime).toBe(10_000);
     expect(b.arrivalTime).toBeLessThan(5_000);
   });
+
+  it('rebases server wall-epoch timestamps into the client perf.now() domain (REMOTE bug regression)', () => {
+    // REMOTE sends snapshots whose savedAt/savedAtPerf are both Date.now()
+    // wall-epoch values (~1.75e12). The client must deserialize them with a
+    // real performance.now() value so transient timestamps compare correctly
+    // against the page's render clock.
+    const serverEpochMs = 1_750_000_000_000;
+    const clientPerfNow = 1_500_000;
+
+    const world = makeInitialWorld(0);
+    world.drones.push({
+      id: 'drone-1',
+      fromIslandId: 'home',
+      originX: 0,
+      originY: 0,
+      dirX: 1,
+      dirY: 0,
+      outboundTiles: 20,
+      scanRadius: 8,
+      launchTime: serverEpochMs,
+      expectedReturnTime: serverEpochMs + 10_000,
+      tier: 2,
+      fuelLoaded: 10,
+      fuelResource: 'biofuel',
+      waypoints: [],
+      darkMode: false,
+      darkModeDiscoveries: [],
+      scanBuffer: new Set<string>(),
+      probabilityBias: 0,
+    });
+
+    const snap = serializeWorld(world, new Map(), serverEpochMs, serverEpochMs);
+    const { world: restored } = deserializeWorld(
+      snap,
+      serverEpochMs + 1_000,
+      clientPerfNow,
+    );
+    const d = restored.drones[0]!;
+
+    // The launchTime should land in the perf domain (near clientPerfNow),
+    // not remain at the server wall epoch.
+    expect(d.launchTime).toBeGreaterThan(clientPerfNow - 2_000);
+    expect(d.launchTime).toBeLessThan(clientPerfNow + 2_000);
+    // Interval is preserved.
+    expect(d.expectedReturnTime - d.launchTime).toBe(10_000);
+  });
 });
 
 // ---------------------------------------------------------------------------
