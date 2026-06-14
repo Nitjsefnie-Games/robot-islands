@@ -7,7 +7,7 @@ import { registerAuthRoutes } from './auth/routes.js';
 import { registerGameRoutes } from './game/routes.js';
 import { registerGameWsRoutes } from './game/ws.js';
 
-export interface AppOptions { readonly pool: Pool; readonly cookieSecure: boolean; readonly authRateLimitMax?: number; }
+export interface AppOptions { readonly pool: Pool; readonly cookieSecure: boolean; readonly authRateLimitMax?: number; readonly wsStatePushIntervalMs?: number; }
 
 export function buildApp(opts: AppOptions): FastifyInstance {
   const app = Fastify({ logger: false });
@@ -37,7 +37,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     // Without this, @fastify/websocket inherits ws's 100 MiB default — a cheap
     // memory-exhaustion vector for a hostile client.
     await instance.register(websocket, { options: { maxPayload: 65536 } });
-    registerGameWsRoutes(instance, opts.pool);
+    registerGameWsRoutes(instance, opts.pool, { statePushIntervalMs: opts.wsStatePushIntervalMs });
   });
   app.get('/health', async () => ({ ok: true }));
   return app;
