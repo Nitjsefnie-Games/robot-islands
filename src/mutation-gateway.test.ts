@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { makeRemoteGateway } from './mutation-gateway.js';
+import { makeLocalGateway, makeRemoteGateway } from './mutation-gateway.js';
+import { createNewGame } from './new-game.js';
+import { makeInitialIslandState } from './world.js';
 import type { Ack, GameServerClient } from './server-client.js';
 
 /** Fake client whose `sendIntent` REJECTS — modelling the real reject sources
@@ -77,5 +79,44 @@ describe('makeRemoteGateway — gateway-rejection contract', () => {
     const gateway = makeRemoteGateway(ackingClient({ seq: 1, ok: true }));
     const result = await gateway.demolishBuilding('home', 'b-1');
     expect(result).toEqual({ ok: true });
+  });
+});
+
+describe('makeLocalGateway — createRoute parity', () => {
+  it('rejects an unpopulated endpoint (Fix 7)', () => {
+    const now = Date.now();
+    const { world, islandStates } = createNewGame(now);
+    const colony = world.islands.find((s) => s.id !== 'home')!;
+    colony.discovered = true;
+    // colony stays unpopulated.
+    const home = world.islands.find((s) => s.id === 'home')!;
+    home.buildings.push({
+      id: 'dock-1', defId: 'dock', x: 0, y: 0,
+      constructionRemainingMs: 0, placedAt: now,
+    });
+    islandStates.get('home')!.buildings = home.buildings;
+
+    const gateway = makeLocalGateway(world, islandStates);
+    const result = gateway.createRoute('home', colony.id, 'dock-1');
+    expect(result).toEqual({ ok: false, error: 'island not populated' });
+  });
+
+  it('rejects an unknown filterResource id (Fix 6 LOCAL)', () => {
+    const now = Date.now();
+    const { world, islandStates } = createNewGame(now);
+    const colony = world.islands.find((s) => s.id !== 'home')!;
+    colony.populated = true;
+    colony.discovered = true;
+    islandStates.set(colony.id, makeInitialIslandState(colony, now));
+    const home = world.islands.find((s) => s.id === 'home')!;
+    home.buildings.push({
+      id: 'dock-1', defId: 'dock', x: 0, y: 0,
+      constructionRemainingMs: 0, placedAt: now,
+    });
+    islandStates.get('home')!.buildings = home.buildings;
+
+    const gateway = makeLocalGateway(world, islandStates);
+    const result = gateway.createRoute('home', colony.id, 'dock-1', 'not_a_resource' as unknown as import('./recipes.js').ResourceId);
+    expect(result).toEqual({ ok: false, error: 'unknown filterResource' });
   });
 });
