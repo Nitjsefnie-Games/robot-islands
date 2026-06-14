@@ -3,17 +3,16 @@
     "target": "ES2022",
     "module": "NodeNext",
     "moduleResolution": "NodeNext",
-    "lib": ["ES2023"],
-    "outDir": "dist",
-    "rootDir": "src",
+    // DOM lib only so the transitively-imported client src/ (render-coupled persistence.ts) typechecks;
+    // the server runs in Node and uses no DOM — see the pure-extraction follow-up.
+    "lib": ["ES2023", "DOM"],
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "composite": true,
-    "declaration": true
+    "noEmit": true
   },
   "include": ["src"],
   "exclude": ["dist", "**/*.test.ts"]

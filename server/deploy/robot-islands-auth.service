@@ -16,7 +16,7 @@ Environment=PGUSER=root
 # /usr/bin/node on this box is v12; Fastify 5 needs >=20. Use the nvm node
 # (same as robot-islands-dev.service) and put it on PATH for child processes.
 Environment=PATH=/root/.nvm/versions/node/v22.22.0/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-ExecStart=/root/.nvm/versions/node/v22.22.0/bin/node /root/robot-islands/server/dist/index.js
+ExecStart=/root/.nvm/versions/node/v22.22.0/bin/node --import tsx /root/robot-islands/server/src/index.ts
 Restart=on-failure
 RestartSec=2
 
