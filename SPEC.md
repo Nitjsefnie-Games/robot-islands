@@ -2193,17 +2193,36 @@ It is being delivered in slices, each with its own design + plan under
     `user_id`, storing a single `SaveSnapshot` in `jsonb` plus schema version.
   - `loadAndCatchUp` (`server/src/game/runtime.ts`) loads the stored snapshot,
     calls `deserializeWorld` to migrate it to the current schema and shift its
-    time domain, runs `advanceIsland` for every populated island to integrate
-    the offline gap, writes the advanced snapshot back with `serializeWorld`,
-    and returns a live projection.
+    time domain, then runs the shared pure `advanceWorldEconomy`
+    (`src/economy-advance.ts`) ONCE to integrate the offline gap, writes the
+    advanced snapshot back with `serializeWorld`, and returns a live projection.
+  - `advanceWorldEconomy` is the SINGLE economy-advance orchestration shared by
+    the client ticker (`main.ts`'s `advanceEconomy`) and the server, so the
+    authoritative offline catch-up integrates with the FULL economy environment
+    — per-island biome modifier multipliers (§3.5), the Network Consciousness
+    buff (§9.6), the active-play bonus (§9.9), Mirror-Sat solar boost (§14.3),
+    lattice and shared-network mass-conserving pooling (§13.3), inter-island
+    cable brownout (§5.3), geothermal heat (§3.5), and toxicity rolls — exactly
+    as online/LOCAL play does, with no client/server drift. (Before this module
+    existed the server called `advanceIsland(state, now)` with no `RatesContext`,
+    silently dropping every one of those multipliers server-side — a regression
+    this restores.) The only render-side effect (terrain-shot →
+    `rebuildWorldLayers`) is threaded back through an optional `hooks` callback;
+    the server passes none, so `resolveShot` still mutates state but the render
+    rebuild is skipped.
+  - Active-play bonus on the server is **read, not accrued**: server play is
+    offline/lazy, so `loadAndCatchUp` never calls `tickActiveBonus` (no online
+    frames to accrue against), but the STORED `world.activeBonusMs` is threaded
+    through `activeBonusMul` so a player who banked an active bonus while online
+    keeps benefiting during server-side catch-up.
   - Offline catch-up uses `Date.now()` for both wall-clock and performance-clock
-    arguments to `deserializeWorld`, so the perf shift collapses to the real
-    elapsed time since the last save (which is stamped wall == perf). This is
-    the same code path for a 1-second or a 30-day gap.
+    arguments to `deserializeWorld` and `advanceWorldEconomy`, so the perf shift
+    collapses to the real elapsed time since the last save (which is stamped
+    wall == perf). This is the same code path for a 1-second or a 30-day gap.
   - The server reuses the client's pure layer unchanged: `serializeWorld`,
-    `deserializeWorld`, `advanceIsland`, and `createNewGame` are imported from
-    `src/` via `tsx` (the server's runtime is `tsx src/index.ts`); no DOM or
-    renderer is instantiated.
+    `deserializeWorld`, `advanceWorldEconomy`, and `createNewGame` are imported
+    from `src/` via `tsx` (the server's runtime is `tsx src/index.ts`); no DOM
+    or renderer is instantiated.
 
 * Slice 3 (transport + intent protocol) is specified in
   `docs/superpowers/specs/2026-06-14-transport-intent-protocol-slice-design.md`.
