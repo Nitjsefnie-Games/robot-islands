@@ -166,14 +166,14 @@
     </section>
 
     <section id="s5">
-      <div class="sec-head"><span class="num">05</span><h2>Migration-chain reuse (single-sourced)</h2></div>
-      <p class="body">Slice 2 does not modify the migration logic's behavior. <code>game/persistence.ts</code> reads the
-        <code>saves.snapshot</code> jsonb (possibly old version), runs the <strong>same</strong> version-dispatch +
-        <code>migrateV*</code> chain the client uses, then calls <code>deserializeWorld</code>. If a pure
-        "migrate snapshot object to current" helper isn't already separable from the IDB-bound <code>loadWorld</code>,
-        the plan adds one small pure export to <code>src/persistence.ts</code>
-        (<code>migrateSnapshotToCurrent(raw)</code>) and refactors <code>loadWorld</code> to call it — keeping client +
-        server on one code path (with SPEC + tests updated).</p>
+      <div class="sec-head"><span class="num">05</span><h2>Migration-chain reuse (no refactor — verified)</h2></div>
+      <p class="body"><strong>Verified in source:</strong> <code>deserializeWorld</code> already walks the entire
+        <code>v7 → … → SCHEMA_VERSION</code> <code>migrateV*</code> chain internally (<code>src/persistence.ts:869-920</code>),
+        then throws if not current. <code>loadWorld</code> is just an IDB wrapper around it. So the earlier idea of
+        extracting a <code>migrateSnapshotToCurrent</code> helper is <strong>unnecessary and dropped</strong> — slice 2
+        makes <strong>no change</strong> to <code>src/persistence.ts</code>. <code>game/persistence.ts</code> reads the
+        <code>saves.snapshot</code> jsonb and calls <code>deserializeWorld(snapshot, now, now)</code>; migration happens
+        inside. Migration logic stays single-sourced with zero new code.</p>
     </section>
 
     <section id="s6">
@@ -231,7 +231,7 @@
       <div class="risks">
         <div class="row"><div class="cell head">Risk</div><div class="cell head">Sev</div><div class="cell head">Mitigation</div></div>
         <div class="row"><div class="cell">Importing src/persistence.ts drags PixiJS into the server bundle.</div><div class="cell"><span class="sev low">LOW</span></div><div class="cell">Import-only, proven headless; split deferred to TODO #6; documented.</div></div>
-        <div class="row"><div class="cell">Extracting migrateSnapshotToCurrent breaks the client.</div><div class="cell"><span class="sev med">MED</span></div><div class="cell">Behavior-preserving pure extraction; root persistence tests are the gate; keep loadWorld signature.</div></div>
+        <div class="row"><div class="cell">(Removed) migration-helper extraction.</div><div class="cell"><span class="sev low">N/A</span></div><div class="cell">Not needed — deserializeWorld already migrates internally; no src/persistence.ts change.</div></div>
         <div class="row"><div class="cell">Snapshot jsonb shape drift vs server expectations.</div><div class="cell"><span class="sev med">MED</span></div><div class="cell">Reuse exact serializeWorld output; roundtrip test asserts identity.</div></div>
         <div class="row"><div class="cell">Clock/perfShift mismatch yields wrong catch-up.</div><div class="cell"><span class="sev med">MED</span></div><div class="cell">savedAt=savedAtPerf=Date.now(); load passes Date.now() for both; catch-up + split-invariance tests.</div></div>
         <div class="row"><div class="cell">New-game constructor not cleanly reusable from src/.</div><div class="cell"><span class="sev med">MED</span></div><div class="cell">Plan identifies the initial-world path; extract a small tested pure builder if browser-coupled.</div></div>
