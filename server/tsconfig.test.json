@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  // Identical compiler options to tsconfig.json, but tests are INCLUDED so the
+  // strict-mode checks (strict, noUncheckedIndexedAccess, noUnusedLocals,
+  // noUnusedParameters) cover the *.test.ts files too. `tsconfig.json` excludes
+  // tests (it is the build/runtime typecheck); this config is the `typecheck`
+  // npm script's target so test code can't hide real type errors.
+  "include": ["src/**/*.ts"],
+  "exclude": ["dist"]
+}

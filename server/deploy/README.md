@@ -11,8 +11,24 @@ taken by the separate `/root/islands` rewrite (a websocket server on `:8090`).
 4. Install the unit:
    `cp server/deploy/robot-islands-auth.service /etc/systemd/system/`
    then `systemctl daemon-reload && systemctl enable --now robot-islands-auth`.
-5. (Later slice) nginx: add `location /api/ { proxy_pass http://127.0.0.1:5180; }`
-   to the islands.nitjsefni.eu vhost.
+5. nginx: add this `location` to the islands.nitjsefni.eu vhost. The
+   `X-Forwarded-For` header MUST be set to `$remote_addr` (the real peer),
+   **replacing** any client-supplied value — NOT the appending
+   `$proxy_add_x_forwarded_for`. The app runs with `trustProxy: 1`, so it
+   reads the rightmost XFF entry as the client IP; if nginx appended instead of
+   replacing, a client could inject a leftmost entry, but with `trustProxy: 1`
+   (one trusted hop) the app already ignores it. Setting `$remote_addr` makes
+   the chain unambiguous and is the supported config:
+   ```nginx
+   location /api/ {
+       proxy_pass http://127.0.0.1:5180;
+       proxy_set_header X-Forwarded-For $remote_addr;   # replace, do NOT append
+       proxy_set_header X-Real-IP $remote_addr;
+       proxy_http_version 1.1;
+       proxy_set_header Upgrade $http_upgrade;          # WS intent channel
+       proxy_set_header Connection "upgrade";
+   }
+   ```
 
 Notes:
 - `/usr/bin/node` on this box is v12 (too old for Fastify 5); the unit uses the

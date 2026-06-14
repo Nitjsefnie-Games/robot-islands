@@ -6,6 +6,7 @@ import { saveSnapshot, loadSnapshot } from './persistence.js';
 import { loadAndCatchUp } from './runtime.js';
 import { createInitialSnapshot } from './new-game.js';
 import { SCHEMA_VERSION, type SaveSnapshot } from '../../../src/persistence.js';
+import type { ModifierId } from '../../../src/biomes.js';
 
 const pool = testPool();
 beforeEach(() => resetDb(pool));
@@ -52,7 +53,7 @@ describe('runtime loadAndCatchUp', () => {
     };
     s.world.activeBonusMs = activeBonusMs;
     const home = s.world.islands.find((i) => i['id'] === 'home')!;
-    home['modifiers'] = [...modifiers];
+    home['modifiers'] = [...modifiers] as ModifierId[];
     // Spec.buildings is what deserialize re-links onto IslandState.buildings.
     // The ore tile at (-7, 2) is deterministic from the home terrain seed.
     home['buildings'] = [
@@ -104,10 +105,11 @@ describe('runtime loadAndCatchUp', () => {
     // game has no disabled buildings, so the building-level part of that migration
     // is moot here. This yields a valid v23 input that deserializeWorld migrates.
     const current = createInitialSnapshot(0);
-    const v23 = JSON.parse(JSON.stringify(current)) as SaveSnapshot & {
+    const v23 = JSON.parse(JSON.stringify(current)) as Omit<SaveSnapshot, 'v' | 'islandStates'> & {
+      v: number;
       islandStates: Array<{ id: string; state: Record<string, unknown> }>;
     };
-    v23.v = 23 as SaveSnapshot['v'];
+    v23.v = 23;
     for (const entry of v23.islandStates) delete entry.state.buildJobs;
     await saveSnapshot(pool, uid, v23 as unknown as SaveSnapshot);
 

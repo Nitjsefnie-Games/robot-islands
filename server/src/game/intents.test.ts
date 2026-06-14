@@ -21,7 +21,6 @@ import type { SaveSnapshot } from '../../../src/persistence.js';
 import { serializeWorld } from '../../../src/persistence.js';
 import { createNewGame } from '../../../src/new-game.js';
 import { makeInitialIslandState } from '../../../src/world.js';
-import type { ResourceId } from '../../../src/recipes.js';
 
 const pool = testPool();
 beforeEach(() => resetDb(pool));
@@ -182,7 +181,7 @@ describe('upgrade-building', () => {
     expect(jobs.some((j) => j.buildingId === id && j.kind === 'upgrade')).toBe(true);
     // Cost was deducted from authoritative inventory.
     const invAfter = state.inventory as Record<string, number>;
-    expect(invAfter.wood).toBeLessThan(invBefore.wood);
+    expect(invAfter.wood!).toBeLessThan(invBefore.wood!);
   });
 
   it('illegal: unknown buildingId is rejected, save unchanged', async () => {
@@ -734,7 +733,7 @@ describe('route management', () => {
     );
     expect(ack.ok).toBe(true);
     const snap = await loadSnapshot(pool, uid);
-    return snap!.world.routes[0].id as string;
+    return snap!.world.routes[0]!.id as string;
   }
 
   it('delete-route: marks an existing route as draining', async () => {
@@ -1142,8 +1141,8 @@ describe('settle-via-spacetime', () => {
 describe('orbital intents', () => {
   function orbitalSnapshot(now: number) {
     const { world, islandStates } = createNewGame(now);
-    const home = world.islands.find((s: any) => s.id === 'home');
-    const state = islandStates.get('home');
+    const home = world.islands.find((s: any) => s.id === 'home')!;
+    const state = islandStates.get('home')!;
     state.ascendantCoreCrafted = true;
     state.unlockedNodes = new Set(['launch.notable.padRedundancy', 'launch.keystone.padMastery']);
     state.unspentSkillPoints = 100;

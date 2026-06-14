@@ -10,6 +10,7 @@ import WebSocket from 'ws';
 import type { AddressInfo } from 'node:net';
 import { testPool, resetDb, buildTestApp } from '../test-helpers.js';
 import { SCHEMA_VERSION } from '../../../src/persistence.js';
+import { SlidingWindowLimiter } from './ws.js';
 
 const pool = testPool();
 const app = buildTestApp(pool);
@@ -216,5 +217,71 @@ describe('game ws', () => {
     ws.close();
     await tickApp.close();
     await tickPool.end();
+  });
+
+  it('rate-limits a flood of intents on a single connection', async () => {
+    const cookie = await authedCookieWithGame('wslimit1@x.com');
+    // A tiny limit (2 intents / 10s) and a quiet periodic tick so the only
+    // non-state frames are acks. Sending 5 intents back-to-back: the first two
+    // are accepted (ok:true), the rest are rejected with 'rate limit exceeded'.
+    const limPool = testPool();
+    const limApp = buildTestApp(limPool, {
+      wsStatePushIntervalMs: 100000,
+      wsIntentRateLimit: 2,
+      wsIntentRateWindowMs: 10000,
+    });
+    await limApp.listen({ host: '127.0.0.1', port: 0 });
+    const addr = limApp.server.address() as AddressInfo;
+    const url = `ws://127.0.0.1:${addr.port}/api/game/ws`;
+    const ws = new WebSocket(url, { headers: { cookie } });
+    await awaitOpen(ws);
+
+    const acks: Array<Record<string, unknown>> = [];
+    const got = new Promise<void>((resolve) => {
+      const onMsg = (data: Buffer) => {
+        const parsed = JSON.parse(data.toString()) as Record<string, unknown>;
+        if (parsed.type === 'state') return; // ignore the initial connect push
+        acks.push(parsed);
+        if (acks.length === 5) { ws.off('message', onMsg); resolve(); }
+      };
+      ws.on('message', onMsg);
+    });
+    // 5 distinct tiles so accepted ones are all legal placements.
+    for (let i = 0; i < 5; i++) {
+      ws.send(JSON.stringify({ type: 'place-building', payload: { islandId: 'home', defId: 'workshop', x: i * 3, y: 0, rotation: 0 }, seq: i }));
+    }
+    await got;
+
+    const limited = acks.filter((a) => a.ok === false && a.error === 'rate limit exceeded');
+    const accepted = acks.filter((a) => a.ok === true);
+    expect(accepted.length).toBe(2);
+    expect(limited.length).toBe(3);
+    // Rejections correlate to the originating seq (not -1).
+    expect(limited.every((a) => typeof a.seq === 'number' && (a.seq as number) >= 2)).toBe(true);
+
+    ws.close();
+    await limApp.close();
+    await limPool.end();
+  });
+});
+
+describe('SlidingWindowLimiter', () => {
+  it('allows up to the limit then rejects within the window', () => {
+    const lim = new SlidingWindowLimiter(3, 1000);
+    expect(lim.allow(0)).toBe(true);
+    expect(lim.allow(10)).toBe(true);
+    expect(lim.allow(20)).toBe(true);
+    expect(lim.allow(30)).toBe(false); // 4th within 1s window
+  });
+
+  it('lets attempts through again after the window slides', () => {
+    const lim = new SlidingWindowLimiter(2, 1000);
+    expect(lim.allow(0)).toBe(true);
+    expect(lim.allow(100)).toBe(true);
+    expect(lim.allow(200)).toBe(false); // over limit
+    // After the first two age out (>1000ms past), capacity frees up.
+    expect(lim.allow(1101)).toBe(true);
+    expect(lim.allow(1201)).toBe(true);
+    expect(lim.allow(1301)).toBe(false);
   });
 });
