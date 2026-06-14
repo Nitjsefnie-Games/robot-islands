@@ -2205,5 +2205,34 @@ It is being delivered in slices, each with its own design + plan under
     renderer is instantiated. The browser client continues to run its own
     local loop until the slice-4 cutover.
 
+* Slice 3 (transport + intent protocol) is specified in
+  `docs/superpowers/specs/2026-06-14-transport-intent-protocol-slice-design.md`.
+  It adds the WebSocket channel through which a logged-in client sends actions
+  to the authoritative server.
+  - The authenticated endpoint is `/api/game/ws`; auth uses the `ri_session`
+    cookie, sharing resolution with the HTTP guard.
+  - Client → server envelope: `{ type, payload, seq }`.
+    ```json
+    { "type": "place-building", "payload": { "islandId": "...", "defId": "...", "x": 0, "y": 0, "rotation": 0 }, "seq": 42 }
+    ```
+  - Server → client ack:
+    ```json
+    { "seq": 42, "ok": true, "projection": { ... } }
+    { "seq": 42, "ok": false, "error": "..." }
+    ```
+  - Validation re-runs the existing pure entry function from `src/` on the
+    authoritative server state; client numbers are never trusted. A rejected
+    intent persists nothing, and intents are serialized to one in-flight
+    intent per connection.
+  - All 30 player intents are cataloged in the slice-3 design doc. Nine are
+    in scope for this slice; eight are wired immediately
+    (`place-building`, `demolish-building`, `cancel-construction`,
+    `upgrade-building`, `set-active-floors`, `dispatch-drone`, `create-route`,
+    `unlock-skill-node`), while `accept-trade` is deferred because trade
+    offers are runtime-only and unpersisted (no authoritative offer to
+    validate — see the follow-up catalog).
+  - Weather and day-night are not sent; the client renders them from
+    `(seed, t)`.
+
 §15.6's "fully client-side" stack note is superseded for *state ownership* by
 this server migration; see the annotation at §15.6.
