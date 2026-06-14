@@ -48,7 +48,7 @@ import { candidateAnchors, type AnchorCandidate } from './anchor-picker.js';
 import { footprintTiles, type Rotation } from './shape-mask.js';
 import type { ResourceId } from './recipes.js';
 import { VISION_BLUE, tileToWorldPx, type IslandSpec, type WorldState } from './world.js';
-import { unwrapGatewayResult, type MutationGateway } from './mutation-gateway.js';
+import { type MutationGateway } from './mutation-gateway.js';
 import { brushTilesAt, SHOT_DURATION_MS } from './terrain-modifier.js';
 
 /** §4.6 picker dep: opens the cargo-label modal and resolves to the
@@ -763,9 +763,22 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     const localX = Math.round(wt.x - targetSpec.cx);
     const localY = Math.round(wt.y - targetSpec.cy);
     if (relocating) {
-      const result = deps.gateway
-        ? unwrapGatewayResult(deps.gateway.relocateBuilding(targetSpec.id, relocating.id, localX, localY, rotation))
-        : relocateBuilding(targetSpec, targetState, relocating.id, localX, localY, rotation);
+      const gatewayResult = deps.gateway
+        ? deps.gateway.relocateBuilding(targetSpec.id, relocating.id, localX, localY, rotation)
+        : undefined;
+      if (gatewayResult instanceof Promise) {
+        void (async () => {
+          const result = await gatewayResult;
+          if (!result.ok) {
+            recordRejection();
+            return;
+          }
+          deps.onRelocated?.();
+          cancel();
+        })();
+        return { ok: false };
+      }
+      const result = gatewayResult ?? relocateBuilding(targetSpec, targetState, relocating.id, localX, localY, rotation);
       if (!result.ok) {
         recordRejection();
         return { ok: false, reason: result.reason === 'not-found' ? undefined : (result.reason as PlacementReason) };
@@ -790,28 +803,39 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     // commit (defensive: another sibling production tick could have
     // consumed inventory in the gap). On the rare race, fall through to
     // the same `insufficient-resources` reason the validator emits.
-    const result = deps.gateway
-      ? unwrapGatewayResult(
-          deps.gateway.placeBuilding(targetSpec.id, activeDefId, localX, localY, rotation, {
-            cargoLabel: activeCargoLabel,
-            terrainTarget: def.terrainModifier === true ? activeTerrainTarget : undefined,
-            terrainShotMs: def.terrainModifier === true ? SHOT_DURATION_MS : undefined,
-          }),
-        )
-      : placeBuilding(
-          targetSpec,
-          targetState,
-          activeDefId,
-          localX,
-          localY,
-          rotation,
-          () => placedIdFor(targetSpec.id, localX, localY),
-          undefined, // nowMs — keep the default (state.lastTick)
-          activeCargoLabel, // §4.6 picker pick — undefined for non-generic defs
-          undefined, // anchorIslandId — land path, never set
-          def.terrainModifier === true ? activeTerrainTarget : undefined,
-          def.terrainModifier === true ? SHOT_DURATION_MS : undefined,
-        );
+    const gatewayResult = deps.gateway
+      ? deps.gateway.placeBuilding(targetSpec.id, activeDefId, localX, localY, rotation, {
+          cargoLabel: activeCargoLabel,
+          terrainTarget: def.terrainModifier === true ? activeTerrainTarget : undefined,
+          terrainShotMs: def.terrainModifier === true ? SHOT_DURATION_MS : undefined,
+        })
+      : undefined;
+    if (gatewayResult instanceof Promise) {
+      void (async () => {
+        const result = await gatewayResult;
+        if (!result.ok) {
+          recordRejection();
+          return;
+        }
+        cancel();
+        deps.onPlaced();
+      })();
+      return { ok: false };
+    }
+    const result = gatewayResult ?? placeBuilding(
+      targetSpec,
+      targetState,
+      activeDefId,
+      localX,
+      localY,
+      rotation,
+      () => placedIdFor(targetSpec.id, localX, localY),
+      undefined, // nowMs — keep the default (state.lastTick)
+      activeCargoLabel, // §4.6 picker pick — undefined for non-generic defs
+      undefined, // anchorIslandId — land path, never set
+      def.terrainModifier === true ? activeTerrainTarget : undefined,
+      def.terrainModifier === true ? SHOT_DURATION_MS : undefined,
+    );
     if (!result.ok) {
       recordRejection();
       return { ok: false, reason: result.reason as PlacementReason };
