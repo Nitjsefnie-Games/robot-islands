@@ -23,7 +23,8 @@ import {
   type Camera,
 } from './camera.js';
 import { effectiveModifierMultipliers, type ModifierMultipliers } from './biomes.js';
-import { advanceIsland, computeRates, xpForLevel, type IslandState, type PowerBalance, type RatesContext } from './economy.js';
+import { computeRates, xpForLevel, type IslandState, type PowerBalance, type RatesContext } from './economy.js';
+import { advanceWorldEconomy } from './economy-advance.js';
 import type { ResourceId } from './recipes.js';
 import { computeNcState } from './network-consciousness.js';
 import { createNewGame } from './new-game.js';
@@ -42,7 +43,7 @@ import {
   makeRegistry,
 } from './input.js';
 import { resetUiLayout } from './window-manager.js';
-import { islandInscribedAny, TILE_PX } from './island.js';
+import { TILE_PX } from './island.js';
 import { computeVisionSources } from './lighthouse.js';
 import { discoverIslandsInVision } from './vision-discovery.js';
 import { visionSourcesSignature } from './vision-source.js';
@@ -66,7 +67,6 @@ import { type Axis } from './land-reclamation.js';
 import { mountInventoryUi } from './inventory-ui.js';
 import { buildingAtTile, findOceanBuildingAt } from './placement.js';
 import { footprintTiles, shapeHeight, shapeWidth, type Rotation } from './shape-mask.js';
-import { resolveShot } from './terrain-modifier.js';
 import { mountPlacementUi } from './placement-ui.js';
 import { mountCargoLabelPicker } from './cargo-label-picker.js';
 import { mountTerrainModifierTargetPicker } from './terrain-modifier-target-picker.js';
@@ -110,9 +110,7 @@ import { findNextMerge, performMerge } from './island-merge.js';
 import { mountRoutesUi } from './routes-ui.js';
 import { RouteRenderer } from './routes-renderer.js';
 import { computeCableNetworkBalance, drainRoutesForBuilding, tickRoutes } from './routes.js';
-import { computeLatticeActive, crossIslandNeighbors, latticeInventory, latticeStorageCaps } from './lattice.js';
-import { advanceLatticeGroup } from './lattice-advance.js';
-import { advanceSharedNetworkGroup, sharedResourceSet } from './shared-network-advance.js';
+import { crossIslandNeighbors, latticeInventory, latticeStorageCaps } from './lattice.js';
 import { mountSettlementUi } from './settlement-ui.js';
 import { mountOrbitalUi } from './orbital-ui.js';
 import { mountWeatherOverlay } from './weather-overlay.js';
@@ -2095,29 +2093,47 @@ async function main(): Promise<void> {
    *  gating frame's clocks; advanceIsland integrates the full interval
    *  since each island's lastTick, so a long gap is one big-dt advance. */
   const advanceEconomy = (now: number, nowWall: number): void => {
-    // Compute Network Consciousness state once per economy tick from the current
-    // island set. §9.6 buff applies only to T3+ islands; per-island gating
-    // happens at the call site below (not inside advanceIsland) so the
-    // pure economy doesn't take a dependency on `tierForLevel`.
-    const ncState = computeNcState(worldState);
+    // §15.6: the full economy advance lives in the PURE `advanceWorldEconomy`
+    // (economy-advance.ts) so the authoritative server runs the IDENTICAL
+    // orchestration (NC buff / lattice + shared-network pooling / cross-island
+    // adjacency / cable brownout / Mirror-Sat solar / active-play bonus /
+    // geothermal / per-island modifiers) — no client/server drift. The only
+    // render-side effect (terrain-shot → rebuildWorldLayers) is threaded back
+    // through the `onTerrainShotFire` hook; `resolveShot` itself runs inside
+    // the pure module on both sides. The returned per-island ctx + NC state
+    // feed the HUD/inspector bookkeeping below (lastNcState, lastIslandCtx,
+    // islandNets, islandPower) WITHOUT recomputing the per-tick precompute.
+    let needRebuild = false;
+    const { ncState, islandCtx: builtIslandCtx } = advanceWorldEconomy(
+      worldState,
+      islandStates,
+      now,
+      nowWall,
+      {
+        onTerrainShotFire: () => {
+          needRebuild = true;
+        },
+      },
+    );
     lastNcState = ncState;
+    for (const s of islandStates.values()) {
+      const islandCtx = builtIslandCtx.get(s.id);
+      if (!islandCtx) continue;
+      lastIslandCtx.set(s.id, islandCtx);
+      const { net, power } = computeRates(s, islandCtx, undefined, nowWall);
+      islandNets.set(s.id, net);
+      islandPower.set(s.id, power);
+    }
+    if (needRebuild) rebuildWorldLayers();
+    // The post-tick active-island HUD recompute below still needs the per-tick
+    // precompute outputs (lattice inventory/caps, cross-island adjacency, cable
+    // balances, solar boost). Recompute them here cheaply — these are the same
+    // pure helpers `advanceWorldEconomy` used internally, so the HUD reads the
+    // identical environment the integrator saw this tick.
     const ncBuffFor = (s: IslandState): number =>
       tierForLevel(s.level) >= 3 ? ncState.globalProductionBuff : 1;
-    // Advance every populated island in turn. Routes are dispatched AFTER
-    // advance so the per-island production from this frame is visible to
-    // route dispatch; deliveries handed back to the next frame's advance
-    // get consumed (and the funnel-pending credit drained) on that frame.
-    // Each island's modifier set composes its own recipe-rate multipliers,
-    // so we look up the precomputed bundle by id and pass it through.
-    // §13.3 evaluate Omniscient Lattice activation after all economy advances
-    // so newly placed nodes on this frame are counted.
-    computeLatticeActive(worldState);
-    // §13.3 unified inventory — computed once per tick and threaded to every
-    // Lattice island's rate computation so consumers see stockpile on siblings.
     const unifiedInv = latticeInventory(worldState);
     const unifiedCaps = latticeStorageCaps(worldState);
-    // §13.3 cross-island adjacency — precompute once per tick for each
-    // lattice island so computeRates can treat remote buildings as neighbors.
     const crossIslandById = new Map<string, PlacedBuilding[]>();
     if (worldState.latticeActive) {
       for (const id of worldState.latticeNodeIslands) {
@@ -2125,19 +2141,6 @@ async function main(): Promise<void> {
         if (neighbors) crossIslandById.set(id, neighbors);
       }
     }
-
-    // §5.3 cable network: compute the per-component binary-gated balance
-    // ONCE per tick, then thread the matching CableComponentBalance into
-    // every per-island `computeRates` / `advanceIsland` call. The local
-    // power helper inside `computeCableNetworkBalance` re-uses the same
-    // per-island ctx the advance loop will use, so the gate decision is
-    // taken against the same modifiers / NC buff the integrator will see
-    // this frame.
-    // §14.3 Mirror Sat: precompute per-island solar boost ONCE per tick.
-    // Each populated island gets the aggregate of every locked mirror sat's
-    // Lorentzian contribution to that island's centre. Cheap (O(sats ×
-    // islands)) and avoids re-summing inside the cable helper and the per-
-    // island advance loop.
     const solarBoostByIsland = new Map<string, number>();
     for (const spec of worldState.islands) {
       if (!spec.populated) continue;
@@ -2162,160 +2165,7 @@ async function main(): Promise<void> {
         solarBoost: solarBoostByIsland.get(id),
       };
     };
-    // §2.7 / §15.1: thread (now, nowWall) so the gate's local-power probe
-    // samples the same wall-anchored solar / conditional field as the
-    // advance loop, instead of falling back to perf-domain lastTick.
     const cableBalances = computeCableNetworkBalance(worldState, islandStates, cableLocalCtxFor, now, nowWall);
-    const sharedNetwork = computeSharedNetworkState(worldState);
-
-    let needRebuild = false;
-    // §13.3 D-01 lattice grouped lockstep. When the Lattice is active its
-    // member islands form ONE net-flow problem: they advance together via
-    // `advanceLatticeGroup`, which pools their inventories, runs the union
-    // flow solve, integrates the pooled stock (so it actually DRAINS), and
-    // redistributes by cap share. Non-members advance per-island exactly as
-    // before. `isLatticeMember` gates which path each island takes; the
-    // `buildIslandRatesContext` snapshot below still uses the pooled overrides
-    // for members so the inspector/HUD read the same cross-island state.
-    const latticeActive = unifiedInv !== undefined;
-    const isLatticeMember = (id: string): boolean =>
-      latticeActive && worldState.latticeNodeIslands.includes(id);
-
-    // §13.3 base RatesContext for a lattice member — WITHOUT the pooled
-    // inventory/caps/flowSiblings (those are injected by advanceLatticeGroup).
-    // Carries the per-island modifiers, terrain, cross-island adjacency,
-    // cable component, solar boost, world, worldSeed, and the terrain-shot
-    // callback so grouped members get identical side effects to a solo advance.
-    const latticeMemberBaseCtx = (s: IslandState): RatesContext => {
-      const spec = islandSpecsById.get(s.id);
-      const inscribedFor = spec
-        ? (lx: number, ly: number) => islandInscribedAny(spec, lx, ly)
-        : () => false;
-      return {
-        modifierMul: modifierMulFor(s.id),
-        ncBuff: ncBuffFor(s),
-        activeBonusMul: activeBonusMul(worldState),
-        terrainAt: spec?.terrainAt,
-        crossIsland: crossIslandById.get(s.id),
-        cableComponent: cableBalances.get(s.id),
-        geothermalActive: spec?.modifiers.includes('geothermal_active') === true,
-        solarBoost: solarBoostByIsland.get(s.id),
-        world: worldState,
-        worldSeed: worldState.seed,
-        onTerrainShotFire: (buildingId) => {
-          const modifier = s.buildings.find((b) => b.id === buildingId);
-          if (!modifier) return;
-          if (spec) resolveShot(spec, s, modifier, inscribedFor);
-          needRebuild = true;
-        },
-      };
-    };
-
-    // Advance the active-lattice member group as a unit (mass-conserving).
-    if (latticeActive) {
-      const memberStates: IslandState[] = [];
-      for (const id of worldState.latticeNodeIslands) {
-        const st = islandStates.get(id);
-        if (st) memberStates.push(st);
-      }
-      if (memberStates.length > 0) {
-        advanceLatticeGroup(memberStates, now, latticeMemberBaseCtx, nowWall);
-      }
-    }
-
-    // D-02: advance the non-lattice cross-island shared-network participant
-    // group as ONE net-flow problem, pooling ONLY the shared-resource subset
-    // (mass-conserving; no within-tick double-spend). Lattice members are
-    // excluded — they already advanced above and `sharedNetwork` is
-    // mutually-exclusive with the Lattice (`!isLatticeIsland` gate). The base
-    // ctx reuses `latticeMemberBaseCtx` (same per-island modifiers/terrain/
-    // cross-island/cable/solar/world/worldSeed/terrain-shot fields); the
-    // grouped advance INJECTS the partial pooled inventory/caps/flowSiblings.
-    const sharedSet = sharedResourceSet(sharedNetwork);
-    if (sharedSet.size > 0) {
-      const participantStates: IslandState[] = [];
-      for (const id of sharedNetwork.participantIds) {
-        if (isLatticeMember(id)) continue; // lattice path owns these
-        const st = islandStates.get(id);
-        if (st) participantStates.push(st);
-      }
-      if (participantStates.length > 0) {
-        advanceSharedNetworkGroup(
-          participantStates,
-          now,
-          latticeMemberBaseCtx,
-          sharedSet,
-          sharedNetwork.sharedStorageCap,
-          sharedNetwork.inventoryHolders,
-          nowWall,
-        );
-      }
-    }
-
-    for (const s of islandStates.values()) {
-      // Thread the spec's `terrainAt` closure so `resolveRecipe` (recipes.ts)
-      // can branch Mine output on the tile under each footprint (§8.1).
-      // Spec lookup is cheap (Map.get); the closure itself is reused across
-      // every recomputeRates call within the tick.
-      const spec = islandSpecsById.get(s.id);
-      const isLatticeIsland = isLatticeMember(s.id);
-      const isNetParticipant = sharedNetwork.participantIds.has(s.id);
-      const crossIsland = crossIslandById.get(s.id);
-      const cableComponent = cableBalances.get(s.id);
-      const geothermalActive = spec?.modifiers.includes('geothermal_active') === true;
-      const inscribedFor = spec
-        ? (lx: number, ly: number) => islandInscribedAny(spec, lx, ly)
-        : () => false;
-
-      // §Task-19: cross-island shared network overrides ( Lattice takes precedence).
-      const sharedInventory = isNetParticipant && !isLatticeIsland
-        ? Object.fromEntries(sharedNetwork.sharedInventory) as Record<ResourceId, number>
-        : undefined;
-      const sharedCaps = isNetParticipant && !isLatticeIsland
-        ? Object.fromEntries(sharedNetwork.sharedStorageCap) as Record<ResourceId, number>
-        : undefined;
-
-      // §15.1: shared RatesContext builder — one source for both the
-      // advanceIsland call and the lastIslandCtx snapshot so the inspector
-      // uses byte-identical fields and rates always agree with the HUD.
-      const buildIslandRatesContext = (): RatesContext => ({
-        modifierMul: modifierMulFor(s.id),
-        ncBuff: ncBuffFor(s),
-        activeBonusMul: activeBonusMul(worldState),
-        terrainAt: spec?.terrainAt,
-        inventory: isLatticeIsland ? unifiedInv : sharedInventory,
-        crossIsland,
-        caps: isLatticeIsland ? unifiedCaps : sharedCaps,
-        cableComponent,
-        geothermalActive,
-        solarBoost: solarBoostByIsland.get(s.id),
-        world: worldState,
-      });
-      // §13.3 D-01 / D-02: lattice members AND non-lattice shared-network
-      // participants were already advanced together above (grouped, mass-
-      // conserving). Only islands on neither grouped path advance per-island
-      // here. The grouped islands still get their snapshot + retained net/power
-      // below (with the partial pooled overrides) for the HUD.
-      const isSharedParticipant = isNetParticipant && !isLatticeIsland && sharedSet.size > 0;
-      if (!isLatticeIsland && !isSharedParticipant) {
-        advanceIsland(s, now, {
-          ...buildIslandRatesContext(),
-          worldSeed: worldState.seed,
-          onTerrainShotFire: (buildingId) => {
-            const modifier = s.buildings.find((b) => b.id === buildingId);
-            if (!modifier) return;
-            if (spec) resolveShot(spec, s, modifier, inscribedFor);
-            needRebuild = true;
-          },
-        }, nowWall);
-      }
-      const islandCtx: RatesContext = buildIslandRatesContext();
-      lastIslandCtx.set(s.id, islandCtx);
-      const { net, power } = computeRates(s, islandCtx, undefined, nowWall);
-      islandNets.set(s.id, net);
-      islandPower.set(s.id, power);
-    }
-    if (needRebuild) rebuildWorldLayers();
     // Recompute the active island's rates so the HUD and multi-island bar
     // show post-advance data. (Before the 5 Hz gate this ran after the
     // per-frame route/vehicle ticks; their inventory effects now surface at
