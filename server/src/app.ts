@@ -4,7 +4,7 @@ import rateLimit from '@fastify/rate-limit';
 import type { Pool } from './db.js';
 import { registerAuthRoutes } from './auth/routes.js';
 
-export interface AppOptions { readonly pool: Pool; readonly cookieSecure: boolean; }
+export interface AppOptions { readonly pool: Pool; readonly cookieSecure: boolean; readonly authRateLimitMax?: number; }
 
 export function buildApp(opts: AppOptions): FastifyInstance {
   const app = Fastify({ logger: false });
@@ -14,7 +14,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     // Tighter limit on auth endpoints. Relaxed in plain-HTTP dev/test so the
     // integration suite can run multiple requests against the same app.
     await instance.register(rateLimit, {
-      max: opts.cookieSecure ? 10 : 1000,
+      max: opts.authRateLimitMax ?? 10,
       timeWindow: '1 minute',
     });
     registerAuthRoutes(instance, opts.pool, opts.cookieSecure);
