@@ -2173,3 +2173,14 @@ Out of scope for first release; designed but not implemented:
 * Multi-device sync (would require backend)
 * Localization
 
+
+## Appendix C — Server architecture (migration)
+
+The server-authoritative migration (see `TODO.md`) moves the simulation
+off the browser; the server owns all state and validates client intents.
+It is being delivered in slices, each with its own design + plan under
+`docs/superpowers/`. Slice 1 (auth service + user store) is specified in
+`docs/superpowers/specs/2026-06-13-server-auth-slice-design.md` and adds a
+standalone Node + Fastify server under `server/` with no change to the
+simulation. §15.6 (pure client-side) remains in force until the runtime
+slice moves game state server-side; this appendix will be expanded then.
