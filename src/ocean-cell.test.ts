@@ -47,6 +47,35 @@ describe('footprintMatches', () => {
     ]);
     expect(footprintMatches(w, 0, 0, 2, 2, ['shallows', 'deep'])).toBe(true);
   });
+
+  it('§5 masks an un-depth-revealed rare feature so it does NOT satisfy a feature terrainReq', () => {
+    const w = mkWorld([[2, 3, 'hydrothermal_vent']]);
+    const depthRevealed = new Set<string>(); // cell NOT revealed
+    expect(footprintMatches(w, 2, 3, 1, 1, ['hydrothermal_vent'], depthRevealed)).toBe(false);
+  });
+
+  it('§5 uses true terrain when the rare feature IS depth-revealed', () => {
+    const w = mkWorld([[2, 3, 'hydrothermal_vent']]);
+    const depthRevealed = new Set<string>(['2,3']);
+    expect(footprintMatches(w, 2, 3, 1, 1, ['hydrothermal_vent'], depthRevealed)).toBe(true);
+  });
+
+  it('§5 server path omits depthRevealedCells and matches true terrain unchanged', () => {
+    const w = mkWorld([[2, 3, 'hydrothermal_vent']]);
+    expect(footprintMatches(w, 2, 3, 1, 1, ['hydrothermal_vent'])).toBe(true);
+  });
+
+  it('§5 hidden rare feature still matches a bulk terrainReq (treated as deep base)', () => {
+    const w = mkWorld([[2, 3, 'hydrothermal_vent']]);
+    const depthRevealed = new Set<string>();
+    expect(footprintMatches(w, 2, 3, 1, 1, ['shallows', 'deep'], depthRevealed)).toBe(true);
+  });
+
+  it('§5 hidden rare feature does not satisfy a shallows-only requirement', () => {
+    const w = mkWorld([[2, 3, 'hydrothermal_vent']]);
+    const depthRevealed = new Set<string>();
+    expect(footprintMatches(w, 2, 3, 1, 1, ['shallows'], depthRevealed)).toBe(false);
+  });
 });
 
 describe('§6 shouldRenderFeatureGlyph', () => {
