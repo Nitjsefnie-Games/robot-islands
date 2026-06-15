@@ -8,11 +8,12 @@
 // This module is logic-only: no PixiJS imports.
 
 import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
+import { displayedFloorLevel } from './floor-levels.js';
 import type { PlacedBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
 import { dispatchDrone, firePulse, type DroneTier } from './drones.js';
 import type { TerrainKind } from './island.js';
-import { expandIsland, type Axis } from './land-reclamation.js';
+import { canExpandIsland, expandIsland, type Axis } from './land-reclamation.js';
 import {
   constructIsland,
   makeArtificialIdGenerator,
@@ -29,12 +30,14 @@ import {
   setBuildingActiveFloors,
 } from './placement.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
+import { CARGO_WILDCARD, type CargoEntry, type CargoMode } from './route-cargo.js';
 import {
   createRouteFromBuilding,
+  islandHasTeleporterPad,
   reorderPriorityList,
+  routeProfileForBuilding,
   type Route,
 } from './routes.js';
-import type { CargoEntry, CargoMode } from './route-cargo.js';
 import type { Rotation } from './shape-mask.js';
 import type { GameServerClient } from './server-client.js';
 import {
@@ -249,6 +252,62 @@ export function makeLocalGateway(
     return typeof v === 'string' && (ALL_RESOURCES as ReadonlyArray<string>).includes(v);
   }
 
+  function isValidCargoMode(v: unknown): v is CargoMode {
+    return v === 'priority' || v === 'waterfall' || v === 'split' || v === 'balanced';
+  }
+
+  function isValidVehicleKind(v: unknown): v is VehicleKind {
+    return v === 'ship' || v === 'helicopter';
+  }
+
+  function isValidVehicleTier(v: unknown): v is VehicleTier {
+    return typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= 4;
+  }
+
+  /** LOCAL mirror of the server's validateCargoList in server/src/game/intents.ts. */
+  function validateCargoList(cargo: unknown): { ok: true; list: CargoEntry[] } | { ok: false; error: string } {
+    if (!Array.isArray(cargo)) return { ok: false, error: 'cargo must be an array' };
+    const list: CargoEntry[] = [];
+    const seen = new Set<string>();
+    let seenAll = false;
+    for (const entry of cargo) {
+      if (entry === null || typeof entry !== 'object') return { ok: false, error: 'cargo entry must be an object' };
+      const { resourceId, weight, sourceFloorPct } = entry as Record<string, unknown>;
+      if (typeof resourceId !== 'string') return { ok: false, error: 'cargo entry resourceId must be a string' };
+      if (resourceId !== CARGO_WILDCARD && !isValidResourceId(resourceId)) {
+        return { ok: false, error: `unknown cargo resourceId ${resourceId}` };
+      }
+      if (resourceId === CARGO_WILDCARD) {
+        if (seenAll) return { ok: false, error: 'only one all wildcard allowed' };
+        seenAll = true;
+      } else {
+        if (seen.has(resourceId)) return { ok: false, error: `duplicate cargo resourceId ${resourceId}` };
+        seen.add(resourceId);
+      }
+      if (weight !== undefined) {
+        if (typeof weight !== 'number' || !Number.isFinite(weight) || weight <= 0) {
+          return { ok: false, error: 'cargo weight must be positive' };
+        }
+      }
+      if (sourceFloorPct !== undefined) {
+        if (
+          typeof sourceFloorPct !== 'number' ||
+          !Number.isFinite(sourceFloorPct) ||
+          sourceFloorPct < 0 ||
+          sourceFloorPct > 100
+        ) {
+          return { ok: false, error: 'cargo sourceFloorPct must be 0..100' };
+        }
+      }
+      list.push({
+        resourceId,
+        ...(weight !== undefined ? { weight } : {}),
+        ...(sourceFloorPct !== undefined ? { sourceFloorPct } : {}),
+      } as CargoEntry);
+    }
+    return { ok: true, list };
+  }
+
   function ok<T = void>(value?: T): GatewayOk<T> {
     return { ok: true, value };
   }
@@ -267,6 +326,9 @@ export function makeLocalGateway(
     placeBuilding(islandId, defId, x, y, rotation, options = {}) {
       const island = resolveIsland(islandId);
       if (!island) return err('unknown island');
+      if (options.cargoLabel !== undefined && !isValidResourceId(options.cargoLabel)) {
+        return err('cargoLabel must be a valid resource id');
+      }
       const idGenerator = options.idGenerator ?? (() => `placed-${islandId}-${x},${y}`);
       const result = placeBuilding(
         island.spec,
@@ -313,6 +375,12 @@ export function makeLocalGateway(
     setBuildingActiveFloors(islandId, buildingId, disabledFloors) {
       const island = resolveIsland(islandId);
       if (!island) return err('unknown island');
+      if (typeof disabledFloors !== 'number' || !Number.isInteger(disabledFloors) || disabledFloors < 0) {
+        return err('disabledFloors must be a non-negative integer');
+      }
+      const b = island.spec.buildings.find((bb) => bb.id === buildingId);
+      if (!b) return err('not-found');
+      if (disabledFloors > displayedFloorLevel(b)) return err('disabledFloors out of range');
       return fromOutcome(setBuildingActiveFloors(island.spec, island.state, buildingId, disabledFloors));
     },
 
@@ -352,10 +420,16 @@ export function makeLocalGateway(
     relabelCargo(islandId, buildingId, newLabel) {
       const island = resolveIsland(islandId);
       if (!island) return err('unknown island');
+      if (typeof newLabel !== 'string' || !isValidResourceId(newLabel)) {
+        return err('newLabel must be a valid resource id');
+      }
       const b = island.spec.buildings.find((bb) => bb.id === buildingId);
       if (!b) return err('not-found');
       const def = BUILDING_DEFS[b.defId as BuildingDefId];
       if (!def) return err('unknown def');
+      if (!def.storage || def.storage.category !== 'generic') {
+        return err('building is not generic storage');
+      }
       applyRelabelStorageCap(island.state, b, def, b.cargoLabel, newLabel);
       b.cargoLabel = newLabel;
       return ok();
@@ -364,6 +438,8 @@ export function makeLocalGateway(
     expandIsland(islandId, axis) {
       const island = resolveIsland(islandId);
       if (!island) return err('unknown island');
+      const can = canExpandIsland(island.spec, island.state, axis);
+      if (!can.ok) return err(can.reason ?? 'expand failed', can.reason);
       expandIsland(island.spec, island.state, axis);
       return ok();
     },
@@ -422,6 +498,11 @@ export function makeLocalGateway(
     dispatchDrone(islandId, originX, originY, dirX, dirY, fuelLoaded, nowMs, waypoints, selectedTier) {
       const island = resolveIsland(islandId);
       if (!island) return err('unknown island');
+      if (selectedTier !== undefined) {
+        if (typeof selectedTier !== 'number' || !Number.isInteger(selectedTier) || selectedTier < 1 || selectedTier > 6) {
+          return err('selectedTier must be an integer 1..6');
+        }
+      }
       return fromOutcome(
         dispatchDrone(
           world,
@@ -449,19 +530,34 @@ export function makeLocalGateway(
       if (!origin) return err('unknown origin island');
       const targetSpec = world.islands.find((s) => s.id === targetIslandId);
       if (!targetSpec) return err('unknown target island');
-      return fromOutcome(
-        dispatchVehicle(
-          world,
-          origin.spec,
-          origin.state,
-          targetSpec,
-          kind,
-          tier,
-          fuelLoaded,
-          foundationKitCount,
-          nowMs,
-        ),
-      );
+      if (originIslandId === targetIslandId) return err('origin and target must differ');
+      if (!isValidVehicleKind(kind)) return err('kind must be ship or helicopter');
+      if (!isValidVehicleTier(tier)) return err('tier must be 1..4');
+      if (typeof fuelLoaded !== 'number' || !Number.isFinite(fuelLoaded) || fuelLoaded <= 0) {
+        return err('fuelLoaded must be positive');
+      }
+      if (typeof foundationKitCount !== 'number' || !Number.isInteger(foundationKitCount) || foundationKitCount < 1) {
+        return err('foundationKitCount must be a positive integer');
+      }
+      if (!targetSpec.discovered) return err('target not discovered');
+      if (targetSpec.populated) return err('target already populated');
+      try {
+        return fromOutcome(
+          dispatchVehicle(
+            world,
+            origin.spec,
+            origin.state,
+            targetSpec,
+            kind,
+            tier,
+            fuelLoaded,
+            foundationKitCount,
+            nowMs,
+          ),
+        );
+      } catch (e) {
+        return err(e instanceof Error ? e.message : String(e));
+      }
     },
 
     settleViaSpacetime(originIslandId, targetIslandId, nowMs) {
@@ -546,6 +642,7 @@ export function makeLocalGateway(
       const toSpec = world.islands.find((s) => s.id === toIslandId);
       if (!fromSpec) return err('unknown from island');
       if (!toSpec) return err('unknown to island');
+      if (fromIslandId === toIslandId) return err('from and to must differ');
       if (typeof filterResource === 'string' && !isValidResourceId(filterResource)) {
         return err('unknown filterResource');
       }
@@ -553,6 +650,11 @@ export function makeLocalGateway(
       if (!toSpec.populated) return err('island not populated');
       const building = fromSpec.buildings.find((b) => b.id === buildingId);
       if (!building) return err('building not on from island');
+      const profile = routeProfileForBuilding(building.defId);
+      if (profile === null) return err('building is not a transport building');
+      if (profile.type === 'teleporter' && !islandHasTeleporterPad(toSpec)) {
+        return err('destination has no teleporter pad');
+      }
       const dx = fromSpec.cx - toSpec.cx;
       const dy = fromSpec.cy - toSpec.cy;
       const dist = Math.sqrt(dx * dx + dy * dy);
@@ -583,15 +685,24 @@ export function makeLocalGateway(
     },
 
     setRouteMode(routeId, mode) {
+      if (!isValidCargoMode(mode)) return err('invalid cargo mode');
       const route = findRoute(routeId);
       if (!route) return err('route not found');
+      if (route.draining) return err('route is draining');
       route.mode = mode;
       return ok();
     },
 
     setCargoWeight(routeId, cargoIndex, weight) {
+      if (typeof cargoIndex !== 'number' || !Number.isInteger(cargoIndex) || cargoIndex < 0) {
+        return err('cargoIndex must be a non-negative integer');
+      }
+      if (typeof weight !== 'number' || !Number.isFinite(weight) || weight <= 0) {
+        return err('weight must be positive');
+      }
       const route = findRoute(routeId);
       if (!route) return err('route not found');
+      if (route.draining) return err('route is draining');
       const entry = route.cargo[cargoIndex];
       if (!entry) return err('cargoIndex out of range');
       route.cargo[cargoIndex] = { ...entry, weight };
@@ -599,20 +710,37 @@ export function makeLocalGateway(
     },
 
     setCargoFloorPct(routeId, cargoIndex, sourceFloorPct) {
+      if (typeof cargoIndex !== 'number' || !Number.isInteger(cargoIndex) || cargoIndex < 0) {
+        return err('cargoIndex must be a non-negative integer');
+      }
+      const hasFloor = sourceFloorPct !== undefined;
+      if (
+        hasFloor &&
+        (typeof sourceFloorPct !== 'number' || !Number.isFinite(sourceFloorPct) || sourceFloorPct < 0 || sourceFloorPct > 100)
+      ) {
+        return err('sourceFloorPct must be 0..100');
+      }
       const route = findRoute(routeId);
       if (!route) return err('route not found');
+      if (route.draining) return err('route is draining');
       const entry = route.cargo[cargoIndex];
       if (!entry) return err('cargoIndex out of range');
-      route.cargo[cargoIndex] =
-        sourceFloorPct === undefined
-          ? { resourceId: entry.resourceId, weight: entry.weight }
-          : { resourceId: entry.resourceId, weight: entry.weight, sourceFloorPct };
+      route.cargo[cargoIndex] = hasFloor
+        ? { resourceId: entry.resourceId, weight: entry.weight, sourceFloorPct }
+        : { resourceId: entry.resourceId, weight: entry.weight };
       return ok();
     },
 
     reorderRouteCargo(routeId, srcIndex, dstIndex) {
+      if (typeof srcIndex !== 'number' || !Number.isInteger(srcIndex) || srcIndex < 0) {
+        return err('srcIndex must be a non-negative integer');
+      }
+      if (typeof dstIndex !== 'number' || !Number.isInteger(dstIndex) || dstIndex < 0) {
+        return err('dstIndex must be a non-negative integer');
+      }
       const route = findRoute(routeId);
       if (!route) return err('route not found');
+      if (route.draining) return err('route is draining');
       if (srcIndex >= route.cargo.length || dstIndex >= route.cargo.length) {
         return err('index out of range');
       }
@@ -623,7 +751,10 @@ export function makeLocalGateway(
     setRouteCargo(routeId, cargo) {
       const route = findRoute(routeId);
       if (!route) return err('route not found');
-      route.cargo = cargo;
+      if (route.draining) return err('route is draining');
+      const v = validateCargoList(cargo);
+      if (!v.ok) return err(v.error);
+      route.cargo = v.list;
       return ok();
     },
 
