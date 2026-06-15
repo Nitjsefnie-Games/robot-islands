@@ -15,6 +15,8 @@ export interface GraphUi {
   hide(): void;
   toggle(): boolean;
   isVisible(): boolean;
+  /** Repaint gate met/pending colours against the live active island. */
+  refresh(): void;
 }
 
 export interface MountGraphUiOptions {
@@ -262,6 +264,10 @@ export function mountGraphUi(
 
   refreshGatesStatus();
 
+  function refresh(): void {
+    refreshGatesStatus();
+  }
+
   function applyFilter(): void {
     const q = search.value.trim().toLowerCase();
     for (const section of sections) {
@@ -367,5 +373,6 @@ return {
   isVisible(): boolean {
     return visible;
   },
+  refresh,
 };
 }

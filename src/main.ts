@@ -2149,6 +2149,33 @@ async function main(): Promise<void> {
 
     refreshRetainedRates(nowWall);
 
+    // Re-sync client-cached object references that were orphaned by the
+    // server snapshot re-minting worldState.islands. Panels that read live
+    // getters (inspector, HUD) are unaffected; modules that held direct
+    // references to IslandSpec / PlacedBuilding objects need to be
+    // re-resolved by id so they don't render stale geometry/state.
+    if (selectedSpec) {
+      selectedSpec = islandSpecsById.get(selectedSpec.id) ?? null;
+    }
+    if (hoveredBuilding) {
+      const spec = islandSpecsById.get(hoveredBuilding.spec.id);
+      if (spec) {
+        const building = spec.buildings.find((b) => b.id === hoveredBuilding!.building.id);
+        hoveredBuilding = building ? { spec, building } : null;
+      } else {
+        hoveredBuilding = null;
+      }
+    }
+    repaintSelection();
+    repaintHover();
+
+    // Panels that only repaint on open or that cache object references must
+    // refresh against the authoritative snapshot while they are visible.
+    if (skillGraph.isVisible()) skillGraph.refresh();
+    if (constructionUi.isVisible()) constructionUi.refresh();
+    if (routesUi.isVisible()) routesUi.refresh(performance.now());
+    if (graphUi.isVisible()) graphUi.refresh();
+
     // §2.2 rebuild discipline: only re-bake the ocean/island/fog GPU textures
     // when the vision-source set OR the discovery/revealed-cell state actually
     // changed. The server pushes a full snapshot every 1s plus per-intent;
