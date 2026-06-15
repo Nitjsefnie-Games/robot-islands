@@ -2441,6 +2441,14 @@ async function main(): Promise<void> {
     }
   }
 
+  // §9.9 REMOTE activity-heartbeat accumulators. Focused/unfocused ms are
+  // accumulated per frame and flushed to the server every 5s so the server
+  // owns the authoritative active-bonus balance.
+  let hbFocusedMs = 0;
+  let hbUnfocusedMs = 0;
+  let hbLastSentMs = 0;
+  const HEARTBEAT_INTERVAL_MS = 5000;
+
   app.ticker.add(() => {
     let dx = 0;
     let dy = 0;
@@ -2514,6 +2522,8 @@ async function main(): Promise<void> {
       // internally clamps accrual and decays the unfocused remainder, so the
       // RAW frame dt goes in (NOT onlineDtMs — decay needs the full interval).
       tickActiveBonus(worldState, tradeOnline, elapsedSec * 1000);
+      // Stamp last-active so a closed-game reload decays only true away time.
+      worldState.lastActiveMs = nowWall;
       tickTradeOffers(
         tradeRuntime,
         islandStates,
@@ -2688,6 +2698,24 @@ async function main(): Promise<void> {
     tradeUi.update(tradeRuntime, activeIslandId, now);
     // §13.3 Omniscient Lattice banner visibility.
     latticeBanner.style.display = worldState.latticeActive ? 'block' : 'none';
+
+    // §9.9 REMOTE activity heartbeat. The client accumulates capped focused
+    // and unfocused ms per frame and flushes them to the server periodically.
+    // The server applies the accrual/decay authoritatively and stamps
+    // lastActiveMs so load-time decay only charges true away time.
+    if (isRemote) {
+      const frameMs = elapsedSec * 1000;
+      const online = document.visibilityState === 'visible';
+      hbFocusedMs += online ? Math.min(frameMs, ONLINE_DT_CAP_MS) : 0;
+      hbUnfocusedMs += online ? 0 : frameMs;
+      if (now - hbLastSentMs >= HEARTBEAT_INTERVAL_MS) {
+        if (hbFocusedMs > 0 || hbUnfocusedMs > 0) void gateway.activeHeartbeat(hbFocusedMs, hbUnfocusedMs);
+        hbFocusedMs = 0;
+        hbUnfocusedMs = 0;
+        hbLastSentMs = now;
+      }
+    }
+
     // Skill tree only repaints while visible — DOM writes are wasted
     // otherwise. show() also forces a paint on transition so we don't
     // strictly need a per-frame call, but level-up while the panel is open

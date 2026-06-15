@@ -3,6 +3,7 @@ import {
   ACTIVE_BONUS_PER_MIN,
   ACTIVE_DECAY_RATIO,
   activeBonusMul,
+  applyActiveBonusDelta,
   tickActiveBonus,
 } from './active-bonus.js';
 import { ONLINE_DT_CAP_MS } from './trade.js';
@@ -50,6 +51,32 @@ describe('tickActiveBonus (§9.9 accrual law)', () => {
     tickActiveBonus(w, true, 0);
     tickActiveBonus(w, false, -5);
     expect(w.activeBonusMs).toBe(123);
+  });
+});
+
+describe('applyActiveBonusDelta (§9.9 server heartbeat)', () => {
+  it('accrues focused ms', () => {
+    const w = { activeBonusMs: 1000 };
+    applyActiveBonusDelta(w, 5000, 0);
+    expect(w.activeBonusMs).toBe(6000);
+  });
+
+  it('decays at 3× unfocused ms', () => {
+    const w = { activeBonusMs: 10_000 };
+    applyActiveBonusDelta(w, 0, 3000);
+    expect(w.activeBonusMs).toBe(1000);
+  });
+
+  it('floors at 0', () => {
+    const w = { activeBonusMs: 500 };
+    applyActiveBonusDelta(w, 0, 10_000);
+    expect(w.activeBonusMs).toBe(0);
+  });
+
+  it('ignores negative inputs', () => {
+    const w = { activeBonusMs: 1000 };
+    applyActiveBonusDelta(w, -1000, -2000);
+    expect(w.activeBonusMs).toBe(1000);
   });
 });
 

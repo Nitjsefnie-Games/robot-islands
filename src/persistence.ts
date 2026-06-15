@@ -157,6 +157,9 @@ export interface SerializedWorld {
   /** §9.9 active-play bonus balance (effective focused ms). Optional:
    *  absent on pre-v22 saves; load decays it for the closed gap. */
   readonly activeBonusMs?: number;
+  /** §9.9 wall-clock ms of the player's last activity heartbeat/tick.
+   *  Optional on legacy saves; absent ≡ savedAt for decay purposes. */
+  readonly lastActiveMs?: number;
   /** §13.3 Lattice Node island list. */
   readonly latticeNodeIslands?: ReadonlyArray<string>;
   /** §14.4 in-flight comm packets. */
@@ -828,6 +831,7 @@ export function serializeWorld(
       },
       latticeActive: world.latticeActive,
       activeBonusMs: world.activeBonusMs ?? 0,
+      lastActiveMs: world.lastActiveMs,
       latticeNodeIslands: [...world.latticeNodeIslands],
       commPackets: [...world.commPackets],
       totalCo2Kg: world.totalCo2Kg,
@@ -941,6 +945,12 @@ export function deserializeWorld(
   // tick (advanceIsland's `nowMs <= lastTick` guard handles equality fine).
   const deltaMs = Math.max(0, nowWallMs - snapshot.savedAt);
 
+  // §9.9: decay only non-active time. `lastActiveMs` defaults to savedAt so
+  // legacy snapshots (and test fixtures that don't set it) behave identically
+  // to the previous time-since-save decay.
+  const lastActive = (snapshot.world as { lastActiveMs?: number }).lastActiveMs ?? snapshot.savedAt;
+  const awayMs = Math.max(0, nowWallMs - lastActive);
+
   // Drone/route/vehicle perfShift defined just below; the buildings array
   // needs the same shift applied to its §4.7 maintenance timestamps so
   // `placedAt` / `maintainedAt` land in the NEW session's perf-domain.
@@ -1045,11 +1055,13 @@ export function deserializeWorld(
     latticeActive: snapshot.world.latticeActive ?? false,
     // §9.9: the closed-game gap is unfocused time — burn the balance at the
     // decay ratio before offline catch-up runs, so catch-up production uses
-    // the post-decay multiplier.
+    // the post-decay multiplier. Decay is computed from time-since-last-active
+    // (not time-since-save), so connected play does not erode the bonus.
     activeBonusMs: Math.max(
       0,
-      (snapshot.world.activeBonusMs ?? 0) - ACTIVE_DECAY_RATIO * deltaMs,
+      (snapshot.world.activeBonusMs ?? 0) - ACTIVE_DECAY_RATIO * awayMs,
     ),
+    lastActiveMs: lastActive,
     latticeNodeIslands: [...(snapshot.world.latticeNodeIslands ?? [])],
     commPackets: snapshot.world.commPackets.map((p) => ({ ...p, generatedMs: p.generatedMs + perfShift })),
     totalCo2Kg: snapshot.world.totalCo2Kg,
