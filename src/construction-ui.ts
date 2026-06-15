@@ -588,7 +588,6 @@ export function mountConstructionUi(
     const nameCheck = validateIslandName(customName);
     const displayName = nameCheck.ok ? nameCheck.name : undefined;
 
-    let result: { newSpec: IslandSpec; newState: IslandState } | undefined;
     if (options.gateway) {
       const gatewayResult = await options.gateway.constructIsland({
         founderIslandId: selectedFounder,
@@ -601,21 +600,25 @@ export function mountConstructionUi(
         nowMs,
       });
       if (!gatewayResult.ok) return;
-      result = gatewayResult.value;
-    } else {
-      const id = nextArtificialId();
-      result = constructIsland(
-        options.world.seed,
-        state,
-        spec,
-        req,
-        { cx: posX, cy: posY },
-        id,
-        nowMs,
-        displayName,
-      );
+      // REMOTE: the authoritative snapshot push will append the new island and
+      // rebuild render layers; the UI just needs to reset and close.
+      customName = '';
+      nameInput.value = '';
+      hide();
+      return;
     }
-    if (!result) return;
+
+    const id = nextArtificialId();
+    const result = constructIsland(
+      options.world.seed,
+      state,
+      spec,
+      req,
+      { cx: posX, cy: posY },
+      id,
+      nowMs,
+      displayName,
+    );
     options.onConstruct({
       newSpec: result.newSpec,
       newState: result.newState,

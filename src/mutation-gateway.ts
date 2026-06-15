@@ -788,7 +788,9 @@ export function makeRemoteGateway(client: GameServerClient): MutationGateway {
       return { ok: false, error: err instanceof Error ? err.message : String(err) };
     }
     if (ack.ok) return { ok: true } as GatewayResult<T>;
-    return { ok: false, error: ack.error };
+    // Mirror LOCAL: every failure carries the machine-readable reason so panel
+    // code can display a specific message (orbital-ui, settlement-ui, etc.).
+    return { ok: false, error: ack.error, reason: ack.error };
   }
 
   return {

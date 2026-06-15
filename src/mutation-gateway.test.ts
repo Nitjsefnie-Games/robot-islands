@@ -69,10 +69,10 @@ describe('makeRemoteGateway — gateway-rejection contract', () => {
     expect(result).toEqual({ ok: false, error: 'socket closed' });
   });
 
-  it('still surfaces a server-side { ok: false } ack as a failure result', async () => {
+  it('#52: surfaces a server-side { ok: false } ack with the machine-readable reason', async () => {
     const gateway = makeRemoteGateway(ackingClient({ seq: 1, ok: false, error: 'insufficient-resources' }));
     const result = await gateway.demolishBuilding('home', 'b-1');
-    expect(result).toEqual({ ok: false, error: 'insufficient-resources' });
+    expect(result).toEqual({ ok: false, error: 'insufficient-resources', reason: 'insufficient-resources' });
   });
 
   it('passes through a successful ack as { ok: true }', async () => {

@@ -111,6 +111,34 @@ describe('demolish-building', () => {
     expect(scrapAfter).toBe(100);
   });
 
+  it('#44: drains routes sourced from the demolished building', async () => {
+    const now = Date.now();
+    const uid = await aUserWithTwoPopulatedIslands(now);
+    const dockId = await placeBuilding(uid, 'dock', 0, 0, now);
+
+    const createAck = await applyIntent(
+      pool, uid,
+      {
+        type: 'create-route',
+        payload: { fromIslandId: 'home', toIslandId: COLONY_ID, buildingId: dockId, filterResource: 'wood' },
+        seq: 2,
+      },
+      now,
+    );
+    expect(createAck.ok).toBe(true);
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'demolish-building', payload: { islandId: 'home', buildingId: dockId }, seq: 3 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 3 });
+
+    const routes = (await worldSnap(uid)).routes;
+    expect(routes).toHaveLength(1);
+    expect(routes[0].draining).toBe(true);
+  });
+
   it('illegal: unknown buildingId is rejected, save unchanged', async () => {
     const now = Date.now();
     const uid = await aUserWithGame();
@@ -211,6 +239,34 @@ describe('set-active-floors', () => {
     const buildings = await homeBuildings(uid);
     const b = buildings.find((bb) => bb.id === id)!;
     expect(b.disabledFloors).toBe(1);
+  });
+
+  it('#44: drains routes sourced from the building when active floors drop to 0', async () => {
+    const now = Date.now();
+    const uid = await aUserWithTwoPopulatedIslands(now);
+    const dockId = await placeBuilding(uid, 'dock', 0, 0, now);
+
+    const createAck = await applyIntent(
+      pool, uid,
+      {
+        type: 'create-route',
+        payload: { fromIslandId: 'home', toIslandId: COLONY_ID, buildingId: dockId, filterResource: 'wood' },
+        seq: 2,
+      },
+      now,
+    );
+    expect(createAck.ok).toBe(true);
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'set-active-floors', payload: { islandId: 'home', buildingId: dockId, disabledFloors: 1 }, seq: 3 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 3 });
+
+    const routes = (await worldSnap(uid)).routes;
+    expect(routes).toHaveLength(1);
+    expect(routes[0].draining).toBe(true);
   });
 
   it('illegal: disabledFloors out of range is rejected, save unchanged', async () => {
@@ -1089,7 +1145,7 @@ describe('route management', () => {
     return snap!.world.routes[0]!.id as string;
   }
 
-  it('delete-route: marks an existing route as draining', async () => {
+  it('delete-route: removes the route immediately when inFlight is empty', async () => {
     const now = Date.now();
     const uid = await aUserWithTwoPopulatedIslands(now);
     const routeId = await makeRoute(uid, now);
@@ -1102,6 +1158,34 @@ describe('route management', () => {
     expect(ack).toMatchObject({ ok: true, seq: 3 });
 
     const routes = (await worldSnap(uid)).routes;
+    expect(routes).toHaveLength(0);
+  });
+
+  it('delete-route: marks the route as draining when cargo is in flight', async () => {
+    const now = Date.now();
+    const uid = await aUserWithTwoPopulatedIslands(now);
+    const routeId = await makeRoute(uid, now);
+
+    // Put a batch in flight before deleting.
+    const before = await loadSnapshot(pool, uid);
+    before!.world.routes[0]!.inFlight.push({
+      resourceId: 'wood',
+      amount: 1,
+      arrivalTime: now + 60_000,
+      dispatchTime: now,
+      id: 'batch-1',
+    });
+    await saveSnapshot(pool, uid, before!);
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'delete-route', payload: { routeId }, seq: 3 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 3 });
+
+    const routes = (await worldSnap(uid)).routes;
+    expect(routes).toHaveLength(1);
     expect(routes[0].draining).toBe(true);
   });
 
@@ -1109,6 +1193,17 @@ describe('route management', () => {
     const now = Date.now();
     const uid = await aUserWithTwoPopulatedIslands(now);
     const routeId = await makeRoute(uid, now);
+
+    // Put cargo in flight so the route drains instead of being spliced out.
+    const before = await loadSnapshot(pool, uid);
+    before!.world.routes[0]!.inFlight.push({
+      resourceId: 'wood',
+      amount: 1,
+      arrivalTime: now + 60_000,
+      dispatchTime: now,
+      id: 'batch-1',
+    });
+    await saveSnapshot(pool, uid, before!);
 
     const del = await applyIntent(
       pool, uid,
@@ -1594,6 +1689,52 @@ describe('orbital intents', () => {
       { type: 'launch-satellite', payload: { islandId: 'home', variant: 'scanner', targetX: 100, targetY: 0 }, seq: 9 },
       now,
     );
+  });
+
+  it('#51: launch-satellite failure persists the consumed payload', async () => {
+    const now = Date.now();
+
+    // T1 spaceport + no launch-success skills → base 30% success rate. The RNG
+    // is seeded from world.seed + nowMs, so scan a small range to find a
+    // deterministic failure roll. A fresh user is created for each attempt so a
+    // success on an earlier timestamp doesn't consume the fixture resources.
+    let failureUid: string | null = null;
+    let failureNow: number | null = null;
+    for (let i = 0; i < 50 && failureUid === null; i++) {
+      const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
+        const home = world.islands.find((s: any) => s.id === 'home');
+        const state = islandStates.get('home');
+        state.ascendantCoreCrafted = true;
+        home.buildings.push({
+          id: 'spaceport-1', defId: 'spaceport', x: 0, y: 0,
+          constructionRemainingMs: 0, placedAt: now, tier: 1,
+        });
+        state.buildings = home.buildings;
+        state.inventory.scanner_sat = 1;
+        state.inventory.orbital_insertion_package = 1;
+        state.inventory.antimatter_propellant = 1;
+      });
+      const ack = await applyIntent(
+        pool, uid,
+        { type: 'launch-satellite', payload: { islandId: 'home', variant: 'scanner', targetX: 100, targetY: 0 }, seq: 2 },
+        now + i,
+      );
+      if (!ack.ok && (ack as { error: string }).error === 'launch-failure') {
+        failureUid = uid;
+        failureNow = now + i;
+      }
+    }
+    expect(failureUid).not.toBeNull();
+
+    // The failure MUST be persisted: resources are gone (§14.7) and the
+    // Spaceport still exists (the pre-fix path destroyed it on pad explosion).
+    const snap = await loadSnapshot(pool, failureUid!);
+    const state = snap!.islandStates.find((e: any) => e.id === 'home')!.state as unknown as Record<string, unknown>;
+    const inv = state.inventory as Record<string, number>;
+    expect(inv.scanner_sat).toBe(0);
+    expect(inv.orbital_insertion_package).toBe(0);
+    expect(inv.antimatter_propellant).toBe(0);
+    expect((state.buildings as Array<Record<string, unknown>>).some((b) => b.defId === 'spaceport')).toBe(true);
   });
 
   it('move-satellite: starts an in-orbit relocation', async () => {
