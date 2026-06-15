@@ -441,7 +441,7 @@ const GENESIS_POWER_KW: Record<number, number> = {
 const GENESIS_CYCLE_SEC = 300; // 5 minutes per unit
 
 /** Derive the economic tier of a resource from its XP weight. */
-function tierForResource(r: ResourceId): number {
+export function tierForResource(r: ResourceId): number {
   const w = XP_WEIGHT[r];
   if (w === 1) return 0; // T0
   if (w === 3) return 1;
@@ -467,8 +467,13 @@ function computeVarianceFactor(state: IslandState, modifierMul: ModifierMultipli
 }
 
 /** Set the Genesis Chamber target resource. Returns false if the target is
- *  outside the T1-T4 band (including T0 and T5+). */
-export function setGenesisTarget(state: IslandState, target: ResourceId): boolean {
+ *  outside the T1-T4 band (including T0 and T5+). Pass `null` to clear the
+ *  target and stop production. */
+export function setGenesisTarget(state: IslandState, target: ResourceId | null): boolean {
+  if (target === null) {
+    state.genesisTarget = null;
+    return true;
+  }
   const tier = tierForResource(target);
   if (tier > 4 || tier < 1) return false;
   state.genesisTarget = target;

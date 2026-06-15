@@ -10,7 +10,7 @@
 import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
 import { displayedFloorLevel } from './floor-levels.js';
 import type { PlacedBuilding } from './buildings.js';
-import type { IslandState } from './economy.js';
+import { setGenesisTarget, spendTimeLock, type IslandState } from './economy.js';
 import { dispatchDrone, firePulse, type DroneTier } from './drones.js';
 import type { TerrainKind } from './island.js';
 import { canExpandIsland, expandIsland, type Axis } from './land-reclamation.js';
@@ -223,6 +223,11 @@ export interface MutationGateway {
 
   // §? trade
   acceptTrade(offer: TradeOffer): GatewayReturn<{ give: number; get: number }>;
+
+  // §13.3 Time Lock + Genesis Chamber
+  setBankingEnabled(islandId: string, enabled: boolean): GatewayReturn;
+  spendTimeLock(sourceIslandId: string, targetIslandId: string, minutes: number): GatewayReturn;
+  setGenesisTarget(islandId: string, resourceId: ResourceId | null): GatewayReturn;
 
   // §9.9 active-play bonus heartbeat (REMOTE only; LOCAL accrues per-frame)
   activeHeartbeat(focusedMs: number, unfocusedMs: number): GatewayReturn;
@@ -458,6 +463,36 @@ export function makeLocalGateway(
       const result = renameIsland(island.spec, name);
       if (!result.ok) return err(result.reason ?? 'rename failed', result.reason);
       return ok();
+    },
+
+    setBankingEnabled(islandId, enabled) {
+      const island = resolveIsland(islandId);
+      if (!island) return err('unknown island');
+      if (typeof enabled !== 'boolean') return err('enabled must be a boolean');
+      island.state.bankingEnabled = enabled === true;
+      return ok();
+    },
+
+    spendTimeLock(sourceIslandId, targetIslandId, minutes) {
+      const source = resolveIsland(sourceIslandId);
+      if (!source) return err('unknown source island');
+      const target = resolveIsland(targetIslandId);
+      if (!target) return err('unknown target island');
+      if (typeof minutes !== 'number' || !Number.isFinite(minutes) || minutes <= 0) {
+        return err('minutes must be a positive finite number');
+      }
+      const result = spendTimeLock(source.state, target.state, minutes);
+      return result.ok ? ok() : err(result.reason, result.reason);
+    },
+
+    setGenesisTarget(islandId, resourceId) {
+      const island = resolveIsland(islandId);
+      if (!island) return err('unknown island');
+      if (resourceId !== null && !isValidResourceId(resourceId)) {
+        return err('resourceId must be null or a valid resource id');
+      }
+      const okResult = setGenesisTarget(island.state, resourceId);
+      return okResult ? ok() : err('invalid genesis target tier');
     },
 
     editBiome(islandId, biomeId) {
@@ -864,6 +899,15 @@ export function makeRemoteGateway(client: GameServerClient): MutationGateway {
     },
     renameIsland(islandId, name) {
       return send('rename-island', { islandId, name });
+    },
+    setBankingEnabled(islandId, enabled) {
+      return send('set-banking-enabled', { islandId, enabled });
+    },
+    spendTimeLock(sourceIslandId, targetIslandId, minutes) {
+      return send('spend-time-lock', { sourceIslandId, targetIslandId, minutes });
+    },
+    setGenesisTarget(islandId, resourceId) {
+      return send('set-genesis-target', { islandId, resourceId });
     },
     editBiome(islandId, biomeId) {
       return send('edit-biome', { islandId, biomeId });

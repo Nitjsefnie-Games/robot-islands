@@ -1611,6 +1611,58 @@ async function main(): Promise<void> {
       rebuildWorldLayers();
       inspector.refresh();
     },
+    // §13.3 Time Lock — toggle offline banking on the inspected island.
+    onSetBankingEnabled: (target: InspectorTarget, enabled: boolean) => {
+      const gatewayResult = gateway.setBankingEnabled(target.spec.id, enabled);
+      function finish(): void {
+        inspector.refresh();
+      }
+      if (gatewayResult instanceof Promise) {
+        void (async () => {
+          const result = await gatewayResult;
+          if (!result.ok) return;
+          finish();
+        })();
+        return;
+      }
+      if (!gatewayResult.ok) return;
+      finish();
+    },
+    // §13.3 Time Lock — spend banked minutes from the source island onto the
+    // chosen target island. No render rebuild needed; refresh rates/inspector.
+    onSpendTimeLock: (target: InspectorTarget, targetIslandId: string, minutes: number) => {
+      const gatewayResult = gateway.spendTimeLock(target.spec.id, targetIslandId, minutes);
+      function finish(): void {
+        inspector.refresh();
+      }
+      if (gatewayResult instanceof Promise) {
+        void (async () => {
+          const result = await gatewayResult;
+          if (!result.ok) return;
+          finish();
+        })();
+        return;
+      }
+      if (!gatewayResult.ok) return;
+      finish();
+    },
+    // §13.3 Genesis Chamber — set the synthetic output resource (T1-T4 only).
+    onSetGenesisTarget: (target: InspectorTarget, resourceId: ResourceId | null) => {
+      const gatewayResult = gateway.setGenesisTarget(target.spec.id, resourceId);
+      function finish(): void {
+        inspector.refresh();
+      }
+      if (gatewayResult instanceof Promise) {
+        void (async () => {
+          const result = await gatewayResult;
+          if (!result.ok) return;
+          finish();
+        })();
+        return;
+      }
+      if (!gatewayResult.ok) return;
+      finish();
+    },
   });
 
   // Step-11 Construction modal — sister to skill tree + buildings catalog.

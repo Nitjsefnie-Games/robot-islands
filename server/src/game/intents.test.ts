@@ -541,6 +541,199 @@ async function aUserWithTwoPopulatedIslands(now: number): Promise<string> {
   return userWithSnapshot(serializeWorld(world, islandStates, now, now));
 }
 
+/** §13.3 helper: home has an operational Time Lock + Genesis Chamber, colony is
+ *  populated. Used to test Time Lock banking/spend and Genesis target intents. */
+async function aUserWithT5Controls(now: number): Promise<string> {
+  const { world, islandStates } = createNewGame(now);
+  const home = world.islands.find((s) => s.id === 'home')!;
+  home.buildings.push(
+    { id: 'tl-1', defId: 'time_lock', x: -10, y: -10, rotation: 0, constructionRemainingMs: 0 },
+    { id: 'gc-1', defId: 'genesis_chamber', x: 10, y: 10, rotation: 0, constructionRemainingMs: 0 },
+  );
+  const colony = world.islands.find((s) => s.id === COLONY_ID)!;
+  colony.populated = true;
+  colony.discovered = true;
+  islandStates.set('home', makeInitialIslandState(home, now));
+  islandStates.set(COLONY_ID, makeInitialIslandState(colony, now));
+  world.islandStates = islandStates;
+  return userWithSnapshot(serializeWorld(world, islandStates, now, now));
+}
+
+describe('set-banking-enabled', () => {
+  it('legal: toggles state.bankingEnabled on a Time Lock island', async () => {
+    const now = Date.now();
+    const uid = await aUserWithT5Controls(now);
+
+    const onAck = await applyIntent(
+      pool, uid,
+      { type: 'set-banking-enabled', payload: { islandId: 'home', enabled: true }, seq: 2 },
+      now,
+    );
+    expect(onAck).toMatchObject({ ok: true, seq: 2 });
+    expect((await homeState(uid)).bankingEnabled).toBe(true);
+
+    const offAck = await applyIntent(
+      pool, uid,
+      { type: 'set-banking-enabled', payload: { islandId: 'home', enabled: false }, seq: 3 },
+      now,
+    );
+    expect(offAck).toMatchObject({ ok: true, seq: 3 });
+    expect((await homeState(uid)).bankingEnabled).toBe(false);
+  });
+
+  it('illegal: non-boolean enabled is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithT5Controls(now);
+    await expectRejectNoChange(
+      uid,
+      { type: 'set-banking-enabled', payload: { islandId: 'home', enabled: 'yes' }, seq: 2 },
+      now,
+    );
+  });
+});
+
+describe('spend-time-lock', () => {
+  it('legal: with enough banked time, accelerates target and deducts bank', async () => {
+    const now = Date.now();
+    const uid = await aUserWithT5Controls(now);
+
+    // Prime banked time on the source island by mutating the stored snapshot.
+    const before = await loadSnapshot(pool, uid);
+    const homeStateSnap = before!.islandStates.find((s) => s.id === 'home')!;
+    homeStateSnap.state.timeLockBankedMin = 60;
+    await saveSnapshot(pool, uid, before!);
+
+    const ack = await applyIntent(
+      pool, uid,
+      {
+        type: 'spend-time-lock',
+        payload: { sourceIslandId: 'home', targetIslandId: COLONY_ID, minutes: 30 },
+        seq: 2,
+      },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 2 });
+
+    const after = await loadSnapshot(pool, uid);
+    const homeAfter = after!.islandStates.find((s) => s.id === 'home')!;
+    const colonyAfter = after!.islandStates.find((s) => s.id === COLONY_ID)!;
+    expect(homeAfter.state.timeLockBankedMin).toBe(30);
+    expect(colonyAfter.state.accelerationRemainingMin).toBe(30);
+  });
+
+  it('illegal: insufficient banked time is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithT5Controls(now);
+    await expectRejectNoChange(
+      uid,
+      {
+        type: 'spend-time-lock',
+        payload: { sourceIslandId: 'home', targetIslandId: COLONY_ID, minutes: 10 },
+        seq: 2,
+      },
+      now,
+    );
+  });
+
+  it('illegal: already-accelerating target is queued, not rejected, and deducts bank', async () => {
+    const now = Date.now();
+    const uid = await aUserWithT5Controls(now);
+
+    const before = await loadSnapshot(pool, uid);
+    const homeStateSnap = before!.islandStates.find((s) => s.id === 'home')!;
+    const colonyStateSnap = before!.islandStates.find((s) => s.id === COLONY_ID)!;
+    homeStateSnap.state.timeLockBankedMin = 60;
+    colonyStateSnap.state.accelerationRemainingMin = 5;
+    await saveSnapshot(pool, uid, before!);
+
+    const ack = await applyIntent(
+      pool, uid,
+      {
+        type: 'spend-time-lock',
+        payload: { sourceIslandId: 'home', targetIslandId: COLONY_ID, minutes: 20 },
+        seq: 2,
+      },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 2 });
+
+    const after = await loadSnapshot(pool, uid);
+    const homeAfter = after!.islandStates.find((s) => s.id === 'home')!;
+    const colonyAfter = after!.islandStates.find((s) => s.id === COLONY_ID)!;
+    expect(homeAfter.state.timeLockBankedMin).toBe(40);
+    expect(colonyAfter.state.accelerationRemainingMin).toBe(5);
+    expect(colonyAfter.state.accelerationQueue).toHaveLength(1);
+    expect(colonyAfter.state.accelerationQueue[0]).toMatchObject({ sourceIslandId: 'home', durationMin: 20 });
+  });
+
+  it('illegal: non-positive minutes is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithT5Controls(now);
+    await expectRejectNoChange(
+      uid,
+      {
+        type: 'spend-time-lock',
+        payload: { sourceIslandId: 'home', targetIslandId: COLONY_ID, minutes: 0 },
+        seq: 2,
+      },
+      now,
+    );
+  });
+});
+
+describe('set-genesis-target', () => {
+  it('legal: sets a valid T1-T4 resource target', async () => {
+    const now = Date.now();
+    const uid = await aUserWithT5Controls(now);
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'set-genesis-target', payload: { islandId: 'home', resourceId: 'iron_ingot' }, seq: 2 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 2 });
+    expect((await homeState(uid)).genesisTarget).toBe('iron_ingot');
+  });
+
+  it('legal: clears the target with null', async () => {
+    const now = Date.now();
+    const uid = await aUserWithT5Controls(now);
+
+    await applyIntent(
+      pool, uid,
+      { type: 'set-genesis-target', payload: { islandId: 'home', resourceId: 'iron_ingot' }, seq: 2 },
+      now,
+    );
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'set-genesis-target', payload: { islandId: 'home', resourceId: null }, seq: 3 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 3 });
+    expect((await homeState(uid)).genesisTarget).toBeNull();
+  });
+
+  it('illegal: T5 resource target is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithT5Controls(now);
+    await expectRejectNoChange(
+      uid,
+      { type: 'set-genesis-target', payload: { islandId: 'home', resourceId: 'casimir_energy' }, seq: 2 },
+      now,
+    );
+  });
+
+  it('illegal: invalid resource id is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithT5Controls(now);
+    await expectRejectNoChange(
+      uid,
+      { type: 'set-genesis-target', payload: { islandId: 'home', resourceId: 'not_a_resource' }, seq: 2 },
+      now,
+    );
+  });
+});
+
 describe('create-route', () => {
   it('legal: creates a route between two populated islands', async () => {
     const now = Date.now();

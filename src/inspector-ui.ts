@@ -39,6 +39,7 @@ import { activeFloors, displayedFloorLevel, floorEffectMul, floorLevel, floorSca
 import { convertToServitor as pureConvertToServitor } from './servitor.js';
 import { defineAction, dispatchAction, type InputRegistry } from './input.js';
 import type { IslandState } from './economy.js';
+import { tierForResource } from './economy.js';
 import { activeBonusMul } from './active-bonus.js';
 import { computeRates, fledglingRecipeMul, type RatesContext } from './economy.js';
 import {
@@ -232,6 +233,13 @@ export interface InspectorDeps {
    *  layers (new terrain colors), invalidates modifier-multiplier caches,
    *  and refreshes the inspector against the same selected building. */
   onIslandBiomeReassigned?(islandId: string): void;
+  /** §13.3 Time Lock — toggle offline banking on the inspected island. */
+  onSetBankingEnabled(target: InspectorTarget, enabled: boolean): void;
+  /** §13.3 Time Lock — spend `minutes` from the source island's bank onto
+   *  `targetIslandId`. main.ts routes through the gateway and refreshes. */
+  onSpendTimeLock(target: InspectorTarget, targetIslandId: string, minutes: number): void;
+  /** §13.3 Genesis Chamber — set the synthetic output resource (T1-T4 only). */
+  onSetGenesisTarget(target: InspectorTarget, resourceId: ResourceId | null): void;
   /** §15.1 Full RatesContext for the given island — returns the same context
    *  that the most-recent advanceIsland/computeRates tick used, so per-
    *  building rate lines in the inspector agree with the HUD.  Optional:
@@ -1141,6 +1149,119 @@ export function mountInspectorUi(
   }> = [];
   let biomeButtonsBuilt = false;
 
+  // §13.3 Time Lock section — shown only when the selected building is a
+  // `time_lock`. Displays banked minutes, an offline-banking toggle, and a
+  // spend control that transfers banked minutes to another island.
+  const timeLockSection = makeSection('Time Lock');
+  const tlCaption = document.createElement('span');
+  styled(
+    tlCaption,
+    [`color: ${'var(--ri-fg-3)'}`, 'font-size: 10.5px', 'letter-spacing: 0.02em'].join(';'),
+  );
+  timeLockSection.body.appendChild(tlCaption);
+  const tlBankToggleBtn = makeExpandButton();
+  tlBankToggleBtn.addEventListener('click', () => {
+    const target = resolveTarget();
+    if (!target) { close(); return; }
+    deps.onSetBankingEnabled(target, !target.state.bankingEnabled);
+    paint();
+  });
+  timeLockSection.body.appendChild(tlBankToggleBtn);
+  const tlSpendRow = document.createElement('div');
+  styled(tlSpendRow, 'display: flex; gap: 4px; flex-wrap: wrap; padding-top: 4px; align-items: center');
+  const tlSpendInput = document.createElement('input');
+  tlSpendInput.type = 'number';
+  tlSpendInput.min = '1';
+  tlSpendInput.step = '1';
+  tlSpendInput.placeholder = 'min';
+  styled(
+    tlSpendInput,
+    [
+      'width: 60px',
+      `color: ${'var(--ri-fg-1)'}`,
+      `background: ${'rgba(24, 29, 39, 0.6)'}`,
+      `border: 1px solid ${'var(--ri-border-strong)'}`,
+      'border-radius: 2px',
+      'padding: 2px 4px',
+      'font-family: ui-monospace, monospace',
+      'font-size: 10.5px',
+    ].join(';'),
+  );
+  const tlTargetSelect = document.createElement('select');
+  styled(
+    tlTargetSelect,
+    [
+      'flex: 1 1 auto',
+      `color: ${'var(--ri-fg-1)'}`,
+      `background: ${'rgba(24, 29, 39, 0.6)'}`,
+      `border: 1px solid ${'var(--ri-border-strong)'}`,
+      'border-radius: 2px',
+      'padding: 2px 4px',
+      'font-family: ui-monospace, monospace',
+      'font-size: 10.5px',
+    ].join(';'),
+  );
+  const tlSpendBtn = makeExpandButton();
+  tlSpendBtn.textContent = 'SPEND';
+  tlSpendBtn.addEventListener('click', () => {
+    const target = resolveTarget();
+    if (!target) { close(); return; }
+    const minutes = Number(tlSpendInput.value);
+    const targetIslandId = tlTargetSelect.value;
+    if (!Number.isFinite(minutes) || minutes <= 0) return;
+    deps.onSpendTimeLock(target, targetIslandId, minutes);
+    paint();
+  });
+  tlSpendRow.appendChild(tlSpendInput);
+  tlSpendRow.appendChild(tlTargetSelect);
+  tlSpendRow.appendChild(tlSpendBtn);
+  timeLockSection.body.appendChild(tlSpendRow);
+  timeLockSection.wrap.style.display = 'none';
+
+  // §13.3 Genesis Chamber section — shown only when the selected building is a
+  // `genesis_chamber`. Dropdown of T1-T4 resources drives the synthetic recipe.
+  const genesisSection = makeSection('Genesis Chamber');
+  const genesisCaption = document.createElement('span');
+  styled(
+    genesisCaption,
+    [`color: ${'var(--ri-fg-3)'}`, 'font-size: 10.5px', 'letter-spacing: 0.02em'].join(';'),
+  );
+  genesisSection.body.appendChild(genesisCaption);
+  const genesisSelect = document.createElement('select');
+  styled(
+    genesisSelect,
+    [
+      'width: 100%',
+      `color: ${'var(--ri-fg-1)'}`,
+      `background: ${'rgba(24, 29, 39, 0.6)'}`,
+      `border: 1px solid ${'var(--ri-border-strong)'}`,
+      'border-radius: 2px',
+      'padding: 2px 4px',
+      'font-family: ui-monospace, monospace',
+      'font-size: 10.5px',
+    ].join(';'),
+  );
+  // Build the T1-T4 resource list once.
+  const GENESIS_TIER_RESOURCES = ALL_RESOURCES.filter((r) => {
+    const tier = tierForResource(r);
+    return tier >= 1 && tier <= 4;
+  });
+  for (const r of GENESIS_TIER_RESOURCES) {
+    const opt = document.createElement('option');
+    opt.value = r;
+    opt.textContent = r;
+    genesisSelect.appendChild(opt);
+  }
+  genesisSelect.addEventListener('change', () => {
+    const target = resolveTarget();
+    if (!target) { close(); return; }
+    const value = genesisSelect.value as ResourceId;
+    deps.onSetGenesisTarget(target, value);
+    paint();
+  });
+  genesisSection.body.appendChild(genesisSelect);
+  genesisSection.wrap.style.display = 'none';
+
   // §3.4 Land Reclamation section — shown only when the selected building
   // is a `land_reclamation_hub`. Two buttons (+1 major / +1 minor) wired
   // to deps.onExpandIsland; each shows its current-radius cost or the
@@ -1339,6 +1460,8 @@ export function mountInspectorUi(
   body.appendChild(floorSection.wrap);
   body.appendChild(maintenanceSection.wrap);
   body.appendChild(universeEditorSection.wrap);
+  body.appendChild(timeLockSection.wrap);
+  body.appendChild(genesisSection.wrap);
   body.appendChild(reclamationSection.wrap);
   body.appendChild(constraintsSection.wrap);
 
@@ -1984,6 +2107,57 @@ export function mountInspectorUi(
       universeEditorSection.wrap.style.display = '';
     } else {
       universeEditorSection.wrap.style.display = 'none';
+    }
+
+    // §13.3 Time Lock section paint. Only for a `time_lock` building.
+    if (def.id === 'time_lock') {
+      const timeLockCount = state.buildings.filter((b) => b.defId === 'time_lock').length;
+      const maxBank = timeLockCount * 24 * 60;
+      const banked = state.timeLockBankedMin ?? 0;
+      const banking = state.bankingEnabled === true;
+      tlCaption.textContent = `Banked ${Math.floor(banked)} / ${maxBank} min · 1 min = 1 min 3× acceleration`;
+      tlBankToggleBtn.textContent = banking ? 'BANK OFFLINE: ON' : 'BANK OFFLINE: OFF';
+      tlBankToggleBtn.style.color = banking ? 'var(--ri-accent)' : 'var(--ri-fg-2)';
+      tlBankToggleBtn.style.background = banking ? 'rgba(125, 211, 232, 0.12)' : 'transparent';
+
+      // Refresh target dropdown: every populated island (including self).
+      const currentTarget = tlTargetSelect.value;
+      tlTargetSelect.innerHTML = '';
+      const populated = deps.world.islands.filter((s) => s.populated);
+      for (const s of populated) {
+        const opt = document.createElement('option');
+        opt.value = s.id;
+        opt.textContent = s.name ?? s.id;
+        tlTargetSelect.appendChild(opt);
+      }
+      // Preserve selection if still valid; otherwise default to active/home.
+      if (populated.some((s) => s.id === currentTarget)) {
+        tlTargetSelect.value = currentTarget;
+      } else {
+        const home = populated.find((s) => s.id === 'home') ?? populated[0];
+        if (home) tlTargetSelect.value = home.id;
+      }
+      const canSpend = banked >= 1 && tlTargetSelect.value !== '';
+      tlSpendBtn.disabled = !canSpend;
+      tlSpendBtn.style.color = canSpend ? 'var(--ri-accent)' : 'var(--ri-fg-4)';
+      tlSpendBtn.style.borderColor = canSpend ? 'var(--ri-accent-dim)' : 'var(--ri-fg-4)';
+      tlSpendBtn.style.cursor = canSpend ? 'pointer' : 'not-allowed';
+      tlSpendBtn.style.opacity = canSpend ? '1' : '0.6';
+      timeLockSection.wrap.style.display = '';
+    } else {
+      timeLockSection.wrap.style.display = 'none';
+    }
+
+    // §13.3 Genesis Chamber section paint. Only for a `genesis_chamber`.
+    if (def.id === 'genesis_chamber') {
+      const target = state.genesisTarget;
+      const targetTier = target ? tierForResource(target) : 0;
+      const targetLabel = target && targetTier >= 1 && targetTier <= 4 ? target : 'none';
+      genesisCaption.textContent = `Target resource: ${targetLabel}`;
+      genesisSelect.value = (target && GENESIS_TIER_RESOURCES.includes(target) ? target : GENESIS_TIER_RESOURCES[0]) as string;
+      genesisSection.wrap.style.display = '';
+    } else {
+      genesisSection.wrap.style.display = 'none';
     }
 
     // Constraints section — shown when requiredTile or requiredBiomes apply.

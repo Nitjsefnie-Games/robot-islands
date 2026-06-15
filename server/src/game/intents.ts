@@ -81,6 +81,7 @@ import { hasOperationalBuilding } from '../../../src/building-operational.js';
 import { positionIsFree } from '../../../src/construction-gate.js';
 import { candidateAnchors } from '../../../src/anchor-picker.js';
 import { ALL_RESOURCES, type ResourceId } from '../../../src/recipes.js';
+import { setGenesisTarget, spendTimeLock } from '../../../src/economy.js';
 import type { Rotation } from '../../../src/shape-mask.js';
 import { CARGO_WILDCARD, type CargoEntry, type CargoMode } from '../../../src/route-cargo.js';
 import type { CrystalId } from '../../../src/skilltree-graph.js';
@@ -1241,6 +1242,66 @@ export const INTENTS: Record<string, IntentHandler> = {
   'restart-tutorial': {
     apply(game: LiveGame): IntentResult {
       restart(game.world);
+      return { ok: true };
+    },
+  },
+
+  // set-banking-enabled — §13.3 Time Lock offline banking toggle. Player supplies
+  // { islandId, enabled: boolean }. The handler resolves the island and sets the
+  // per-island banking flag; the economy's offline advance path banks time when
+  // the island has a Time Lock and this flag is true.
+  'set-banking-enabled': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { islandId, enabled } = payload;
+      if (typeof islandId !== 'string') return { ok: false, error: 'islandId must be a string' };
+      if (typeof enabled !== 'boolean') return { ok: false, error: 'enabled must be a boolean' };
+      const island = resolveIsland(game, islandId);
+      if (!island) return { ok: false, error: 'unknown island' };
+      island.state.bankingEnabled = enabled === true;
+      return { ok: true };
+    },
+  },
+
+  // spend-time-lock — §13.3 Time Lock spend. Player supplies
+  // { sourceIslandId, targetIslandId, minutes }. The pure `spendTimeLock` self-
+  // validates sufficient banked time and a non-already-accelerating target; the
+  // handler forwards its failure reasons.
+  'spend-time-lock': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { sourceIslandId, targetIslandId, minutes } = payload;
+      if (typeof sourceIslandId !== 'string') return { ok: false, error: 'sourceIslandId must be a string' };
+      if (typeof targetIslandId !== 'string') return { ok: false, error: 'targetIslandId must be a string' };
+      if (typeof minutes !== 'number' || !Number.isFinite(minutes) || minutes <= 0) {
+        return { ok: false, error: 'minutes must be a positive finite number' };
+      }
+      const source = resolveIsland(game, sourceIslandId);
+      if (!source) return { ok: false, error: 'unknown source island' };
+      const target = resolveIsland(game, targetIslandId);
+      if (!target) return { ok: false, error: 'unknown target island' };
+      const result = spendTimeLock(source.state, target.state, minutes);
+      if (!result.ok) return { ok: false, error: result.reason };
+      return { ok: true };
+    },
+  },
+
+  // set-genesis-target — §13.3 Genesis Chamber target resource. Player supplies
+  // { islandId, resourceId: string | null }. The pure `setGenesisTarget` rejects
+  // targets outside T1-T4; the handler mirrors that validation and forwards the
+  // boolean result.
+  'set-genesis-target': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { islandId, resourceId } = payload;
+      if (typeof islandId !== 'string') return { ok: false, error: 'islandId must be a string' };
+      if (resourceId !== null && (typeof resourceId !== 'string' || !isValidResourceId(resourceId))) {
+        return { ok: false, error: 'resourceId must be null or a valid resource id' };
+      }
+      const island = resolveIsland(game, islandId);
+      if (!island) return { ok: false, error: 'unknown island' };
+      const ok = setGenesisTarget(island.state, resourceId as ResourceId | null);
+      if (!ok) return { ok: false, error: 'invalid genesis target tier' };
       return { ok: true };
     },
   },
