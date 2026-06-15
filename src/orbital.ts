@@ -7,7 +7,7 @@
 
 import { ANTENNA_SIGNAL_RADII } from './antenna.js';
 import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
-import { CELL_SIZE_TILES, cellKey, parseCellKey, tileToCell } from './discovery.js';
+import { CELL_SIZE_TILES, cellKey, islandCells, islandIntersectsCells, markIslandDiscovered, parseCellKey, tileToCell } from './discovery.js';
 import { inv } from './economy.js';
 import { findOperationalBuilding, hasOperationalBuilding } from './buildings.js';
 import { makeSeededRng } from './rng.js';
@@ -1033,14 +1033,21 @@ export function tickScannerDiscovery(
       world.revealedCells.add(key);
       world.depthRevealedCells.add(key);
     }
-    // Discovery rolls per island in covered cells.
+    // Discovery rolls per island whose footprint intersects covered cells.
+    // Decide coverage by the island body (not just its centre) so edge-
+    // straddling islands are not discovered by centre-only while the rest of
+    // the body leaks through. Use the maximum dwell on any covered footprint
+    // cell so a previously-scanned island whose centre has just moved out of
+    // the footprint still benefits from its body dwell.
     const rng = makeSeededRng(`${world.seed}_scan_${sat.id}_${nowMs}`);
     for (const isl of world.islands) {
       if (isl.discovered) continue;
-      const { cellX, cellY } = tileToCell(isl.cx, isl.cy);
-      const key = cellKey(cellX, cellY);
-      if (!covered.has(key)) continue;
-      const dwell = sat.dwellByCellKey[key] ?? 0;
+      if (!islandIntersectsCells(isl, covered)) continue;
+      let dwell = 0;
+      for (const k of islandCells(isl)) {
+        if (!covered.has(k)) continue;
+        dwell = Math.max(dwell, sat.dwellByCellKey[k] ?? 0);
+      }
       // Discovery sub-path's dwell-ramp bonus inflates EFFECTIVE dwell on
       // this scanner so the saturating-exponential ramp reaches its
       // asymptote sooner. Multiplier ≤ 1 (missing field) leaves base
@@ -1049,7 +1056,7 @@ export function tickScannerDiscovery(
       const pRefTick = scannerDiscoveryProbability(effectiveDwell);
       const p = scannerPerCallProbability(pRefTick, tickDeltaMs);
       if (rng() < p) {
-        isl.discovered = true;
+        markIslandDiscovered(isl, world.revealedCells);
         newlyDiscovered.push(isl.id);
       }
     }
