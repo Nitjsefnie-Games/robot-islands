@@ -286,6 +286,8 @@ Vehicles in flight while the player is offline are resolved at return-time using
 
 The world's day-night cycle tracks the **real sun at the player's chosen geographic coordinates** (`world.playerLat` / `world.playerLon`), computed via SunCalc. The phase label, the full-viewport tint, the during-night gameplay gate, and the economy integrator's segment boundaries all derive from the sun's true altitude `h` there. Phases are **not** equal-length and vary by season and latitude:
 
+**REMOTE mode.** In the default server-authoritative boot mode the player's location is sent to the server via the `set-location` intent and persisted in the account snapshot; the authoritative economy computes solar/day-night against the stored `playerLat`/`playerLon`. The client keeps a local copy for the map-picker "don't reappear" UX and for rendering the HUD tint, but the server snapshot is the source of truth for production.
+
 * `h ≥ 0°` — Day
 * `−6° ≤ h < 0°`, rising — Dawn
 * `−6° ≤ h < 0°`, falling — Dusk
@@ -2261,16 +2263,25 @@ It is being delivered in slices, each with its own design + plan under
   - Wired intents include `place-building`, `demolish-building`,
     `cancel-construction`, `upgrade-building`, `set-active-floors`,
     `set-force-run`, `convert-to-servitor`, `relabel-cargo`, `expand-island`,
-    `rename-island`, `edit-biome`, `construct-island`, `dispatch-drone`,
-    `fire-t4-pulse`, `create-route`, `delete-route`, `set-route-mode`,
-    `set-cargo-weight`, `set-cargo-floor-pct`, `reorder-route-cargo`,
-    `set-route-cargo`, `unlock-skill-node`, `buy-keystone`, `bind-crystal`,
-    `unbind-crystal`, `tier-reset`, `dispatch-settler`, `settle-via-spacetime`,
-    `launch-satellite`, `upgrade-spaceport`, `move-satellite`, and
-    `dispatch-repair-drone`. `accept-trade` is LOCAL-only; `reject-trade`
-    remains unwired pending pure-layer extraction. Trade offers as a whole are
-    LOCAL-only post-migration and non-functional in REMOTE (default) until
-    server-deterministic trade intents land.
+    `rename-island`, `edit-biome`, `set-location`, `construct-island`,
+    `dispatch-drone`, `fire-t4-pulse`, `create-route`, `delete-route`,
+    `set-route-mode`, `set-cargo-weight`, `set-cargo-floor-pct`,
+    `reorder-route-cargo`, `set-route-cargo`, `unlock-skill-node`,
+    `buy-keystone`, `bind-crystal`, `unbind-crystal`, `tier-reset`,
+    `dispatch-settler`, `settle-via-spacetime`, `launch-satellite`,
+    `upgrade-spaceport`, `move-satellite`, and `dispatch-repair-drone`.
+    `set-location` carries the player's real-world lat/lon so the server can
+    compute the authoritative solar/day-night multiplier. `accept-trade` is
+    LOCAL-only; `reject-trade` remains unwired pending pure-layer extraction.
+    Trade offers as a whole are LOCAL-only post-migration and non-functional
+    in REMOTE (default) until server-deterministic trade intents land.
+  - **Fog projection.** The server runs the full authoritative world (including
+    every undiscovered island) for offline catch-up and intent validation, but
+    it applies `projectSnapshotForClient` before pushing a snapshot over the
+    WebSocket. The projection omits every island where `discovered === false`
+    and `populated === false`; only discovered and/or populated islands reach
+    the client. This keeps the fog-of-war trust boundary on the server while
+    still letting the client render known islands and vision sources.
   - **Per-account atomicity (Slice 5 hardening).** The whole
     load→apply→persist sequence for an intent runs inside a single Postgres
     transaction that first takes a transaction-scoped advisory lock keyed on the
