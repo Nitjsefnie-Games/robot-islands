@@ -25,7 +25,6 @@ import {
   clearSave,
   MAX_SAVE_INTERVAL_SEC,
   MIN_SAVE_INTERVAL_SEC,
-  saveWorld,
   STORAGE_KEY_DISPLAY,
 } from './persistence.js';
 import { showMapPicker } from './map-picker.js';
@@ -147,6 +146,10 @@ export interface SettingsUiDeps {
   /** Apply a new autosave cadence (seconds). The caller clamps, re-arms the
    *  timer, and persists. The panel passes an already-clamped value. */
   setSaveIntervalSec(sec: number): void;
+  /** Called when the player confirms a new real-world location from the map
+   *  picker. In REMOTE this should forward a `set-location` intent to the
+   *  server; in LOCAL it can mutate world directly. */
+  onChangeLocation?(lat: number, lon: number): void;
 }
 
 export function mountSettingsUi(
@@ -317,9 +320,7 @@ export function mountSettingsUi(
             ? { lat: deps.world.playerLat, lon: deps.world.playerLon }
             : null,
           onPick: (lat, lon) => {
-            deps.world.playerLat = lat;
-            deps.world.playerLon = lon;
-            void saveWorld(deps.world, deps.islandStates);
+            deps.onChangeLocation?.(lat, lon);
           },
           onCancel: () => { /* no-op */ },
         });

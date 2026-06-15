@@ -339,6 +339,12 @@ async function main(): Promise<void> {
 
   worldState.islandStates = islandStates;
 
+  // Slice 4 mutation gateway — LOCAL default. REMOTE receives the WS client
+  // and forwards intents to the authoritative server.
+  const gateway = isRemote && remoteClient
+    ? makeRemoteGateway(remoteClient)
+    : makeLocalGateway(worldState, islandStates, {});
+
   if (worldState.playerLat == null || worldState.playerLon == null) {
     await new Promise<void>((resolve) => {
       showMapPicker({
@@ -347,6 +353,7 @@ async function main(): Promise<void> {
           worldState.playerLon = lon;
           if (isRemote) {
             storePlayerLatLon(lat, lon);
+            void gateway.setLocation(lat, lon);
           } else {
             void saveWorld(worldState, restored?.islandStates ?? new Map());
           }
@@ -1122,12 +1129,6 @@ async function main(): Promise<void> {
   const islandSpecsById = new Map<string, IslandSpec>();
   for (const s of worldState.islands) islandSpecsById.set(s.id, s);
 
-  // Slice 4 mutation gateway — LOCAL default. REMOTE receives the WS client
-  // and forwards intents to the authoritative server.
-  const gateway = isRemote && remoteClient
-    ? makeRemoteGateway(remoteClient)
-    : makeLocalGateway(worldState, islandStates, {});
-
   // -----------------------------------------------------------------------
   // Active island selection — §3 (no island privileged in code)
   // -----------------------------------------------------------------------
@@ -1660,6 +1661,12 @@ async function main(): Promise<void> {
       // Persist immediately so the new cadence survives a refresh even before
       // the next world autosave lands.
       flushPrefsSave();
+    },
+    onChangeLocation: (lat, lon) => {
+      worldState.playerLat = lat;
+      worldState.playerLon = lon;
+      storePlayerLatLon(lat, lon);
+      void gateway.setLocation(lat, lon);
     },
   });
   defineAction(reg, 'toggle-settings', () => {

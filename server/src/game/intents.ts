@@ -668,6 +668,26 @@ export const INTENTS: Record<string, IntentHandler> = {
     },
   },
 
+  // set-location — §2.7 player geographic coordinates for day-night / solar.
+  // Player supplies { lat, lon }. The server validates range and mutates the
+  // authoritative world location; the economy's solar multiplier is computed
+  // against these stored coordinates.
+  'set-location': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { lat, lon } = payload;
+      if (typeof lat !== 'number' || !Number.isFinite(lat) || lat < -90 || lat > 90) {
+        return { ok: false, error: 'lat must be a finite number in [-90,90]' };
+      }
+      if (typeof lon !== 'number' || !Number.isFinite(lon) || lon < -180 || lon > 180) {
+        return { ok: false, error: 'lon must be a finite number in [-180,180]' };
+      }
+      game.world.playerLat = lat;
+      game.world.playerLon = lon;
+      return { ok: true };
+    },
+  },
+
   // construct-island — §2.5 artificial island construction. Player supplies
   // { founderIslandId, biome, majorRadius, minorRadius, cx, cy, displayName? }.
   // The server mints the new island id and timestamp from authoritative state;

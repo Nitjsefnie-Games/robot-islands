@@ -140,6 +140,7 @@ export interface MutationGateway {
   expandIsland(islandId: string, axis: Axis): GatewayReturn;
   renameIsland(islandId: string, name: string): GatewayReturn;
   editBiome(islandId: string, biomeId: string): GatewayReturn;
+  setLocation(lat: number, lon: number): GatewayReturn;
   constructIsland(
     args: {
       founderIslandId: string;
@@ -356,6 +357,12 @@ export function makeLocalGateway(
     editBiome(islandId, biomeId) {
       const result = editIslandBiome(world, islandId, biomeId as Biome);
       if (!result.ok) return err(result.reason ?? 'edit biome failed', result.reason);
+      return ok();
+    },
+
+    setLocation(lat, lon) {
+      world.playerLat = lat;
+      world.playerLon = lon;
       return ok();
     },
 
@@ -666,6 +673,9 @@ export function makeRemoteGateway(client: GameServerClient): MutationGateway {
     },
     editBiome(islandId, biomeId) {
       return send('edit-biome', { islandId, biomeId });
+    },
+    setLocation(lat, lon) {
+      return send('set-location', { lat, lon });
     },
     constructIsland({ founderIslandId, biome, majorRadius, minorRadius, cx, cy, displayName, nowMs }) {
       return send('construct-island', {

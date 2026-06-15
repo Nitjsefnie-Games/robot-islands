@@ -1546,6 +1546,77 @@ describe('orbital intents', () => {
 });
 
 
+describe('set-location', () => {
+  it('legal: sets world.playerLat and world.playerLon', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'set-location', payload: { lat: 40.7128, lon: -74.006 }, seq: 2 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 2 });
+
+    const world = await worldSnap(uid);
+    expect(world.playerLat).toBe(40.7128);
+    expect(world.playerLon).toBe(-74.006);
+  });
+
+  it('illegal: lat out of range is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+    await expectRejectNoChange(
+      uid,
+      { type: 'set-location', payload: { lat: 91, lon: 0 }, seq: 9 },
+      now,
+    );
+  });
+
+  it('illegal: lon out of range is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+    await expectRejectNoChange(
+      uid,
+      { type: 'set-location', payload: { lat: 0, lon: 181 }, seq: 9 },
+      now,
+    );
+  });
+
+  it('illegal: non-finite lat is rejected', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'set-location', payload: { lat: NaN, lon: 0 }, seq: 9 },
+      now,
+    );
+    expect(ack.ok).toBe(false);
+  });
+
+  it('illegal: missing lat/lon is rejected', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'set-location', payload: { lat: 0 }, seq: 9 },
+      now,
+    );
+    expect(ack.ok).toBe(false);
+  });
+
+  it('illegal: wrong type is rejected', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'set-location', payload: { lat: '40', lon: -74 }, seq: 9 },
+      now,
+    );
+    expect(ack.ok).toBe(false);
+  });
+});
+
 describe('rename-island', () => {
   it('legal: renames the island', async () => {
     const now = Date.now();
