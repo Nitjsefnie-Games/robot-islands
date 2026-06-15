@@ -476,6 +476,29 @@ describe('computeRates', () => {
     expect(net.bolt).toBeCloseTo(0.00023255813953488373, 9);
   });
 
+  // Issue #112 — REMOTE offline catch-up flicker. A consumer drawing from an
+  // input bin holding floating-point DUST (e.g. 1e-15 — the residue left when
+  // `applyRates` clamps a near-empty bin and a producer trickles it back) must
+  // be gated by the §15.3 net-flow solver exactly as it is at an exactly-empty
+  // bin. Before the fix the regime scan classified zero/cap with `stock <= 0`
+  // / `stock >= cap`, so dust just above 0 was NOT zero-constrained: the
+  // consumer ran ungated, net went strongly negative, `findNextCapEvent`
+  // re-fired a `tMs + 1` event every segment → the 10k-segment safety cap → a
+  // ~12s synchronous catch-up that blocked the server event loop.
+  it('gates a consumer at a float-dust input bin so net is pinned (#112)', () => {
+    // Lubricant Refinery consumes heavy_oil:5 + chlorine:5 + calcium_sulfonate:1.
+    // Stock the other two inputs; leave chlorine at sub-attogram dust with NO
+    // producer. The solver must pin the refinery's chlorine draw to its (zero)
+    // production — net.chlorine ≈ 0, not -5/cycleSec.
+    const state = makeState({
+      level: 10, // T2 — the §9.7 runtime tier gate would otherwise zero the refinery
+      buildings: [LUBRICANT_REFINERY],
+      inventory: { ...blankInventory(), heavy_oil: 50, calcium_sulfonate: 50, chlorine: 1e-15 },
+    });
+    const { net } = computeRates(state, { defs: POWER_FREE });
+    expect(net.chlorine ?? 0).toBeGreaterThanOrEqual(-1e-12);
+  });
+
   it('disabling floors scales throughput by active floor count (floor-disable)', () => {
     // mine built to floor 3 (floorLevel 2 → ×3) with 2 floors disabled → active 1 → ×1 (base 0.05 iron_ore/s)
     const mine: PlacedBuilding = { id: 'm', defId: 'mine', x: 0, y: 0, floorLevel: 2, disabledFloors: 2 };

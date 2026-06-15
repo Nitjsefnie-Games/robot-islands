@@ -93,6 +93,22 @@ export const BATTERY_CAPACITY_WS: Readonly<Partial<Record<BuildingDefId, number>
  *  one millisecond — far below gameplay-visible scale. */
 export const BATTERY_EMPTY_THRESHOLD_WS = 1;
 
+/**
+ * §15.3 net-flow regime tolerance (issue #112). A resource bin is treated as
+ * empty (zero-constrained) at `stock <= STOCK_BOUNDARY_EPS` and full
+ * (cap-constrained) at `stock >= cap - STOCK_BOUNDARY_EPS`, rather than at the
+ * exact `0` / `cap` boundary. Floating-point arithmetic leaves sub-nanounit
+ * DUST at a pinned bin — e.g. a near-empty bin clamped to 0 by `applyRates`
+ * while a producer trickles a few atto-units back in. Without this band the
+ * regime scan classifies that dust as "not empty", so `solveFlow` never gates
+ * the dust-bin consumer/producer, `net` never settles toward 0, and
+ * `findNextCapEvent` re-fires a `tMs + 1` event every segment — a flicker that
+ * grinds the integrator to its 10k-segment safety cap (~12s of synchronous
+ * catch-up). The band is far below any meaningful stock (recipe flows are
+ * ≥ ~1e-4 units/s), so a healthy economy's resource never lingers inside it.
+ */
+export const STOCK_BOUNDARY_EPS = 1e-9;
+
 /** Total per-island battery capacity in W-seconds, summed across operational
  *  batteries × the skill-tree batteryCapacity multiplier. */
 export function batteryCapacityWs(state: IslandState, mul: SkillMultipliers): number {
@@ -1590,8 +1606,11 @@ export function computeRates(
       for (const r of [...Object.keys(fb.produces), ...Object.keys(fb.consumes)]) {
         const id = r as ResourceId;
         const stock = ctx?.inventory?.[id] ?? state.inventory[id] ?? 0;
-        if (stock <= 0) zeroConstrained.add(r);
-        if (stock >= cap(state, id, ctx?.caps, undefined, ctx?.baseMult)) capConstrained.add(r);
+        // Issue #112: classify with STOCK_BOUNDARY_EPS so float DUST at a
+        // boundary is treated as pinned and solveFlow gates the dust-bin
+        // consumer/producer (net settles toward 0). See the constant's docs.
+        if (stock <= STOCK_BOUNDARY_EPS) zeroConstrained.add(r);
+        if (stock >= cap(state, id, ctx?.caps, undefined, ctx?.baseMult) - STOCK_BOUNDARY_EPS) capConstrained.add(r);
       }
     }
   }

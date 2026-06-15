@@ -2120,6 +2120,24 @@ PixiJS, like `ocean-gen.ts` in §2.1) holds the exact solve; `computeRates` feed
 it in a pass-2.5 and consumes the gate in passes 3–4. Full design and worked
 examples: `docs/superpowers/specs/2026-06-10-net-flow-economy-design.md`.
 
+**Boundary classification uses a tolerance (`STOCK_BOUNDARY_EPS`, issue #112).**
+Whether a bin counts as pinned — cap-constrained (`stock ≥ cap`) or
+zero-constrained (`stock ≤ 0`), the regimes that feed the shared-factor solve
+above — is judged within `STOCK_BOUNDARY_EPS` (1e-9 units) of the boundary, not
+at the exact value: `stock ≤ ε` is empty and `stock ≥ cap − ε` is full.
+Floating-point arithmetic leaves sub-nanounit **dust** at a pinned bin — e.g. a
+near-empty bin the integrator clamps to 0 while a producer trickles a few
+atto-units back in. Classifying that dust as "not pinned" leaves the bin's
+consumer (or producer) ungated, so its `net` never settles toward 0 and
+`findNextCapEvent` re-fires a 1 ms (`tMs + 1`) event **every** segment — a
+flicker that grinds an offline catch-up to the 10k-segment safety cap (~12 s of
+synchronous integration that blocked the server's request event loop). The
+tolerance is in the *regime classification* only (it changes which constraints
+the solver sees, so the gate itself pins the bin); it is **not** an event-skip
+in `findNextCapEvent`, which would over-integrate a near-boundary segment. The
+band sits far below any meaningful recipe flow (≥ ~1e-4 units/s), so a healthy
+economy's resource never lingers inside it.
+
 **Joint net-flow ⇄ brownout fixpoint (§5.1 × §15.3).** The brownout factor `pf`
 and the net-flow gate `g` are mutually dependent: `pf` scales every grid-power
 consumer's *whole* realized recipe (both produces and consumes), and `g` is then
