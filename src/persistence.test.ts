@@ -2379,6 +2379,9 @@ describe('persistence v15 → v16', () => {
 
   it('v17 round-trips byte-identical through serialize → deserialize → serialize', () => {
     const world = makeInitialWorld(0);
+    // §9.9 lastActiveMs is optional on fresh worlds but deserialize materializes
+    // it to savedAt; seed it so the first serialize matches the second.
+    world.lastActiveMs = 0;
     const islandStates = new Map<string, IslandState>();
     for (const spec of world.islands) {
       if (spec.populated) {
@@ -2640,6 +2643,35 @@ describe('schema v22 — activeBonusMs (§9.9)', () => {
     } as unknown as SaveSnapshot;
     const { world: loaded } = deserializeWorld(v21, 1_000_000, 9_999);
     expect(loaded.activeBonusMs).toBe(0);
+  });
+
+  it('decays activeBonusMs from time-since-last-active, not time-since-save', () => {
+    const world = makeInitialWorld(0);
+    world.activeBonusMs = 600_000;
+    const savedAt = 1_000_000;
+    // Player was active right up to save time.
+    world.lastActiveMs = savedAt;
+    const snap = serializeWorld(world, new Map(), savedAt, 500);
+    // Reload one minute later; because lastActiveMs == savedAt, away time is
+    // the full minute and the legacy path would also decay. The new behaviour
+    // shows that lastActiveMs is carried through and the decay is computed
+    // from now - lastActiveMs.
+    const { world: loaded } = deserializeWorld(snap, savedAt + 60_000, 9_999);
+    expect(loaded.activeBonusMs).toBe(420_000); // 600_000 − 3 × 60_000
+    expect(loaded.lastActiveMs).toBe(savedAt);
+  });
+
+  it('does not decay when lastActiveMs is recent (connected play)', () => {
+    const world = makeInitialWorld(0);
+    world.activeBonusMs = 600_000;
+    const savedAt = 1_000_000;
+    const now = savedAt + 60_000;
+    // Player sent a heartbeat 100 ms ago: only 100 ms of true away time.
+    world.lastActiveMs = now - 100;
+    const snap = serializeWorld(world, new Map(), savedAt, 500);
+    const { world: loaded } = deserializeWorld(snap, now, 9_999);
+    expect(loaded.activeBonusMs).toBe(599_700); // 600_000 − 3 × 100
+    expect(loaded.lastActiveMs).toBe(now - 100);
   });
 });
 

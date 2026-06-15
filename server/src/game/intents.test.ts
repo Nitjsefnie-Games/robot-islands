@@ -1863,3 +1863,71 @@ describe('refresh-maintenance', () => {
     );
   });
 });
+
+
+describe('active-heartbeat', () => {
+  it('accrues focused ms and stamps lastActiveMs', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'active-heartbeat', payload: { focusedMs: 60_000, unfocusedMs: 0 }, seq: 1 },
+      now,
+    );
+    expect(ack.ok).toBe(true);
+    const snap = await loadSnapshot(pool, uid);
+    expect(snap!.world.activeBonusMs).toBe(60_000);
+    expect(snap!.world.lastActiveMs).toBe(now);
+  });
+
+  it('decays for unfocused ms', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+    await applyIntent(
+      pool, uid,
+      { type: 'active-heartbeat', payload: { focusedMs: 120_000, unfocusedMs: 0 }, seq: 1 },
+      now,
+    );
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'active-heartbeat', payload: { focusedMs: 0, unfocusedMs: 20_000 }, seq: 2 },
+      now,
+    );
+    expect(ack.ok).toBe(true);
+    const snap = await loadSnapshot(pool, uid);
+    expect(snap!.world.activeBonusMs).toBe(60_000); // 120_000 − 3 × 20_000
+  });
+
+  it('floors activeBonusMs at 0', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'active-heartbeat', payload: { focusedMs: 0, unfocusedMs: 60_000 }, seq: 1 },
+      now,
+    );
+    expect(ack.ok).toBe(true);
+    const snap = await loadSnapshot(pool, uid);
+    expect(snap!.world.activeBonusMs).toBe(0);
+  });
+
+  it('rejects negative focusedMs and leaves save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+    await expectRejectNoChange(
+      uid,
+      { type: 'active-heartbeat', payload: { focusedMs: -1000, unfocusedMs: 0 }, seq: 1 },
+      now,
+    );
+  });
+
+  it('rejects non-numeric payload', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+    await expectRejectNoChange(
+      uid,
+      { type: 'active-heartbeat', payload: { focusedMs: 'lots', unfocusedMs: 0 }, seq: 1 },
+      now,
+    );
+  });
+});

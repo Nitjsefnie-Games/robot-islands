@@ -81,6 +81,7 @@ import type { Rotation } from '../../../src/shape-mask.js';
 import { CARGO_WILDCARD, type CargoEntry, type CargoMode } from '../../../src/route-cargo.js';
 import type { CrystalId } from '../../../src/skilltree-graph.js';
 import { CELL_SIZE_TILES } from '../../../src/constants.js';
+import { applyActiveBonusDelta } from '../../../src/active-bonus.js';
 
 export type IntentResult = { ok: true } | { ok: false; error: string };
 
@@ -1113,6 +1114,28 @@ export const INTENTS: Record<string, IntentHandler> = {
       if (typeof satId !== 'string') return { ok: false, error: 'satId must be a string' };
       const r = dispatchRepairDrone(game.world, islandId, satId, now);
       if (!r.ok) return { ok: false, error: r.reason };
+      return { ok: true };
+    },
+  },
+
+  // active-heartbeat — §9.9 server-authoritative active-play bonus. The client
+  // sends a periodic heartbeat with capped-focused + unfocused ms accumulated
+  // since the last heartbeat; the server applies the accrual/decay and stamps
+  // the world's lastActiveMs so load-time decay only charges true away time.
+  'active-heartbeat': {
+    apply(game: LiveGame, payload: unknown, now: number): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { focusedMs, unfocusedMs } = payload;
+      if (typeof focusedMs !== 'number' || !Number.isFinite(focusedMs) || focusedMs < 0) {
+        return { ok: false, error: 'focusedMs must be a non-negative finite number' };
+      }
+      if (typeof unfocusedMs !== 'number' || !Number.isFinite(unfocusedMs) || unfocusedMs < 0) {
+        return { ok: false, error: 'unfocusedMs must be a non-negative finite number' };
+      }
+      const f = Math.min(focusedMs, 300_000);
+      const u = Math.min(unfocusedMs, 300_000);
+      applyActiveBonusDelta(game.world, f, u);
+      game.world.lastActiveMs = now;
       return { ok: true };
     },
   },

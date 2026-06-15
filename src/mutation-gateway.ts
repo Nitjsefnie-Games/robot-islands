@@ -218,6 +218,9 @@ export interface MutationGateway {
 
   // §? trade
   acceptTrade(offer: TradeOffer): GatewayReturn<{ give: number; get: number }>;
+
+  // §9.9 active-play bonus heartbeat (REMOTE only; LOCAL accrues per-frame)
+  activeHeartbeat(focusedMs: number, unfocusedMs: number): GatewayReturn;
 }
 
 // ── LOCAL factory ────────────────────────────────────────────────────────────
@@ -630,6 +633,11 @@ export function makeLocalGateway(
       const amounts = applyOffer(state, offer);
       return ok(amounts);
     },
+
+    activeHeartbeat() {
+      // LOCAL accrues/decays per-frame via tickActiveBonus in main.ts.
+      return ok();
+    },
   };
 }
 
@@ -803,6 +811,10 @@ export function makeRemoteGateway(client: GameServerClient): MutationGateway {
 
     acceptTrade() {
       return Promise.resolve({ ok: false, error: 'not supported yet' } as GatewayResult<{ give: number; get: number }>);
+    },
+
+    activeHeartbeat(focusedMs, unfocusedMs) {
+      return send('active-heartbeat', { focusedMs, unfocusedMs });
     },
   };
 }
