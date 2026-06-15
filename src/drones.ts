@@ -67,9 +67,7 @@ export interface Drone {
   status?: 'active' | 'lost' | 'returned';
   /** For T5 path-drawn drones: sequence of waypoints. Empty for straight-line drones. */
   readonly waypoints: ReadonlyArray<{ readonly x: number; readonly y: number }>;
-  /** True if this drone is currently in dark mode (out of antenna range). */
-  darkMode: boolean;
-  /** Accumulated discoveries while in dark mode. */
+  /** Accumulated discoveries while out of antenna range (dark mode). */
   darkModeDiscoveries: Array<{ readonly islandId: string }>;
   /** Cell-reveal buffer (mirror of darkModeDiscoveries for cells). Every
    *  corridor cell the drone scans joins this Set unconditionally on every
@@ -550,7 +548,6 @@ export function dispatchDrone(
     fuelResource,
     status: 'active',
     waypoints: waypoints ?? [],
-    darkMode: false,
     darkModeDiscoveries: [],
     scanBuffer: new Set<string>(),
     probabilityBias: probabilityBiasForIsland(origin),
@@ -840,10 +837,7 @@ export function tickDrones(
       const dronePos = droneCurrentPosition(d, segEndMs);
       const inSignalRange = pointInSignalRange(ranges, dronePos.x, dronePos.y);
       if (inSignalRange) {
-        d.darkMode = false;
         cellsAddedThisTick += flushDroneBuffers(d, world, newlyDiscoveredIslandIds);
-      } else {
-        d.darkMode = true;
       }
     }
 

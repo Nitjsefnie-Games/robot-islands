@@ -1096,13 +1096,10 @@ export function deserializeWorld(
       auraAmpCache: null,
       auraAmpCacheVersion: -1,
       socketBindings: new Map(s.socketBindings ?? []),
-      // §9.7 cooldown anchors. Both fields were minted in the saved
-      // session's `performance.now()` domain (matching `lastTick`); apply
-      // the same perfShift the drone/vehicle/repair-drone timestamps get,
-      // so the 24-hour cooldown gate reads a real elapsed value after a
-      // reload. Null-preserving: a fresh island has both null and must
+      // §9.7 cooldown anchor: perfShift `lastResetAt` so the 24-hour
+      // cooldown gate reads a real elapsed value after a reload.
+      // Null-preserving: a fresh island has `lastResetAt === null` and must
       // survive deserialize as null (null + number would be NaN).
-      declaredAt: s.declaredAt === null ? null : s.declaredAt + perfShift,
       lastResetAt: s.lastResetAt === null ? null : s.lastResetAt + perfShift,
       // Remap lastTick from the saved performance.now() domain into the
       // current session's performance.now() domain. The save preserved

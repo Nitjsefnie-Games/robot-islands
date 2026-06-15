@@ -66,7 +66,6 @@ function makeIslandState(over: Partial<IslandState> = {}): IslandState {
     auraAmpCacheVersion: -1,
     co2Kg: 0,
     funnelPending: emptyFunnel(),
-    declaredAt: null,
     aiCoreCrafted: false,
     ascendantCoreCrafted: false,
     lastResetAt: null,
@@ -1270,7 +1269,6 @@ describe('T5 path-drawn drone', () => {
       fuelResource: 'plasma_charge',
       status: 'active',
       waypoints,
-      darkMode: false,
       darkModeDiscoveries: [],
       scanBuffer: new Set<string>(),
       probabilityBias: 0,
@@ -1352,7 +1350,6 @@ describe('dark-mode telemetry', () => {
     // Tick at mid-flight (apex, 50s). Drone is out of antenna range, has not
     // returned yet — dark-mode discoveries should be buffered.
     tickDrones(w, 50_000, 0);
-    expect(w.drones[0]!.darkMode).toBe(true);
     // Cells should NOT be revealed.
     expect(w.revealedCells.size).toBe(0);
     // But the island discovery should be buffered.
@@ -1832,7 +1829,6 @@ describe('Fix 6.3: destruction fate decided at dispatch', () => {
       fuelResource: 'diesel',
       status: 'active',
       waypoints: [],
-      darkMode: true,
       darkModeDiscoveries: [],
       scanBuffer: new Set<string>(),
       probabilityBias: 0,

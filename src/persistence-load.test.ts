@@ -56,7 +56,6 @@ describe('loadWorld IDB walker', () => {
             unlockedNodes: [...islandState.unlockedNodes],
             subPathProgress: [],
             specializationRole: null,
-            declaredAt: null,
             lastResetAt: null,
             lastTick: islandState.lastTick,
             aiCoreCrafted: false,

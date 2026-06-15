@@ -352,11 +352,6 @@ export interface IslandState {
    *  as 0 — `makeInitialIslandState` seeds all ResourceIds to 0 explicitly
    *  so the deductions in `accrueXp` never see undefined. */
   funnelPending: Record<ResourceId, number>;
-  /** Wall-clock timestamp (ms) at which the player declared the current role.
-   *  Null until the first declaration. Carries no economic semantics in
-   *  step 10 — it's a UX hook for the §9.7 Tier Reset cooldown timer
-   *  (reset disallowed within 24 real-time hours of the last reset). */
-  declaredAt: number | null;
   /** §13.1 T5 access gate. Becomes `true` the first time the island has ever
    *  produced (and counted in `production` of) an AI core, and stays true
    *  thereafter. Composed with `level >= 50` by `t5Unlocked` (skilltree.ts) /
@@ -388,13 +383,12 @@ export interface IslandState {
    *  `lubricantProduced`: T1 maintenance auto-consumes 5 bolts, so a
    *  stockpile check is unwinnable. Auto-flips in the integrator. */
   boltProduced?: boolean;
-  /** Wall-clock timestamp (`performance.now()` domain, matching `lastTick`
-   *  and `declaredAt`) of the last §9.7 Tier Reset on this island, or null
-   *  if the island has never been reset. Drives the 24-hour cooldown gate
-   *  in `canTierReset`. Null on a fresh island; stamped by
-   *  `executeTierReset(state, nowMs)`. perfShift-ed on deserialize alongside
-   *  `declaredAt`, so the cooldown gate reads a real elapsed value across
-   *  save/load. */
+  /** Wall-clock timestamp (`performance.now()` domain, matching `lastTick`)
+   *  of the last §9.7 Tier Reset on this island, or null if the island has
+   *  never been reset. Drives the 24-hour cooldown gate in `canTierReset`.
+   *  Null on a fresh island; stamped by `executeTierReset(state, nowMs)`.
+   *  perfShift-ed on deserialize so the cooldown gate reads a real elapsed
+   *  value across save/load. */
   lastResetAt: number | null;
   /** §queue: next FIFO sequence number to stamp on an enqueued build.
    *  Incremented on each enqueue. Optional; absent ≡ 0 (forward-compat). */
@@ -2349,11 +2343,23 @@ export function applySegmentSideEffects(
     state.boltProduced = true;
   }
   // §10 CO₂ accrual — Phase 2 hook
-  // Path 1: co2 produced as a regular recipe output
-  state.co2Kg += (production.co2 ?? 0) * dtSec;
-  // Path 2: exogenous fuel-combustion CO₂ (not in outputs ledger)
+  // Path 1: co2 produced as a regular recipe output. Biogenic CO₂ is
+  // recently-absorbed carbon (e.g. charcoal_kiln), so it is carbon-neutral
+  // and does not count toward the climate CO₂ total.
   for (const br of byBuilding) {
-    if (br.recipe.exogenousFlow === 'fuel-combustion-CO₂' && br.recipe.exogenousFlowKg) {
+    const co2Out = br.recipe.outputs.co2 ?? 0;
+    if (co2Out > 0 && !br.recipe.biogenic) {
+      state.co2Kg += co2Out * br.effectiveRate * dtSec;
+    }
+  }
+  // Path 2: exogenous fuel-combustion CO₂ (not in outputs ledger). Biogenic
+  // fuel flows are likewise treated as net-zero.
+  for (const br of byBuilding) {
+    if (
+      br.recipe.exogenousFlow === 'fuel-combustion-CO₂' &&
+      br.recipe.exogenousFlowKg &&
+      !br.recipe.biogenic
+    ) {
       state.co2Kg += br.recipe.exogenousFlowKg * br.effectiveRate * dtSec;
     }
   }
