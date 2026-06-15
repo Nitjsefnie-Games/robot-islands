@@ -568,10 +568,16 @@ function destinationHeadroom(
   states: Map<string, IslandState>,
   destIslandId: string,
   r: ResourceId,
+  /** PERF: precomputed dest-island skill multipliers. cap() folds skills when
+   *  this is omitted; route dispatch calls this per resource per route per step,
+   *  so a CPU profile showed the omitted-mult fold (skillMulSignature) as ~11%
+   *  of offline-catch-up CPU. Passing the value cap() would itself fold is
+   *  byte-identical. */
+  mult?: SkillMultipliers,
 ): number {
   const destState = states.get(destIslandId);
   if (!destState) return 0;
-  const room = cap(destState, r, undefined, { ignoreGrace: true }) - inv(destState, r) - totalInboundInFlight(world, destIslandId, r);
+  const room = cap(destState, r, undefined, { ignoreGrace: true }, mult) - inv(destState, r) - totalInboundInFlight(world, destIslandId, r);
   return Math.max(0, room);
 }
 
@@ -595,10 +601,18 @@ function planRouteCargo(
   states: Map<string, IslandState>,
   route: Route,
   budget: number,
+  /** See destinationHeadroom — precomputed per-island skill mults so the per-
+   *  resource cap() folds in this route's cargo planning are skipped. */
+  precomputedSkillMul?: ReadonlyMap<string, SkillMultipliers>,
 ): PlannedDemand[] {
   const srcState = states.get(route.from);
   const destState = states.get(route.to);
   if (!srcState || !destState) return [];
+  // Resolve source/dest skill multipliers ONCE for this route (from the
+  // precomputed map during a catch-up, else a single fold) and thread them into
+  // every cap() below — cap() otherwise re-folds skills per resource per push.
+  const srcMul = precomputedSkillMul?.get(route.from) ?? effectiveSkillMultipliers(srcState);
+  const destMul = precomputedSkillMul?.get(route.to) ?? effectiveSkillMultipliers(destState);
   const viable: ViableEntry[] = [];
 
   // Resources named explicitly anywhere in this cargo. Used so a wildcard
@@ -611,13 +625,13 @@ function planRouteCargo(
   function tryPush(entry: CargoEntry, r: ResourceId): void {
     const sourceAvail = inv(srcState!, r);
     if (sourceAvail <= 0) return;
-    const headroom = destinationHeadroom(world, states, route.to, r);
+    const headroom = destinationHeadroom(world, states, route.to, r, destMul);
     if (headroom <= 0) return;
     if (entry.sourceFloorPct !== undefined) {
-      const srcCap = cap(srcState!, r);
+      const srcCap = cap(srcState!, r, undefined, undefined, srcMul);
       if (srcCap <= 0 || sourceAvail / srcCap < entry.sourceFloorPct / 100) return;
     }
-    const destCap = cap(destState!, r);
+    const destCap = cap(destState!, r, undefined, undefined, destMul);
     viable.push({
       resourceId: r,
       weight: entry.weight ?? 1,
@@ -908,7 +922,7 @@ function dispatchPhase(
     // scale this route's effective capacity ×(1+L) (and transit speed below).
     const floorMul = routeFloorMultiplier(route, world);
     const capDemand = route.capacityPerSec * floorMul * skillCapMul * airshipMul * weatherMul * elapsedSec;
-    const planned = planRouteCargo(world, states, route, capDemand);
+    const planned = planRouteCargo(world, states, route, capDemand, precomputedSkillMul);
     for (const d of planned) {
       // §15.4 fix 7.2: use unclampedDesired so Phase-2 proportional distribution
       // sees capacity-share, not the sourceAvail-clamped amount (waterfall fix).
