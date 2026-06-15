@@ -25,7 +25,6 @@ function makeState(over: Partial<IslandState> = {}): IslandState {
     unlockedNodes: new Set(),
     unlockedEdges: new Set(),
     funnelPending: {},
-    declaredAt: null,
     aiCoreCrafted: false,
     ascendantCoreCrafted: false,
     lastResetAt: null,
