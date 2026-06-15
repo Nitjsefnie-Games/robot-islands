@@ -1534,6 +1534,25 @@ async function main(): Promise<void> {
       if (!gatewayResult.ok) return;
       finish();
     },
+    onRefreshMaintenance: (target: InspectorTarget) => {
+      // §4.7 Manual maintenance refresh: route through the gateway so REMOTE
+      // authoritatively debits the 50%-placement-cost basket.
+      const gatewayResult = gateway.refreshMaintenance(target.spec.id, target.building.id);
+      function finish(): void {
+        buildingAlertsOverlay.invalidate();
+        inspector.refresh();
+      }
+      if (gatewayResult instanceof Promise) {
+        void (async () => {
+          const result = await gatewayResult;
+          if (!result.ok) return;
+          finish();
+        })();
+        return;
+      }
+      if (!gatewayResult.ok) return;
+      finish();
+    },
     onUpgradeFloor: (target: InspectorTarget) => {
       const gatewayResult = gateway.applyUpgrade(target.spec.id, target.building.id);
       function finish(): void {

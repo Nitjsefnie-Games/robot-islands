@@ -55,6 +55,7 @@ import {
   buyKeystone,
   bindCrystal,
   unbindCrystal,
+  effectiveSkillMultipliers,
 } from '../../../src/skilltree.js';
 import { CRYSTAL_CATALOG } from '../../../src/skilltree-crystals.js';
 import { canTierReset, executeTierReset } from '../../../src/tier-reset.js';
@@ -74,6 +75,7 @@ import {
 import { expandIsland, canExpandIsland, type Axis } from '../../../src/land-reclamation.js';
 import { convertToServitor } from '../../../src/servitor.js';
 import { BIOME_DEFS } from '../../../src/biomes.js';
+import { tryRefreshMaintenance } from '../../../src/maintenance.js';
 import { ALL_RESOURCES, type ResourceId } from '../../../src/recipes.js';
 import type { Rotation } from '../../../src/shape-mask.js';
 import { CARGO_WILDCARD, type CargoEntry, type CargoMode } from '../../../src/route-cargo.js';
@@ -563,6 +565,31 @@ export const INTENTS: Record<string, IntentHandler> = {
       if (!b) return { ok: false, error: 'not-found' };
       b.forceRun = forceRun ? true : undefined;
       return { ok: true };
+    },
+  },
+
+  // refresh-maintenance — §4.7 manual maintenance refresh. Player supplies
+  // { islandId, buildingId }. The server re-runs the pure tryRefreshMaintenance
+  // against authoritative inventory and debits the 50%-placement-cost basket.
+  'refresh-maintenance': {
+    apply(game: LiveGame, payload: unknown, now: number): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { islandId, buildingId } = payload;
+      if (typeof islandId !== 'string') return { ok: false, error: 'islandId must be a string' };
+      if (typeof buildingId !== 'string') return { ok: false, error: 'buildingId must be a string' };
+      const island = resolveIsland(game, islandId);
+      if (!island) return { ok: false, error: 'unknown island' };
+      const b = island.spec.buildings.find((bb) => bb.id === buildingId);
+      if (!b) return { ok: false, error: 'not-found' };
+      const def = BUILDING_DEFS[b.defId];
+      const ok = tryRefreshMaintenance(
+        b,
+        def,
+        island.state.inventory,
+        now,
+        effectiveSkillMultipliers(island.state).maintenanceThreshold,
+      );
+      return ok ? { ok: true } : { ok: false, error: 'maintenance not due or unaffordable' };
     },
   },
 

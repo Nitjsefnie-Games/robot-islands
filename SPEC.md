@@ -557,7 +557,7 @@ Once accumulated operating time reaches the maintenance threshold for the buildi
 
 In that state, output efficiency degrades linearly from 100% to 50% over the next 4 real-time hours (placeholder). If still unmaintained at 50%, output stays at 50% indefinitely. Buildings do not stop entirely and are never randomly destroyed by neglect; they simply run at reduced rate.
 
-To restore the building to 100%, maintenance materials must be present in the island's inventory at maintenance-cycle time. The engine consumes materials and resets the timer automatically. A player may also trigger a manual maintenance refresh from the building inspector, which consumes 50% of the building's placement cost (a different basket than the tier maintenance recipe) to reset the building to full efficiency immediately.
+To restore the building to 100%, maintenance materials must be present in the island's inventory at maintenance-cycle time. The engine consumes materials and resets the timer automatically. A player may also trigger a manual maintenance refresh from the building inspector; in REMOTE mode this is an authoritative `refresh-maintenance` intent. The server re-runs the pure `tryRefreshMaintenance` entry function against the live island and debits 50% of the building's placement cost (a different basket than the tier maintenance recipe) to reset the building to full efficiency immediately.
 
 |Building tier|Maintenance recipe (placeholder)|
 |-|-|
@@ -2262,7 +2262,8 @@ It is being delivered in slices, each with its own design + plan under
     intent persists nothing.
   - Wired intents include `place-building`, `demolish-building`,
     `cancel-construction`, `upgrade-building`, `set-active-floors`,
-    `set-force-run`, `convert-to-servitor`, `relabel-cargo`, `expand-island`,
+    `set-force-run`, `refresh-maintenance`, `convert-to-servitor`,
+    `relabel-cargo`, `expand-island`,
     `rename-island`, `edit-biome`, `set-location`, `construct-island`,
     `dispatch-drone`, `fire-t4-pulse`, `create-route`, `delete-route`,
     `set-route-mode`, `set-cargo-weight`, `set-cargo-floor-pct`,

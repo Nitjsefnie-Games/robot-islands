@@ -63,6 +63,7 @@ describe('mountInspectorUi', () => {
       onMove: vi.fn(),
       onSetActiveFloors: vi.fn(),
       onSetForceRun: vi.fn(),
+      onRefreshMaintenance: vi.fn(),
       onUpgradeFloor: vi.fn(),
       onExpandIsland: vi.fn(),
       onRenameIsland: vi.fn(),
