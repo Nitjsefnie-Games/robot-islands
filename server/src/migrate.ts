@@ -18,27 +18,40 @@ function loadMigrations(): Migration[] {
     .sort((a, b) => a.version - b.version);
 }
 
+/** Fixed advisory-lock key for the migration runner. Only one boot process
+ *  may run migrations at a time; concurrent boots block until the winner
+ *  commits, then see that all migrations are already applied. */
+const MIGRATION_LOCK_KEY = 'robot-islands:migrations';
+
 export async function runMigrations(pool: Pool): Promise<void> {
-  await pool.query(
-    'CREATE TABLE IF NOT EXISTS schema_migrations (version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())',
-  );
-  const applied = new Set(
-    (await pool.query('SELECT version FROM schema_migrations')).rows.map((row) => Number(row.version)),
-  );
-  for (const mig of loadMigrations()) {
-    if (applied.has(mig.version)) continue;
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      await client.query(mig.sql);
-      await client.query('INSERT INTO schema_migrations (version) VALUES ($1)', [mig.version]);
-      await client.query('COMMIT');
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw new Error(`migration ${mig.name} failed: ${(err as Error).message}`);
-    } finally {
-      client.release();
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [MIGRATION_LOCK_KEY]);
+    await client.query(
+      'CREATE TABLE IF NOT EXISTS schema_migrations (version integer PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())',
+    );
+    const applied = new Set(
+      (await client.query('SELECT version FROM schema_migrations')).rows.map((row) => Number(row.version)),
+    );
+    for (const mig of loadMigrations()) {
+      if (applied.has(mig.version)) continue;
+      await client.query('SAVEPOINT migrate_sp');
+      try {
+        await client.query(mig.sql);
+        await client.query('INSERT INTO schema_migrations (version) VALUES ($1)', [mig.version]);
+        await client.query('RELEASE SAVEPOINT migrate_sp');
+      } catch (err) {
+        await client.query('ROLLBACK TO SAVEPOINT migrate_sp');
+        throw new Error(`migration ${mig.name} failed: ${(err as Error).message}`);
+      }
     }
+    await client.query('COMMIT');
+  } catch (err) {
+    try { await client.query('ROLLBACK'); } catch { /* connection already broken */ }
+    throw err;
+  } finally {
+    client.release();
   }
 }
 

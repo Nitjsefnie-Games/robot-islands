@@ -827,7 +827,12 @@ export function debrisHitProbability(
  * rate is frame-rate independent — calibrated at `SCANNER_REF_TICK_MS` (1000 ms).
  *
  * Deterministic — RNG seeded from `${world.seed}_debris_${nowMs}_${sat.id}`. */
-export function tickDebris(world: WorldState, nowMs: number, tickDeltaMs: number): void {
+export function tickDebris(
+  world: WorldState,
+  nowMs: number,
+  tickDeltaMs: number,
+  rngStepIndex: number = Math.floor(nowMs / 1000),
+): void {
   if (world.debrisFields.length === 0 || world.satellites.length === 0) return;
   const survivors: Satellite[] = [];
   for (const sat of world.satellites) {
@@ -855,7 +860,7 @@ export function tickDebris(world: WorldState, nowMs: number, tickDeltaMs: number
       : 1;
     const hitPRefTick = debrisHitProbability(field, sat) / protection;
     const hitP = debrisPerCallProbability(hitPRefTick, tickDeltaMs);
-    const rng = makeSeededRng(`${world.seed}_debris_${nowMs}_${sat.id}`);
+    const rng = makeSeededRng(`${world.seed}_debris_${rngStepIndex}_${sat.id}`);
     if (rng() >= hitP) {
       survivors.push(sat);
       continue;
@@ -1010,6 +1015,7 @@ export function tickScannerDiscovery(
   world: WorldState,
   tickDeltaMs: number,
   nowMs: number,
+  rngStepIndex: number = Math.floor(nowMs / 1000),
 ): string[] {
   const newlyDiscovered: string[] = [];
   for (const sat of world.satellites) {
@@ -1057,7 +1063,7 @@ export function tickScannerDiscovery(
     // the body leaks through. Use the maximum dwell on any covered footprint
     // cell so a previously-scanned island whose centre has just moved out of
     // the footprint still benefits from its body dwell.
-    const rng = makeSeededRng(`${world.seed}_scan_${sat.id}_${nowMs}`);
+    const rng = makeSeededRng(`${world.seed}_scan_${sat.id}_${rngStepIndex}`);
     for (const isl of world.islands) {
       if (isl.discovered) continue;
       if (!islandIntersectsCells(isl, covered)) continue;

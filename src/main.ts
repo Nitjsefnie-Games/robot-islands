@@ -86,7 +86,8 @@ import {
   type WorldState,
 } from './world.js';
 import { mountDronesUi } from './drones-ui.js';
-import { setDroneWeatherWallOffsetMs, tickDrones } from './drones.js';
+import { tickDrones } from './drones.js';
+import { WS_SYSTEMS_STEP_MS } from './world-systems-advance.js';
 import {
   tickTradeOffers,
   tuningFor,
@@ -169,16 +170,6 @@ async function main(): Promise<void> {
   world.label = 'world';
   app.stage.addChild(world);
 
-  // §15.1 / §2.6 wall-clock anchor for WEATHER sampling. Captured ONCE per
-  // session: every production `weather()` consumer samples at
-  // `perfTs + weatherWallOffsetMs` (see `weatherClockMs`) so the weather
-  // timeline is anchored to real time instead of restarting at the same
-  // dwell states on every page load. Mirrors the §2.7 day-night wall
-  // anchor (`nowWall` in the ticker / `wallClockNowMs` in economy.ts).
-  // The drone subsystem reads a module-level copy because its dispatch
-  // path is invoked from the launch UI (see setDroneWeatherWallOffsetMs).
-  const weatherWallOffsetMs = Date.now() - performance.now();
-  setDroneWeatherWallOffsetMs(weatherWallOffsetMs);
   // Load UI prefs (camera + active-island + open-panel) in parallel with
   // world; applied below after the camera is constructed.
   const restoredPrefs = await loadPrefs();
@@ -339,11 +330,16 @@ async function main(): Promise<void> {
 
   worldState.islandStates = islandStates;
 
+  // §15.1 wall-clock anchor for WEATHER sampling. Captured once per session
+  // and threaded explicitly to every weather consumer so the value is never
+  // stored in a process-global module variable (multi-tenant safety).
+  const weatherWallOffsetMs = Date.now() - performance.now();
+
   // Slice 4 mutation gateway — LOCAL default. REMOTE receives the WS client
   // and forwards intents to the authoritative server.
   const gateway = isRemote && remoteClient
     ? makeRemoteGateway(remoteClient)
-    : makeLocalGateway(worldState, islandStates, {});
+    : makeLocalGateway(worldState, islandStates, {}, weatherWallOffsetMs);
 
   if (worldState.playerLat == null || worldState.playerLon == null) {
     await new Promise<void>((resolve) => {
@@ -1776,6 +1772,7 @@ async function main(): Promise<void> {
     getOriginSpec: activeSpec,
     screenToWorldTile,
     gateway,
+    weatherWallOffsetMs,
     onDiscoveryChanged: rebuildWorldLayers,
     // Mutual-exclusion: when launch mode arms, cancel any in-progress
     // placement / settlement-arm / orbital-launch so a mouseup-commit can't
@@ -2053,7 +2050,7 @@ async function main(): Promise<void> {
     for (const s of islandStates.values()) {
       if (s.lastTick < prevMs) prevMs = s.lastTick;
     }
-    const catchUp = tickDrones(worldState, catchUpNowMs, prevMs);
+    const catchUp = tickDrones(worldState, catchUpNowMs, prevMs, weatherWallOffsetMs);
     // The initial ocean/island/fog layers were baked before this catch-up;
     // re-bake if it revealed anything so the offline scan is visible on the
     // very first frame (mirrors the per-frame rebuild trigger in the ticker).
@@ -2598,7 +2595,7 @@ async function main(): Promise<void> {
       // Rebuild render layers when either an island flips `discovered` OR
       // new cells got revealed (so the fog overlay / DISCOVERED_BLUE
       // squares update mid-flight, not just on return).
-      const droneResult = tickDrones(worldState, now, prevFrameMs);
+      const droneResult = tickDrones(worldState, now, prevFrameMs, weatherWallOffsetMs);
       if (
         droneResult.newlyDiscoveredIslandIds.length > 0 ||
         droneResult.revealedCellsAdded > 0
@@ -2623,10 +2620,11 @@ async function main(): Promise<void> {
       //   6. Repair drone arrivals (existing — keep last so a successful arrival
       //      sees the freshly-cleaned/destroyed satellite state).
       const orbitalDeltaMs = now - prevFrameMs;
+      const orbitalStepIndex = Math.floor(now / WS_SYSTEMS_STEP_MS);
       tickSatMovement(worldState, now);
       tickSweeperCleanup(worldState, orbitalDeltaMs);
-      tickDebris(worldState, now, orbitalDeltaMs);
-      tickScannerDiscovery(worldState, orbitalDeltaMs, now);
+      tickDebris(worldState, now, orbitalDeltaMs, orbitalStepIndex);
+      tickScannerDiscovery(worldState, orbitalDeltaMs, now, orbitalStepIndex);
       tickCommPackets(worldState);
       tickRepairDrones(worldState, now);
 
