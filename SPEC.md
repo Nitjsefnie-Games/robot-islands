@@ -458,7 +458,9 @@ The starting world seed determines the home island's terrain (positions of ore v
 
 **Implementation note — bootstrap starter inventory.** The shipped game seeds the home island with `1200 stone + 600 wood + 30 iron_ore + 80 coal + 60 iron_ingot + 25 bolt + 15 limestone + 4 saltwater_cell + 1 foundation_kit + 5000 scrap` instead of the empty-inventory literal above. The §14 placement-cost basket (Mine `30 stone + 15 wood`, Coal Generator `50 + 25`, Antenna T1 `15 + 5`, plus the §12.3 Foundation Kit needed to dispatch the first settlement vehicle) makes the literal empty start unplayable — the player has no path to the first extraction building. The starter kit is sized to reach a first `battery_bank` within ~45 minutes via the `cell_press` chain, and the 5000-scrap salvage cache bootstraps the steel chain (scrap → steel). It still leaves the deeper extraction/refining loop to the player rather than shipping a finished economy. Source of truth: `src/world.ts` `startingInventory()`.
 
-**Implementation note — tutorial onboarding system.** A 72-step guided tutorial (`src/tutorial.ts`) runs alongside normal play. It is a pure state-machine with no DOM dependencies: `TUTORIAL_STEPS` is an ordered array of `TutorialStep` objects each carrying `id`, `mechanic`, `hint`, `expectedAction`, `triggerCondition`, `dismissalCondition`, and optional `targetDefId`. `currentStep(world)` scans the array and returns the first step whose `triggerCondition` fires and whose `id` is not in `TutorialState.completed`. A bottom-left hint overlay (`tutorial-ui.ts`) renders the active step; clicking it calls `markCompleted`. Concept steps auto-dismiss via a `stepShownFor` TTL. `TutorialState` carries: `completed: Set<ObjectiveId>` (persisted), `completedAt` and `shownAt` (transient timestamps, not serialized), and `xpBumpClaimed: Set<ObjectiveId>` (persisted at schema v21 — prevents XP re-grant after `restart()` or `skipAll()`). The `current: ObjectiveId | null` field in `TutorialState` is serialized for forward-compatibility but is **not read by `currentStep`** — the active step is always recomputed. The default value `'place_solar'` seeded in new-game and persistence-fallback paths is a legacy placeholder; no step with that id exists in `TUTORIAL_STEPS`.
+**Implementation note — tutorial onboarding system.** A 72-step guided tutorial (`src/tutorial.ts`) runs alongside normal play. It is a pure state-machine with no DOM dependencies: `TUTORIAL_STEPS` is an ordered array of `TutorialStep` objects each carrying `id`, `mechanic`, `hint`, `expectedAction`, `triggerCondition`, `dismissalCondition`, and optional `targetDefId`. `currentStep(world)` scans the array and returns the first step whose `triggerCondition` fires and whose `id` is not in `TutorialState.completed`. A bottom-left hint overlay (`tutorial-ui.ts`) renders the active step. Concept steps auto-dismiss via a `stepShownFor` TTL. `TutorialState` carries: `completed: Set<ObjectiveId>` (persisted), `completedAt` and `shownAt` (transient timestamps, not serialized), and `xpBumpClaimed: Set<ObjectiveId>` (persisted at schema v21 — prevents XP re-grant after `restart()` or `skipAll()`). The `current: ObjectiveId | null` field in `TutorialState` is serialized for forward-compatibility but is **not read by `currentStep`** — the active step is always recomputed. The default value `'place_solar'` seeded in new-game and persistence-fallback paths is a legacy placeholder; no step with that id exists in `TUTORIAL_STEPS`.
+
+> **Server authority.** Dismissal *detection* (`currentStep`, `markShown`, `checkDismissals`) runs on the client in both LOCAL and REMOTE modes because `shownAt` is transient and never serialized. The actual *completion* (`markCompleted`), the per-objective onboarding XP bump, and `skipAll`/`restart` are authoritative mutations: in REMOTE they are sent to the server as `mark-tutorial-completed`, `skip-tutorial`, and `restart-tutorial` intents, and the server applies them via the same pure `completeTutorialStep` helper used by LOCAL. The hint-card click and the Settings Skip/Restart buttons route through the mutation gateway rather than mutating local state directly.
 
 \---
 
@@ -2278,12 +2280,20 @@ It is being delivered in slices, each with its own design + plan under
     `reorder-route-cargo`, `set-route-cargo`, `unlock-skill-node`,
     `buy-keystone`, `bind-crystal`, `unbind-crystal`, `tier-reset`,
     `dispatch-settler`, `settle-via-spacetime`, `launch-satellite`,
-    `upgrade-spaceport`, `move-satellite`, and `dispatch-repair-drone`.
+    `upgrade-spaceport`, `move-satellite`, `dispatch-repair-drone`,
+    `mark-tutorial-completed`, `skip-tutorial`, and `restart-tutorial`.
     `set-location` carries the player's real-world lat/lon so the server can
     compute the authoritative solar/day-night multiplier. `accept-trade` is
     LOCAL-only; `reject-trade` remains unwired pending pure-layer extraction.
     Trade offers as a whole are LOCAL-only post-migration and non-functional
     in REMOTE (default) until server-deterministic trade intents land.
+  - **Tutorial authority.** Dismissal *detection* runs client-side in both
+    modes (the transient `shownAt` TTL cannot be server-authoritative), but
+    tutorial completion, the onboarding XP bump, skip, and restart are
+    authoritative intents applied by the server in REMOTE and by the LOCAL
+    gateway using the same `completeTutorialStep` / `skipAll` / `restart` pure
+    helpers. This keeps the permanent `xpBumpClaimed` ledger and home-island XP
+    in sync with the persisted snapshot.
   - **Fog projection.** The server runs the full authoritative world (including
     every undiscovered island) for offline catch-up and intent validation, but
     it applies `projectSnapshotForClient` before pushing a snapshot over the

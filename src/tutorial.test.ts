@@ -12,7 +12,10 @@ import {
   markBumpClaimed,
   skipAll,
   restart,
+  completeTutorialStep,
+  xpBumpPercentForCompletion,
 } from './tutorial.js';
+import { xpForLevel } from './economy.js';
 import { serializeWorld, deserializeWorld, type SaveSnapshot } from './persistence.js';
 import { makeInitialWorld } from './world.js';
 import type { IslandSpec, WorldState } from './world.js';
@@ -339,6 +342,42 @@ describe('xpBumpClaimed ledger (restart/skip XP-farm fix)', () => {
     skipAll(w);
     expect(w.tutorialState?.xpBumpClaimed?.size).toBe(TUTORIAL_STEPS.length);
     expect(w.tutorialState?.completed.size).toBe(TUTORIAL_STEPS.length);
+  });
+});
+
+describe('completeTutorialStep helper', () => {
+  it('marks the step completed', () => {
+    const w = makeTestWorld();
+    completeTutorialStep(w, '01_location');
+    expect(w.tutorialState?.completed.has('01_location')).toBe(true);
+  });
+
+  it('grants the home island XP once using the 1%..N% ramp', () => {
+    const w = makeTestWorld();
+    const home = w.islandStates!.get('home')!;
+    const before = home.xp;
+
+    const granted1 = completeTutorialStep(w, '01_location');
+    const expected1 = (xpBumpPercentForCompletion(1) / 100) * xpForLevel(home.level + 1);
+    expect(granted1).toBe(expected1);
+    expect(home.xp).toBe(before + expected1);
+
+    const xpAfterFirst = home.xp;
+    const granted2 = completeTutorialStep(w, '02_inventory');
+    const expected2 = (xpBumpPercentForCompletion(2) / 100) * xpForLevel(home.level + 1);
+    expect(granted2).toBe(expected2);
+    expect(home.xp).toBe(xpAfterFirst + expected2);
+  });
+
+  it('grants XP only once per step (idempotent)', () => {
+    const w = makeTestWorld();
+    const home = w.islandStates!.get('home')!;
+    completeTutorialStep(w, '01_location');
+    const afterFirst = home.xp;
+    const grantedAgain = completeTutorialStep(w, '01_location');
+    expect(grantedAgain).toBe(0);
+    expect(home.xp).toBe(afterFirst);
+    expect(w.tutorialState?.xpBumpClaimed?.has('01_location')).toBe(true);
   });
 });
 

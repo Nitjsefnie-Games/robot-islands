@@ -61,6 +61,7 @@ import {
 import { dispatchVehicle, settleViaSpacetimeAnchor } from './settlement.js';
 import type { VehicleKind, VehicleTier } from './settlement.js';
 import { canTierReset, executeTierReset } from './tier-reset.js';
+import { completeTutorialStep, skipAll, restart } from './tutorial.js';
 import { convertToServitor as pureConvertToServitor } from './servitor.js';
 import { tryRefreshMaintenance } from './maintenance.js';
 import { applyOffer, type TradeOffer } from './trade.js';
@@ -225,6 +226,11 @@ export interface MutationGateway {
 
   // §9.9 active-play bonus heartbeat (REMOTE only; LOCAL accrues per-frame)
   activeHeartbeat(focusedMs: number, unfocusedMs: number): GatewayReturn;
+
+  // §05 tutorial onboarding (server-authoritative completion + XP bump)
+  markTutorialCompleted(stepId: string): GatewayReturn;
+  skipTutorial(): GatewayReturn;
+  restartTutorial(): GatewayReturn;
 }
 
 // ── LOCAL factory ────────────────────────────────────────────────────────────
@@ -772,6 +778,22 @@ export function makeLocalGateway(
       // LOCAL accrues/decays per-frame via tickActiveBonus in main.ts.
       return ok();
     },
+
+    markTutorialCompleted(stepId) {
+      if (typeof stepId !== 'string') return err('stepId must be a string');
+      completeTutorialStep(world, stepId);
+      return ok();
+    },
+
+    skipTutorial() {
+      skipAll(world);
+      return ok();
+    },
+
+    restartTutorial() {
+      restart(world);
+      return ok();
+    },
   };
 }
 
@@ -951,6 +973,18 @@ export function makeRemoteGateway(client: GameServerClient): MutationGateway {
 
     activeHeartbeat(focusedMs, unfocusedMs) {
       return send('active-heartbeat', { focusedMs, unfocusedMs });
+    },
+
+    markTutorialCompleted(stepId) {
+      return send('mark-tutorial-completed', { stepId });
+    },
+
+    skipTutorial() {
+      return send('skip-tutorial', {});
+    },
+
+    restartTutorial() {
+      return send('restart-tutorial', {});
     },
   };
 }

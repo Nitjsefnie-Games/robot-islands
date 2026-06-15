@@ -7,6 +7,7 @@ import type { BuildingDefId } from './building-defs.js';
 import { borderTiles, footprintKeySet, touchesBorder } from './adjacency.js';
 import type { ResourceId } from './recipes.js';
 import { sumIslandCo2 } from './weather.js';
+import { xpForLevel } from './economy.js';
 import type { WorldState } from './world.js';
 
 // ---------------------------------------------------------------------------
@@ -938,5 +939,37 @@ export function restart(world: WorldState): void {
  *  N% of the next-level XP threshold into the home island's XP bar. */
 export function xpBumpPercentForCompletion(completionIndex: number): number {
   return completionIndex;
+}
+
+/** Authoritatively complete a tutorial step and grant its one-shot onboarding
+ *  XP bump. Used by both the LOCAL gateway and the server-side
+ *  `mark-tutorial-completed` intent so the two paths cannot drift.
+ *
+ *  - Marks `id` completed and stamps `completedAt`.
+ *  - If `id` is NOT already in the permanent `xpBumpClaimed` ledger, computes
+ *    the ramp percentage from the CURRENT claimed count (BEFORE adding `id`)
+ *    and adds that share of `xpForLevel(home.level + 1)` to the home island's
+ *    XP bar.
+ *  - Records `id` in `xpBumpClaimed` so the bump is paid exactly once.
+ *
+ *  Returns the granted XP (0 if already claimed or no home island). */
+export function completeTutorialStep(world: WorldState, id: ObjectiveId): number {
+  markCompleted(world, id);
+  const already = world.tutorialState?.xpBumpClaimed?.has(id) ?? false;
+  if (already) {
+    markBumpClaimed(world, id);
+    return 0;
+  }
+  const home = world.islandStates?.get('home');
+  if (!home) {
+    markBumpClaimed(world, id);
+    return 0;
+  }
+  const claimedCount = world.tutorialState?.xpBumpClaimed?.size ?? 0;
+  const pct = xpBumpPercentForCompletion(claimedCount + 1);
+  const granted = (pct / 100) * xpForLevel(home.level + 1);
+  home.xp += granted;
+  markBumpClaimed(world, id);
+  return granted;
 }
 

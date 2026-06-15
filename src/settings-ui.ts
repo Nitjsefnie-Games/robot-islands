@@ -31,7 +31,6 @@ import { showMapPicker } from './map-picker.js';
 import { mountModal } from './ui-modal.js';
 import type { IslandState } from './economy.js';
 import type { WorldState } from './world.js';
-import { skipAll, restart } from './tutorial.js';
 import { refreshTutorialHint } from './tutorial-ui.js';
 
 // Pure helpers — exported for tests
@@ -150,6 +149,12 @@ export interface SettingsUiDeps {
    *  picker. In REMOTE this should forward a `set-location` intent to the
    *  server; in LOCAL it can mutate world directly. */
   onChangeLocation?(lat: number, lon: number): void;
+  /** Called when the player clicks "Skip Tutorial". In REMOTE this forwards a
+   *  `skip-tutorial` intent; in LOCAL it mutates the authoritative world. */
+  onSkipTutorial(): void;
+  /** Called when the player clicks "Restart Tutorial". In REMOTE this forwards
+   *  a `restart-tutorial` intent; in LOCAL it mutates the authoritative world. */
+  onRestartTutorial(): void;
 }
 
 export function mountSettingsUi(
@@ -473,13 +478,13 @@ export function mountSettingsUi(
       tutBtnRow.style.paddingTop = '6px';
 
       const skipBtn = makeButton('Skip Tutorial', () => {
-        skipAll(deps.world);
+        deps.onSkipTutorial();
         refreshTutorialHint(deps.world);
       });
       tutBtnRow.appendChild(skipBtn);
 
       const restartBtn = makeButton('Restart Tutorial', () => {
-        restart(deps.world);
+        deps.onRestartTutorial();
         refreshTutorialHint(deps.world);
       });
       tutBtnRow.appendChild(restartBtn);

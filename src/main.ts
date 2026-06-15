@@ -23,7 +23,7 @@ import {
   type Camera,
 } from './camera.js';
 import { effectiveModifierMultipliers, type ModifierMultipliers } from './biomes.js';
-import { computeRates, xpForLevel, type IslandState, type PowerBalance, type RatesContext } from './economy.js';
+import { computeRates, type IslandState, type PowerBalance, type RatesContext } from './economy.js';
 import { advanceWorldEconomy } from './economy-advance.js';
 import type { ResourceId } from './recipes.js';
 import { computeNcState } from './network-consciousness.js';
@@ -134,7 +134,7 @@ import {
   loadStoredPlayerLatLon,
   storePlayerLatLon,
 } from './remote-boot.js';
-import { checkDismissals, currentStep, markBumpClaimed, markCompleted, markShown, xpBumpPercentForCompletion } from './tutorial.js';
+import { checkDismissals, currentStep, markShown } from './tutorial.js';
 import { refreshTutorialHint } from './tutorial-ui.js';
 
 /** Pan speed for keyboard input, in screen-pixels-per-frame. */
@@ -1684,6 +1684,12 @@ async function main(): Promise<void> {
       void gateway.setLocation(lat, lon);
       if (!isRemote) triggerSave();
     },
+    onSkipTutorial: () => {
+      void gateway.skipTutorial();
+    },
+    onRestartTutorial: () => {
+      void gateway.restartTutorial();
+    },
   });
   defineAction(reg, 'toggle-settings', () => {
     settingsUi.toggle();
@@ -2791,36 +2797,26 @@ async function main(): Promise<void> {
     // hoveredBuilding is unchanged (one Graphics.clear + redraw at most).
     repaintHover();
 
-    if (!isRemote) {
-      // Phase 7 §05 — tutorial polling. Runs once per frame; predicates are O(1)
-      // reads off the world, so the cost is negligible.
-      // Stamp the first-show time for the current step BEFORE checking
-      // dismissals, so concept-step TTLs (which measure elapsed-since-shown)
-      // start counting the moment a step is surfaced. markShown is idempotent,
-      // so re-stamping every frame is a no-op after the first show.
-      const shownStep = currentStep(worldState);
-      if (shownStep) markShown(worldState, shownStep.id);
-      const dismissedSteps = checkDismissals(worldState);
-      if (dismissedSteps.length > 0) {
-        const home = worldState.islandStates?.get('home');
-        // Gate the one-shot XP bump on the PERMANENT xpBumpClaimed ledger (not the
-        // resettable `completed` set), and index the 1%..N% ramp off the permanent
-        // claimed-count. restart()/skipAll preserve/fill the ledger, so a reset
-        // tutorial re-completing its still-satisfied objectives grants no XP.
-        let claimedCount = worldState.tutorialState?.xpBumpClaimed?.size ?? 0;
-        for (let i = 0; i < dismissedSteps.length; i++) {
-          const id = dismissedSteps[i]!;
-          const already = worldState.tutorialState?.xpBumpClaimed?.has(id) ?? false;
-          markCompleted(worldState, id);
-          if (already) continue;            // bump already paid -> no XP
-          claimedCount += 1;
-          const pct = xpBumpPercentForCompletion(claimedCount);
-          if (home) home.xp += (pct / 100) * xpForLevel(home.level + 1);
-          markBumpClaimed(worldState, id);
-        }
+    // Phase 7 §05 — tutorial polling. Runs once per frame in BOTH LOCAL and
+    // REMOTE modes. Detection (currentStep/markShown/checkDismissals) is
+    // client-local: `shownAt` is transient and never serialized. Completion
+    // and the onboarding XP bump are authoritative, so each dismissed step is
+    // routed through the mutation gateway (LOCAL applies immediately; REMOTE
+    // sends a `mark-tutorial-completed` intent and reflects on the next
+    // snapshot).
+    const shownStep = currentStep(worldState);
+    if (shownStep) markShown(worldState, shownStep.id);
+    const dismissedSteps = checkDismissals(worldState);
+    if (dismissedSteps.length > 0) {
+      for (const id of dismissedSteps) {
+        void gateway.markTutorialCompleted(id);
       }
     }
-    refreshTutorialHint(worldState);
+    refreshTutorialHint(worldState, {
+      onCompleteStep: (stepId) => {
+        void gateway.markTutorialCompleted(stepId);
+      },
+    });
 
     if (!isRemote) {
       // recentBuildAttempts TTL — 5 s window
