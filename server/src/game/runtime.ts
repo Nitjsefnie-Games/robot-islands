@@ -22,9 +22,20 @@ export interface LiveGame { world: WorldState; islandStates: Map<string, IslandS
  * stamped wall == perf). Two reads at the same `now` therefore advance to the
  * same state — idempotent. Same path for a 1s and a 30d gap.
  */
-export function catchUp(snapshot: SaveSnapshot | null, now: number): LiveGame | null {
+export function catchUp(
+  snapshot: SaveSnapshot | null,
+  now: number,
+  opts: { decayActiveBonus?: boolean } = {},
+): LiveGame | null {
   if (snapshot === null) return null;
-  const { world, islandStates } = deserializeWorld(snapshot, now, now);
+  // §9.9 accept-offline tradeoff: when the player ACCEPTS the offline catch-up,
+  // the active-play bonus burns over the offline gap at ACTIVE_DECAY_RATIO (3×),
+  // exactly the LOCAL cold-load semantics (deserializeWorld's
+  // decayClosedGameActiveBonus). Read paths and reject pass false (bonus
+  // untouched) — only the accept intent threads `decayActiveBonus: true`.
+  const { world, islandStates } = deserializeWorld(snapshot, now, now, {
+    decayClosedGameActiveBonus: opts.decayActiveBonus === true,
+  });
   // Unify the view BEFORE advancing: `advanceWorldEconomy` (via computeNcState
   // and the orbital/lattice helpers) reads `world.islandStates`, and several
   // pure entry functions (orbital.ts launch/upgrade/repair) read it afterwards.
@@ -64,11 +75,43 @@ export function catchUp(snapshot: SaveSnapshot | null, now: number): LiveGame | 
  * left intact (no partial-write); inside a tx the surrounding ROLLBACK is the
  * stronger guarantee.
  */
-export async function loadAndCatchUp(db: Queryable, userId: string, now: number): Promise<LiveGame | null> {
+export async function loadAndCatchUp(
+  db: Queryable,
+  userId: string,
+  now: number,
+  opts: { decayActiveBonus?: boolean } = {},
+): Promise<LiveGame | null> {
   const snapshot = await loadSnapshot(db, userId);
-  const game = catchUp(snapshot, now);
+  const game = catchUp(snapshot, now, opts);
   if (game === null) return null;
   const advanced: SaveSnapshot = serializeWorld(game.world, game.islandStates, now, now);
   await saveSnapshot(db, userId, advanced);
   return game;
+}
+
+/**
+ * REJECT-offline path (§9.9 accept/reject): load the save and re-stamp it to
+ * `now` WITHOUT integrating the offline gap — no production, no XP, no
+ * world-systems advance — and WITHOUT decaying the active-play bonus. The
+ * player forfeits the offline catch-up to keep the bonus.
+ *
+ * Mechanics: deserialize at `now` (which remaps in-flight perf timestamps into
+ * the current session's domain, the same "1 frame or 24h, one code path" remap)
+ * but DO NOT call advanceWorldEconomy / advanceWorldSystems, and reset each
+ * island's `lastTick` to `now` so the forfeited gap is consumed (a subsequent
+ * catch-up sees ~0 elapsed). `deserializeWorld` is called WITHOUT
+ * `decayClosedGameActiveBonus`, so `activeBonusMs` is preserved. Persists the
+ * re-stamped snapshot (savedAt = now) so the gap cannot be re-applied later.
+ */
+export async function loadAndSkipCatchUp(db: Queryable, userId: string, now: number): Promise<LiveGame | null> {
+  const snapshot = await loadSnapshot(db, userId);
+  if (snapshot === null) return null;
+  const { world, islandStates } = deserializeWorld(snapshot, now, now);
+  world.islandStates = islandStates;
+  // Forfeit the gap: stamp every island's economy clock to `now` so no offline
+  // production/XP is integrated now or on the next advance.
+  for (const st of islandStates.values()) st.lastTick = now;
+  const stamped: SaveSnapshot = serializeWorld(world, islandStates, now, now);
+  await saveSnapshot(db, userId, stamped);
+  return { world, islandStates };
 }
