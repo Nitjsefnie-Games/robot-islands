@@ -70,7 +70,7 @@ Legend: **L** = live · **P** = partial · **N** = not implemented.
 | §15.2 Tick model | L | Per-island advance + global route/drone/vehicle/sat ticks. |
 | §15.3 Piecewise integration | L | Event-driven `findNextCapEvent` with cap/floor/maintenance/construction boundaries; offline-catchup handles 24h+ gaps. |
 | §15.4 Inter-island flow | L | Proportional distribution under contention. |
-| §15.5 Offline math | L | Persisted state survives reload; `lastTick` shifts to current perf-clock domain; weather/toxicity rolls deterministic at any catchup duration. |
+| §15.5 Offline math | L | Persisted state survives reload; `lastTick` shifts to current perf-clock domain; weather/toxicity rolls deterministic at any catchup duration. Orbital debris/scanner RNG is seeded from the stable bounded-step index so read-path recomputation is idempotent. |
 | §15.6 Stack | L | Vite 5 + TypeScript strict + PixiJS 8 + vitest. No React. **Superseded:** the browser client is now display + intent-sender only; the server owns all state/persistence for server accounts (REMOTE default). LOCAL remains as an opt-out debug fallback (see Appendix C). |
 | §15.7 Build order | — | Reference ordering, not a runtime concern. |
 
@@ -2319,6 +2319,10 @@ It is being delivered in slices, each with its own design + plan under
     `loadAndCatchUp`. A read at a fixed `now` is idempotent (advances but never
     commits); this removes the prior per-second-per-socket write amplification
     and stops a read from re-persisting state a concurrent intent could clobber.
+    Read-path determinism requires that any RNG drawn during catch-up is keyed
+    from stable inputs (e.g. bounded-step index for orbital debris/scanner rolls,
+    not raw `Date.now()`), so recomputing the same trailing partial step twice
+    yields identical state.
   - Weather and day-night are not sent; the client renders them from
     `(seed, t)`.
 

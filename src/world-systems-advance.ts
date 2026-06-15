@@ -48,8 +48,8 @@ export interface WorldSystemsResult {
 /**
  * Advance all time-driven world systems from `fromMs` to `toMs`, in BOUNDED
  * steps so a long offline gap can't blow up time-scaled accrual (debris/Kessler,
- * sweeper) or run unboundedly. Deterministic (the tick fns use no RNG), so a
- * read-path caller may recompute it from the same stored snapshot every push
+ * sweeper) or run unboundedly. Deterministic — the tick functions draw RNG from seeds keyed on a stable
+ * step index, so a read-path caller may recompute it from the same stored snapshot every push
  * and get identical state.
  *
  * `wallOffsetMs` converts the tick clock to wall time for weather sampling: the
@@ -98,7 +98,7 @@ export function advanceWorldSystems(
       result.merges.push({ absorberId: m.absorber.id, absorbedId: m.absorbed.id });
     }
 
-    const dr: TickDronesResult = tickDrones(world, cur, prev);
+    const dr: TickDronesResult = tickDrones(world, cur, prev, wallOffsetMs);
     result.dronesReturned.push(...dr.returned);
     result.dronesLost.push(...dr.lost);
     result.newlyDiscoveredIslandIds.push(...dr.newlyDiscoveredIslandIds);
@@ -108,10 +108,11 @@ export function advanceWorldSystems(
     result.routeArrivals.push(...rr.arrivals);
     result.routeDispatches.push(...rr.dispatches);
 
+    const rngStepIndex = Math.floor(cur / WS_SYSTEMS_STEP_MS);
     tickSatMovement(world, cur);
     result.debrisCleared += tickSweeperCleanup(world, delta);
-    tickDebris(world, cur, delta);
-    const scannerIds = tickScannerDiscovery(world, delta, cur);
+    tickDebris(world, cur, delta, rngStepIndex);
+    const scannerIds = tickScannerDiscovery(world, delta, cur, rngStepIndex);
     result.newlyDiscoveredIslandIds.push(...scannerIds);
 
     const delivered = tickCommPackets(world);

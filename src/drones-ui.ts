@@ -155,6 +155,10 @@ export interface DroneUiDeps {
   /** Optional: called whenever launch-mode toggles on/off. Used by main.ts
    *  to disarm placement mode when launch is armed (mutual exclusion). */
   onLaunchModeChanged?(armed: boolean): void;
+  /** §15.1 wall-clock anchor for drone weather sampling. The client passes
+   *  `Date.now() - performance.now()` so perf-domain `nowMs` is shifted to
+   *  wall time; tests may leave it undefined (defaults to 0). */
+  weatherWallOffsetMs?: number;
 }
 
 export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUiHandle {
@@ -1243,7 +1247,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
       Math.max(1, Math.ceil((2 * dist) / currentEfficiency)),
     );
     const gatewayResult = deps.gateway
-      ? deps.gateway.dispatchDrone(origin.id, ox, oy, dx, dy, fuelNeeded, nowMs, undefined, selectedTier)
+      ? deps.gateway.dispatchDrone(origin.id, ox, oy, dx, dy, fuelNeeded, nowMs, undefined, selectedTier, deps.weatherWallOffsetMs ?? 0)
       : undefined;
     if (gatewayResult instanceof Promise) {
       void (async () => {
@@ -1254,7 +1258,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
       })();
       return { ok: false };
     }
-    const r = gatewayResult ?? dispatchDrone(deps.world, origin, ox, oy, dx, dy, fuelNeeded, nowMs, undefined, selectedTier);
+    const r = gatewayResult ?? dispatchDrone(deps.world, origin, ox, oy, dx, dy, fuelNeeded, nowMs, undefined, selectedTier, deps.weatherWallOffsetMs ?? 0);
     if (r.ok) {
       setLaunchMode(false);
       refresh(nowMs);
@@ -1317,6 +1321,8 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
       fuel,
       nowMs,
       waypointsForDispatch,
+      undefined,
+      deps.weatherWallOffsetMs ?? 0,
     );
     if (result.ok) {
       waypointBuffer = [];

@@ -1,6 +1,6 @@
 // server/src/game/routes.ts
 import type { FastifyInstance } from 'fastify';
-import type { Pool } from '../db.js';
+import { type Pool, withAccountTx } from '../db.js';
 import { makeAuthGuard } from '../auth/guard.js';
 import { hasSave, saveSnapshot, loadSnapshot } from './persistence.js';
 import { createInitialSnapshot } from './new-game.js';
@@ -35,40 +35,53 @@ export function registerGameRoutes(app: FastifyInstance, pool: Pool): void {
 
   app.post('/api/game/new', { preHandler: guard }, async (req, reply) => {
     const userId = req.user!.id;
-    if (await hasSave(pool, userId)) return reply.code(409).send({ error: 'game already exists' });
-    const now = Date.now();
-    await saveSnapshot(pool, userId, createInitialSnapshot(now));
-    const game = await loadAndCatchUp(pool, userId, now);
+    const game = await withAccountTx(pool, userId, async (client) => {
+      if (await hasSave(client, userId)) return null;
+      const now = Date.now();
+      await saveSnapshot(client, userId, createInitialSnapshot(now));
+      return loadAndCatchUp(client, userId, now);
+    });
+    if (game === null) return reply.code(409).send({ error: 'game already exists' });
     return reply.code(201).send(projectGame(game!));
   });
 
   app.post('/api/game/import', { preHandler: guard }, async (req, reply) => {
     const userId = req.user!.id;
-    if (await hasSave(pool, userId)) return reply.code(409).send({ error: 'game already exists' });
     const body = req.body as { snapshot?: unknown };
     const rawSnapshot = body?.snapshot;
     if (!isValidSaveSnapshot(rawSnapshot)) {
       return reply.code(400).send({ error: 'snapshot is missing, malformed, or unsupported version' });
     }
-    // TRUST BOUNDARY (SPEC Appendix C): import trusts the player's OWN local
-    // save as a one-time migration; it is NOT a general anti-cheat-safe write
-    // path (no content/reachability validation — out of scope). We DO clamp the
-    // client-authored savedAt/savedAtPerf to [now - MAX_OFFLINE_WINDOW_MS, now]
-    // so a hand-crafted far-past/far-future savedAt cannot mint an unbounded
-    // offline catch-up windfall.
-    const now = Date.now();
-    const snapshot = clampImportSavedAt(rawSnapshot as SaveSnapshot, now);
-    // Deep-validate by attempting to deserialize. This catches corrupted inner
-    // shapes without persisting junk into the authoritative store.
+    class ImportValidationError extends Error {}
     try {
-      deserializeWorld(snapshot, now, now);
+      const game = await withAccountTx(pool, userId, async (client) => {
+        if (await hasSave(client, userId)) return null;
+        // TRUST BOUNDARY (SPEC Appendix C): import trusts the player's OWN local
+        // save as a one-time migration; it is NOT a general anti-cheat-safe write
+        // path (no content/reachability validation — out of scope). We DO clamp the
+        // client-authored savedAt/savedAtPerf to [now - MAX_OFFLINE_WINDOW_MS, now]
+        // so a hand-crafted far-past/far-future savedAt cannot mint an unbounded
+        // offline catch-up windfall.
+        const now = Date.now();
+        const snapshot = clampImportSavedAt(rawSnapshot as SaveSnapshot, now);
+        // Deep-validate by attempting to deserialize. This catches corrupted inner
+        // shapes without persisting junk into the authoritative store.
+        try {
+          deserializeWorld(snapshot, now, now);
+        } catch (err) {
+          throw new ImportValidationError(err instanceof Error ? err.message : 'invalid snapshot');
+        }
+        await saveSnapshot(client, userId, snapshot);
+        return loadAndCatchUp(client, userId, now);
+      });
+      if (game === null) return reply.code(409).send({ error: 'game already exists' });
+      return reply.code(201).send(projectGame(game!));
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'invalid snapshot';
-      return reply.code(400).send({ error: message });
+      if (err instanceof ImportValidationError) {
+        return reply.code(400).send({ error: err.message });
+      }
+      throw err;
     }
-    await saveSnapshot(pool, userId, snapshot);
-    const game = await loadAndCatchUp(pool, userId, now);
-    return reply.code(201).send(projectGame(game!));
   });
 
   app.get('/api/game/state', { preHandler: guard }, async (req, reply) => {

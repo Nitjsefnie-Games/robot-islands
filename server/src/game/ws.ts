@@ -200,7 +200,10 @@ export function registerGameWsRoutes(
     const pushIntervalMs = opts.statePushIntervalMs ?? STATE_PUSH_INTERVAL_MS;
     const checkpointIntervalMs = opts.checkpointIntervalMs ?? WS_CHECKPOINT_INTERVAL_MS;
     let lastCheckpointMs = 0;
+    let pushBusy = false;
     const tickInterval = setInterval(() => {
+      if (pushBusy) return; // skip if the previous push is still in flight
+      pushBusy = true;
       chain = chain.then(async () => {
         const now = Date.now();
         if (now - lastCheckpointMs >= checkpointIntervalMs) {
@@ -209,7 +212,14 @@ export function registerGameWsRoutes(
         } else {
           await pushStateReadOnly(socket, pool, userId, now);
         }
-      }).catch(() => { /* socket gone */ });
+      }).catch((err) => {
+        // Runner/persistence failures are logged server-side; the socket catch-all
+        // below redacts the message before it reaches the client.
+        // eslint-disable-next-line no-console
+        console.error('periodic push failed', err);
+      }).finally(() => {
+        pushBusy = false;
+      });
     }, pushIntervalMs);
     socket.on('close', () => {
       clearInterval(tickInterval);
@@ -269,9 +279,12 @@ export function registerGameWsRoutes(
         }
       }).catch((err: unknown) => {
         // applyIntent already try/catches handler throws; this catch covers a
-        // failure of the runner/persistence itself. Report, keep the socket up.
-        const error = err instanceof Error ? err.message : 'internal error';
-        try { socket.send(JSON.stringify({ seq: -1, ok: false, error })); } catch { /* socket gone */ }
+        // failure of the runner/persistence itself. Redact the real message
+        // before sending it over the transport to avoid leaking internal / DB
+        // details; log the original error server-side.
+        // eslint-disable-next-line no-console
+        console.error('intent runner/persistence error', err);
+        try { socket.send(JSON.stringify({ seq: -1, ok: false, error: 'internal error' })); } catch { /* socket gone */ }
       });
     });
   });

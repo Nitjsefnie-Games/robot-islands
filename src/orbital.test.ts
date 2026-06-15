@@ -1484,7 +1484,7 @@ describe('§14.5 scanner dwell-ramp discovery', () => {
     // Pre-warm dwell so p is at asymptote (≈0.05).
     sat.dwellByCellKey = { '0,0': SCANNER_DWELL_TIME_CONSTANT_MS * 10 };
     // nowMs=20 with seed '0_scan_sat1_20' yields rng≈0.018 < 0.05 → success.
-    const result = tickScannerDiscovery(world, 1000, 20);
+    const result = tickScannerDiscovery(world, 1000, 20, 20);
     expect(result).toContain('target');
     expect(world.islands[0]!.discovered).toBe(true);
   });
@@ -1502,7 +1502,7 @@ describe('§14.5 scanner dwell-ramp discovery', () => {
     });
     // Centre cell (9,0) is covered; pre-warm it to asymptote.
     sat.dwellByCellKey = { '9,0': SCANNER_DWELL_TIME_CONSTANT_MS * 10 };
-    const result = tickScannerDiscovery(world, 1000, 20);
+    const result = tickScannerDiscovery(world, 1000, 20, 20);
     expect(result).toContain('wide');
     expect(island.discovered).toBe(true);
     for (const k of islandCells(island)) {
@@ -1524,7 +1524,7 @@ describe('§14.5 scanner dwell-ramp discovery', () => {
     // Pre-warm a covered body cell (21,0) to asymptote. The centre cell (28,0)
     // is not covered, but the dwell ramp now looks at covered body cells.
     sat.dwellByCellKey = { '21,0': SCANNER_DWELL_TIME_CONSTANT_MS * 10 };
-    const result = tickScannerDiscovery(world, 1000, 20);
+    const result = tickScannerDiscovery(world, 1000, 20, 20);
     expect(result).toContain('straddle-sat');
     expect(island.discovered).toBe(true);
     for (const k of islandCells(island)) {
@@ -1543,7 +1543,7 @@ describe('§14.5 scanner dwell-ramp discovery', () => {
       satellites: [sat],
     });
     sat.dwellByCellKey = { '0,0': SCANNER_DWELL_TIME_CONSTANT_MS * 10 };
-    tickScannerDiscovery(world, 1000, 20);
+    tickScannerDiscovery(world, 1000, 20, 20);
     expect(inRange.discovered).toBe(true);
     expect(outOfRange.discovered).toBe(false);
   });
@@ -2203,7 +2203,7 @@ describe('§5 Scanner Sat ocean cell discovery', () => {
     const expected = cellsCoveredBySat(sat);
     // nowMs=20 with seed '0_scan_sat1_20' yields rng ≈ 0.018 < 0.05 → island
     // discovery succeeds (same forced-success seed as the §14.5 dwell test).
-    const newlyDiscovered = tickScannerDiscovery(world, 1000, 20);
+    const newlyDiscovered = tickScannerDiscovery(world, 1000, 20, 20);
     expect(newlyDiscovered).toContain('target');
     expect(world.islands[0]!.discovered).toBe(true);
     // Ocean-cell reveal: every covered cell, including the cell containing

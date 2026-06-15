@@ -17,6 +17,10 @@ import {
   dispatchVehicle,
 } from './settlement.js';
 import {
+  addDebrisFragments,
+  type Satellite,
+} from './orbital.js';
+import {
   WS_SYSTEMS_MAX_STEPS,
   WS_SYSTEMS_STEP_MS,
   advanceWorldSystems,
@@ -203,5 +207,77 @@ describe('advanceWorldSystems', () => {
     const expectedStepMs = Math.max(WS_SYSTEMS_STEP_MS, Math.ceil(gapMs / WS_SYSTEMS_MAX_STEPS));
     expect(expectedStepMs).toBeGreaterThan(WS_SYSTEMS_STEP_MS);
     expect(res.dronesReturned).toHaveLength(1);
+  });
+
+  it('orbital debris/scanner rolls are identical for different nowMs inside the same step (#53)', () => {
+    function buildWorld() {
+      const homeSpec = makeIslandSpec({
+        id: 'home',
+        populated: true,
+        discovered: true,
+        cx: 0,
+        cy: 0,
+        majorRadius: 6,
+        minorRadius: 6,
+      });
+      const targetSpec = makeIslandSpec({
+        id: 'target',
+        populated: false,
+        discovered: false,
+        cx: 50,
+        cy: 0,
+        majorRadius: 4,
+        minorRadius: 4,
+      });
+      const world = freshWorld([homeSpec, targetSpec]);
+      const homeState = makeIslandState({ id: 'home' });
+      const islandStates = new Map<string, IslandState>([['home', homeState]]);
+      (world as typeof world & { islandStates: typeof islandStates }).islandStates = islandStates;
+
+      const scanner: Satellite = {
+        id: 'sat-scan',
+        variant: 'scanner',
+        spaceportIslandId: 'home',
+        x: 50,
+        y: 0,
+        commRange: 0,
+        coverageRadius: 120,
+        fuel: 0,
+        lodges: { scan: 0, weather: 0, comm: 0 },
+        locked: true,
+        pendingRepairDroneId: null,
+        buffer: [],
+      };
+      const victim: Satellite = {
+        id: 'sat-victim',
+        variant: 'sweeper',
+        spaceportIslandId: 'home',
+        x: 0,
+        y: 0,
+        commRange: 0,
+        coverageRadius: 0,
+        fuel: 0,
+        lodges: { scan: 0, weather: 0, comm: 0 },
+        locked: true,
+        pendingRepairDroneId: null,
+        buffer: [],
+      };
+      world.satellites.push(scanner, victim);
+      addDebrisFragments(world, 0, 0, 2000);
+      return { world, islandStates, scanner, victim, targetSpec };
+    }
+
+    const a = buildWorld();
+    const b = buildWorld();
+    const resA = advanceWorldSystems(a.world, a.islandStates, 0, 300, 0);
+    const resB = advanceWorldSystems(b.world, b.islandStates, 0, 700, 0);
+
+    // Both trailing nowMs fall inside the same bounded step (step index 0), so
+    // the recomputed partial step must resolve identically.
+    expect(resA.newlyDiscoveredIslandIds).toEqual(resB.newlyDiscoveredIslandIds);
+    expect(a.targetSpec.discovered).toBe(b.targetSpec.discovered);
+    expect(a.scanner.lodges).toEqual(b.scanner.lodges);
+    expect(a.victim.lodges).toEqual(b.victim.lodges);
+    expect(a.world.satellites.map((s) => s.id)).toEqual(b.world.satellites.map((s) => s.id));
   });
 });
