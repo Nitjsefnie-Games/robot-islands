@@ -2169,7 +2169,7 @@ Identical code path. When player returns, every island runs `advanceIsland(islan
 * **UI:** Vanilla TypeScript DOM overlay on top of the Pixi canvas (no React/Solid framework)
 * **State model:** A plain mutable `WorldState` object (no Zustand); islands advance lazily via `advanceIsland`. For server accounts the authoritative `WorldState` lives on the server; the browser holds a read-only snapshot and sends intents over a WebSocket.
 * **Persistence (LOCAL fallback):** IndexedDB via idb-keyval. World state (key `robot-islands:save:v14`, schema version 24) serialized to JSON, saved every 30s and on `visibilitychange`. UI prefs (camera transform only) live in a separate `robot-islands:prefs:v1` key with a 500 ms-debounced write cadence so pan/zoom feels persistent on a quick refresh without churning the main save blob.
-* **Persistence (REMOTE default):** The server stores the authoritative `SaveSnapshot` in Postgres (`server/migrations/0002_saves.sql`). The client does not write world state locally.
+* **Persistence (REMOTE default):** The server stores the authoritative `SaveSnapshot` in Postgres, sharded across `save_meta` / `save_world` / `save_islands` (`server/migrations/0003_split_saves.sql`; was a single `saves` jsonb row in `0002`). The client does not write world state locally.
 * **Client/server split:** REMOTE is the default boot mode. LOCAL is an opt-out debug fallback enabled by `?server=0` or `localStorage.setItem('ri_server', '0')`. See Appendix C for the full client architecture.
 
 ### 15.7 Build Order
@@ -2218,8 +2218,21 @@ It is being delivered in slices, each with its own design + plan under
 * Slice 2 (server runtime + persistence) is specified in
   `docs/superpowers/specs/2026-06-14-server-runtime-persistence-slice-design.md`.
   It makes the server the authoritative owner of game state for server accounts.
-  - One `saves` row per account (`server/migrations/0002_saves.sql`), keyed by
-    `user_id`, storing a single `SaveSnapshot` in `jsonb` plus schema version.
+  - **Sharded storage (migration `0003_split_saves.sql`).** The authoritative
+    save is stored across three tables keyed by `user_id` rather than one
+    monolithic `saves` jsonb row (which reached ~230 KiB in early-mid game and
+    grew without bound): `save_meta` (schema version + save timestamps),
+    `save_world` (the world object minus islandStates), and `save_islands` (one
+    row per island runtime state, keyed `(user_id, island_id)`, with an `ord`
+    column preserving array order). The pure `SaveSnapshot` shape is unchanged —
+    only the storage boundary (`server/src/game/persistence.ts`) reshapes:
+    `saveSnapshot` upserts `save_meta`/`save_world` and one row per island
+    (deleting island rows no longer present) inside the caller's per-account
+    transaction; `loadSnapshot` reassembles a byte-identical snapshot with a
+    SINGLE aggregating query (`jsonb_agg` over `save_islands` ordered by `ord`)
+    so the lock-free read paths cannot observe a torn three-table write. The
+    0003 backfill (proven byte-identical against the live save before commit)
+    migrates any existing `saves` row, then drops `saves`.
   - `loadAndCatchUp` (`server/src/game/runtime.ts`) loads the stored snapshot,
     calls `deserializeWorld` to migrate it to the current schema and shift its
     time domain, then runs the shared pure `advanceWorldEconomy`
@@ -2327,7 +2340,11 @@ It is being delivered in slices, each with its own design + plan under
     lock is what guarantees correctness ACROSS connections. A throwing handler
     returns a failure ack (the catch-up write commits; the would-be mutation is
     dropped) preserving no-partial-persist; an error in the runner/persistence
-    rolls the whole tx back, leaving the stored save byte-identical.
+    rolls the whole tx back, leaving the stored save byte-identical. The save now
+    spans three tables (the `0003` shard); writing them inside this one
+    transaction is exactly what keeps the multi-row update atomic, and the
+    lock-free read path reassembles them in a single query so it never sees a
+    partially-applied shard.
   - **Read-only projection path (Slice 5 hardening).** Reads
     (`GET /api/game/state`, the ~1 Hz WS state push) use `runtime.catchUp`,
     which deserializes + advances the offline gap to `now` IN MEMORY and returns
