@@ -1,4 +1,4 @@
-import { currentStep, markCompleted } from './tutorial.js';
+import { currentStep } from './tutorial.js';
 import type { WorldState } from './world.js';
 
 // Bottom-left hint overlay (spec §06).
@@ -6,7 +6,14 @@ import type { WorldState } from './world.js';
 let hintEl: HTMLElement | null = null;
 let renderedStepId: string | null = null;
 
-export function refreshTutorialHint(world: WorldState): void {
+export interface TutorialHintDeps {
+  /** Called when the player clicks the hint card to complete the active step.
+   *  In REMOTE this forwards a `mark-tutorial-completed` intent; in LOCAL it
+   *  mutates the authoritative world directly. */
+  onCompleteStep(stepId: string): void;
+}
+
+export function refreshTutorialHint(world: WorldState, deps?: TutorialHintDeps): void {
   const step = currentStep(world);
   if (!step) {
     if (hintEl) {
@@ -23,9 +30,9 @@ export function refreshTutorialHint(world: WorldState): void {
     document.body.appendChild(hintEl);
     hintEl.addEventListener('click', () => {
       const cur = currentStep(world);
-      if (cur) {
-        markCompleted(world, cur.id);
-        refreshTutorialHint(world);
+      if (cur && deps) {
+        deps.onCompleteStep(cur.id);
+        refreshTutorialHint(world, deps);
       }
     });
   }

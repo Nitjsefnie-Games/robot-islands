@@ -86,6 +86,7 @@ import { CARGO_WILDCARD, type CargoEntry, type CargoMode } from '../../../src/ro
 import type { CrystalId } from '../../../src/skilltree-graph.js';
 import { CELL_SIZE_TILES } from '../../../src/constants.js';
 import { applyActiveBonusDelta } from '../../../src/active-bonus.js';
+import { completeTutorialStep, skipAll, restart } from '../../../src/tutorial.js';
 
 export type IntentResult =
   | { ok: true }
@@ -1205,6 +1206,41 @@ export const INTENTS: Record<string, IntentHandler> = {
       const u = Math.min(unfocusedMs, 300_000);
       applyActiveBonusDelta(game.world, f, u);
       game.world.lastActiveMs = now;
+      return { ok: true };
+    },
+  },
+
+  // mark-tutorial-completed — §05 tutorial onboarding. Player supplies
+  // { stepId }. The server marks the step completed and applies the SAME
+  // onboarding XP-bump ramp as LOCAL (per-objective 1%..N% of the home island's
+  // next-level threshold), gated on the permanent `xpBumpClaimed` ledger so the
+  // reward is paid exactly once per objective. Dismissal timing (`shownAt`)
+  // remains client-local and is not serialized.
+  'mark-tutorial-completed': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { stepId } = payload;
+      if (typeof stepId !== 'string') return { ok: false, error: 'stepId must be a string' };
+      completeTutorialStep(game.world, stepId);
+      return { ok: true };
+    },
+  },
+
+  // skip-tutorial — §05. Forfeits the remaining tutorial objectives and the
+  // onboarding XP ramp by marking every objective bump-claimed.
+  'skip-tutorial': {
+    apply(game: LiveGame): IntentResult {
+      skipAll(game.world);
+      return { ok: true };
+    },
+  },
+
+  // restart-tutorial — §05. Resets the mutable `completed` set while preserving
+  // the permanent `xpBumpClaimed` ledger (so re-completing a reset tutorial
+  // grants no XP).
+  'restart-tutorial': {
+    apply(game: LiveGame): IntentResult {
+      restart(game.world);
       return { ok: true };
     },
   },
