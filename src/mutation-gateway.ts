@@ -221,8 +221,11 @@ export interface MutationGateway {
   reorderRouteCargo(routeId: string, srcIndex: number, dstIndex: number): GatewayReturn;
   setRouteCargo(routeId: string, cargo: CargoEntry[]): GatewayReturn;
 
-  // §? trade
+  // §9.8 trade — accept/reject a live offer. REMOTE: server-authoritative
+  // intents; LOCAL: applyOffer client-side (reject bookkeeping is inline in
+  // main.ts, so the LOCAL rejectTrade is a no-op).
   acceptTrade(offer: TradeOffer): GatewayReturn<{ give: number; get: number }>;
+  rejectTrade(offer: TradeOffer): GatewayReturn;
 
   // §13.3 Time Lock + Genesis Chamber
   setBankingEnabled(islandId: string, enabled: boolean): GatewayReturn;
@@ -809,6 +812,12 @@ export function makeLocalGateway(
       return ok(amounts);
     },
 
+    rejectTrade() {
+      // LOCAL reject is pure bookkeeping (cadence compound + offer removal),
+      // applied inline in main.ts's reject handler — no gateway work needed.
+      return ok();
+    },
+
     activeHeartbeat() {
       // LOCAL accrues/decays per-frame via tickActiveBonus in main.ts.
       return ok();
@@ -1011,8 +1020,12 @@ export function makeRemoteGateway(client: GameServerClient): MutationGateway {
       return send('set-route-cargo', { routeId, cargo });
     },
 
-    acceptTrade() {
-      return Promise.resolve({ ok: false, error: 'not supported yet' } as GatewayResult<{ give: number; get: number }>);
+    acceptTrade(offer) {
+      return send<{ give: number; get: number }>('accept-trade', { offerId: offer.id });
+    },
+
+    rejectTrade(offer) {
+      return send('reject-trade', { offerId: offer.id });
     },
 
     activeHeartbeat(focusedMs, unfocusedMs) {

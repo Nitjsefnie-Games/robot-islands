@@ -45,7 +45,7 @@ Legend: **L** = live · **P** = partial · **N** = not implemented.
 | §9.5 Biome-locked uniques | L | All six biome uniques in catalog; placement gated by biome; artificial-island block honoured. |
 | §9.6 Network Consciousness | P | Network reachability + 3/5/10/20-island milestone tiers + global production buff. Auto-Patronage at 10-island milestone (3 default routes from nearest Patron Hub) L. |
 | §9.7 Tier Reset | L | Reset logic + cost formula + cooldown + spec'd preserve/clear sets. Merged-island reset operates on the absorber's IslandState transparently (no merge-specific code needed). UI cost preview in the Skill Tree's reset row + confirm dialog. |
-| §9.8 Trade Offers | P | Signal Exchange building and offer-generation logic are live, but trade offers are LOCAL-only post-migration: `tickTradeOffers` runs only in client LOCAL mode and there is no `accept-trade` intent server-side. Non-functional in REMOTE (the default boot mode) until server-deterministic trade intents land. Other mechanics (cooldown persistence, skill tuning) remain implemented. |
+| §9.8 Trade Offers | L | Server-authoritative and functional in REMOTE (the default): the §9.9 activity heartbeat advances the offer lifecycle server-side (online-time burns `tradeCooldownMs`, spawns/expires offers), and `accept-trade` / `reject-trade` intents resolve them. Offers persist as `WorldState.tradeOffers` (schema v25, wall-clock times). LOCAL keeps the client-side `tickTradeOffers`. |
 | §9.9 Active-play production bonus | L | +0.1%/min focused, −0.3%/min away (incl. closed), floor 0, no cap; world-level recipe-rate multiplier. REMOTE: server-authoritative via periodic `active-heartbeat` intent; load-time decay uses `lastActiveMs` so connected play is not decayed. Schema v24 (`activeBonusMs`, `lastActiveMs`). |
 | §10 Funneling | L | Per-resource consumed-on-route XP bonus while below T3. |
 | §11 Drones | P | T1/T2/T3 drone dispatch via Drone Pad; T4 omnidirectional pulse via Launch Tower; T5 path-drawn via Path Drone Foundry. Drone Pad (T2) is the gate; once built, the tier picker lets the player launch any tier from T1 up to the launching island's current tier (T1 = biofuel = cheap entry option for short scouts). Fuel auto-computed per click. |
@@ -1284,11 +1284,16 @@ A player may pay to revert an island to Tier 1, primarily to redo skill-tree cho
 
 ### 9.8 Trade Offers
 
-> **Note — REMOTE status.** Trade offers are LOCAL-only post-migration:
-> `tickTradeOffers` runs only inside the client's `if (!isRemote)` block, and
-> there is no `accept-trade` intent server-side. The mechanic is therefore
-> non-functional in REMOTE (the default boot mode) until server-deterministic
-> trade intents land.
+> **Note — REMOTE authority.** Trades are server-authoritative and fully
+> functional in REMOTE (the default boot mode). The §9.9 activity heartbeat
+> advances the offer lifecycle server-side: its online-time (`focusedMs`)
+> burns each Signal-Exchange island's `tradeCooldownMs`, spawns offers at 0,
+> and prunes expired offers against wall-clock time. `accept-trade` and
+> `reject-trade` intents resolve offers authoritatively (validated against the
+> live, persisted offer + its wall-clock expiry). The client's
+> `tickTradeOffers` still owns the lifecycle in LOCAL mode (the debug
+> fallback); in REMOTE the client only displays `worldState.tradeOffers` from
+> server snapshots and sends accept/reject intents.
 
 A short-cadence engagement loop layered over the hours-long tier climb. A cheap Tier-1 **Signal Exchange** building periodically surfaces a single expiring **barter offer** on the island that hosts it: dump some of your fullest stockpile for an under-stocked resource you already make. The world advances on a live per-frame ticker but its reward cadence runs on the scale of hour-long tier climbs; Trade Offers add a seconds-scale decision the player can act on minute-to-minute.
 
@@ -1308,20 +1313,22 @@ When an eligible island's spawn cooldown reaches zero (§9.8.3), the engine atte
 * **Pricing.** The fair baseline output-per-input is the per-unit weight ratio `xp\_weight[give] / xp\_weight[get]` — verified fair against the recipe table, whose realized tier-up multiplier tracks the ≈3.16×/tier ladder. That baseline is multiplied by a rolled **spread** centred on `0.8^Δtier` (with bounded random variance and the skill-tuned favourability shift). The spread is the deal-quality signal: near-tier swaps land favourable, far-tier swaps land lossy, and offers average ≈neutral. The flat tier-distance tax is what stops a full silo of bulk T0 from converting into a fortune of endgame components — quantity, not per-unit price, is where exploits would live, so the size cap and ever-produced gate (below) carry that load.
 * **Size.** The give quantity is a fraction of current give-stock (placeholder `sizePct` = 10%), clamped so the received quantity never exceeds the get resource's output **headroom** (`cap[get] − inv[get]`). Whichever side binds, the other is back-computed from the price so the swap is exact. If either side clamps to zero the attempt is abandoned.
 
-A generated offer records its give/get resources and quantities, a spawn timestamp, and an expiry timestamp (`spawnedAt + expiryMs`, placeholder expiry = 5 minutes).
+A generated offer records its give/get resources and quantities, a spawn timestamp, and an expiry timestamp (`spawnedAt + expiryMs`, placeholder expiry = 5 minutes). Both timestamps are **wall-clock** (epoch ms), so offers serialize and resume across a reload/reconnect (§9.8.5). The offer id is `${islandId}-${tradeAcceptCount}-${spawnedAt}` — one live offer per island at a time, so this uniquely and stably names it for accept/reject targeting (no process-global counter that would collide with a persisted offer across a server restart).
 
 #### 9.8.2 Acceptance
 
 On accept, the engine re-clamps the offer against the island's *current* give-stock and *current* output headroom — production may have moved stock between spawn and accept — then subtracts the (re-clamped) give quantity and adds the get quantity in place. **No XP is granted.** The offer is consumed and its slot frees.
 
+In **REMOTE** this resolution is the `accept-trade` intent: the server finds the live offer by id, rejects it if missing or past its wall-clock `expiresAt`, applies the exchange, compounds the island's cadence (§9.8.4), and removes the offer — then pushes the updated snapshot. A manual reject is the `reject-trade` intent (compound cadence + remove, no goods moved). In **LOCAL** the identical resolution runs client-side in the trade-UI handlers. Either way the cadence-compounding and offer removal are one atomic resolution.
+
 #### 9.8.3 Lifecycle — online-only, refresh-proof cadence
 
 Offers exist only while the player is present, and the cadence that paces them is persisted so it cannot be farmed by reloading.
 
-* **Online predicate.** An island's offer machinery only advances on **online** frames, defined as `document.visibilityState === 'visible'`. "Visible" excludes a minimized window or a backgrounded tab; a visible-but-unfocused window (another window on top with focus elsewhere) still counts as online — the earlier `hasFocus()` requirement was dropped (owner request 2026-06-10). On any non-online frame, zero online time is credited.
+* **Online predicate.** An island's offer machinery only advances on **online** time, defined as `document.visibilityState === 'visible'`. "Visible" excludes a minimized window or a backgrounded tab; a visible-but-unfocused window (another window on top with focus elsewhere) still counts as online — the earlier `hasFocus()` requirement was dropped (owner request 2026-06-10). On any non-online frame, zero online time is credited. In **LOCAL** this online dt is credited per frame; in **REMOTE** it arrives as the heartbeat's accumulated `focusedMs` (the same online-time signal §9.9 uses), so the server burns cooldown on real visible play, not wall-clock.
 * **One offer per island.** At most one active offer per Signal-Exchange island at a time. While an offer is live, no new one spawns for that island.
 * **Persisted online-time cooldown.** The spawn timer is a per-island `tradeCooldownMs` field that lives in persisted island state, *not* in ephemeral runtime. Each online frame an eligible island with no active offer burns its cooldown down by the frame's online time, and spawns an offer the moment the cooldown reaches zero. The per-frame credit is capped (`ONLINE\_DT\_CAP\_MS`, placeholder 3 s) so a long hidden→focused jump cannot dump accumulated wall-clock time into the countdown and spawn instantly.
-* **Offers themselves stay ephemeral.** Active offers are runtime-only and are never serialized (§9.8.5). Reloading with an offer on screen forfeits it; the already-running cooldown is unaffected. Because the *cooldown* (not the offer) is what persists, the original ephemeral-cadence behaviour — which let a player load, accept the immediately-spawned offer, reload, and repeat — is closed: a fresh load reads the mid-countdown cooldown and no offer appears until real online time elapses.
+* **Offers are persisted, server-owned state (schema v25).** Active offers live in `WorldState.tradeOffers` with wall-clock `spawnedAt`/`expiresAt` (§9.8.5). A reload/reconnect resumes the SAME offer with its remaining lifetime — in REMOTE the server owns and expires them; in LOCAL the client tick does. The refresh-farm stays closed: the persisted cooldown is still the spawn gate, and an offer's expiry is wall-clock, so reloading can neither reset the timer nor conjure a fresh offer.
 * **Reset on resolution.** When an offer resolves — by accept *or* by expiry — that island's cooldown is reset to its effective cadence (§9.8.4), starting the next wait. The cooldown is reset only on resolution, never at spawn, so an accept's compounding increment (below) lands on the very next offer. The first offer after the building is placed is immediate (cooldown seeds to 0).
 
 #### 9.8.4 Compounding speedup
@@ -1336,7 +1343,7 @@ so every timely reaction (accept or manual reject) makes that island's next offe
 
 #### 9.8.5 Persistence
 
-`tradeCooldownMs` and `tradeAcceptCount` persist per island (schema v20; backfilled to 0 for pre-v20 saves via `migrateV19toV20`). Active offers do **not** persist — they are regenerated fresh after load once the cooldown elapses. Offers are, however, deterministic per `(worldSeed, islandId, tradeAcceptCount)` so a reload cannot re-roll the terms.
+`tradeCooldownMs` and `tradeAcceptCount` persist per island (schema v20; backfilled to 0 for pre-v20 saves via `migrateV19toV20`). Active offers **also persist** as `WorldState.tradeOffers` (schema v25; `migrateV24toV25` seeds an empty list, since pre-v25 offers were runtime-only). Offer `spawnedAt`/`expiresAt` are wall-clock, so a reload/reconnect resumes the same live offer with its remaining lifetime rather than forfeiting it. Offer *terms* remain deterministic per `(worldSeed, islandId, tradeAcceptCount)`, so even a fresh regeneration cannot re-roll a better deal.
 
 Both fields are **preserved across Tier Reset (§9.7)** — a Tier Reset does not clear `tradeAcceptCount`; the §9.7 preserve-set extends to it. (Tier-Reset preservation and the §9.8.4 timeout-reset are independent concerns: a Tier Reset leaves the accumulator intact, whereas letting an offer lapse resets it to 0.)
 
