@@ -6,6 +6,7 @@
 
 import type { IslandState } from './economy.js';
 import { tickDrones, type Drone, type TickDronesResult } from './drones.js';
+import { computeSignalRanges } from './antenna.js';
 import { findNextMerge, performMerge } from './island-merge.js';
 import { discoverIslandsInVision } from './vision-discovery.js';
 import {
@@ -87,6 +88,25 @@ export function advanceWorldSystems(
 
   const gap = toMs - fromMs;
   const stepMs = Math.max(WS_SYSTEMS_STEP_MS, Math.ceil(gap / WS_SYSTEMS_MAX_STEPS));
+
+  // PERF: antenna signal ranges feed tickDrones' per-step reveal test. They are
+  // a pure function of populated islands' operational antenna placements, which
+  // are STATIC across the bounded steps of one advance EXCEPT when island
+  // topology changes: a merge (performMerge, at the top of a step) or a
+  // settlement vehicle arriving and populating an island (tickVehicles, at the
+  // end of a step). tickDrones recomputed them every step (O(buildings)); a CPU
+  // profile showed that recompute was ~10% of offline-catch-up time. We compute
+  // them once and recompute ONLY at those topology changes, then hand them to
+  // tickDrones. This reproduces the per-step result EXACTLY — a merge is applied
+  // before that step's tickDrones (recompute this step), and a vehicle settle
+  // happens after it (recompute before the next step's tickDrones) — so the
+  // ranges tickDrones sees each step are identical to the old per-step recompute,
+  // just without the 3599/3600 redundant ones. Over-recomputing on a vehicle
+  // arrival that did NOT populate a new island is harmless (still identical).
+  const recomputeRanges = (): ReturnType<typeof computeSignalRanges> =>
+    computeSignalRanges(world.islands.filter((s) => s.populated));
+  let signalRanges = recomputeRanges();
+
   let prev = fromMs;
   while (prev < toMs) {
     const cur = Math.min(prev + stepMs, toMs);
@@ -97,9 +117,12 @@ export function advanceWorldSystems(
     if (m) {
       performMerge(world, states, m.absorber, m.absorbed);
       result.merges.push({ absorberId: m.absorber.id, absorbedId: m.absorbed.id });
+      // Islands/buildings changed → this step's tickDrones must see fresh ranges
+      // (the merge ran before it, exactly as in the per-step-recompute version).
+      signalRanges = recomputeRanges();
     }
 
-    const dr: TickDronesResult = tickDrones(world, cur, prev, wallOffsetMs);
+    const dr: TickDronesResult = tickDrones(world, cur, prev, wallOffsetMs, signalRanges);
     result.dronesReturned.push(...dr.returned);
     result.dronesLost.push(...dr.lost);
     result.newlyDiscoveredIslandIds.push(...dr.newlyDiscoveredIslandIds);
@@ -126,6 +149,10 @@ export function advanceWorldSystems(
     result.vehicleArrivals.push(...vr.arrivals);
     result.vehicleFailures.push(...vr.failures);
     result.vehicleLost.push(...vr.lost);
+    // A settlement arrival can populate a new island → the NEXT step's tickDrones
+    // must see fresh ranges (vehicles run after tickDrones, so the effect is seen
+    // next step — matching the old per-step recompute). Arrivals are rare.
+    if (vr.arrivals.length > 0) signalRanges = recomputeRanges();
 
     result.steps++;
     prev = cur;

@@ -15,7 +15,7 @@
 //     the Drone record. A T1 island launches with biofuel, a T3 island with
 //     aviation kerosene, etc. No fallback to lower grades.
 
-import { computeSignalRanges, pointInSignalRange } from './antenna.js';
+import { computeSignalRanges, pointInSignalRange, type SignalRange } from './antenna.js';
 import { hasOperationalBuilding, isOperationalBuilding } from './building-operational.js';
 import { corridorCells, islandIntersectsCells, markIslandDiscovered, parseCellKey } from './discovery.js';
 import type { IslandState } from './economy.js';
@@ -666,6 +666,17 @@ export function tickDrones(
   nowMs: number,
   prevTickMs: number = nowMs,
   wallOffsetMs: number = 0,
+  /** PERF: optional precomputed antenna signal ranges. A caller that advances
+   *  many bounded steps in a loop (server/client catch-up via
+   *  `advanceWorldSystems`) sees ranges that are static across steps except when
+   *  island topology changes (a merge, or a vehicle settling a new island). Such
+   *  a caller computes the ranges once, recomputes only at those topology
+   *  changes, and passes them in here — turning a per-step O(buildings) recompute
+   *  (a CPU profile showed it was ~10% of offline-catch-up CPU) into one compute
+   *  per topology change. Omitted (the client per-frame path) ⇒ computed
+   *  internally, exactly as before. Passing the same ranges this function would
+   *  itself compute is byte-identical. */
+  precomputedRanges?: ReadonlyArray<SignalRange>,
 ): TickDronesResult {
   const returned: Drone[] = [];
   const lost: Drone[] = [];
@@ -673,10 +684,10 @@ export function tickDrones(
   const remaining: Drone[] = [];
 
   // Antenna signal ranges — recomputed every tick (antennas can be built /
-  // demolished mid-session). Cheap: one allocation + a walk over populated
-  // islands' buildings.
-  const populated = world.islands.filter((s) => s.populated);
-  const ranges = computeSignalRanges(populated);
+  // demolished mid-session) UNLESS a loop caller supplies precomputed ranges
+  // (see the param doc). Cheap: one allocation + a walk over populated islands'
+  // buildings.
+  const ranges = precomputedRanges ?? computeSignalRanges(world.islands.filter((s) => s.populated));
 
   let cellsAddedThisTick = 0;
   for (const d of world.drones) {
