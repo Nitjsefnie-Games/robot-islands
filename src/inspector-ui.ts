@@ -52,7 +52,6 @@ import {
   MAINTENANCE_THRESHOLD_MS_BY_TIER,
   maintenanceFactor,
   refreshCostFor,
-  tryRefreshMaintenance,
 } from './maintenance.js';
 import { ALL_RESOURCES, resolveRecipe, type Recipe, type ResourceId } from './recipes.js';
 import { effectiveSkillMultipliers, type SkillMultipliers } from './skilltree.js';
@@ -205,6 +204,10 @@ export interface InspectorDeps {
    *  Force Run keeps the building producing for XP at a full output bin;
    *  overflow is voided, inputs / power / wear stay real costs. */
   onSetForceRun(target: InspectorTarget, value: boolean): void;
+  /** §4.7 Trigger a manual maintenance refresh. main.ts owns the mutation
+   *  (gateway.refreshMaintenance), invalidates alerts, and refreshes the
+   *  inspector. */
+  onRefreshMaintenance(target: InspectorTarget): void;
   /** Floor-upgrade callback. main.ts owns the mutation (applyUpgrade),
    *  rebuilds world layers, and refreshes the inspector so the new floor
    *  count and effect are visible. */
@@ -1248,15 +1251,8 @@ export function mountInspectorUi(
   refreshBtn.addEventListener('click', () => {
     const target = resolveTarget();
     if (!target) { close(); return; }
-    const def = BUILDING_DEFS[target.building.defId];
-    const ok = tryRefreshMaintenance(
-      target.building,
-      def,
-      target.state.inventory,
-      Date.now(),
-      effectiveSkillMultipliers(target.state).maintenanceThreshold,
-    );
-    if (ok) paint();
+    deps.onRefreshMaintenance(target);
+    paint();
   });
   footerSection.appendChild(refreshBtn);
 
