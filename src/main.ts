@@ -2049,21 +2049,21 @@ async function main(): Promise<void> {
   // via applyOffer and removes the offer from the runtime list.
   const tradeUi = mountTradeUi(
     async (offer) => {
-      // §trade in REMOTE (server-authoritative): the server implements no
-      // accept-trade intent, so accepting can't persist. Rather than silently
-      // no-op (or mutate local state that the next server snapshot reverts),
-      // surface a clear message. tickTradeOffers is gated to LOCAL, so offers
-      // never spawn in REMOTE today — this guard is defense-in-depth.
-      if (isRemote) {
-        toast.show('Trade is unavailable in online mode.', 'info');
+      const result = await gateway.acceptTrade(offer);
+      if (!result.ok) {
+        // REMOTE rejections (offer expired / already taken) surface a toast;
+        // LOCAL accept never fails (applyOffer re-clamps).
+        if (isRemote) toast.show('Trade could not be completed.', 'info');
         return;
       }
-      const result = await gateway.acceptTrade(offer);
-      if (!result.ok) return;
+      // REMOTE (§9.8 server-authoritative): the server applied the exchange,
+      // compounded the cadence, and removed the offer; the next snapshot
+      // reflects it. Mutating locally here would be reverted on the next push.
+      if (isRemote) return;
       const st = islandStates.get(offer.islandId);
       if (!st) return;
-      // Each accepted trade compounds this island's next offer 1% sooner; the
-      // cooldown is reset HERE (on resolution) so the increment lands on the
+      // LOCAL: each accepted trade compounds this island's next offer 1% sooner;
+      // the cooldown is reset HERE (on resolution) so the increment lands on the
       // very next offer. tuningFor folds in the Logistics-Network frequency node.
       st.tradeAcceptCount += 1;
       st.tradeCooldownMs = effectiveCadenceMs(
@@ -2072,17 +2072,15 @@ async function main(): Promise<void> {
       );
       tradeRuntime.offers = tradeRuntime.offers.filter((o) => o.id !== offer.id);
     },
-    (offer) => {
-      // §trade in REMOTE: reject would mutate local island state directly,
-      // bypassing the gateway (reverted on the next server snapshot). Surface
-      // the same "unavailable online" message instead of a silent local write.
+    async (offer) => {
+      // REMOTE: compound cadence + remove offer authoritatively server-side.
       if (isRemote) {
-        toast.show('Trade is unavailable in online mode.', 'info');
+        await gateway.rejectTrade(offer);
         return;
       }
       const st = islandStates.get(offer.islandId);
       if (!st) return;
-      // Manual reject counts as a timely reaction: it compounds cadence but
+      // LOCAL: manual reject counts as a timely reaction — compounds cadence but
       // exchanges no goods.
       st.tradeAcceptCount += 1;
       st.tradeCooldownMs = effectiveCadenceMs(
@@ -2606,12 +2604,15 @@ async function main(): Promise<void> {
       tickActiveBonus(worldState, tradeOnline, elapsedSec * 1000);
       // Stamp last-active so a closed-game reload decays only true away time.
       worldState.lastActiveMs = nowWall;
+      // §9.8: offer spawnedAt/expiresAt are WALL-clock (persisted, server-
+      // authoritative in REMOTE), so the LOCAL tick stamps them with nowWall —
+      // the same clock the trade-UI countdown reads.
       tickTradeOffers(
         tradeRuntime,
         islandStates,
         worldState.seed,
         (state) => tuningFor(effectiveSkillMultipliers(state)),
-        now,
+        nowWall,
         onlineDtMs,
       );
       // §3.6 Island Joining: AFTER economy advances, walk pairs of populated
@@ -2788,7 +2789,12 @@ async function main(): Promise<void> {
       );
       islandBar.update(activeIslandId, islandPower, saveAgeSec);
     }
-    tradeUi.update(tradeRuntime, activeIslandId, now);
+    // §9.8: in REMOTE the authoritative offers live in worldState.tradeOffers
+    // (server-owned, refreshed by each snapshot push). Mirror them into the
+    // display runtime so the trade card shows server offers; LOCAL keeps its
+    // own tradeRuntime.offers. Countdown reads wall-clock (offers are wall-timed).
+    if (isRemote) tradeRuntime.offers = worldState.tradeOffers ?? [];
+    tradeUi.update(tradeRuntime, activeIslandId, nowWall);
     // §13.3 Omniscient Lattice banner visibility.
     latticeBanner.style.display = worldState.latticeActive ? 'block' : 'none';
 
