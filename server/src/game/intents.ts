@@ -85,6 +85,13 @@ import { setGenesisTarget, spendTimeLock } from '../../../src/economy.js';
 import type { Rotation } from '../../../src/shape-mask.js';
 import { CARGO_WILDCARD, type CargoEntry, type CargoMode } from '../../../src/route-cargo.js';
 import type { CrystalId } from '../../../src/skilltree-graph.js';
+import {
+  tickTradeOffers,
+  tuningFor,
+  applyOffer,
+  effectiveCadenceMs,
+  type TradeRuntime,
+} from '../../../src/trade.js';
 import { CELL_SIZE_TILES } from '../../../src/constants.js';
 import { applyActiveBonusDelta } from '../../../src/active-bonus.js';
 import { completeTutorialStep, skipAll, restart } from '../../../src/tutorial.js';
@@ -1207,6 +1214,21 @@ export const INTENTS: Record<string, IntentHandler> = {
       const u = Math.min(unfocusedMs, 300_000);
       applyActiveBonusDelta(game.world, f, u);
       game.world.lastActiveMs = now;
+      // §9.8 server-authoritative trades advance on the SAME online-time signal.
+      // The capped focused ms (`f`) is the online time: it burns each
+      // signal_exchange island's persisted `tradeCooldownMs`, spawns an offer
+      // when the cooldown hits 0, and prunes expired offers against wall-clock
+      // `now` (offer spawnedAt/expiresAt are wall-clock, persisted in v25).
+      const rt: TradeRuntime = { offers: game.world.tradeOffers ?? [] };
+      tickTradeOffers(
+        rt,
+        game.islandStates,
+        game.world.seed ?? '',
+        (s) => tuningFor(effectiveSkillMultipliers(s)),
+        now,
+        f,
+      );
+      game.world.tradeOffers = rt.offers;
       return { ok: true };
     },
   },
@@ -1311,8 +1333,56 @@ export const INTENTS: Record<string, IntentHandler> = {
   // the server would drag the renderer into the authoritative layer, violating
   // the pure/render split. Left for a future slice that extracts or mirrors the
   // pure logic without the PixiJS dependency.
-  //
-  // UNWIRED: reject-trade. Trade offers are runtime-only and unpersisted on the
-  // client; there is no authoritative offer state server-side to validate
-  // against. Wired only when server-deterministic trade offers land.
+
+  // accept-trade — §9.8. Player accepts a live, server-owned offer by id. The
+  // server validates it exists and hasn't expired (wall-clock `now`), applies
+  // the exchange to the island inventory (`applyOffer`, re-clamped to live
+  // stock/headroom), compounds the island's cadence (accept-count +1 → cooldown
+  // reset to the now-faster effective cadence), and removes the offer. Mirrors
+  // the LOCAL accept handler in main.ts exactly.
+  'accept-trade': {
+    apply(game: LiveGame, payload: unknown, now: number): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { offerId } = payload;
+      if (typeof offerId !== 'string') return { ok: false, error: 'offerId must be a string' };
+      const offers = game.world.tradeOffers ?? [];
+      const offer = offers.find((o) => o.id === offerId);
+      if (!offer) return { ok: false, error: 'offer not found' };
+      if (offer.expiresAt <= now) return { ok: false, error: 'offer expired' };
+      const state = game.islandStates.get(offer.islandId);
+      if (!state) return { ok: false, error: 'island not found' };
+      applyOffer(state, offer);
+      state.tradeAcceptCount += 1;
+      state.tradeCooldownMs = effectiveCadenceMs(
+        state.tradeAcceptCount,
+        tuningFor(effectiveSkillMultipliers(state)).cadenceMs,
+      );
+      game.world.tradeOffers = offers.filter((o) => o.id !== offerId);
+      return { ok: true };
+    },
+  },
+
+  // reject-trade — §9.8. A manual reject is a timely reaction: it compounds the
+  // cadence (accept-count +1 → faster next offer) but exchanges no goods, then
+  // removes the offer. Mirrors the LOCAL reject handler in main.ts.
+  'reject-trade': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { offerId } = payload;
+      if (typeof offerId !== 'string') return { ok: false, error: 'offerId must be a string' };
+      const offers = game.world.tradeOffers ?? [];
+      const offer = offers.find((o) => o.id === offerId);
+      if (!offer) return { ok: false, error: 'offer not found' };
+      const state = game.islandStates.get(offer.islandId);
+      if (state) {
+        state.tradeAcceptCount += 1;
+        state.tradeCooldownMs = effectiveCadenceMs(
+          state.tradeAcceptCount,
+          tuningFor(effectiveSkillMultipliers(state)).cadenceMs,
+        );
+      }
+      game.world.tradeOffers = offers.filter((o) => o.id !== offerId);
+      return { ok: true };
+    },
+  },
 };

@@ -99,9 +99,6 @@ function priceMultiplier(give: ResourceId, get: ResourceId, rng: () => number, t
   return (wGive / wGet) * Math.max(0.05, spread);
 }
 
-// process-local id counter; offers are ephemeral/runtime-only (never persisted), so reset-per-process is fine
-let _offerSeq = 0;
-
 /** Generate one trade offer for an island, or null if no valid pair exists. */
 export function generateOffer(
   state: IslandState,
@@ -145,7 +142,11 @@ export function generateOffer(
     if (giveQty <= 0 || getQty <= 0) continue;
 
     return {
-      id: `offer-${++_offerSeq}`,
+      // Stable, persistence-safe id: one live offer per island at a time, so
+      // island + accept-count + wall-clock spawn time uniquely names it. No
+      // process-global counter (would collide across a server restart with a
+      // persisted offer). The terms are still deterministic from the seed.
+      id: `${state.id}-${state.tradeAcceptCount}-${nowMs}`,
       islandId: state.id,
       give: { res: give, qty: giveQty },
       get: { res: get, qty: getQty },
