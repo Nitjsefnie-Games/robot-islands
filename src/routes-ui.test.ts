@@ -1,10 +1,15 @@
-// Pure helper tests for the route-creation UI dropdown cache keys.
-// DOM-dependent behaviour is covered by manual/integration smoke tests;
-// this file targets the exported pure helpers.
+// @vitest-environment happy-dom
+
+// Pure helper tests for the route-creation UI dropdown cache keys, plus a
+// mount smoke-test guarding the boot-time temporal-dead-zone regression where
+// buildOptions() (called eagerly during mount) wrote lastRoutesKey/
+// lastViaBuildingsKey before their `let` declarations ran.
 
 import { describe, expect, it } from 'vitest';
 
-import { viaBuildingKeyForIsland } from './routes-ui.js';
+import { mountRoutesUi, viaBuildingKeyForIsland } from './routes-ui.js';
+import { createNewGame } from './new-game.js';
+import type { RouteRenderer } from './routes-renderer.js';
 import type { PlacedBuilding } from './buildings.js';
 import type { IslandSpec } from './world.js';
 
@@ -58,5 +63,24 @@ describe('viaBuildingKeyForIsland (#108 route dropdown key)', () => {
 
   it('returns empty string for a missing island', () => {
     expect(viaBuildingKeyForIsland(undefined)).toBe('');
+  });
+});
+
+describe('mountRoutesUi — boot init order (TDZ regression)', () => {
+  it('mounts without a temporal-dead-zone ReferenceError', () => {
+    const now = Date.now();
+    const { world, islandStates } = createNewGame(now);
+    const islandSpecs = new Map<string, IslandSpec>(world.islands.map((s) => [s.id, s]));
+    // routeRenderer is only touched in refresh()/paintLayer, never during
+    // mount, so an empty mock suffices to exercise the boot path.
+    const routeRenderer = {} as unknown as RouteRenderer;
+    const parent = document.createElement('div');
+
+    // Regression: buildOptions() runs at mount and assigns lastRoutesKey =
+    // routesKey(), but lastRoutesKey was `let`-declared ~530 lines below the
+    // call → "Cannot access 'lastRoutesKey' before initialization".
+    expect(() =>
+      mountRoutesUi(parent, { world, islandStates, islandSpecs, routeRenderer }),
+    ).not.toThrow();
   });
 });
