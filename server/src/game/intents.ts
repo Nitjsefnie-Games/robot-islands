@@ -454,6 +454,7 @@ export const INTENTS: Record<string, IntentHandler> = {
         fuelLoaded as number, now,
         typedWaypoints,
         typedTier,
+        0, // server uses wall-epoch timestamps, so no offset is needed
       );
       if (!r.ok) return { ok: false, error: r.reason };
       return { ok: true };

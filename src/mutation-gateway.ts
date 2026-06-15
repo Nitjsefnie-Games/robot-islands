@@ -171,6 +171,7 @@ export interface MutationGateway {
     nowMs: number,
     waypoints?: ReadonlyArray<{ x: number; y: number }>,
     selectedTier?: DroneTier | '5-path',
+    wallOffsetMs?: number,
   ): GatewayReturn;
   firePulse(islandId: string, nowMs: number): GatewayReturn;
 
@@ -232,6 +233,7 @@ export function makeLocalGateway(
   world: WorldState,
   islandStates: Map<string, IslandState>,
   hooks: LocalGatewayHooks = {},
+  weatherWallOffsetMs: number = 0,
 ): MutationGateway {
   function nowMsOr(fallback: number, explicit?: number): number {
     return explicit ?? hooks.getNowMs?.() ?? fallback;
@@ -495,10 +497,10 @@ export function makeLocalGateway(
       }
     },
 
-    dispatchDrone(islandId, originX, originY, dirX, dirY, fuelLoaded, nowMs, waypoints, selectedTier) {
+    dispatchDrone(islandId, originX, originY, dirX, dirY, fuelLoaded, nowMs, waypoints, selectedTier, wallOffsetMs = weatherWallOffsetMs) {
       const island = resolveIsland(islandId);
       if (!island) return err('unknown island');
-      if (selectedTier !== undefined) {
+      if (selectedTier !== undefined && selectedTier !== '5-path') {
         if (typeof selectedTier !== 'number' || !Number.isInteger(selectedTier) || selectedTier < 1 || selectedTier > 6) {
           return err('selectedTier must be an integer 1..6');
         }
@@ -514,7 +516,8 @@ export function makeLocalGateway(
           fuelLoaded,
           nowMs,
           waypoints as { x: number; y: number }[] | undefined,
-          selectedTier as DroneTier | undefined,
+          selectedTier === '5-path' ? undefined : selectedTier as DroneTier | undefined,
+          wallOffsetMs,
         ),
       );
     },
@@ -859,7 +862,7 @@ export function makeRemoteGateway(client: GameServerClient): MutationGateway {
       });
     },
 
-    dispatchDrone(islandId, originX, originY, dirX, dirY, fuelLoaded, nowMs, waypoints, selectedTier) {
+    dispatchDrone(islandId, originX, originY, dirX, dirY, fuelLoaded, nowMs, waypoints, selectedTier, _wallOffsetMs) {
       return send('dispatch-drone', {
         islandId,
         originX,

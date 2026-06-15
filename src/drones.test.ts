@@ -17,7 +17,6 @@ import {
   firePulse,
   pointToSegmentDistSq,
   probabilityBiasForIsland,
-  setDroneWeatherWallOffsetMs,
   tickDrones,
   type Drone,
   DRONE_T5_EFFICIENCY,
@@ -2105,20 +2104,15 @@ describe('§15.1 wall-anchored drone weather', () => {
 
   /** Dispatch one straight-line drone at perf-time `launchMs` under wall
    *  anchor `anchorMs`; returns whether the dispatch-time fate roll doomed
-   *  it (`doomedAtMs` set). Resets the anchor to 0 afterwards. */
+   *  it (`doomedAtMs` set). */
   function fateWithAnchor(seed: string, launchMs: number, anchorMs: number): boolean {
-    setDroneWeatherWallOffsetMs(anchorMs);
-    try {
-      const w = freshWorld(seed);
-      const home = makeIslandState();
-      home.inventory.biofuel = 50;
-      _resetDroneIdCounter();
-      const r = dispatchDrone(w, home, 0, 0, 1, 0, 10, launchMs);
-      expect(r.ok).toBe(true);
-      return r.ok ? r.drone.doomedAtMs !== undefined : false;
-    } finally {
-      setDroneWeatherWallOffsetMs(0);
-    }
+    const w = freshWorld(seed);
+    const home = makeIslandState();
+    home.inventory.biofuel = 50;
+    _resetDroneIdCounter();
+    const r = dispatchDrone(w, home, 0, 0, 1, 0, 10, launchMs, undefined, undefined, anchorMs);
+    expect(r.ok).toBe(true);
+    return r.ok ? r.drone.doomedAtMs !== undefined : false;
   }
 
   it('anchor W at launch 0 ≡ anchor 0 at launch W (same wall instant, same fate)', () => {
@@ -2155,25 +2149,20 @@ describe('§15.1 wall-anchored drone weather', () => {
       [doomedSeed!, true],
       [survivorSeed!, false],
     ] as const) {
-      setDroneWeatherWallOffsetMs(W);
-      try {
-        const w = freshWorld(seed);
-        const home = makeIslandState();
-        home.inventory.biofuel = 50;
-        _resetDroneIdCounter();
-        const r = dispatchDrone(w, home, 0, 0, 1, 0, 10, 0);
-        expect(r.ok).toBe(true);
-        if (!r.ok) return;
-        // Simulate an old save: strip the pre-computed fate so tickDrones
-        // takes the legacy re-roll path. (`doomedAtMs` is readonly on the
-        // public type; old saves simply deserialize without it.)
-        (r.drone as { doomedAtMs?: number }).doomedAtMs = undefined;
-        const t = tickDrones(w, 81_000, 0);
-        expect(t.lost).toHaveLength(expectLost ? 1 : 0);
-        expect(t.returned).toHaveLength(expectLost ? 0 : 1);
-      } finally {
-        setDroneWeatherWallOffsetMs(0);
-      }
+      const w = freshWorld(seed);
+      const home = makeIslandState();
+      home.inventory.biofuel = 50;
+      _resetDroneIdCounter();
+      const r = dispatchDrone(w, home, 0, 0, 1, 0, 10, 0, undefined, undefined, W);
+      expect(r.ok).toBe(true);
+      if (!r.ok) return;
+      // Simulate an old save: strip the pre-computed fate so tickDrones
+      // takes the legacy re-roll path. (`doomedAtMs` is readonly on the
+      // public type; old saves simply deserialize without it.)
+      (r.drone as { doomedAtMs?: number }).doomedAtMs = undefined;
+      const t = tickDrones(w, 81_000, 0, W);
+      expect(t.lost).toHaveLength(expectLost ? 1 : 0);
+      expect(t.returned).toHaveLength(expectLost ? 0 : 1);
     }
   });
 });

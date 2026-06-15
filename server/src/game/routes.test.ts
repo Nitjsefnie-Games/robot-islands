@@ -44,6 +44,17 @@ describe('game routes', () => {
     expect((await app.inject({ method: 'POST', url: '/api/game/new', headers: { cookie } })).statusCode).toBe(409);
   });
 
+  it('concurrent /new only creates one game (advisory-lock serialization)', async () => {
+    const cookie = await authedCookie();
+    const results = await Promise.all([
+      app.inject({ method: 'POST', url: '/api/game/new', headers: { cookie } }),
+      app.inject({ method: 'POST', url: '/api/game/new', headers: { cookie } }),
+      app.inject({ method: 'POST', url: '/api/game/new', headers: { cookie } }),
+    ]);
+    const statuses = results.map((r) => r.statusCode).sort();
+    expect(statuses).toEqual([201, 409, 409]);
+  });
+
   it('state -> 404 before new, projection after', async () => {
     const cookie = await authedCookie();
     expect((await app.inject({ method: 'GET', url: '/api/game/state', headers: { cookie } })).statusCode).toBe(404);
