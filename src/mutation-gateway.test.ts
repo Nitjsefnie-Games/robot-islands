@@ -82,6 +82,41 @@ describe('makeRemoteGateway — gateway-rejection contract', () => {
   });
 });
 
+function makeTwoPopulatedIslands() {
+  const now = Date.now();
+  const { world, islandStates } = createNewGame(now);
+  const colony = world.islands.find((s) => s.id !== 'home')!;
+  colony.populated = true;
+  colony.discovered = true;
+  islandStates.set(colony.id, makeInitialIslandState(colony, now));
+  const home = world.islands.find((s) => s.id === 'home')!;
+  home.buildings.push({
+    id: 'dock-1', defId: 'dock', x: 0, y: 0,
+    constructionRemainingMs: 0, placedAt: now,
+  });
+  islandStates.get('home')!.buildings = home.buildings;
+  return { now, world, islandStates, home, colony };
+}
+
+function makeDrainingRoute() {
+  const { now, world, islandStates, colony } = makeTwoPopulatedIslands();
+  const gateway = makeLocalGateway(world, islandStates);
+  const create = unwrapGatewayResult(gateway.createRoute('home', colony.id, 'dock-1', 'wood'));
+  expect(create.ok).toBe(true);
+  const route = world.routes[0]!;
+  route.inFlight.push({
+    resourceId: 'wood',
+    amount: 1,
+    arrivalTime: now + 60_000,
+    dispatchTime: now,
+    id: 'batch-1',
+  });
+  const drain = unwrapGatewayResult(gateway.deleteRoute(route.id));
+  expect(drain.ok).toBe(true);
+  expect(route.draining).toBe(true);
+  return { now, world, islandStates, gateway, route };
+}
+
 describe('makeLocalGateway — createRoute parity', () => {
   it('rejects an unpopulated endpoint (Fix 7)', () => {
     const now = Date.now();
@@ -102,22 +137,43 @@ describe('makeLocalGateway — createRoute parity', () => {
   });
 
   it('rejects an unknown filterResource id (Fix 6 LOCAL)', () => {
-    const now = Date.now();
-    const { world, islandStates } = createNewGame(now);
-    const colony = world.islands.find((s) => s.id !== 'home')!;
-    colony.populated = true;
-    colony.discovered = true;
-    islandStates.set(colony.id, makeInitialIslandState(colony, now));
-    const home = world.islands.find((s) => s.id === 'home')!;
-    home.buildings.push({
-      id: 'dock-1', defId: 'dock', x: 0, y: 0,
-      constructionRemainingMs: 0, placedAt: now,
-    });
-    islandStates.get('home')!.buildings = home.buildings;
-
+    const { world, islandStates, colony } = makeTwoPopulatedIslands();
     const gateway = makeLocalGateway(world, islandStates);
     const result = gateway.createRoute('home', colony.id, 'dock-1', 'not_a_resource' as unknown as import('./recipes.js').ResourceId);
     expect(result).toEqual({ ok: false, error: 'unknown filterResource' });
+  });
+
+  it('rejects from===to', () => {
+    const { world, islandStates } = makeTwoPopulatedIslands();
+    const gateway = makeLocalGateway(world, islandStates);
+    const result = gateway.createRoute('home', 'home', 'dock-1');
+    expect(result).toEqual({ ok: false, error: 'from and to must differ' });
+  });
+
+  it('rejects a teleporter route when destination has no teleporter pad', () => {
+    const { now, world, islandStates, colony } = makeTwoPopulatedIslands();
+    const home = world.islands.find((s) => s.id === 'home')!;
+    home.buildings = [{
+      id: 'tp-1', defId: 'teleporter_pad', x: 0, y: 0,
+      constructionRemainingMs: 0, placedAt: now,
+    }];
+    islandStates.get('home')!.buildings = home.buildings;
+    const gateway = makeLocalGateway(world, islandStates);
+    const result = gateway.createRoute('home', colony.id, 'tp-1');
+    expect(result).toEqual({ ok: false, error: 'destination has no teleporter pad' });
+  });
+
+  it('rejects a non-transport building', () => {
+    const { now, world, islandStates, colony } = makeTwoPopulatedIslands();
+    const home = world.islands.find((s) => s.id === 'home')!;
+    home.buildings = [{
+      id: 'mine-1', defId: 'mine', x: 0, y: 0,
+      constructionRemainingMs: 0, placedAt: now,
+    }];
+    islandStates.get('home')!.buildings = home.buildings;
+    const gateway = makeLocalGateway(world, islandStates);
+    const result = gateway.createRoute('home', colony.id, 'mine-1');
+    expect(result).toEqual({ ok: false, error: 'building is not a transport building' });
   });
 });
 
@@ -187,6 +243,145 @@ describe('makeLocalGateway — rename / edit-biome / construct-island parity', (
     if (!result.ok) return;
     expect(result.value!.newSpec.id).toBe('art-1');
     expect(result.value!.newSpec.biome).toBe('plains');
+  });
+});
+
+describe('makeLocalGateway — validation parity with server intents', () => {
+  it('#46 expandIsland rejects when axis is already at max', () => {
+    const now = Date.now();
+    const { world, islandStates } = createNewGame(now);
+    const home = world.islands.find((s) => s.id === 'home')!;
+    home.majorRadius = 28;
+    home.minorRadius = 28;
+    home.buildings.push({
+      id: 'hub-1', defId: 'land_reclamation_hub', x: 0, y: 0,
+      constructionRemainingMs: 0, placedAt: now,
+    });
+    islandStates.get('home')!.buildings = home.buildings;
+    const gateway = makeLocalGateway(world, islandStates);
+    const result = gateway.expandIsland('home', 'major');
+    expect(result).toEqual({ ok: false, error: 'axis-at-max', reason: 'axis-at-max' });
+  });
+
+  it('#49 dispatchDrone rejects an out-of-range selectedTier', () => {
+    const now = Date.now();
+    const { world, islandStates } = createNewGame(now);
+    const gateway = makeLocalGateway(world, islandStates);
+    const result = gateway.dispatchDrone('home', 0, 0, 1, 0, 10, now, undefined, 99 as unknown as import('./drones.js').DroneTier);
+    expect(result).toEqual({ ok: false, error: 'selectedTier must be an integer 1..6' });
+  });
+
+  it('#66 draining route rejects setRouteMode, setCargoWeight, setCargoFloorPct, reorderRouteCargo, setRouteCargo', () => {
+    const { gateway, route } = makeDrainingRoute();
+    expect(gateway.setRouteMode(route.id, 'balanced')).toEqual({ ok: false, error: 'route is draining' });
+    expect(gateway.setCargoWeight(route.id, 0, 2)).toEqual({ ok: false, error: 'route is draining' });
+    expect(gateway.setCargoFloorPct(route.id, 0, 50)).toEqual({ ok: false, error: 'route is draining' });
+    expect(gateway.reorderRouteCargo(route.id, 0, 0)).toEqual({ ok: false, error: 'route is draining' });
+    expect(gateway.setRouteCargo(route.id, [{ resourceId: 'wood' }])).toEqual({ ok: false, error: 'route is draining' });
+  });
+
+  it('#68 relabelCargo rejects an invalid resource label', () => {
+    const now = Date.now();
+    const { world, islandStates } = createNewGame(now);
+    const home = world.islands.find((s) => s.id === 'home')!;
+    home.buildings.push({
+      id: 'crate-1', defId: 'crate', x: 0, y: 0,
+      constructionRemainingMs: 0, placedAt: now,
+    });
+    islandStates.get('home')!.buildings = home.buildings;
+    const gateway = makeLocalGateway(world, islandStates);
+    const result = gateway.relabelCargo('home', 'crate-1', 'not-a-resource' as unknown as import('./recipes.js').ResourceId);
+    expect(result).toEqual({ ok: false, error: 'newLabel must be a valid resource id' });
+  });
+
+  it('#69 setBuildingActiveFloors rejects out-of-range disabledFloors', () => {
+    const now = Date.now();
+    const { world, islandStates } = createNewGame(now);
+    const home = world.islands.find((s) => s.id === 'home')!;
+    home.buildings.push({
+      id: 'ws-1', defId: 'workshop', x: 0, y: 0,
+      constructionRemainingMs: 0, placedAt: now,
+    });
+    islandStates.get('home')!.buildings = home.buildings;
+    const gateway = makeLocalGateway(world, islandStates);
+    const result = gateway.setBuildingActiveFloors('home', 'ws-1', 5);
+    expect(result).toEqual({ ok: false, error: 'disabledFloors out of range' });
+  });
+
+  it('#70 setRouteCargo rejects duplicate resources', () => {
+    const { gateway, route } = makeDrainingRoute();
+    route.draining = false; // unset draining so validation reaches cargo list
+    const result = gateway.setRouteCargo(route.id, [
+      { resourceId: 'wood' },
+      { resourceId: 'wood' },
+    ]);
+    expect(result).toEqual({ ok: false, error: 'duplicate cargo resourceId wood' });
+  });
+
+  it('#71 placeBuilding rejects an invalid cargoLabel', () => {
+    const now = Date.now();
+    const { world, islandStates } = createNewGame(now);
+    const gateway = makeLocalGateway(world, islandStates);
+    const result = gateway.placeBuilding('home', 'crate', 0, 0, 0, {
+      cargoLabel: 'not-a-resource' as unknown as import('./recipes.js').ResourceId,
+    });
+    expect(result).toEqual({ ok: false, error: 'cargoLabel must be a valid resource id' });
+  });
+
+  it('#72 dispatchSettler rejects fractional foundationKitCount and does not throw', () => {
+    const now = Date.now();
+    const { world, islandStates } = createNewGame(now);
+    const home = world.islands.find((s) => s.id === 'home')!;
+    const colony = world.islands.find((s) => s.id !== 'home')!;
+    colony.discovered = true;
+    colony.populated = false;
+    home.buildings.push({
+      id: 'sy-1', defId: 'shipyard', x: 0, y: 0,
+      constructionRemainingMs: 0, placedAt: now,
+    });
+    const state = islandStates.get('home')!;
+    state.buildings = home.buildings;
+    state.inventory.biofuel = 200;
+    state.inventory.foundation_kit = 10;
+    const gateway = makeLocalGateway(world, islandStates);
+    const result = gateway.dispatchSettler('home', colony.id, 'ship', 1, 200, 1.5, now);
+    expect(result).toEqual({ ok: false, error: 'foundationKitCount must be a positive integer' });
+  });
+
+  it('#72 dispatchSettler rejects an out-of-range tier and does not throw', () => {
+    const now = Date.now();
+    const { world, islandStates } = createNewGame(now);
+    const home = world.islands.find((s) => s.id === 'home')!;
+    const colony = world.islands.find((s) => s.id !== 'home')!;
+    colony.discovered = true;
+    colony.populated = false;
+    home.buildings.push({
+      id: 'sy-1', defId: 'shipyard', x: 0, y: 0,
+      constructionRemainingMs: 0, placedAt: now,
+    });
+    const state = islandStates.get('home')!;
+    state.buildings = home.buildings;
+    state.inventory.biofuel = 200;
+    state.inventory.foundation_kit = 10;
+    const gateway = makeLocalGateway(world, islandStates);
+    const result = gateway.dispatchSettler('home', colony.id, 'ship', 5 as unknown as import('./settlement.js').VehicleTier, 200, 1, now);
+    expect(result).toEqual({ ok: false, error: 'tier must be 1..4' });
+  });
+
+  it('#89 setCargoWeight rejects non-positive / non-finite weight', () => {
+    const { gateway, route } = makeDrainingRoute();
+    route.draining = false;
+    expect(gateway.setCargoWeight(route.id, 0, 0)).toEqual({ ok: false, error: 'weight must be positive' });
+    expect(gateway.setCargoWeight(route.id, 0, Number.NaN)).toEqual({ ok: false, error: 'weight must be positive' });
+  });
+
+  it('#111 setCargoFloorPct rejects out-of-range sourceFloorPct and draining routes', () => {
+    const { gateway, route } = makeDrainingRoute();
+    route.draining = false;
+    expect(gateway.setCargoFloorPct(route.id, 0, 101)).toEqual({ ok: false, error: 'sourceFloorPct must be 0..100' });
+    expect(gateway.setCargoFloorPct(route.id, 0, Number.NaN)).toEqual({ ok: false, error: 'sourceFloorPct must be 0..100' });
+    route.draining = true;
+    expect(gateway.setCargoFloorPct(route.id, 0, 50)).toEqual({ ok: false, error: 'route is draining' });
   });
 });
 
