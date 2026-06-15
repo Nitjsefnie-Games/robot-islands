@@ -1699,7 +1699,6 @@ describe('orbital intents', () => {
     // deterministic failure roll. A fresh user is created for each attempt so a
     // success on an earlier timestamp doesn't consume the fixture resources.
     let failureUid: string | null = null;
-    let failureNow: number | null = null;
     for (let i = 0; i < 50 && failureUid === null; i++) {
       const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
         const home = world.islands.find((s: any) => s.id === 'home');
@@ -1721,7 +1720,6 @@ describe('orbital intents', () => {
       );
       if (!ack.ok && (ack as { error: string }).error === 'launch-failure') {
         failureUid = uid;
-        failureNow = now + i;
       }
     }
     expect(failureUid).not.toBeNull();

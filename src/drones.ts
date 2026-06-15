@@ -17,7 +17,7 @@
 
 import { computeSignalRanges, pointInSignalRange } from './antenna.js';
 import { hasOperationalBuilding, isOperationalBuilding } from './building-operational.js';
-import { corridorCells, islandIntersectsCells, parseCellKey } from './discovery.js';
+import { corridorCells, islandIntersectsCells, markIslandDiscovered, parseCellKey } from './discovery.js';
 import type { IslandState } from './economy.js';
 import { inv } from './economy.js';
 import { fuelForTier, type ResourceId } from './recipes.js';
@@ -224,7 +224,7 @@ export function firePulse(
   for (const isl of world.islands) {
     if (isl.discovered) continue;
     if (islandIntersectsCells(isl, pulseCells)) {
-      isl.discovered = true;
+      markIslandDiscovered(isl, world.revealedCells);
       discovered.push(isl.id);
     }
   }
@@ -633,10 +633,12 @@ function isRareIsland(isl: import('./world.js').IslandSpec): boolean {
 }
 
 /** Discover rare islands that fall inside an expanded cell set (probability-bias
- *  corridor). Mutates `isl.discovered` and appends to `outIds`. */
+ *  corridor). Mutates `isl.discovered`, reveals the full footprint, and appends
+ *  to `outIds`. */
 function discoverRareIslands(
   islands: ReadonlyArray<import('./world.js').IslandSpec>,
   expandedCells: ReadonlySet<string>,
+  revealedCells: Set<string>,
   outIds: string[],
 ): void {
   for (const isl of islands) {
@@ -644,7 +646,7 @@ function discoverRareIslands(
     if (isl.discovered) continue;
     if (!isRareIsland(isl)) continue;
     if (islandIntersectsCells(isl, expandedCells)) {
-      isl.discovered = true;
+      markIslandDiscovered(isl, revealedCells);
       outIds.push(isl.id);
     }
   }
@@ -668,7 +670,7 @@ function flushDroneBuffers(
   for (const disc of d.darkModeDiscoveries) {
     const isl = world.islands.find((i) => i.id === disc.islandId);
     if (isl && !isl.discovered && !isl.populated) {
-      isl.discovered = true;
+      markIslandDiscovered(isl, world.revealedCells);
       newlyDiscoveredIslandIds.push(isl.id);
     }
   }
@@ -819,7 +821,7 @@ export function tickDrones(
       // §13.3 Probability-bias rare-island discovery: STILL run on the expanded
       // corridor regardless of buffer flush. Rare-island reveals are not gated
       // by antenna range in the existing code; preserve that behaviour.
-      discoverRareIslands(world.islands, expandedCorridor, newlyDiscoveredIslandIds);
+      discoverRareIslands(world.islands, expandedCorridor, world.revealedCells, newlyDiscoveredIslandIds);
 
       // Island discoveries in this tick's corridor join darkModeDiscoveries
       // (the flush helper drains them along with cells). Use plain corridor
@@ -903,7 +905,7 @@ export function tickDrones(
       if (isl.populated) continue;
       if (isl.discovered) continue;
       if (islandIntersectsCells(isl, world.revealedCells)) {
-        isl.discovered = true;
+        markIslandDiscovered(isl, world.revealedCells);
         newlyDiscoveredIslandIds.push(isl.id);
       }
     }
