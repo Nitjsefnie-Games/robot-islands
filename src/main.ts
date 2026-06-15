@@ -355,7 +355,7 @@ async function main(): Promise<void> {
             storePlayerLatLon(lat, lon);
             void gateway.setLocation(lat, lon);
           } else {
-            void saveWorld(worldState, restored?.islandStates ?? new Map());
+            void saveWorld(worldState, islandStates);
           }
           resolve();
         },
@@ -1667,6 +1667,7 @@ async function main(): Promise<void> {
       worldState.playerLon = lon;
       storePlayerLatLon(lat, lon);
       void gateway.setLocation(lat, lon);
+      if (!isRemote) triggerSave();
     },
   });
   defineAction(reg, 'toggle-settings', () => {
