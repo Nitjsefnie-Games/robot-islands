@@ -2350,10 +2350,20 @@ It is being delivered in slices, each with its own design + plan under
     receives is a full `{ type: 'state', snapshot }` baseline, and every
     subsequent push is a `{ type: 'state-delta', delta }` computed against the
     exact snapshot last sent on that socket. The delta is a recursive
-    merge-patch (reserved markers `__set` / `__del` so it is unambiguous on
-    JSON `null`/object values) with `islandStates` diffed **by id**
-    (`isUpd`/`isAdd`/`isDel`) — an island whose only change is a few inventory
-    numbers carries just those numbers, not its multi-KiB building list. The
+    merge-patch (reserved markers `__set` / `__del` / `__keyed` so it is
+    unambiguous on JSON `null`/object/array values) with `islandStates` diffed
+    **by id** (`isUpd`/`isAdd`/`isDel`). The decisive lever is **keyed-array
+    diffing**: any array whose every element is a plain object with a unique
+    string `id` — most importantly each island's `buildings` and `world.islands`
+    itself — is diffed element-wise by id (`{ __keyed, u, a, d, o }`) rather than
+    replaced wholesale. Every operating building accrues `operatingMs` (duty-cycle
+    wear) each tick, so a wholesale replace would resend the entire ~38 KiB
+    building list per second; keyed diffing sends only the one changed number per
+    building. Non-keyed arrays (`revealedCells` strings, `oceanCells`
+    `[key, cell]` tuples) fall back to wholesale `__set`, cheap since they rarely
+    change. Measured on the real save: a 1 s tick drops from a full ~190 KiB
+    projected snapshot to a ~7.5 KiB delta (~1.5 KiB on the wire after deflate),
+    ~25× raw / ~125× vs the prior uncompressed full push. The
     baseline always advances to the snapshot just sent, keeping client and
     server in lockstep; `server-client.ts` resets its baseline on every
     (re)connect so a fresh socket reseeds from the full frame, and drops a delta
