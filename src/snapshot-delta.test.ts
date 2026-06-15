@@ -139,6 +139,57 @@ describe('computeSnapshotDelta / applySnapshotDelta round-trip', () => {
   });
 });
 
+describe('keyed-array diffing (by id)', () => {
+  it('sends only the changed field of one element in a large keyed array', () => {
+    const buildings = (mul: number) =>
+      Array.from({ length: 40 }, (_, i) => ({ id: `b${i}`, defId: 'mine', x: i, y: 0, operatingMs: i * mul }));
+    const prev = snap({ islandStates: [{ id: 'home', state: { lastTick: 1, buildings: buildings(1) } }] });
+    const next = snap({ islandStates: [{ id: 'home', state: { lastTick: 2, buildings: buildings(2) } }] });
+    const { delta } = computeSnapshotDelta(prev, next);
+    const patch = delta.isUpd![0]!.patch as Record<string, unknown>;
+    const bpatch = patch.buildings as Record<string, unknown>;
+    expect(bpatch.__keyed).toBe(true);
+    // No full-element replacement — every changed building carries just operatingMs.
+    const u = bpatch.u as Record<string, Record<string, unknown>>;
+    for (const id of Object.keys(u)) {
+      expect(Object.keys(u[id]!)).toEqual(['operatingMs']);
+    }
+    expectRoundTrip(prev, next);
+  });
+
+  it('round-trips add / remove / update within a keyed array', () => {
+    const prev = snap({ world: { islands: [{ id: 'a', r: 1 }, { id: 'b', r: 2 }, { id: 'c', r: 3 }] } });
+    const next = snap({ world: { islands: [{ id: 'a', r: 1 }, { id: 'c', r: 9 }, { id: 'd', r: 4 }] } });
+    const { delta } = computeSnapshotDelta(prev, next);
+    expect((delta.world!.islands as Record<string, unknown>).__keyed).toBe(true);
+    expectRoundTrip(prev, next);
+  });
+
+  it('round-trips a reorder of keyed elements', () => {
+    const prev = snap({ world: { islands: [{ id: 'a', r: 1 }, { id: 'b', r: 2 }, { id: 'c', r: 3 }] } });
+    const next = snap({ world: { islands: [{ id: 'c', r: 3 }, { id: 'a', r: 1 }, { id: 'b', r: 2 }] } });
+    const rebuilt = applySnapshotDelta(prev, computeSnapshotDelta(prev, next).delta);
+    expect((rebuilt.world.islands as unknown as Array<{ id: string }>).map((e) => e.id)).toEqual(['c', 'a', 'b']);
+    expectRoundTrip(prev, next);
+  });
+
+  it('falls back to wholesale replace for non-keyed arrays (tuples, strings)', () => {
+    const prev = snap({ world: { oceanCells: [['1,1', { t: 'deep' }]], revealedCells: ['1,1'] } });
+    const next = snap({ world: { oceanCells: [['1,1', { t: 'deep' }], ['1,2', { t: 'shelf' }]], revealedCells: ['1,1', '1,2'] } });
+    const { delta } = computeSnapshotDelta(prev, next);
+    // Tuple/string arrays are __set wholesale, not keyed.
+    expect((delta.world!.oceanCells as Record<string, unknown>).__set).toBeDefined();
+    expectRoundTrip(prev, next);
+  });
+
+  it('handles an array going from empty to populated and back', () => {
+    const empty = snap({ islandStates: [{ id: 'home', state: { lastTick: 1, buildings: [] } }] });
+    const full = snap({ islandStates: [{ id: 'home', state: { lastTick: 2, buildings: [{ id: 'b0', x: 0 }] } }] });
+    expectRoundTrip(empty, full);
+    expectRoundTrip(full, empty);
+  });
+});
+
 describe('substantive flag (idle-skip signal)', () => {
   it('is false when only the clock advances (savedAt + per-island lastTick)', () => {
     const prev = snap({
