@@ -46,7 +46,7 @@ describe('applyIntent', () => {
     expect(ack).toMatchObject({ seq: 7, ok: false, error: 'no game' });
   });
 
-  it('applies a legal place-building: ok, projection shows the building, save advances', async () => {
+  it('applies a legal place-building: ok ack, stored save carries the building', async () => {
     const uid = await aUserWithGame();
     const ack = await applyIntent(pool, uid, LEGAL_PLACE, Date.now());
     expect(ack.ok).toBe(true);

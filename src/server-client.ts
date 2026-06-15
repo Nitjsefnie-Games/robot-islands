@@ -2,7 +2,7 @@ import { applySnapshotDelta, type SnapshotDelta } from './snapshot-delta.js';
 import type { SaveSnapshot } from './persistence.js';
 
 export type Ack =
-  | { seq: number; ok: true; projection?: unknown }
+  | { seq: number; ok: true }
   | { seq: number; ok: false; error: string };
 
 export interface GameServerClient {
