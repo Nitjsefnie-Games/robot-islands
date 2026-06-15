@@ -19,6 +19,7 @@ import {
   type ConstructionRequirements,
   type ValidationReason,
 } from './artificial-island.js';
+import { positionIsFree } from './construction-gate.js';
 import { BIOME_DEFS } from './biomes.js';
 import type { IslandState } from './economy.js';
 import { hasOperationalBuilding } from './buildings.js';
@@ -27,7 +28,6 @@ import { mountModal } from './ui-modal.js';
 import type { MutationGateway } from './mutation-gateway.js';
 import type { ResourceId } from './recipes.js';
 import {
-  distSqTiles,
   ISLAND_NAME_MAX_LEN,
   validateIslandName,
   type Biome,
@@ -94,9 +94,6 @@ const REASON_LABEL: Readonly<Record<ValidationReason, string>> = {
   'invalid-biome': 'Unknown biome selection',
 };
 
-/** Distance buffer (tiles) added to (major_a + major_b) for overlap check. */
-const POSITION_BUFFER_TILES = 4;
-
 /** Tiny stable id generator so multiple constructs in one session get
  *  unique ids without colliding with the demo set. */
 let constructionCounter = 0;
@@ -123,22 +120,6 @@ export function _seedConstructionCounter(value: number): void {
 /** Reset the construction id counter. Test-only. */
 export function _resetConstructionCounter(): void {
   constructionCounter = 0;
-}
-
-/** Check whether a candidate position would overlap any existing island.
- *  Returns true if safe to place, false otherwise. Pure helper kept local
- *  to the UI since the rule is a UX guardrail, not a pure-layer invariant. */
-function positionIsFree(
-  world: WorldState,
-  cx: number,
-  cy: number,
-  majorRadius: number,
-): boolean {
-  for (const s of world.islands) {
-    const minDist = s.majorRadius + majorRadius + POSITION_BUFFER_TILES;
-    if (distSqTiles(s.cx, s.cy, cx, cy) < minDist * minDist) return false;
-  }
-  return true;
 }
 
 export function mountConstructionUi(

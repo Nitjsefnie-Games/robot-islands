@@ -76,6 +76,9 @@ import { expandIsland, canExpandIsland, type Axis } from '../../../src/land-recl
 import { convertToServitor } from '../../../src/servitor.js';
 import { BIOME_DEFS } from '../../../src/biomes.js';
 import { tryRefreshMaintenance } from '../../../src/maintenance.js';
+import { hasOperationalBuilding } from '../../../src/building-operational.js';
+import { positionIsFree } from '../../../src/construction-gate.js';
+import { candidateAnchors } from '../../../src/anchor-picker.js';
 import { ALL_RESOURCES, type ResourceId } from '../../../src/recipes.js';
 import type { Rotation } from '../../../src/shape-mask.js';
 import { CARGO_WILDCARD, type CargoEntry, type CargoMode } from '../../../src/route-cargo.js';
@@ -245,8 +248,19 @@ export const INTENTS: Record<string, IntentHandler> = {
       // placement-ui.ts ocean path), so convert back to world-cell indices by
       // adding the anchor centre and dividing by CELL_SIZE_TILES before validating.
       if (def.oceanPlacement === true) {
-        const ov = validateOceanPlacement(game.world, typedDefId, (x + spec.cx) / CELL_SIZE_TILES, (y + spec.cy) / CELL_SIZE_TILES);
+        const cellX = (x + spec.cx) / CELL_SIZE_TILES;
+        const cellY = (y + spec.cy) / CELL_SIZE_TILES;
+        const ov = validateOceanPlacement(game.world, typedDefId, cellX, cellY);
         if (!ov.ok) return { ok: false, error: ov.reason ?? 'illegal ocean placement' };
+        // Trust-surface: the ocean anchor picker only offers populated islands
+        // within range. Re-check the supplied anchor id against the same
+        // candidate list so a crafted intent cannot anchor to an ineligible island.
+        if (
+          typeof anchorIslandId !== 'string' ||
+          !candidateAnchors(game.world, cellX, cellY).some((a) => a.islandId === anchorIslandId)
+        ) {
+          return { ok: false, error: 'ineligible-anchor' };
+        }
       } else {
         const v = validatePlacement(spec, state, typedDefId, x, y, rot);
         if (!v.ok) return { ok: false, error: v.reason ?? 'illegal placement' };
@@ -410,6 +424,16 @@ export const INTENTS: Record<string, IntentHandler> = {
       }
       const island = resolveIsland(game, islandId);
       if (!island) return { ok: false, error: 'unknown island' };
+      // Trust-surface: the Drone Ops UI disables launch when the active island
+      // has no operational Drone Pad. Path-drawn mode additionally requires an
+      // operational Path Drone Foundry. Re-check both gates before dispatch.
+      if (!hasOperationalBuilding(island.state.buildings, 'dronepad')) {
+        return { ok: false, error: 'no-operational-dronepad' };
+      }
+      const isPathDrawn = typedWaypoints !== undefined && typedWaypoints.length >= 2;
+      if (isPathDrawn && !hasOperationalBuilding(island.state.buildings, 'path_drone_foundry')) {
+        return { ok: false, error: 'no-operational-path-drone-foundry' };
+      }
       const r = dispatchDrone(
         game.world, island.state,
         originX as number, originY as number,
@@ -606,6 +630,12 @@ export const INTENTS: Record<string, IntentHandler> = {
       if (typeof buildingId !== 'string') return { ok: false, error: 'buildingId must be a string' };
       const island = resolveIsland(game, islandId);
       if (!island) return { ok: false, error: 'unknown island' };
+      // Trust-surface: the inspector UI only shows the Convert button when the
+      // island has an operational Reality Forge. Re-check that gate here so a
+      // crafted intent cannot bypass it.
+      if (!hasOperationalBuilding(island.state.buildings, 'reality_forge')) {
+        return { ok: false, error: 'requires an operational Reality Forge' };
+      }
       const result = convertToServitor(island.state, buildingId, BUILDING_DEFS);
       if (!result.ok) return { ok: false, error: result.reason };
       return { ok: true };
@@ -744,6 +774,12 @@ export const INTENTS: Record<string, IntentHandler> = {
       const req = { biome: biome as Biome, majorRadius, minorRadius };
       const can = validateConstruction(founder.state, founder.spec, req);
       if (!can.ok) return { ok: false, error: can.reason ?? 'construction invalid' };
+      // Trust-surface: the Construction UI disables placement while the chosen
+      // position overlaps an existing island. Re-run the same overlap check on
+      // authoritative state so a crafted intent cannot mint an overlapping island.
+      if (!positionIsFree(game.world, cx, cy, majorRadius)) {
+        return { ok: false, error: 'position-occupied' };
+      }
       const id = makeArtificialIdGenerator(game.world)();
       let name: string | undefined;
       if (typeof displayName === 'string') {
