@@ -67,6 +67,9 @@ describe('mountInspectorUi', () => {
       onUpgradeFloor: vi.fn(),
       onExpandIsland: vi.fn(),
       onRenameIsland: vi.fn(),
+      onSetBankingEnabled: vi.fn(),
+      onSpendTimeLock: vi.fn(),
+      onSetGenesisTarget: vi.fn(),
       ...over,
     };
   }
