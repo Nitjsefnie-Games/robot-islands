@@ -1,3 +1,6 @@
+import { applySnapshotDelta, type SnapshotDelta } from './snapshot-delta.js';
+import type { SaveSnapshot } from './persistence.js';
+
 export type Ack =
   | { seq: number; ok: true; projection?: unknown }
   | { seq: number; ok: false; error: string };
@@ -40,6 +43,12 @@ function isStateFrame(value: unknown): value is { type: 'state'; snapshot: unkno
   return v.type === 'state' && 'snapshot' in v;
 }
 
+function isStateDeltaFrame(value: unknown): value is { type: 'state-delta'; delta: SnapshotDelta } {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return v.type === 'state-delta' && typeof v.delta === 'object' && v.delta !== null;
+}
+
 export function gameSocketUrl(): string {
   const protocol = globalThis.location.protocol === 'https:' ? 'wss' : 'ws';
   return `${protocol}://${globalThis.location.host}/api/game/ws`;
@@ -57,6 +66,11 @@ export function connectGameServer(opts: ConnectGameServerOptions): GameServerCli
   const pending = new Map<number, PendingIntent>();
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let backoffMs = INITIAL_BACKOFF_MS;
+  // The last full snapshot delivered to `onState`. The server sends a full
+  // `state` frame as the per-socket baseline, then `state-delta` frames that
+  // patch it; we reconstruct the full snapshot here so `onState` always sees a
+  // complete SaveSnapshot. Reset on (re)connect so the next baseline reseeds.
+  let lastSnapshot: SaveSnapshot | null = null;
 
   function cleanupSocket(): void {
     if (!socket) return;
@@ -105,12 +119,28 @@ export function connectGameServer(opts: ConnectGameServerOptions): GameServerCli
     }
 
     if (isStateFrame(frame)) {
+      // A full baseline snapshot (or null when the account has no game yet).
+      lastSnapshot = (frame.snapshot ?? null) as SaveSnapshot | null;
       onState(frame.snapshot);
+      return;
+    }
+
+    if (isStateDeltaFrame(frame)) {
+      // A delta is only meaningful against a prior baseline. The server
+      // guarantees a full `state` frame first on every socket, and we reset
+      // `lastSnapshot` on (re)connect, so a delta without a base is a protocol
+      // desync — drop it and wait for the next baseline rather than corrupt state.
+      if (lastSnapshot === null) return;
+      lastSnapshot = applySnapshotDelta(lastSnapshot, frame.delta);
+      onState(lastSnapshot);
     }
   }
 
   function connect(): void {
     if (closed || socket) return;
+    // A new socket gets a fresh full baseline from the server; discard any
+    // prior snapshot so a stale base can't be patched by the new socket's deltas.
+    lastSnapshot = null;
     try {
       socket = new WebSocketCtor(url);
     } catch (err) {
