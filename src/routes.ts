@@ -26,7 +26,7 @@ import {
 import { makeSeededRng } from './rng.js';
 import { solveBrownoutFactor } from './flow-power-fixpoint.js';
 import { XP_WEIGHT, type ResourceId } from './recipes.js';
-import { effectiveSkillMultipliers } from './skilltree.js';
+import { effectiveSkillMultipliers, type SkillMultipliers } from './skilltree.js';
 import {
   biomeForCell,
   routeCapacityMultiplierForWeather,
@@ -810,6 +810,13 @@ export function tickRoutes(
   /** §15.1 wall anchor (see `weatherClockMs`). Threaded into both the
    *  arrival-loss samples and the dispatch capacity multiplier. */
   wallOffsetMs: number = 0,
+  /** PERF: optional precomputed per-island skill multipliers (keyed by island
+   *  id). A loop caller (advanceWorldSystems) whose skills are static across the
+   *  bounded steps builds these once and passes them in, so dispatchPhase skips
+   *  rebuilding the skill-mul memo signature + cloning per route PER step (a CPU
+   *  profile showed that was ~14% of offline-catch-up CPU). Omitted ⇒ each call
+   *  recomputes via effectiveSkillMultipliers, exactly as before. */
+  precomputedSkillMul?: ReadonlyMap<string, SkillMultipliers>,
 ): {
   dispatches: Array<{ routeId: string; resourceId: ResourceId; amount: number }>;
   arrivals: Array<{ destIslandId: string; resourceId: ResourceId; amount: number }>;
@@ -823,7 +830,7 @@ export function tickRoutes(
     const r = world.routes[i];
     if (r && r.draining && r.inFlight.length === 0) world.routes.splice(i, 1);
   }
-  const dispatches = dispatchPhase(world, states, nowMs, elapsedSec, wallOffsetMs);
+  const dispatches = dispatchPhase(world, states, nowMs, elapsedSec, wallOffsetMs, precomputedSkillMul);
   return { dispatches, arrivals };
 }
 
@@ -835,6 +842,11 @@ function dispatchPhase(
   nowMs: number,
   elapsedSec: number,
   wallOffsetMs: number = 0,
+  /** See tickRoutes' param doc — precomputed per-island skill multipliers so the
+   *  per-route-per-step effectiveSkillMultipliers recompute is skipped during a
+   *  catch-up. A miss (e.g. an island settled mid-loop) falls back to a live
+   *  compute, so correctness never depends on the map being complete. */
+  precomputedSkillMul?: ReadonlyMap<string, SkillMultipliers>,
 ): Array<{ routeId: string; resourceId: ResourceId; amount: number }> {
   if (elapsedSec <= 0) return [];
 
@@ -854,10 +866,12 @@ function dispatchPhase(
     const srcState = states.get(route.from);
     if (!srcState) continue;
     // Transport sub-path skill bonus — read on the SOURCE island (where
-    // dispatch decisions get made and the player invests skill points).
-    // Reading per-route per-tick is fine because effectiveSkillMultipliers
-    // is a cheap Map fold.
-    const skillCapMul = effectiveSkillMultipliers(srcState).routeCapacity;
+    // dispatch decisions get made and the player invests skill points). Use the
+    // precomputed per-island bundle when a loop caller supplied one (skills are
+    // static across a catch-up), else fold live. Computed ONCE per route here
+    // and reused for both the routeCapacity and airshipRange reads below.
+    const srcMul = precomputedSkillMul?.get(route.from) ?? effectiveSkillMultipliers(srcState);
+    const skillCapMul = srcMul.routeCapacity;
 
     // §2.6 weather capacity modulation
     const fromSpec = islandIndex.get(route.from);
@@ -888,7 +902,7 @@ function dispatchPhase(
 
     // Airship-specific Transport bonus stacks only on airship routes.
     const airshipMul = route.type === 'airship'
-      ? effectiveSkillMultipliers(srcState).airshipRange
+      ? srcMul.airshipRange
       : 1;
     // §2.4 route-floor scaling: the source transport building's active floors
     // scale this route's effective capacity ×(1+L) (and transit speed below).
@@ -971,7 +985,7 @@ function dispatchPhase(
         const toSpec = world.islands.find((i) => i.id === d.route.to);
         if (fromSpec && toSpec) {
           const distTiles = Math.hypot(toSpec.cx - fromSpec.cx, toSpec.cy - fromSpec.cy);
-          const efficiency = effectiveSkillMultipliers(srcState).teleporterEfficiency;
+          const efficiency = (precomputedSkillMul?.get(d.route.from) ?? effectiveSkillMultipliers(srcState)).teleporterEfficiency;
           const fuelCost = (distTiles * TELEPORTER_FUEL_PER_TILE) / efficiency;
           if (inv(srcState, 'biofuel') < fuelCost) {
             // Insufficient fuel — refund the cargo we already deducted above

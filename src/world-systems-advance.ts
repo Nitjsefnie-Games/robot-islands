@@ -7,6 +7,7 @@
 import type { IslandState } from './economy.js';
 import { tickDrones, type Drone, type TickDronesResult } from './drones.js';
 import { computeSignalRanges } from './antenna.js';
+import { effectiveSkillMultipliers, type SkillMultipliers } from './skilltree.js';
 import { findNextMerge, performMerge } from './island-merge.js';
 import { discoverIslandsInVision } from './vision-discovery.js';
 import {
@@ -107,6 +108,18 @@ export function advanceWorldSystems(
     computeSignalRanges(world.islands.filter((s) => s.populated));
   let signalRanges = recomputeRanges();
 
+  // PERF: per-island skill multipliers are invariant across one advance — no
+  // systems tick mutates unlockedNodes (a merge transfers skill POINTS, not
+  // nodes; tier reset isn't called here), and effectiveSkillMultipliers depends
+  // only on unlockedNodes/auraAmpVersion. So we fold them ONCE and hand them to
+  // tickRoutes, which otherwise rebuilt the skill-mul memo signature + cloned
+  // the bundle per route PER step (a CPU profile showed ~14% of catch-up CPU).
+  // dispatchPhase falls back to a live fold for any island absent from the map
+  // (e.g. a settlement that populated a new island mid-loop), so correctness
+  // never depends on the map being complete.
+  const skillMulByIsland = new Map<string, SkillMultipliers>();
+  for (const [id, st] of states) skillMulByIsland.set(id, effectiveSkillMultipliers(st));
+
   let prev = fromMs;
   while (prev < toMs) {
     const cur = Math.min(prev + stepMs, toMs);
@@ -128,7 +141,7 @@ export function advanceWorldSystems(
     result.newlyDiscoveredIslandIds.push(...dr.newlyDiscoveredIslandIds);
     result.revealedCellsAdded += dr.revealedCellsAdded;
 
-    const rr = tickRoutes(world, states, cur, delta / 1000, wallOffsetMs);
+    const rr = tickRoutes(world, states, cur, delta / 1000, wallOffsetMs, skillMulByIsland);
     result.routeArrivals.push(...rr.arrivals);
     result.routeDispatches.push(...rr.dispatches);
 
