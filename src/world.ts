@@ -414,16 +414,60 @@ export function islandsOverlap(a: IslandSpec, b: IslandSpec): boolean {
   return false;
 }
 
-/**
- * §3.6 total tile count across all constituents, deduplicated for tiles
- * shared by overlapping constituents (a tile counts once regardless of how
- * many constituents inscribe it). Pure.
- *
- * Used by `chooseMergeAbsorber` to decide which island is "larger" at the
- * moment of merge, and by `findNextMerge` to order multi-pair merges by
- * combined tile count.
- */
-export function islandTileCount(spec: IslandSpec): number {
+// PERF: islandTileCount rasterizes every constituent ellipse's bounding box —
+// O(major×minor), allocating a Set<string> of "x,y" keys per call. findNextMerge
+// invokes it once per populated island PER world-systems catch-up step (≈3600×
+// for a 1h offline gap), and a CPU profile showed it was >50% of total server
+// simulation time (plus most of the GC churn, from the per-tile string keys).
+//
+// The count is a pure function of the spec's ellipse GEOMETRY only — majorRadius,
+// minorRadius, and each extraEllipses entry's major/minor/offsetX/offsetY
+// (rotation is intentionally NOT read below) — and that geometry is static
+// between the rare §3.6 merges / §3.4 expansions. So we memoize per spec and
+// recompute only when the live geometry actually changed.
+//
+// Why the validity check is an exact field compare, NOT object identity: a merge
+// mutates `extraEllipses` (and §3.4 mutates the radii) IN PLACE on the same spec
+// object — attachTerrainAt's by-reference contract — so keying on identity alone
+// would return a STALE count after a merge. An exact compare of the geometry
+// fields also means zero collision risk (no hashing): equal fields ⇒ provably
+// equal count, because computeIslandTileCount reads ONLY those fields.
+//
+// Readable equivalent: delete the cache and call computeIslandTileCount directly.
+interface TileCountCacheEntry {
+  readonly major: number;
+  readonly minor: number;
+  /** Flattened [major, minor, offsetX, offsetY] per extraEllipses entry, as of
+   *  the count below — the exact geometry that produced `count`. */
+  readonly extra: readonly number[];
+  readonly count: number;
+}
+const tileCountCache = new WeakMap<IslandSpec, TileCountCacheEntry>();
+
+function tileCountGeometryUnchanged(entry: TileCountCacheEntry, spec: IslandSpec): boolean {
+  if (entry.major !== spec.majorRadius || entry.minor !== spec.minorRadius) return false;
+  const ex = spec.extraEllipses;
+  const exLen = ex ? ex.length : 0;
+  if (entry.extra.length !== exLen * 4) return false;
+  if (ex) {
+    for (let i = 0; i < ex.length; i++) {
+      const e = ex[i]!;
+      const b = i * 4;
+      if (
+        entry.extra[b] !== e.major ||
+        entry.extra[b + 1] !== e.minor ||
+        entry.extra[b + 2] !== e.offsetX ||
+        entry.extra[b + 3] !== e.offsetY
+      ) {
+        return false;
+      }
+    }
+  }
+  return true;
+}
+
+/** The actual rasterization — see islandTileCount for the cached public entry. */
+function computeIslandTileCount(spec: IslandSpec): number {
   const seen = new Set<string>();
   for (const c of islandConstituents(spec)) {
     // Bounding box for this constituent in island-local coords.
@@ -456,6 +500,27 @@ export function islandTileCount(spec: IslandSpec): number {
     }
   }
   return seen.size;
+}
+
+/**
+ * §3.6 total tile count across all constituents, deduplicated for tiles
+ * shared by overlapping constituents (a tile counts once regardless of how
+ * many constituents inscribe it). Pure (memoized — see the PERF note above).
+ *
+ * Used by `chooseMergeAbsorber` to decide which island is "larger" at the
+ * moment of merge, and by `findNextMerge` to order multi-pair merges by
+ * combined tile count.
+ */
+export function islandTileCount(spec: IslandSpec): number {
+  const cached = tileCountCache.get(spec);
+  if (cached !== undefined && tileCountGeometryUnchanged(cached, spec)) return cached.count;
+  const count = computeIslandTileCount(spec);
+  const extra: number[] = [];
+  if (spec.extraEllipses) {
+    for (const e of spec.extraEllipses) extra.push(e.major, e.minor, e.offsetX, e.offsetY);
+  }
+  tileCountCache.set(spec, { major: spec.majorRadius, minor: spec.minorRadius, extra, count });
+  return count;
 }
 
 /**
