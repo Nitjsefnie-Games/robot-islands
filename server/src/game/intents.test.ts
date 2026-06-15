@@ -2573,3 +2573,49 @@ describe('restart-tutorial', () => {
     expect(ts.xpBumpClaimed!.length).toBe(72);
   });
 });
+
+describe('active-heartbeat — §9.9 bonus accrues under focused play', () => {
+  // Regression: before the heartbeat-ownership fix, every intent's
+  // loadAndCatchUp re-charged the inter-heartbeat window as 3× "away" decay
+  // while the heartbeat accrued the same window at 1×, so a fully-focused
+  // player's bonus only ever DRAINED. It must now tick UP.
+  it('consecutive fully-focused heartbeats increase the bonus, never drain it', async () => {
+    const t0 = 1_000_000_000_000;
+    const snap = createInitialSnapshot(t0);
+    (snap.world as { activeBonusMs?: number }).activeBonusMs = 10_000;
+    (snap.world as { lastActiveMs?: number }).lastActiveMs = t0;
+    const uid = await userWithSnapshot(snap);
+
+    let now = t0;
+    for (let i = 0; i < 3; i++) {
+      now += 5_000;
+      const ack = await applyIntent(
+        pool, uid,
+        { type: 'active-heartbeat', payload: { focusedMs: 5_000, unfocusedMs: 0 }, seq: i + 1 },
+        now,
+      );
+      expect(ack.ok).toBe(true);
+    }
+    const out = await loadSnapshot(pool, uid);
+    expect(out!.world.activeBonusMs).toBeGreaterThan(10_000);
+  });
+
+  it('away-time reported as unfocused still decays the bonus authoritatively', async () => {
+    const t0 = 1_000_000_000_000;
+    const snap = createInitialSnapshot(t0);
+    (snap.world as { activeBonusMs?: number }).activeBonusMs = 10_000;
+    (snap.world as { lastActiveMs?: number }).lastActiveMs = t0;
+    const uid = await userWithSnapshot(snap);
+
+    // First heartbeat reports a large unfocused away-gap (the boot seed).
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'active-heartbeat', payload: { focusedMs: 0, unfocusedMs: 60_000 }, seq: 1 },
+      t0 + 60_000,
+    );
+    expect(ack.ok).toBe(true);
+    const out = await loadSnapshot(pool, uid);
+    // 10000 − 3×60000 floored at 0.
+    expect(out!.world.activeBonusMs).toBe(0);
+  });
+});
