@@ -30,9 +30,9 @@ export function isInToxicityPeriod(
   reactor: PlacedBuilding,
   nowMs: number,
 ): boolean {
-  return (
-    reactor.toxicityExpiryMs !== undefined && nowMs < reactor.toxicityExpiryMs
-  );
+  if (reactor.toxicityExpiryMs === undefined) return false;
+  const onsetMs = reactor.toxicityExpiryMs - TOXICITY_DURATION_MS;
+  return nowMs >= onsetMs && nowMs < reactor.toxicityExpiryMs;
 }
 
 /** Per-building output multiplier from toxicity state. 0.5 inside the

@@ -245,10 +245,12 @@ function advanceGroup(
   // Per-member base skill multiplier (frozen) — the same value advanceIsland
   // reads off its derivations memo.
   const baseMultByIsland = new Map<string, ReturnType<typeof cloneSkillMultipliers>>();
+  const varianceActiveByIsland = new Map<string, boolean>();
   for (const st of states) {
     const bm = cloneSkillMultipliers(effectiveSkillMultipliers(st));
     Object.freeze(bm);
     baseMultByIsland.set(st.id, bm);
+    varianceActiveByIsland.set(st.id, ctxFor(st).modifierMul?.outputVariance ?? false);
   }
 
   // §reactor-toxicity rolls + §12.4 grace shrink + pre-first-segment
@@ -394,6 +396,21 @@ function advanceGroup(
       );
       if (memberEvent < segEndMs) segEndMs = memberEvent;
 
+      // A member whose own lastTick is still ahead of the current segment
+      // start has not "joined" the lockstep yet. Split at its join moment so
+      // per-member factors are constant and the online guard below is exact.
+      if (st.lastTick > t) {
+        const e = st.lastTick;
+        if (e < segEndMs) segEndMs = e;
+      }
+
+      // §3.5 high_wind variance re-samples once per second; clamp the segment
+      // so the variance factor stays constant inside it.
+      if (varianceActiveByIsland.get(st.id)) {
+        const e = (Math.floor(t / 1000) + 1) * 1000;
+        if (e < segEndMs) segEndMs = e;
+      }
+
       // §13.3 battery boundary (local only).
       if (seg.batteryIsLocal) {
         if (seg.rawBalance > 0 && seg.maxCap > 0 && st.batteryStoredWs < seg.maxCap) {
@@ -449,9 +466,28 @@ function advanceGroup(
       // ---- Pooled integration (pooled resources): integrate the pooled
       // inventory by the pooled net over dt, clamped to pooled caps, via a
       // synthetic state so we reuse `applyRates`' exact clamp semantics.
-      const poolState: IslandState = { ...segs[0]!.state, inventory: { ...pool }, storageCaps: pooledCaps };
+      // The synthetic state MUST have its own `everProduced` Set — sharing the
+      // reference with member 0 would mis-attribute every pooled resource to
+      // island 0 and starve the real producer.
+      const poolState: IslandState = {
+        ...segs[0]!.state,
+        inventory: { ...pool },
+        storageCaps: pooledCaps,
+        everProduced: new Set<ResourceId>(),
+      };
       applyRates(poolState, pooledNet, dtSec, pooledCaps, baseMultByIsland.get(segs[0]!.state.id));
       distributePooled(states, poolState.inventory, pooledCaps, cfg);
+
+      // Attribute pooled everProduced entries to the actual producing members,
+      // not to the synthetic pool state or member 0.
+      for (const seg of segs) {
+        for (const [r, rate] of Object.entries(seg.net)) {
+          const rid = r as ResourceId;
+          if ((rate ?? 0) <= 0) continue;
+          if (!isPooledForIsland(cfg, rid, seg.state.id)) continue;
+          seg.state.everProduced.add(rid);
+        }
+      }
 
       // ---- Local integration (NON-pooled resources): each member integrates
       // its own non-pooled net against its OWN inventory + caps. For POOL_ALL
@@ -465,21 +501,33 @@ function advanceGroup(
       }
 
       // ---- Per-member side effects on that member's OWN production.
+      // Offline members (their own lastTick is still ahead of this segment)
+      // must not accrue XP, wear, CO₂, or battery charge for pre-join time.
+      // Construction ticks and terrain-shot counters still run (they are not
+      // gated by production), so we pass empty production/byBuilding/util and
+      // zero rawBalance instead of skipping the call.
       for (const seg of segs) {
+        const st = seg.state;
+        const online = t >= st.lastTick - 1e-9;
+        const effectByBuilding = online ? seg.byBuilding : [];
+        const effectProduction = online ? seg.production : ({} as Record<ResourceId, number>);
+        const effectConsumption = online ? seg.consumption : ({} as Record<ResourceId, number>);
+        const effectUtilById = online ? seg.utilById : new Map<string, number>();
+        const effectRawBalance = online ? seg.rawBalance : 0;
         applySegmentSideEffects(
-          seg.state,
-          seg.byBuilding,
-          seg.production,
-          seg.consumption,
+          st,
+          effectByBuilding,
+          effectProduction,
+          effectConsumption,
           dtSec,
           segEndMs,
           t,
           seg.localCtx,
           seg.skillMul,
           seg.batteryIsLocal,
-          seg.rawBalance,
+          effectRawBalance,
           seg.maxCap,
-          seg.utilById,
+          effectUtilById,
         );
       }
     }

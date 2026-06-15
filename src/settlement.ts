@@ -17,7 +17,7 @@
 import type { IslandState } from './economy.js';
 import { inv } from './economy.js';
 import { hasOperationalBuilding } from './buildings.js';
-import type { BuildingDefId } from './building-defs.js';
+import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
 import { fuelForTier, RECIPES, type ResourceId } from './recipes.js';
 import { computeNcState } from './network-consciousness.js';
 import { makeSeededRng } from './rng.js';
@@ -25,6 +25,7 @@ import { nextRouteId, T1_CARGO_CAPACITY_UNITS_PER_SEC, transitTimeForDistance } 
 import { tierForLevel } from './skilltree.js';
 import { biomeForCell, rasterizePath, rollVehicleDestruction, sumIslandCo2 } from './weather.js';
 import { islandInscribedAny } from './island.js';
+import { footprintTiles } from './shape-mask.js';
 import { CELL_SIZE_TILES, makeInitialIslandState } from './world.js';
 import type { IslandSpec, WorldState } from './world.js';
 
@@ -265,27 +266,80 @@ function computeStarterBuildings(
 
   // Build occupied set from already-placed buildings on the target so the
   // dock/helipad (pushed onto target.buildings before this call) is excluded.
+  // We mark every footprint tile (not just the anchor) so multi-tile starters
+  // cannot overlap each other or the dock.
   const occupied = new Set<string>();
-  for (const b of target.buildings) occupied.add(`${b.x},${b.y}`);
+  for (const b of target.buildings) {
+    const def = BUILDING_DEFS[b.defId];
+    for (const t of footprintTiles(def.footprint, b.x, b.y, (b.rotation ?? 0) as 0 | 1 | 2 | 3)) {
+      occupied.add(`${t.x},${t.y}`);
+    }
+  }
 
   // Enumerate inscribed candidate tiles in deterministic scan order.
   const xMin = -Math.ceil(target.majorRadius);
   const xMax = Math.ceil(target.majorRadius);
   const yMin = -Math.ceil(target.minorRadius);
   const yMax = Math.ceil(target.minorRadius);
+
+  // Terrain-tagged extractors (e.g. Mine) must sit on valid tiles. Place those
+  // first so an unconstrained Solar/Workshop doesn't accidentally occupy part
+  // of an ore cluster the Mine needs.
+  const sorted = [...defs].sort((a, b) => {
+    const aReq = BUILDING_DEFS[a].requiredTile?.length ? 1 : 0;
+    const bReq = BUILDING_DEFS[b].requiredTile?.length ? 1 : 0;
+    return bReq - aReq;
+  });
+
   const placements: Array<{ defId: BuildingDefId; x: number; y: number }> = [];
-  let i = 0;
-  outer: for (let y = yMin; y <= yMax; y++) {
-    for (let x = xMin; x <= xMax; x++) {
-      if (i >= defs.length) break outer;
-      if (!islandInscribedAny(target, x, y)) continue;
-      const key = `${x},${y}`;
-      if (occupied.has(key)) continue;
-      placements.push({ defId: defs[i]!, x, y });
-      occupied.add(key);
-      i += 1;
+
+  const tryPlace = (defId: BuildingDefId, requireTerrain: boolean): { x: number; y: number } | null => {
+    const def = BUILDING_DEFS[defId];
+    const required = def.requiredTile;
+    const terrainAt = target.terrainAt;
+    const allowed =
+      requireTerrain && required && required.length > 0 && terrainAt
+        ? new Set(required)
+        : null;
+    for (let y = yMin; y <= yMax; y++) {
+      for (let x = xMin; x <= xMax; x++) {
+        if (!islandInscribedAny(target, x, y)) continue;
+        const tiles = footprintTiles(def.footprint, x, y, 0);
+        let blocked = false;
+        for (const t of tiles) {
+          if (!islandInscribedAny(target, t.x, t.y)) {
+            blocked = true;
+            break;
+          }
+          if (occupied.has(`${t.x},${t.y}`)) {
+            blocked = true;
+            break;
+          }
+          if (allowed && !allowed.has(terrainAt!(t.x, t.y))) {
+            blocked = true;
+            break;
+          }
+        }
+        if (blocked) continue;
+        for (const t of tiles) occupied.add(`${t.x},${t.y}`);
+        return { x, y };
+      }
     }
+    return null;
+  };
+
+  for (const defId of sorted) {
+    // First pass: honour the def's terrain requirement if the island exposes
+    // a terrain function.
+    let p = tryPlace(defId, true);
+    if (!p) {
+      // Fallback: any inscribed unoccupied tile. This keeps tiny or unusual
+      // islands from dropping the starter entirely, matching the old behaviour.
+      p = tryPlace(defId, false);
+    }
+    if (p) placements.push({ defId, ...p });
   }
+
   if (placements.length < defs.length) {
     // eslint-disable-next-line no-console
     console.warn(

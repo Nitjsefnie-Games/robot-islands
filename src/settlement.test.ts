@@ -25,8 +25,10 @@ import {
 } from './settlement.js';
 import { deserializeWorld, serializeWorld, type SaveSnapshot } from './persistence.js';
 import { rasterizePath, rollVehicleDestruction, weather } from './weather.js';
-import { type IslandSpec, type WorldState } from './world.js';
+import { attachTerrainAt, type IslandSpec, type WorldState } from './world.js';
 import { islandInscribedAny } from './island.js';
+import { BUILDING_DEFS } from './building-defs.js';
+import { footprintTiles } from './shape-mask.js';
 
 // Test fixtures
 
@@ -195,6 +197,53 @@ describe('per-tier vehicle stats', () => {
     expect(targetSpec.buildings.some((b) => b.defId === 'workshop')).toBe(true);
     expect(targetSpec.buildings.some((b) => b.defId === 'mine')).toBe(true);
   });
+
+  it('T3 ship starter Mine lands on an ore tile and produces', () => {
+    const { world, homeSpec, homeState, islandStates } = makeTestWorld();
+    // Replace the bare target spec with one that has a guaranteed 2×2 ore pocket.
+    const target = attachTerrainAt({
+      id: 'target',
+      name: 'target',
+      biome: 'plains',
+      cx: 30,
+      cy: 0,
+      majorRadius: 14,
+      minorRadius: 14,
+      populated: false,
+      discovered: true,
+      buildings: [],
+      modifiers: [],
+    });
+    const idx = world.islands.findIndex((s) => s.id === 'target');
+    world.islands[idx] = target;
+    const baseTerrain = target.terrainAt!;
+    (target as { terrainAt: (x: number, y: number) => ReturnType<typeof baseTerrain> }).terrainAt = (
+      x,
+      y,
+    ) => {
+      if ((x === 2 || x === 3) && (y === 2 || y === 3)) return 'ore';
+      return baseTerrain(x, y);
+    };
+
+    homeState.inventory.foundation_kit = 1;
+    homeState.inventory.aviation_kerosene = 400;
+    const r = dispatchVehicle(world, homeSpec, homeState, target, 'ship', 3, 346, 1, 0);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    tickVehicles(world, islandStates, r.vehicle.expectedArrivalTime + 1);
+
+    const mine = target.buildings.find((b) => b.id.startsWith('target-starter-mine'));
+    expect(mine).toBeDefined();
+    for (const t of footprintTiles(BUILDING_DEFS.mine.footprint, mine!.x, mine!.y, 0)) {
+      expect(target.terrainAt!(t.x, t.y)).toBe('ore');
+    }
+
+    const newState = islandStates.get(target.id);
+    expect(newState).toBeDefined();
+    advanceIsland(newState!, 20000, { defs: BUILDING_DEFS });
+    expect(newState!.inventory.iron_ore).toBeGreaterThan(0);
+  });
+
   it('T4 ship arrival grants 6 free skill points', () => {
     const { world, homeSpec, homeState, targetSpec, islandStates } = makeTestWorld();
     homeState.inventory.foundation_kit = 1;

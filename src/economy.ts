@@ -37,7 +37,7 @@ import {
   pickMostDegradedTarget,
   tryAutoMaintain,
 } from './maintenance.js';
-import { advanceToxicityRolls, toxicityMultiplier } from './reactor-toxicity.js';
+import { advanceToxicityRolls, TOXICITY_DURATION_MS, toxicityMultiplier } from './reactor-toxicity.js';
 import { makeSeededRng } from './rng.js';
 import { nextRotateOutputBoundaryMs, resolveRecipe, resolveRotatingOutput, XP_WEIGHT, type Recipe, type ResourceId } from './recipes.js';
 import { cloneSkillMultipliers, effectiveSkillMultipliers, skillPointsForLevelUp, type NodeId, effectiveTierShift, tierForLevel, skillUnlockedAdjacencyRules, type SkillMultipliers, DEFAULT_GRAPH, type ConditionalEffectCondition, type ExoticAdjacencyRule } from './skilltree.js';
@@ -452,6 +452,11 @@ function tierForResource(r: ResourceId): number {
   if (w === 1000) return 6;
   return 1;
 }
+
+/** Variance samples once per real-time second and must not be frozen across a
+ *  long catch-up segment, so the integrator clamps segment length to this
+ *  period whenever the `high_wind` modifier is active. */
+const VARIANCE_SAMPLE_MS = 1000;
 
 /** Compute the variance factor for high_wind modifier. Deterministic per
  *  (islandId, second). Returns 1 when variance is inactive. */
@@ -1903,13 +1908,18 @@ export function computeRates(
   // multiplier composes with the existing skill-tree per-node accumulation
   // so depth-3 Mining + Cursed Storms gives the full 2× boost on top of
   // the depth scaling, matching the spec's "doubled rare finds" intent.
+  // §9.1 XP accrues only from REALIZED production: a trickle whose output
+  // resource is already at cap produces nothing (applyRates would clamp it
+  // away) and therefore must not contribute to `production` or earn XP.
+  const trickleHeadroom = (r: ResourceId): number =>
+    cap(state, r, ctx?.caps, undefined, skillMul) - (ctx?.inventory?.[r] ?? state.inventory[r] ?? 0);
   if (skillMul.mineRareTrickleRate > 0) {
     let mines = 0;
     for (const b of validBuildings) {
       if (b.defId === 'mine' || b.defId === 'deep_mine') mines++;
     }
     const rare = mines * skillMul.mineRareTrickleRate * modifierMul.rareFindMul;
-    if (rare > 0) {
+    if (rare > 0 && trickleHeadroom('helium_3') > 0) {
       production.helium_3 = (production.helium_3 ?? 0) + rare;
       net.helium_3 = (net.helium_3 ?? 0) + rare;
     }
@@ -1920,7 +1930,7 @@ export function computeRates(
       if (b.defId === 'logger' || b.defId === 'heavy_logger') loggers++;
     }
     const exotic = loggers * skillMul.loggerExoticTrickleRate * modifierMul.rareFindMul;
-    if (exotic > 0) {
+    if (exotic > 0 && trickleHeadroom('lumber') > 0) {
       production.lumber = (production.lumber ?? 0) + exotic;
       net.lumber = (net.lumber ?? 0) + exotic;
     }
@@ -2113,6 +2123,21 @@ export function findNextCapEvent(
   const constructionEvent = nextConstructionCompletionMs(state.buildings, tMs);
   if (constructionEvent !== null && constructionEvent > tMs && constructionEvent < best) {
     best = constructionEvent;
+  }
+  // §4.5 Chemical Reactor toxicity onset/expiry. A reactor's throughput factor
+  // changes at the start and end of a toxicity episode, so each transition must
+  // be a segment boundary. The roll itself is advanced before the loop; here we
+  // only read the resulting `toxicityExpiryMs` and split at the nearest future
+  // transition (onset if still before it, expiry if already inside the period).
+  for (const b of state.buildings) {
+    if (b.toxicityExpiryMs === undefined) continue;
+    const def = defs[b.defId];
+    if (def.id !== 'chemical_reactor') continue;
+    const expiryMs = b.toxicityExpiryMs;
+    if (expiryMs <= tMs) continue;
+    const onsetMs = expiryMs - TOXICITY_DURATION_MS;
+    const candidate = onsetMs > tMs ? onsetMs : expiryMs;
+    if (candidate < best) best = candidate;
   }
   // Guard against floating-point fuzz: if best is microscopically below tMs
   // (e.g. -1e-12), clamp to tMs so the integration progresses one event at
@@ -2542,6 +2567,10 @@ export function advanceIsland(
     getDerivationsMemo(state, defs, ctx?.geothermalActive ?? false, ctx?.crossIsland).baseSkillMul,
   );
   Object.freeze(baseMult);  // shallow — covers all primitive fields
+  // The caller's modifier bundle is stable for the duration of this advance
+  // call. When `high_wind` is active its variance sample changes per second,
+  // so we clamp each integration segment to the next second boundary.
+  const varianceActive = (ctx?.modifierMul ?? IDENTITY_MODIFIER_MULTIPLIERS).outputVariance;
   // §13.3 Time Lock banking: if the island has at least one Time Lock and
   // banking is enabled, accumulate offline time into the bank instead of
   // advancing production.
@@ -2690,9 +2719,17 @@ export function advanceIsland(
         nextRotationMs = boundary;
       }
     }
+    // §3.5 high_wind variance re-samples once per second. The sample is
+    // constant within a second, so a long catch-up segment must split at the
+    // next second boundary or the integral would use one arbitrary draw for
+    // the whole interval.
+    let nextVarianceMs = Infinity;
+    if (varianceActive) {
+      nextVarianceMs = (Math.floor(t / VARIANCE_SAMPLE_MS) + 1) * VARIANCE_SAMPLE_MS;
+    }
     // Clamp to nowMs; findNextCapEvent already returns nowMs when nothing
     // changes, but if all rates are zero we still need to exit the loop.
-    const segEndMs = Math.min(nextEventMs, nextPhaseMs, nextSolarMs, nextAccelMs, nextBatteryMs, nextRotationMs, nextShotMs, nowMs);
+    const segEndMs = Math.min(nextEventMs, nextPhaseMs, nextSolarMs, nextAccelMs, nextBatteryMs, nextRotationMs, nextShotMs, nextVarianceMs, nowMs);
     const dtSec = (segEndMs - t) / 1000;
     if (dtSec > 0) {
       applyRates(state, net, dtSec, ctx?.caps, baseMult);

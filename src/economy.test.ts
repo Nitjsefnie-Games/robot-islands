@@ -60,6 +60,7 @@ import * as skilltreeModule from './skilltree.js';
 import { FULL_CATALOG } from './skilltree-catalog.js';
 import { attachTerrainAt, makeInitialIslandState } from './world.js';
 import { resolveShot, SHOT_DURATION_MS } from './terrain-modifier.js';
+import { TOXICITY_DURATION_MS } from './reactor-toxicity.js';
 import { islandInscribedAny } from './island.js';
 
 const MINE: PlacedBuilding = { id: 'b-mine', defId: 'mine', x: 0, y: 0 };
@@ -399,6 +400,26 @@ describe('XP accrual', () => {
     });
     advanceIsland(state, 10_000, { defs: POWER_FREE });
     expect(state.xp).toBe(0);
+  });
+
+  it('rare-find / exotic trickle grants no XP when its output is capped', () => {
+    const state = makeState({
+      buildings: [MINE],
+      unlockedNodes: new Set<NodeId>(['mining.notable.heliumSeep']),
+      storageCaps: { ...blankCaps(100), helium_3: 0 },
+    });
+    const { production } = computeRates(state, { defs: POWER_FREE }, 0);
+    expect(production.helium_3 ?? 0).toBe(0);
+  });
+
+  it('rare-find / exotic trickle grants XP when its output has headroom', () => {
+    const state = makeState({
+      buildings: [MINE],
+      unlockedNodes: new Set<NodeId>(['mining.notable.heliumSeep']),
+      storageCaps: { ...blankCaps(100), helium_3: 100 },
+    });
+    const { production } = computeRates(state, { defs: POWER_FREE }, 0);
+    expect((production.helium_3 ?? 0)).toBeGreaterThan(0);
   });
 });
 
@@ -1814,6 +1835,18 @@ describe('modifier integration in computeRates / advanceIsland (§3.5)', () => {
     // Workshop should be within ±20% of 1/4300 (not double-dipped)
     expect(wsRate).toBeGreaterThanOrEqual((1 / 4300) * 0.8);
     expect(wsRate).toBeLessThanOrEqual((1 / 4300) * 1.2);
+  });
+
+  it('high_wind variance re-samples each second during advanceIsland', () => {
+    // Without a per-second segment boundary the integrator would freeze the
+    // second-0 sample across the whole 2 s catch-up. With the fix it integrates
+    // second 0 at the second-0 sample and second 1 at the second-1 sample.
+    const state = makeState({ buildings: [MINE] });
+    const mul = effectiveModifierMultipliers(['high_wind']);
+    const sample0 = computeRates(state, { modifierMul: mul, defs: POWER_FREE }, 0).production.iron_ore ?? 0;
+    const sample1 = computeRates(state, { modifierMul: mul, defs: POWER_FREE }, 1000).production.iron_ore ?? 0;
+    advanceIsland(state, 2000, { modifierMul: mul, defs: POWER_FREE });
+    expect(state.inventory.iron_ore).toBeCloseTo(sample0 + sample1, 9);
   });
 
   it('computeRates with modifierMul matches advanceIsland integration', () => {
@@ -3985,6 +4018,52 @@ describe('§4.5 — chemical_reactor toxicity in computeRates', () => {
       (a.toxicityExpiryMs !== undefined && a.toxicityExpiryMs > startMs) ||
       (b.toxicityExpiryMs !== undefined && b.toxicityExpiryMs > startMs);
     expect(anyTriggered).toBe(true);
+  });
+
+  it('findNextCapEvent splits at toxicity onset and expiry', () => {
+    const reactor: PlacedBuilding = { id: 'reactor', defId: 'chemical_reactor', x: 0, y: 0 };
+    const state = makeState({ buildings: [reactor], level: 10 });
+    const net = {} as Record<ResourceId, number>;
+
+    // Future onset: the nearest transition is the start of the toxicity window.
+    reactor.toxicityExpiryMs = 2 * TOXICITY_DURATION_MS;
+    expect(findNextCapEvent(state, net, 0, 10 * TOXICITY_DURATION_MS, { defs: BUILDING_DEFS })).toBe(
+      TOXICITY_DURATION_MS,
+    );
+
+    // Currently inside the window: the next transition is the expiry.
+    reactor.toxicityExpiryMs = 5000;
+    expect(findNextCapEvent(state, net, 1000, 10000, { defs: BUILDING_DEFS })).toBe(5000);
+  });
+
+  it('advanceIsland uses the toxic factor only after onset', () => {
+    // Set expiry so the toxicity window starts at t = 3000 and ends one hour later.
+    const reactor: PlacedBuilding = {
+      id: 'reactor',
+      defId: 'chemical_reactor',
+      x: 0,
+      y: 0,
+      toxicityExpiryMs: 3000 + TOXICITY_DURATION_MS,
+    };
+    const state = makeState({
+      buildings: [reactor],
+      inventory: { ...blankInventory(), sulfur: 1000, quicklime: 1000, heavy_oil: 1000 },
+      level: 10,
+    });
+
+    const noPower = ((): DefCatalog => {
+      const base = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
+      const { power: _p, ...rest } = base.chemical_reactor;
+      base.chemical_reactor = rest as BuildingDef;
+      return base;
+    })();
+
+    // Pre-onset rate is the full rate; post-onset rate is halved.
+    const before = computeRates(state, { defs: noPower }, 0);
+    const after = computeRates(state, { defs: noPower }, 4000);
+    const beforeRate = before.byBuilding.find((r) => r.building.id === 'reactor')!.effectiveRate;
+    const afterRate = after.byBuilding.find((r) => r.building.id === 'reactor')!.effectiveRate;
+    expect(afterRate).toBeCloseTo(beforeRate * 0.5, 9);
   });
 });
 
