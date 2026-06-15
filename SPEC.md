@@ -22,7 +22,7 @@ Legend: **L** = live · **P** = partial · **N** = not implemented.
 | §2.6 Weather | L | Forecast model, biome modulation, vehicle destruction rolls, route capacity modulation, in-flight loss, satellite immunity. Map overlay snaps to vision cells. |
 | §2.7 Day-night cycle | L | Solar multiplier per phase, weather-phase modulation (+25% severe-storm Night/Dawn), full-viewport tint overlay. |
 | §3.1-3.4 Island spec / biomes / tile types / shape | L | All six biomes, ellipse geometry, Land Reclamation expansion, max-size table. |
-| §3.5 Modifiers | L | Roll distribution, biome-tagged sampling, Stable exclusivity. High Wind variance + +50% wind-power. Cursed Storms -10% global prod + 2× rare-find trickle (Mining helium_3 + Forestry exotic-species) via `rareFindMul`. |
+| §3.5 Modifiers | L | Roll distribution, biome-tagged sampling, Stable exclusivity. High Wind variance re-samples once per real-time second and is clamped to 1 s integration segments so long catch-ups average instead of freezing one draw; +50% wind-power. Cursed Storms -10% global prod + 2× rare-find trickle (Mining helium_3 + Forestry exotic-species) via `rareFindMul`. |
 | §3.6 Joining | L | Geometric overlap detection, largest-absorbs, ellipse list, building global coords via offsets, route redirect/delete, modifier voiding. |
 | §3.7 Starting state | L | Empty home Plains island, Drone Pad gated at L5. Starter inventory ships as `60 stone + 40 wood + 1 Foundation Kit` (bootstrap deviation from the §3.7 literal — see §3.7 Implementation note). |
 | §4.1-4.3 Building footprint / rotation / placement | L | All shape masks, 4 rotations, terrain-requirement gates. |
@@ -508,7 +508,7 @@ Two categories:
 * Smelter requires adjacent Heat Source; without one, output is zero
 * Refinery without adjacent Wastewater Treatment operates only on low-grade recipe (efficiency -50%)
 * Crystal Growth Lab adjacent to Cooling Tower unlocks rare crystal recipes
-* Chemical Reactor adjacent to another Chemical Reactor risks toxicity event: 5% per real-time hour per reactor that has at least one adjacent Chemical Reactor. On trigger, that specific reactor's throughput drops to 50% for 1 real-time hour, then auto-resolves. Adjacent reactors are unaffected unless they trigger their own roll. Player can mitigate by spacing reactors with non-reactor buildings between them.
+* Chemical Reactor adjacent to another Chemical Reactor risks toxicity event: 5% per real-time hour per reactor that has at least one adjacent Chemical Reactor. On trigger, that specific reactor's throughput drops to 50% for 1 real-time hour, then auto-resolves. Adjacent reactors are unaffected unless they trigger their own roll. Player can mitigate by spacing reactors with non-reactor buildings between them. The toxicity onset and expiry are segment boundaries in the §15.3 integrator so the post-onset sub-segment uses the halved factor.
 
 ### 4.6 Storage Caps
 
@@ -1093,7 +1093,7 @@ xp\_per\_tick = sum over resources r of ( production\_rate\[r] \* xp\_weight\[r]
 
 The `production\_rate\[r]` figure already incorporates `power\_factor` (§5.1), so brownout under-supply reduces XP proportionally without a separate penalty layer.
 
-**XP follows realized production.** XP accrues on what a building actually produces, so a building throttled by a capped output bin or scarce inputs (§15.3 net-flow) earns XP at its throttled rate, not its nominal rate. A cap-pinned producer with zero consumers realizes zero production and therefore earns zero XP — there is no XP farm at a full bin. The player must manage caps, build additional storage, or consume the bottlenecked resource downstream to keep progression moving at full rate.
+**XP follows realized production.** XP accrues on what a building actually produces, so a building throttled by a capped output bin or scarce inputs (§15.3 net-flow) earns XP at its throttled rate, not its nominal rate. A cap-pinned producer with zero consumers realizes zero production and therefore earns zero XP — there is no XP farm at a full bin. The same rule applies to skill-tree rare-find / exotic-species trickles (Mining helium_3, Forestry lumber): when the trickle's output resource is already at cap, the trickle is voided and grants no XP. The player must manage caps, build additional storage, or consume the bottlenecked resource downstream to keep progression moving at full rate.
 
 **Funneling bonus** is the second source — see §10.1 for the formula. It applies only while the island is below Tier 3.
 
@@ -1584,7 +1584,7 @@ Travel time scales with distance and is determined by vehicle tier (helicopter i
 |T3 Heavy Lift Helicopter|1 Solar Panel + 1 Workshop|Contents of the delivered Standard Foundation Kit(s)|4|
 |T4 VTOL Tilt-Rotor|1 Solar Panel + 1 Workshop + 1 Coal Generator + 1 Storage Crate|Contents of the delivered Standard Foundation Kit(s)|6|
 
-Pre-placed buildings are placed by the engine at deterministic default positions (inscribed tiles in scan order, skipping the auto-placed dock/helipad). Skill points are added to the new colony's `unspentSkillPoints` total.
+Pre-placed buildings are placed by the engine at deterministic default positions (inscribed tiles in scan order, skipping the auto-placed dock/helipad). Terrain-tagged extractors such as the Mine are placed on valid terrain first (e.g. an ore or coal vein) so they produce immediately; if no valid tile exists the engine falls back to any inscribed unoccupied tile. Skill points are added to the new colony's `unspentSkillPoints` total.
 
 **Foundation Kit decomposition on arrival.** The kit, which lives in source-island inventory as a single composite item per §12.3, decomposes into its raw constituent resources (5 Iron ingot + 10 Wood + 5 Bolt for the Standard kit; this Standard recipe is credited per kit regardless of vehicle tier) the moment it arrives at the colony. A level-1 colony has no storage buildings, so the kit contents are held under a one-time **starter inventory grace cap** that allows the colony to hold the kit's raw contents even with zero specialized or generic storage. The grace cap shrinks resource-by-resource as the player builds proper storage (Crates, Silos, etc.) — once normal cap meets or exceeds current inventory for a given resource, that resource's grace allowance is removed. Resources still held under grace cannot exceed the kit-delivered quantities (player can't "fill" the grace bucket with more from routes; routes still respect normal caps).
 
@@ -1665,6 +1665,8 @@ Mechanically:
   * Routes between networked islands become redundant and may be deleted; transport to non-networked islands continues to use the route system as normal
 
   Activating Omniscient Lattice is the late-game logistics endpoint. Once it fires, the player's networked production is effectively a single very large island for resource and adjacency purposes.
+
+  In the grouped lockstep advance, a member whose `lastTick` is later than the group's earliest `lastTick` only accrues XP, wear, CO₂, and battery charge from its own `lastTick` forward; the integrator splits the timeline at each member's join moment. Pooled `everProduced` entries are attributed to the member(s) that actually produced the resource, not to the synthetic pool state or to member 0.
 
 * **Self-perpetuation — Eternal Servitor.** A T5 conversion mechanic. The player crafts a Servitor Conversion Kit at a Reality Forge and applies it to a placed building. The targeted building converts to its Eternal Servitor variant — permanently exempt from fuel consumption AND from the maintenance system (§4.7). Conversion is permanent; converted buildings cannot revert. Each Eternal Servitor is a per-building commitment using its own Conversion Kit.
 
@@ -2074,7 +2076,7 @@ function computeRates(island: Island) {
 }
 ```
 
-`findNextCapEvent` returns the timestamp at which any inventory hits its cap or empties given current rates, or `now` if nothing changes within the interval.
+`findNextCapEvent` returns the timestamp at which any inventory hits its cap or empties given current rates, or `now` if nothing changes within the interval. It also reports factor-change boundaries that are not inventory events but still alter rates: maintenance thresholds, construction completions, Chemical Reactor toxicity onset/expiry, and (in the lattice path) member `lastTick` join moments.
 
 **Net-flow throttle (supersedes the binary `outputAvail`).** `outputAvail` is
 no longer a binary stall — a single output bin at cap once froze the whole
@@ -2136,6 +2138,8 @@ verbatim). Generator wattage remains outside the solver throughout (the gate
 throttles resource flows only).
 
 Construction completions are also event boundaries: when `constructionRemainingMs` reaches zero during a segment, the loop iterates there. At that completion point a storage building's capacity multiplier is credited to the island's caps (§4.6, expanded to `multiplier × storage_base(r)` per affected resource) — the base multiplier for a fresh placement (floorLevel 0), the flat per-level multiplier increment for a completed floor upgrade (floorLevel ≥ 1); the same loop runs every segment, so a build completing mid-offline-catchup is credited correctly. Immediately after each segment `promoteQueuedBuilds` promotes the FIFO head of the build queue (lowest `queueSeq`) into any newly freed running slot, so queued builds start ticking within the same advance/offline-catchup call (§4.8).
+
+**Additional segment boundaries.** The integrator also splits segments at: (a) the per-second boundary when `high_wind` is active, so its ±20% variance re-samples each second rather than freezing one draw across a long catch-up; (b) Chemical Reactor toxicity onset/expiry moments (§4.5); (c) in the lattice/shared-network grouped advance, each member's `lastTick` join moment, so XP/wear/CO₂/battery accrual run only from the moment the member actually joined the lockstep; and (d) the pooled integration uses a synthetic island state with its own `everProduced` set, attributing pooled production to the real producing members rather than shallow-sharing the set with member 0.
 
 ### 15.4 Inter-Island Flow Resolution
 

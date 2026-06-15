@@ -329,4 +329,36 @@ describe('advanceLatticeGroup — §13.3 D-01 shared flow', () => {
     expect(pooled([a2, b2], 'bolt')).toBeCloseTo(bigBolt, 2);
     expect(pooled([a2, b2], 'iron_ore')).toBeCloseTo(pooled([a1, b1], 'iron_ore'), 2);
   });
+
+  it('late-lastTick member accrues no XP/wear/CO₂ for the pre-join interval', () => {
+    const a = makeState('A', { buildings: [MINE('mA')] });
+    const b = makeState('B', { buildings: [MINE('mB')], lastTick: 5000 });
+    advanceLatticeGroup([a, b], 10000, ctxFor(DEFS));
+
+    expect(a.xp).toBeGreaterThan(0);
+    expect(b.xp).toBeGreaterThan(0);
+    expect(b.xp).toBeCloseTo(a.xp * 0.5, 4);
+
+    const aMine = a.buildings.find((b) => b.id === 'mA')!;
+    const bMine = b.buildings.find((b) => b.id === 'mB')!;
+    expect(aMine.operatingMs).toBeCloseTo(10000, 0);
+    expect(bMine.operatingMs).toBeCloseTo(5000, 0);
+
+    // Mines emit no CO₂; the point of the assertion is that the offline member
+    // does not inherit side effects from the pooled production.
+    expect(a.co2Kg).toBe(0);
+    expect(b.co2Kg).toBe(0);
+  });
+
+  it('pooled everProduced is attributed to the real producer, not member 0', () => {
+    const producer = makeState('producer', { buildings: [MINE('mProd')] });
+    const consumer = makeState('consumer', { buildings: [WORKSHOP('w')] });
+    consumer.inventory.coal = 1000;
+    // consumer listed first so, before the fix, the synthetic pool state would
+    // shallow-share its everProduced Set and credit iron_ore to the wrong island.
+    advanceLatticeGroup([consumer, producer], 10000, ctxFor(DEFS));
+
+    expect(producer.everProduced.has('iron_ore')).toBe(true);
+    expect(consumer.everProduced.has('iron_ore')).toBe(false);
+  });
 });
