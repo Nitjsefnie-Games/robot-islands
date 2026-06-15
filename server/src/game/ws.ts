@@ -20,7 +20,8 @@ import { resolveSession } from '../auth/guard.js';
 import { applyIntent, type IntentEnvelope } from './intent-runner.js';
 import { catchUp, loadAndCatchUp } from './runtime.js';
 import { loadSnapshot } from './persistence.js';
-import { serializeWorld } from '../../../src/persistence.js';
+import { serializeWorld, type SaveSnapshot } from '../../../src/persistence.js';
+import { computeSnapshotDelta } from '../../../src/snapshot-delta.js';
 import { projectSnapshotForClient } from './projection.js';
 
 /** Interval between periodic authoritative state pushes to the client.
@@ -89,40 +90,65 @@ export class SlidingWindowLimiter {
 /** Per-account open sockets. Used to enforce WS_MAX_SOCKETS_PER_USER. */
 const userSockets = new Map<string, Set<WebSocket>>();
 
-/** Push the current authoritative snapshot to a socket without persisting.
- *  Returns the serialized snapshot (or null when the account has no game) so
- *  callers can assert on it in tests. */
-async function pushStateReadOnly(
-  socket: WebSocket,
+/** READ-ONLY projection: load + advance the account's game in memory to `now`
+ *  but DO NOT persist, returning the client-projected snapshot (or null when
+ *  the account has no game). The periodic push runs ~1 Hz per socket;
+ *  persisting here would write the full jsonb snapshot every second per
+ *  connection (write amplification) and widen the lost-update window. Authority
+ *  is persisted only by accepted intents and the periodic checkpoint. */
+async function projectReadOnly(
   pool: Pool,
   userId: string,
   now: number,
-): Promise<unknown | null> {
-  // READ-ONLY projection: load + advance in memory but DO NOT persist. The
-  // periodic push runs ~1 Hz per socket; persisting here would write the full
-  // jsonb snapshot every second per connection (write amplification) and widen
-  // the lost-update window. Authority is persisted only by accepted intents.
+): Promise<SaveSnapshot | null> {
   const game = catchUp(await loadSnapshot(pool, userId), now);
-  const snapshot = game === null ? null : serializeWorld(game.world, game.islandStates, now, now);
-  socket.send(JSON.stringify({ type: 'state', snapshot: snapshot === null ? null : projectSnapshotForClient(snapshot) }));
-  return snapshot;
+  if (game === null) return null;
+  return projectSnapshotForClient(serializeWorld(game.world, game.islandStates, now, now));
 }
 
-/** Persisting checkpoint push: load, advance, and save under the per-account
- *  advisory lock. Called at most once per WS_CHECKPOINT_INTERVAL_MS so an idle
- *  socket doesn't re-integrate an ever-growing gap. The checkpoint carries no
- *  unpersisted mutation and is idempotent at a given `now`, so it cannot
- *  clobber a concurrent intent. */
-async function pushStateCheckpoint(
-  socket: WebSocket,
+/** Persisting checkpoint projection: load, advance, and save under the
+ *  per-account advisory lock, returning the client-projected snapshot. Called
+ *  at most once per WS_CHECKPOINT_INTERVAL_MS so an idle socket doesn't
+ *  re-integrate an ever-growing gap. The checkpoint carries no unpersisted
+ *  mutation and is idempotent at a given `now`, so it cannot clobber a
+ *  concurrent intent. */
+async function checkpointAndProject(
   pool: Pool,
   userId: string,
   now: number,
-): Promise<unknown | null> {
+): Promise<SaveSnapshot | null> {
   const game = await withAccountTx(pool, userId, (client) => loadAndCatchUp(client, userId, now));
-  const snapshot = game === null ? null : serializeWorld(game.world, game.islandStates, now, now);
-  socket.send(JSON.stringify({ type: 'state', snapshot: snapshot === null ? null : projectSnapshotForClient(snapshot) }));
-  return snapshot;
+  if (game === null) return null;
+  return projectSnapshotForClient(serializeWorld(game.world, game.islandStates, now, now));
+}
+
+/** Per-connection state-push channel. The FIRST frame a socket receives is a
+ *  full `state` snapshot (the baseline); every subsequent push is a `state-delta`
+ *  computed against the exact snapshot this channel last sent — turning the ~230
+ *  KiB-per-tick firehose into a few changed numbers (an idle tick carries only
+ *  the advanced clock, ~100 bytes). The baseline always advances to the snapshot
+ *  just sent, so the client (which patches its own last-received snapshot) and
+ *  the server stay in trivial lockstep. A null game (no save yet) always sends a
+ *  full frame and resets the baseline, since a delta cannot describe "to null". */
+class StatePushChannel {
+  private lastSent: SaveSnapshot | null = null;
+  constructor(private readonly socket: WebSocket) {}
+
+  emit(projected: SaveSnapshot | null): void {
+    if (projected === null) {
+      this.socket.send(JSON.stringify({ type: 'state', snapshot: null }));
+      this.lastSent = null;
+      return;
+    }
+    if (this.lastSent === null) {
+      this.socket.send(JSON.stringify({ type: 'state', snapshot: projected }));
+      this.lastSent = projected;
+      return;
+    }
+    const { delta } = computeSnapshotDelta(this.lastSent, projected);
+    this.socket.send(JSON.stringify({ type: 'state-delta', delta }));
+    this.lastSent = projected;
+  }
 }
 
 /** Parse a raw WS frame into an envelope, or a per-message error descriptor
@@ -190,10 +216,13 @@ export function registerGameWsRoutes(
     // intent can never race the same saves row.
     let chain: Promise<void> = Promise.resolve();
 
+    // Per-connection delta channel: first frame full, rest are deltas.
+    const push = new StatePushChannel(socket);
+
     // Push the initial authoritative snapshot immediately on connect. If the
     // account has no game yet, snapshot is null; the client can use that as a
     // signal to create one (slice-4 boot will show auth/new-game UI).
-    chain = chain.then(async () => { await pushStateReadOnly(socket, pool, userId, Date.now()); }).catch(() => { /* socket gone */ });
+    chain = chain.then(async () => { push.emit(await projectReadOnly(pool, userId, Date.now())); }).catch(() => { /* socket gone */ });
 
     // Periodic authoritative state push: production advances even when the
     // client sends no intents. The interval is cleared on socket close.
@@ -207,10 +236,10 @@ export function registerGameWsRoutes(
       chain = chain.then(async () => {
         const now = Date.now();
         if (now - lastCheckpointMs >= checkpointIntervalMs) {
-          await pushStateCheckpoint(socket, pool, userId, now);
+          push.emit(await checkpointAndProject(pool, userId, now));
           lastCheckpointMs = now;
         } else {
-          await pushStateReadOnly(socket, pool, userId, now);
+          push.emit(await projectReadOnly(pool, userId, now));
         }
       }).catch((err) => {
         // Runner/persistence failures are logged server-side; the socket catch-all
@@ -274,7 +303,7 @@ export function registerGameWsRoutes(
         // that actually succeeded — the next periodic tick re-pushes anyway.
         if (ack.ok) {
           try {
-            await pushStateReadOnly(socket, pool, userId, Date.now());
+            push.emit(await projectReadOnly(pool, userId, Date.now()));
           } catch { /* best-effort; next periodic tick re-pushes */ }
         }
       }).catch((err: unknown) => {

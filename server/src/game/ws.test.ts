@@ -9,7 +9,8 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import WebSocket from 'ws';
 import type { AddressInfo } from 'node:net';
 import { testPool, resetDb, buildTestApp } from '../test-helpers.js';
-import { SCHEMA_VERSION } from '../../../src/persistence.js';
+import { SCHEMA_VERSION, type SaveSnapshot } from '../../../src/persistence.js';
+import { applySnapshotDelta, type SnapshotDelta } from '../../../src/snapshot-delta.js';
 import { SlidingWindowLimiter, WS_MAX_SOCKETS_PER_USER } from './ws.js';
 import { loadSnapshot } from './persistence.js';
 
@@ -76,8 +77,8 @@ function sendAndAwait(ws: WebSocket, envelope: { seq: number } & Record<string, 
     const onMsg = (data: Buffer) => {
       let parsed: Record<string, unknown>;
       try { parsed = JSON.parse(data.toString()); } catch (e) { reject(e); return; }
-      // Skip periodic/intent-triggered state pushes; wait for the ack.
-      if (parsed.type === 'state') {
+      // Skip periodic/intent-triggered state pushes (full + delta); wait for the ack.
+      if (parsed.type === 'state' || parsed.type === 'state-delta') {
         ws.once('message', onMsg);
         return;
       }
@@ -174,7 +175,7 @@ describe('game ws', () => {
     const got = new Promise<void>((resolve) => {
       const onMsg = (data: Buffer) => {
         const parsed = JSON.parse(data.toString()) as Record<string, unknown>;
-        if (parsed.type === 'state') return;
+        if (parsed.type === 'state' || parsed.type === 'state-delta') return;
         acks.push(parsed);
         if (acks.length === 2) { ws.off('message', onMsg); resolve(); }
       };
@@ -213,14 +214,19 @@ describe('game ws', () => {
     const cookie = await authedCookieWithGame('wsstate2@x.com');
     const ws = new WebSocket(baseWsUrl, { headers: { cookie }, origin: TRUSTED_ORIGIN });
     await awaitOpen(ws);
-    await awaitMessage(ws); // consume initial state
+    // The first frame is the full baseline; subsequent pushes are deltas, so we
+    // reconstruct the post-intent snapshot exactly as the real client does.
+    const base = await awaitMessage(ws);
+    expect(base.type).toBe('state');
+    let snapshot = base.snapshot as SaveSnapshot;
     ws.send(JSON.stringify(PLACE(7)));
     const ack = await awaitMessage(ws);
     expect(ack.seq).toBe(7);
     expect(ack.ok).toBe(true);
-    const state = await awaitMessage(ws);
-    expect(state.type).toBe('state');
-    expect((state.snapshot as { world: { islands: Array<{ id: string; buildings: Array<{ defId: string }> }> } }).world.islands.some(
+    const frame = await awaitMessage(ws);
+    expect(frame.type).toBe('state-delta');
+    snapshot = applySnapshotDelta(snapshot, frame.delta as SnapshotDelta);
+    expect(snapshot.world.islands.some(
       (i) => i.id === 'home' && i.buildings.some((b) => b.defId === 'workshop'),
     )).toBe(true);
     ws.close();
@@ -235,9 +241,12 @@ describe('game ws', () => {
     const url = `ws://127.0.0.1:${addr.port}/api/game/ws`;
     const ws = new WebSocket(url, { headers: { cookie }, origin: TRUSTED_ORIGIN });
     await awaitOpen(ws);
-    await awaitMessage(ws); // consume initial state
+    const base = await awaitMessage(ws); // initial full baseline
+    expect(base.type).toBe('state');
+    // The periodic tick arrives as a delta against the baseline (an idle game's
+    // tick carries only the advanced clock, but a frame is still emitted).
     const tick = await awaitMessage(ws, 1000);
-    expect(tick.type).toBe('state');
+    expect(tick.type).toBe('state-delta');
     ws.close();
     await tickApp.close();
     await tickPool.end();
@@ -264,7 +273,7 @@ describe('game ws', () => {
     const got = new Promise<void>((resolve) => {
       const onMsg = (data: Buffer) => {
         const parsed = JSON.parse(data.toString()) as Record<string, unknown>;
-        if (parsed.type === 'state') return; // ignore the initial connect push
+        if (parsed.type === 'state' || parsed.type === 'state-delta') return; // ignore state pushes
         acks.push(parsed);
         if (acks.length === 5) { ws.off('message', onMsg); resolve(); }
       };

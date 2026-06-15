@@ -2340,6 +2340,29 @@ It is being delivered in slices, each with its own design + plan under
     from stable inputs (e.g. bounded-step index for orbital debris/scanner rolls,
     not raw `Date.now()`), so recomputing the same trailing partial step twice
     yields identical state.
+  - **Delta wire format (state-push reduction).** A real mid-game snapshot is
+    ~230 KiB and the REMOTE client is display-only, so the server re-pushes the
+    world ~1 Hz for production to appear to advance. >90 % of those bytes are
+    slowly-changing structure (building lists, island geometry, ocean cells,
+    skill unlocks) that is identical tick-to-tick. The push is therefore a
+    **delta channel** (`src/snapshot-delta.ts`, pure + shared client/server;
+    `StatePushChannel` in `server/src/game/ws.ts`): the FIRST frame a socket
+    receives is a full `{ type: 'state', snapshot }` baseline, and every
+    subsequent push is a `{ type: 'state-delta', delta }` computed against the
+    exact snapshot last sent on that socket. The delta is a recursive
+    merge-patch (reserved markers `__set` / `__del` so it is unambiguous on
+    JSON `null`/object values) with `islandStates` diffed **by id**
+    (`isUpd`/`isAdd`/`isDel`) — an island whose only change is a few inventory
+    numbers carries just those numbers, not its multi-KiB building list. The
+    baseline always advances to the snapshot just sent, keeping client and
+    server in lockstep; `server-client.ts` resets its baseline on every
+    (re)connect so a fresh socket reseeds from the full frame, and drops a delta
+    that arrives with no baseline (protocol desync) rather than corrupt state. A
+    null game (no save yet) always sends a full frame. The WebSocket also
+    negotiates **`permessage-deflate`** (`@fastify/websocket` options, 1 KiB
+    threshold) so even the baseline and any large delta travel compressed
+    (~3× on this JSON). An idle tick still emits a frame, but it carries only
+    the advanced clock (~100 bytes).
   - Weather and day-night are not sent; the client renders them from
     `(seed, t)`.
 
@@ -2357,10 +2380,13 @@ It is being delivered in slices, each with its own design + plan under
        (no server game yet), the client first tries to migrate any existing
        local IndexedDB save via `POST /api/game/import`; only if there is no
        local save or the import fails does it fall back to `POST /api/game/new`.
-    4. Each subsequent server-pushed snapshot is applied in place onto the
-       existing client world state (subsystem references are preserved), and a
-       world-layer rebuild fires only when the discovery/vision/geometry
-       signature changes (`src/discovery-signature.ts`).
+    4. Each subsequent server push is a **`state-delta`** frame (see the wire-
+       format bullet below); `src/server-client.ts` reconstructs the full
+       snapshot from its retained baseline and hands `main.ts` a complete
+       `SaveSnapshot`, which is applied in place onto the existing client world
+       state (subsystem references are preserved). A world-layer rebuild fires
+       only when the discovery/vision/geometry signature changes
+       (`src/discovery-signature.ts`).
   - Mutation gateway (`src/mutation-gateway.ts`):
     - LOCAL fallback: methods call the same pure entry functions as before.
     - REMOTE default: methods forward intents over the WebSocket; the server

@@ -42,7 +42,18 @@ export function buildApp(opts: AppOptions): FastifyInstance {
     // Cap the WS frame size: intents are tiny envelopes, so 64 KiB is generous.
     // Without this, @fastify/websocket inherits ws's 100 MiB default — a cheap
     // memory-exhaustion vector for a hostile client.
-    await instance.register(websocket, { options: { maxPayload: 65536 } });
+    //
+    // perMessageDeflate: the authoritative state pushes are large JSON blobs
+    // (a real mid-game snapshot is ~230 KiB and gzips ~3×). Negotiate
+    // permessage-deflate so the wire carries the compressed form; `threshold`
+    // leaves tiny frames (acks, intent envelopes) uncompressed since the CPU
+    // and 2-byte overhead aren't worth it below ~1 KiB.
+    await instance.register(websocket, {
+      options: {
+        maxPayload: 65536,
+        perMessageDeflate: { threshold: 1024 },
+      },
+    });
     registerGameWsRoutes(instance, opts.pool, {
       allowedWsOrigins: opts.allowedWsOrigins,
       statePushIntervalMs: opts.wsStatePushIntervalMs,
