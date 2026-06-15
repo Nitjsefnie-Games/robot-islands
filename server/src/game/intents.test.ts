@@ -2574,6 +2574,110 @@ describe('restart-tutorial', () => {
   });
 });
 
+describe('§9.8 server-authoritative trades', () => {
+  // A home island wired for trade: signal_exchange present, give-stock + an
+  // everProduced get-target with headroom, cooldown ready.
+  function tradeReadySnap(now: number): SaveSnapshot {
+    const snap = createInitialSnapshot(now);
+    const home = snap.islandStates.find((e) => e.id === 'home')!;
+    const st = home.state as unknown as {
+      inventory: Record<string, number>;
+      storageCaps: Record<string, number>;
+      buildings: Array<Record<string, unknown>>;
+      everProduced: string[];
+      tradeCooldownMs: number;
+      tradeAcceptCount: number;
+    };
+    st.inventory.iron_ore = 1000;
+    st.inventory.copper_ore = 0;
+    st.storageCaps.copper_ore = 1000;
+    st.everProduced = ['copper_ore'];
+    st.buildings.push({ id: 'sx-1', defId: 'signal_exchange', x: 2, y: 2, placedAt: now });
+    st.tradeCooldownMs = 0;
+    st.tradeAcceptCount = 0;
+    return snap;
+  }
+
+  it('a focused heartbeat spawns a trade offer for a signal_exchange island', async () => {
+    const t0 = 1_700_000_000_000;
+    const uid = await userWithSnapshot(tradeReadySnap(t0));
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'active-heartbeat', payload: { focusedMs: 5_000, unfocusedMs: 0 }, seq: 1 },
+      t0,
+    );
+    expect(ack.ok).toBe(true);
+    const out = await loadSnapshot(pool, uid);
+    expect(out!.world.tradeOffers!.length).toBeGreaterThanOrEqual(1);
+    expect(out!.world.tradeOffers![0]!.islandId).toBe('home');
+  });
+
+  it('accept-trade applies the exchange, removes the offer, and compounds cadence', async () => {
+    const t0 = 1_700_000_000_000;
+    const snap = tradeReadySnap(t0);
+    (snap.world as { tradeOffers?: Array<Record<string, unknown>> }).tradeOffers = [{
+      id: 'home-0-x', islandId: 'home',
+      give: { res: 'iron_ore', qty: 100 }, get: { res: 'copper_ore', qty: 50 },
+      spawnedAt: t0, expiresAt: t0 + 300_000,
+    }];
+    const uid = await userWithSnapshot(snap);
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'accept-trade', payload: { offerId: 'home-0-x' }, seq: 1 },
+      t0, // 0 gap → no economy advance, so inventory change is purely the trade
+    );
+    expect(ack.ok).toBe(true);
+    const st = await homeState(uid);
+    expect((st.inventory as Record<string, number>).iron_ore).toBe(900);
+    expect((st.inventory as Record<string, number>).copper_ore).toBe(50);
+    expect(st.tradeAcceptCount).toBe(1);
+    const out = await loadSnapshot(pool, uid);
+    expect(out!.world.tradeOffers).toEqual([]);
+  });
+
+  it('accept-trade rejects an expired offer and leaves state untouched', async () => {
+    const t0 = 1_700_000_000_000;
+    const snap = tradeReadySnap(t0);
+    (snap.world as { tradeOffers?: Array<Record<string, unknown>> }).tradeOffers = [{
+      id: 'home-0-old', islandId: 'home',
+      give: { res: 'iron_ore', qty: 100 }, get: { res: 'copper_ore', qty: 50 },
+      spawnedAt: t0 - 600_000, expiresAt: t0 - 300_000, // already lapsed
+    }];
+    const uid = await userWithSnapshot(snap);
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'accept-trade', payload: { offerId: 'home-0-old' }, seq: 1 },
+      t0,
+    );
+    expect(ack.ok).toBe(false);
+    const st = await homeState(uid);
+    expect((st.inventory as Record<string, number>).iron_ore).toBe(1000);
+    expect(st.tradeAcceptCount).toBe(0);
+  });
+
+  it('reject-trade compounds cadence and removes the offer without exchanging goods', async () => {
+    const t0 = 1_700_000_000_000;
+    const snap = tradeReadySnap(t0);
+    (snap.world as { tradeOffers?: Array<Record<string, unknown>> }).tradeOffers = [{
+      id: 'home-0-y', islandId: 'home',
+      give: { res: 'iron_ore', qty: 100 }, get: { res: 'copper_ore', qty: 50 },
+      spawnedAt: t0, expiresAt: t0 + 300_000,
+    }];
+    const uid = await userWithSnapshot(snap);
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'reject-trade', payload: { offerId: 'home-0-y' }, seq: 1 },
+      t0,
+    );
+    expect(ack.ok).toBe(true);
+    const st = await homeState(uid);
+    expect((st.inventory as Record<string, number>).iron_ore).toBe(1000); // no goods moved
+    expect(st.tradeAcceptCount).toBe(1);
+    const out = await loadSnapshot(pool, uid);
+    expect(out!.world.tradeOffers).toEqual([]);
+  });
+});
+
 describe('active-heartbeat — §9.9 bonus accrues under focused play', () => {
   // Regression: before the heartbeat-ownership fix, every intent's
   // loadAndCatchUp re-charged the inter-heartbeat window as 3× "away" decay
