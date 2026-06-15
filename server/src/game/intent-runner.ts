@@ -1,9 +1,14 @@
 // server/src/game/intent-runner.ts
 //
 // Orchestration: load authoritative state -> dispatch the intent -> persist on
-// success / persist NOTHING on failure -> return an ack with a fresh
-// projection. This is the only layer that touches the DB; `intents.ts` is the
-// pure dispatch map and `ws.ts` is transport only.
+// success / persist NOTHING on failure -> return a minimal ack. This is the only
+// layer that touches the DB; `intents.ts` is the pure dispatch map and `ws.ts`
+// is transport only.
+//
+// The success ack carries NO state payload: the authoritative state reaches the
+// client via the `state-delta` push `ws.ts` emits right after every accepted
+// intent. A heartbeat ack used to ship a full `projectGame` snapshot (~25 KiB of
+// per-island inventory) that the client never read — dead weight on the wire.
 //
 // No-partial-persist invariant (design §10): a rejected OR throwing handler must
 // leave the stored `saves` row byte-identical. We achieve this by never calling
@@ -15,7 +20,6 @@ import { type Pool, withAccountTx } from '../db.js';
 import { loadAndCatchUp } from './runtime.js';
 import { saveSnapshot } from './persistence.js';
 import { serializeWorld } from '../../../src/persistence.js';
-import { projectGame, type GameProjection } from './projection.js';
 import { INTENTS, type IntentResult } from './intents.js';
 
 /** Client -> server intent envelope (design §4). */
@@ -25,9 +29,10 @@ export interface IntentEnvelope {
   readonly seq: number;
 }
 
-/** Server -> client acknowledgement (design §4). */
+/** Server -> client acknowledgement (design §4). Carries no state payload — the
+ *  post-intent `state-delta` push delivers the authoritative state. */
 export type Ack =
-  | { readonly seq: number; readonly ok: true; readonly projection: GameProjection }
+  | { readonly seq: number; readonly ok: true }
   | { readonly seq: number; readonly ok: false; readonly error: string };
 
 export async function applyIntent(
@@ -74,7 +79,7 @@ export async function applyIntent(
 
     await saveSnapshot(client, userId, serializeWorld(game.world, game.islandStates, now, now));
     if (result.ok) {
-      return { seq, ok: true, projection: projectGame(game) };
+      return { seq, ok: true };
     }
     // Persisted failure: the mutation was applied and saved, but the client
     // still receives a failure ack (e.g. a launch RNG failure with consumed

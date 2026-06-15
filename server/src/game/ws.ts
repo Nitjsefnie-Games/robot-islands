@@ -293,9 +293,10 @@ export function registerGameWsRoutes(
         }
         const ack = await applyIntent(pool, userId, parsed.env, Date.now());
         socket.send(JSON.stringify(ack));
-        // After every accepted intent, push the fresh authoritative snapshot
-        // IN ADDITION to the ack. The ack keeps its existing projection field
-        // for slice-3 back-compat; the state push carries the full snapshot.
+        // After every accepted intent, push the fresh authoritative state IN
+        // ADDITION to the ack. The ack is minimal (seq + ok); this state-delta is
+        // the ONLY state the client gets for the intent (the ack no longer ships
+        // a redundant ~25 KiB projection).
         // This push is best-effort: the intent is ALREADY durably committed by
         // applyIntent and the ack is already sent. Swallow a push failure in its
         // own try/catch so it can't fall through to the chain's `.catch` and
