@@ -20,6 +20,10 @@ export interface ConnectGameServerOptions {
   url: string;
   onState: (snapshot: unknown | null) => void;
   onStatus?: (status: 'open' | 'closed' | 'reconnecting') => void;
+  /** Fired on an `offline-pending` frame: the server has an offline gap to
+   *  resolve and is BLOCKING normal intents until the client sends an
+   *  `offline/accept` or `offline/reject` intent. `gapMs` is the away time. */
+  onOfflinePending?: (gapMs: number) => void;
   WebSocketCtor?: typeof WebSocket;
 }
 
@@ -49,6 +53,12 @@ function isStateDeltaFrame(value: unknown): value is { type: 'state-delta'; delt
   return v.type === 'state-delta' && typeof v.delta === 'object' && v.delta !== null;
 }
 
+function isOfflinePendingFrame(value: unknown): value is { type: 'offline-pending'; gapMs: number } {
+  if (typeof value !== 'object' || value === null) return false;
+  const v = value as Record<string, unknown>;
+  return v.type === 'offline-pending' && typeof v.gapMs === 'number';
+}
+
 export function gameSocketUrl(): string {
   const protocol = globalThis.location.protocol === 'https:' ? 'wss' : 'ws';
   return `${protocol}://${globalThis.location.host}/api/game/ws`;
@@ -59,6 +69,7 @@ export function connectGameServer(opts: ConnectGameServerOptions): GameServerCli
   const url = opts.url;
   const onState = opts.onState;
   const onStatus = opts.onStatus;
+  const onOfflinePending = opts.onOfflinePending;
 
   let socket: WebSocket | null = null;
   let closed = false;
@@ -133,6 +144,14 @@ export function connectGameServer(opts: ConnectGameServerOptions): GameServerCli
       if (lastSnapshot === null) return;
       lastSnapshot = applySnapshotDelta(lastSnapshot, frame.delta);
       onState(lastSnapshot);
+      return;
+    }
+
+    if (isOfflinePendingFrame(frame)) {
+      // The server has an unresolved offline gap and is BLOCKING normal
+      // intents until the client sends `offline/accept` or `offline/reject`.
+      onOfflinePending?.(frame.gapMs);
+      return;
     }
   }
 

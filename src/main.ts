@@ -127,6 +127,8 @@ import { showMapPicker } from './map-picker.js';
 import { tickVehicles } from './settlement.js';
 import { makeLocalGateway, makeRemoteGateway } from './mutation-gateway.js';
 import { mountAuthScreen } from './auth-ui.js';
+import { mountOfflineModal } from './offline-ui.js';
+import type { ModalHandle } from './ui-modal.js';
 import { connectGameServer, gameSocketUrl, type GameServerClient } from './server-client.js';
 import { deserializeWorld, type SaveSnapshot } from './persistence.js';
 import {
@@ -184,6 +186,7 @@ async function main(): Promise<void> {
     client: GameServerClient;
     snapshot: SaveSnapshot;
     setOnState(handler: (snapshot: SaveSnapshot) => void): void;
+    setOnOfflinePending(handler: (gapMs: number) => void): void;
   };
 
   /** Authenticate (if necessary), open the game WebSocket, and wait for the
@@ -246,6 +249,9 @@ async function main(): Promise<void> {
       // the import is in flight.
       let importStarted = false;
       let onStateHandler: ((snapshot: SaveSnapshot) => void) | null = null;
+      // The `offline-pending` frame arrives after the first `state` frame, by
+      // which point main has wired the real handler via `setOnOfflinePending`.
+      let onOfflinePendingHandler: ((gapMs: number) => void) | null = null;
 
       const onState = (snapshot: unknown | null) => {
         if (!gotFirst) {
@@ -256,6 +262,9 @@ async function main(): Promise<void> {
               snapshot: snapshot as SaveSnapshot,
               setOnState(handler) {
                 onStateHandler = handler;
+              },
+              setOnOfflinePending(handler) {
+                onOfflinePendingHandler = handler;
               },
             });
           } else if (!importStarted) {
@@ -269,7 +278,11 @@ async function main(): Promise<void> {
         }
       };
 
-      client = connectGameServer({ url: gameSocketUrl(), onState });
+      client = connectGameServer({
+        url: gameSocketUrl(),
+        onState,
+        onOfflinePending: (gapMs) => onOfflinePendingHandler?.(gapMs),
+      });
     });
   }
 
@@ -300,20 +313,17 @@ async function main(): Promise<void> {
   let fresh: ReturnType<typeof createNewGame> | null = null;
   let remoteClient: GameServerClient | null = null;
   let setRemoteOnState: ((handler: (snapshot: SaveSnapshot) => void) => void) | null = null;
-  // §9.9: the closed-game gap since the server's persisted `lastActiveMs` is
-  // unfocused away-time. Server catch-up no longer decays the bonus (the
-  // heartbeat owns in-session accounting), so we seed the FIRST heartbeat's
-  // unfocused accumulator with this gap to decay it authoritatively, once.
-  let remoteBootAwayMs = 0;
+  // §9.9: the server now owns the closed-game active-bonus decay — on
+  // `offline/accept` it decays the bonus 3×gap as part of catch-up, and on
+  // `offline/reject` it preserves the bonus. The client no longer seeds the
+  // heartbeat with the boot away-gap (that double-charged the gap).
+  let setRemoteOnOfflinePending: ((handler: (gapMs: number) => void) => void) | null = null;
 
   if (isRemote) {
     const remote = await bootRemoteClient();
     remoteClient = remote.client;
     setRemoteOnState = remote.setOnState;
-    const bootLastActive = remote.snapshot.world.lastActiveMs;
-    if (typeof bootLastActive === 'number') {
-      remoteBootAwayMs = Math.max(0, Date.now() - bootLastActive);
-    }
+    setRemoteOnOfflinePending = remote.setOnOfflinePending;
     const d = deserializeWorld(remote.snapshot, Date.now(), performance.now());
     worldState = d.world;
     islandStates = d.islandStates;
@@ -2295,6 +2305,33 @@ async function main(): Promise<void> {
     // subsequent snapshots are handled by the WS callback wired below.
     refreshRetainedRates(Date.now());
     setRemoteOnState!(applyRemoteSnapshot);
+
+    // §9.9 / Appendix C: on an `offline-pending` frame the server is serving
+    // the PRE-gap snapshot and BLOCKING normal intents until we send
+    // `offline/accept` or `offline/reject`. Force the choice with a
+    // non-dismissible modal; the server pushes the resolved state via the
+    // normal `applyRemoteSnapshot` path after acking the resolving intent.
+    let offlineModal: ModalHandle | null = null;
+    setRemoteOnOfflinePending!((gapMs) => {
+      // Guard against a second prompt (e.g. a multi-socket re-fire) stacking
+      // another modal on top of the live one.
+      if (offlineModal) return;
+      const dismiss = () => {
+        offlineModal?.hide();
+        offlineModal?.el.remove();
+        offlineModal = null;
+      };
+      offlineModal = mountOfflineModal(
+        document.body,
+        gapMs,
+        () => {
+          void remoteClient!.sendIntent('offline/accept', {}).finally(dismiss);
+        },
+        () => {
+          void remoteClient!.sendIntent('offline/reject', {}).finally(dismiss);
+        },
+      );
+    });
   }
 
   /** The economy advance (5 Hz, gated by `shouldTick` in the ticker below).
@@ -2523,9 +2560,10 @@ async function main(): Promise<void> {
   // accumulated per frame and flushed to the server every 5s so the server
   // owns the authoritative active-bonus balance.
   let hbFocusedMs = 0;
-  // Seed with the boot away-gap (§9.9) so the first heartbeat decays the
-  // closed-game/disconnect time the server catch-up no longer charges.
-  let hbUnfocusedMs = remoteBootAwayMs;
+  // No boot away-gap seed: the server owns closed-game §9.9 decay (applied on
+  // `offline/accept`, skipped on `offline/reject`), so seeding the first
+  // heartbeat with the gap would double-charge it.
+  let hbUnfocusedMs = 0;
   let hbLastSentMs = 0;
   const HEARTBEAT_INTERVAL_MS = 5000;
 
