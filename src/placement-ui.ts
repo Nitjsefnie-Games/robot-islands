@@ -482,7 +482,7 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     let ok = false;
     let reason: OceanPlacementReason | 'no-world' = 'no-world';
     if (world) {
-      const ov = validateOceanPlacement(world, defId, cellX, cellY);
+      const ov = validateOceanPlacement(world, defId, cellX, cellY, world.depthRevealedCells);
       if (ov.ok) {
         ok = true;
       } else {
@@ -684,7 +684,7 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
         // from a validator rejection, which surfaces via `oceanReason`.)
         return { ok: false, reason: 'def-is-ocean' };
       }
-      const ov = validateOceanPlacement(world, activeDefId, cellX, cellY);
+      const ov = validateOceanPlacement(world, activeDefId, cellX, cellY, world.depthRevealedCells);
       if (!ov.ok) {
         recordRejection();
         // Surface the specific ocean-validator reason via `oceanReason`
