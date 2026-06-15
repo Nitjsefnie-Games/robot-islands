@@ -361,6 +361,12 @@ export function makeLocalGateway(
     },
 
     setLocation(lat, lon) {
+      if (typeof lat !== 'number' || !Number.isFinite(lat) || lat < -90 || lat > 90) {
+        return err('lat must be a finite number in [-90,90]');
+      }
+      if (typeof lon !== 'number' || !Number.isFinite(lon) || lon < -180 || lon > 180) {
+        return err('lon must be a finite number in [-180,180]');
+      }
       world.playerLat = lat;
       world.playerLon = lon;
       return ok();
