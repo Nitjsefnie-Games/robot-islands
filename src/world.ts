@@ -1019,7 +1019,6 @@ export function makeInitialIslandState(spec: IslandSpec, nowMs: number): IslandS
     auraAmpCacheVersion: -1,   // -1 forces miss on first computeAuraAmplifiers call
     co2Kg: 0,
     funnelPending: startingFunnelPending(),
-    declaredAt: null,
     // §13.1 T5 access gate. Defaults to false on every fresh island — T5
     // catalog rows stay locked until the player has both reached level 50
     // and crafted at least one AI core. Auto-flips to true on first

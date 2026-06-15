@@ -382,6 +382,16 @@ export function groundStationCommRange(world: WorldState, islandId: string): num
   return base * effectiveSkillMultipliers(state).commRange;
 }
 
+/** §14.8 lodge penalty: comm reliability/range is scaled by (1 - lodges.comm),
+ *  clamped to ≥ 0. Applied to the commRange value that feeds the comm graph. */
+function commReliabilityFactor(sat: Satellite): number {
+  return Math.max(0, 1 - sat.lodges.comm);
+}
+
+function effectiveSatCommRange(sat: Satellite): number {
+  return sat.commRange * commReliabilityFactor(sat);
+}
+
 function getEntityById(
   world: WorldState,
   id: string,
@@ -391,7 +401,7 @@ function getEntityById(
     return { x: island.cx, y: island.cy, commRange: groundStationCommRange(world, id) };
   }
   const sat = world.satellites.find((s) => s.id === id);
-  if (sat) return { x: sat.x, y: sat.y, commRange: sat.commRange };
+  if (sat) return { x: sat.x, y: sat.y, commRange: effectiveSatCommRange(sat) };
   return null;
 }
 
@@ -415,7 +425,7 @@ export function buildCommGraph(world: WorldState): Map<string, Set<string>> {
   }
   for (const sat of world.satellites) {
     if (!sat.locked) continue;
-    nodes.push({ id: sat.id, x: sat.x, y: sat.y, commRange: sat.commRange });
+    nodes.push({ id: sat.id, x: sat.x, y: sat.y, commRange: effectiveSatCommRange(sat) });
   }
   for (const n of nodes) graph.set(n.id, new Set());
   for (let i = 0; i < nodes.length; i++) {
@@ -542,7 +552,7 @@ export function connectedSatellites(world: WorldState): Satellite[] {
       if (connected.has(sat.id)) continue;
       if (!sat.locked) continue; // in-transit satellites are unreachable
       const dist = Math.hypot(sat.x - currentEntity.x, sat.y - currentEntity.y);
-      if (dist <= Math.max(currentEntity.commRange, sat.commRange)) {
+      if (dist <= Math.max(currentEntity.commRange, effectiveSatCommRange(sat))) {
         connected.add(sat.id);
         queue.push(sat.id);
       }
@@ -898,6 +908,14 @@ export function tickSweeperCleanup(world: WorldState, tickDeltaMs: number): numb
   return totalCleared;
 }
 
+/** §14.8 weather-lodge multiplier for satellite weather-snapshot refresh
+ *  cadence. Returns (1 - lodges.weather) clamped to ≥ 0. The consumer is the
+ *  (currently deferred) satellite weather-snapshot tick; keeping the read here
+ *  prevents the field from rotting. */
+export function weatherSnapshotCadenceMul(sat: Satellite): number {
+  return Math.max(0, 1 - sat.lodges.weather);
+}
+
 /** Compute scanner discovery probability per tick at a given dwell time. */
 export function scannerDiscoveryProbability(dwellMs: number): number {
   const range = SCANNER_ASYMPTOTE_P_PER_TICK - SCANNER_INITIAL_P_PER_TICK;
@@ -1051,8 +1069,10 @@ export function tickScannerDiscovery(
       // Discovery sub-path's dwell-ramp bonus inflates EFFECTIVE dwell on
       // this scanner so the saturating-exponential ramp reaches its
       // asymptote sooner. Multiplier ≤ 1 (missing field) leaves base
-      // behaviour identical.
-      const effectiveDwell = dwell * (sat.dwellRateMul ?? 1);
+      // behaviour identical. §14.8 scan-lodge slowdown reduces effective dwell
+      // by (1 - lodges.scan), clamped to ≥ 0.
+      const effectiveDwell =
+        dwell * (sat.dwellRateMul ?? 1) * Math.max(0, 1 - sat.lodges.scan);
       const pRefTick = scannerDiscoveryProbability(effectiveDwell);
       const p = scannerPerCallProbability(pRefTick, tickDeltaMs);
       if (rng() < p) {

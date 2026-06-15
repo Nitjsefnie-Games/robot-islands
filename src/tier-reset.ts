@@ -25,7 +25,6 @@
 //   - `level → 1`, `xp → 0`.
 //   - Spent skill points refunded as `unspentSkillPoints`, then
 //     `unlockedNodes` and `unlockedEdges` cleared.
-//   - `declaredAt` cleared.
 //
 // 24-real-time-hour cooldown between resets on the same island
 // (placeholder per §9.7).
@@ -123,7 +122,7 @@ export function canTierReset(state: IslandState, nowMs: number): TierResetResult
  *      bridges are hand-priced ≠ destination node cost, root buys charge
  *      node cost with no edge, and crystal mini-tree nodes aren't in the
  *      static catalog at all (refunded 0 — SP destroyed).
- *   3. Clear `unlockedNodes`, `unlockedEdges`, `declaredAt`.
+ *   3. Clear `unlockedNodes` and `unlockedEdges`.
  *   4. Reset `level → 1`, `xp → 0`.
  *   5. Stamp `lastResetAt = nowMs` for the cooldown.
  *
@@ -147,7 +146,6 @@ export function executeTierReset(state: IslandState, nowMs: number): void {
   state.unlockedNodes.clear();
   state.unlockedEdges.clear();
   state.auraAmpVersion++;
-  state.declaredAt = null;
   state.level = 1;
   state.xp = 0;
   state.lastResetAt = nowMs;

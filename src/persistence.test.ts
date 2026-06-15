@@ -120,7 +120,6 @@ function makeIslandState(over: Partial<IslandState> = {}): IslandState {
     auraAmpCacheVersion: -1,
     co2Kg: 0,
     funnelPending: emptyFunnel(),
-    declaredAt: null,
     aiCoreCrafted: false,
     ascendantCoreCrafted: false,
     lastResetAt: null,
@@ -682,7 +681,6 @@ describe('id counter seeding', () => {
       fuelLoaded: 10,
       fuelResource: 'biofuel',
       waypoints: [],
-      darkMode: false,
       darkModeDiscoveries: [],
       scanBuffer: new Set<string>(),
       probabilityBias: 0,
@@ -817,7 +815,6 @@ describe('drone and route timestamp remapping', () => {
       fuelLoaded: 10,
       fuelResource: 'biofuel',
       waypoints: [],
-      darkMode: false,
       darkModeDiscoveries: [],
       scanBuffer: new Set<string>(),
       probabilityBias: 0,
@@ -919,7 +916,6 @@ describe('drone and route timestamp remapping', () => {
       fuelLoaded: 10,
       fuelResource: 'biofuel',
       waypoints: [],
-      darkMode: false,
       darkModeDiscoveries: [],
       scanBuffer: new Set<string>(),
       probabilityBias: 0,
@@ -964,7 +960,6 @@ describe('§11.7 tier-matched fuelResource persistence', () => {
       fuelLoaded: 10,
       fuelResource: 'aviation_kerosene',
       waypoints: [],
-      darkMode: false,
       darkModeDiscoveries: [],
       scanBuffer: new Set<string>(),
       probabilityBias: 0,
@@ -1128,18 +1123,17 @@ describe('repair drone persistence', () => {
   });
 });
 
-describe('IslandState.declaredAt / lastResetAt perfShift (§9.7)', () => {
-  it('IslandState.declaredAt and lastResetAt are perfShift-ed (§9.7 cooldown)', () => {
-    // Mirrors the repair-drone / vehicle perfShift tests above. The two
-    // fields are minted in the saved session's `performance.now()` domain
-    // (matching `lastTick`). On deserialize they must shift into the new
-    // session's perf-domain so the 24-hour cooldown gate `nowMs -
-    // lastResetAt < TIER_RESET_COOLDOWN_MS` reads a real elapsed value.
+describe('IslandState.lastResetAt perfShift (§9.7)', () => {
+  it('lastResetAt is perfShift-ed (§9.7 cooldown)', () => {
+    // Mirrors the repair-drone / vehicle perfShift tests above. The field
+    // is minted in the saved session's `performance.now()` domain (matching
+    // `lastTick`). On deserialize it must shift into the new session's
+    // perf-domain so the 24-hour cooldown gate `nowMs - lastResetAt <
+    // TIER_RESET_COOLDOWN_MS` reads a real elapsed value.
     const world = makeInitialWorld(0);
     const states = new Map<string, IslandState>();
     const home = world.islands[0]!;
     const homeState = makeInitialIslandState(home, 1_500_000);
-    homeState.declaredAt = 1_502_000; // 2s after lastTick
     homeState.lastResetAt = 1_504_000; // 4s after lastTick
     states.set(homeState.id, homeState);
 
@@ -1154,29 +1148,23 @@ describe('IslandState.declaredAt / lastResetAt perfShift (§9.7)', () => {
       5_000,
     );
     const r = restored.get(homeState.id)!;
-    // declaredAt: 1_502_000 + (-1_510_000) = -8_000
     // lastResetAt: 1_504_000 + (-1_510_000) = -6_000
-    expect(r.declaredAt).toBe(-8_000);
     expect(r.lastResetAt).toBe(-6_000);
-    // The 2s gap between them is preserved (perfShift is a constant offset).
-    expect(r.lastResetAt! - r.declaredAt!).toBe(2_000);
   });
 
-  it('null declaredAt and lastResetAt survive deserialize without perfShift NaN', () => {
-    // The null-preservation branch — a fresh island has both fields null.
-    // The perfShift remap must NOT poison them into NaN (null + number).
+  it('null lastResetAt survives deserialize without perfShift NaN', () => {
+    // The null-preservation branch — a fresh island has lastResetAt null.
+    // The perfShift remap must NOT poison it into NaN (null + number).
     const world = makeInitialWorld(0);
     const states = new Map<string, IslandState>();
     const home = world.islands[0]!;
     const homeState = makeInitialIslandState(home, 1_500_000);
-    expect(homeState.declaredAt).toBeNull();
     expect(homeState.lastResetAt).toBeNull();
     states.set(homeState.id, homeState);
 
     const snap = serializeWorld(world, states, 100_000, 1_500_000);
     const { islandStates: restored } = deserializeWorld(snap, 115_000, 5_000);
     const r = restored.get(homeState.id)!;
-    expect(r.declaredAt).toBeNull();
     expect(r.lastResetAt).toBeNull();
   });
 });
@@ -1793,7 +1781,6 @@ describe('migrateV7toV8', () => {
             unlockedNodes: ['mining.1', 'mining.2', 'forestry.1'],
             subPathProgress: [['mining', { spent: 3, complete: false }]],
             specializationRole: 'foundry',
-            declaredAt: null,
             lastResetAt: null,
             lastTick: 95000,
             aiCoreCrafted: false,
@@ -1856,7 +1843,6 @@ describe('migrateV7toV8', () => {
             unlockedNodes: [],
             subPathProgress: [],
             specializationRole: null,
-            declaredAt: null,
             lastResetAt: null,
             lastTick: 0,
             aiCoreCrafted: false,
@@ -1884,7 +1870,6 @@ describe('migrateV7toV8', () => {
             unlockedNodes: [],
             subPathProgress: [],
             specializationRole: null,
-            declaredAt: null,
             lastResetAt: null,
             lastTick: 0,
             aiCoreCrafted: false,
@@ -1939,7 +1924,6 @@ describe('migrateV8toV9', () => {
             unspentSkillPoints: 0,
             unlockedNodes: [],
             unlockedEdges: [],
-            declaredAt: null,
             lastResetAt: null,
             lastTick: 0,
             aiCoreCrafted: false,
@@ -2041,7 +2025,6 @@ describe('migrateV11toV12', () => {
           unlockedEdges: [],
           unspentSkillPoints: 4,
           socketBindings: [],
-          declaredAt: null,
           lastResetAt: null,
           aiCoreCrafted: false,
           ascendantCoreCrafted: false,
@@ -2098,7 +2081,6 @@ describe('migrateV13toV14', () => {
           unlockedEdges: ['mining.0-mining.1'],
           socketBindings: [],
           unspentSkillPoints: 42,
-          declaredAt: null,
           lastResetAt: null,
           lastTick: 0,
           aiCoreCrafted: false,
@@ -2152,7 +2134,6 @@ describe('migrateV12toV13', () => {
             fuelLoaded: 10,
             fuelResource: 'biofuel',
             waypoints: [],
-            darkMode: false,
             darkModeDiscoveries: [],
             probabilityBias: 0,
           },
@@ -2189,7 +2170,6 @@ describe('migrateV12toV13', () => {
       fuelLoaded: 10,
       fuelResource: 'biofuel',
       waypoints: [],
-      darkMode: false,
       darkModeDiscoveries: [],
       scanBuffer: new Set<string>(['2:3', '2:4', '3:3']),
       probabilityBias: 0,
@@ -2334,7 +2314,6 @@ describe('migrateV16toV17', () => {
           unlockedEdges: ['mining.0-mining.1'],
           socketBindings: [['mining.socket.0', 'crystal_alpha']],
           unspentSkillPoints: 0,
-          declaredAt: null,
           lastResetAt: null,
           lastTick: 0,
           aiCoreCrafted: false,

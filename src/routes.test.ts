@@ -71,7 +71,6 @@ function makeState(id: string, over: Partial<IslandState> = {}): IslandState {
     auraAmpCacheVersion: -1,
     co2Kg: 0,
     funnelPending: blankFunnel(),
-    declaredAt: null,
     aiCoreCrafted: false,
     ascendantCoreCrafted: false,
     lastResetAt: null,

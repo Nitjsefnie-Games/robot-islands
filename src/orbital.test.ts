@@ -44,6 +44,7 @@ import {
   REPAIR_DRONE_MIN_FUEL,
   mirrorBoost,
   effectiveSolarBoostFor,
+  weatherSnapshotCadenceMul,
   type SatelliteVariant,
   type Satellite,
   type SatBufferEntry,
@@ -81,7 +82,6 @@ function makeIslandState(over: Partial<IslandState> = {}): IslandState {
     auraAmpCacheVersion: -1,
     co2Kg: 0,
     funnelPending: emptyInv(),
-    declaredAt: null,
     aiCoreCrafted: false,
     ascendantCoreCrafted: false,
     lastResetAt: null,
@@ -2332,5 +2332,76 @@ describe('§14.8 dt-scaled debris hit hazard — debrisPerCallProbability', () =
     const sat = makeMinimalSat({ id: 's1', x: 0, y: 0, variant: 'sweeper' });
     const hitP = debrisHitProbability(field, sat);
     expect(debrisPerCallProbability(hitP, 0)).toBe(0);
+  });
+});
+
+// §14.8 Lodge penalties: scan/comm/weather sub-stats are slowed by debris.
+describe('debris lodge penalties (#82)', () => {
+  it('scan lodge reduces effective dwell and discovery probability', () => {
+    const dwell = SCANNER_DWELL_TIME_CONSTANT_MS;
+    const pPristine = scannerDiscoveryProbability(dwell);
+    const pLodged = scannerDiscoveryProbability(dwell * (1 - DEBRIS_LODGE_MAGNITUDE));
+    expect(pLodged).toBeGreaterThan(0);
+    expect(pLodged).toBeLessThan(pPristine);
+  });
+
+  it('comm lodge shortens the effective range used by the comm graph', () => {
+    // Ground station range is 200; satellite range 210 just covers the 205-tile gap.
+    const home = makeMinimalIsland({
+      id: 'home',
+      cx: 0,
+      cy: 0,
+      populated: true,
+      buildings: [{ id: 'sp', defId: 'spaceport', x: 0, y: 0 }],
+    });
+    const state = makeIslandState({ id: 'home' });
+    addSpaceport(state);
+    const sat = makeMinimalSat({ id: 'sat1', x: 205, y: 0, variant: 'relay', commRange: 210 });
+    const world = makeBfsWorld({
+      islands: [home],
+      islandStates: new Map([['home', state]]),
+      satellites: [sat],
+    });
+
+    expect(connectedSatellites(world)).toHaveLength(1);
+
+    // A 5% comm lodge drops effective range to 199.5; max(200, 199.5) < 205.
+    sat.lodges.comm = DEBRIS_LODGE_MAGNITUDE;
+    expect(connectedSatellites(world)).toHaveLength(0);
+  });
+
+  it('weather lodge reduces the weather-snapshot cadence multiplier', () => {
+    const sat = makeMinimalSat({ id: 'sat1', x: 0, y: 0 });
+    expect(weatherSnapshotCadenceMul(sat)).toBe(1);
+    sat.lodges.weather = DEBRIS_LODGE_MAGNITUDE;
+    expect(weatherSnapshotCadenceMul(sat)).toBeCloseTo(1 - DEBRIS_LODGE_MAGNITUDE, 10);
+  });
+
+  it('Repair-Drone arrival clears lodges and restores scan/comm parity', () => {
+    const world = makeWorld({ seed: 'test-seed' });
+    const sat = makeMinimalSat({
+      id: 'sat1',
+      x: 205,
+      y: 0,
+      variant: 'relay',
+      commRange: 210,
+      lodges: { scan: 0, weather: 0, comm: DEBRIS_LODGE_MAGNITUDE },
+    });
+    world.satellites.push(sat);
+    const state = makeIslandState({ id: 'home', ascendantCoreCrafted: true });
+    addSpaceport(state);
+    stockRepairResources(state);
+    // The sat is 205 tiles away; fuel load is > REPAIR_DRONE_MIN_FUEL.
+    state.inventory.antimatter_propellant = 100;
+    world.islandStates = new Map([['home', state]]);
+
+    expect(connectedSatellites(world)).toHaveLength(0);
+
+    const dispatchResult = dispatchRepairDrone(world, 'home', 'sat1', 0);
+    expect(dispatchResult.ok).toBe(true);
+    tickRepairDrones(world, 100_001);
+
+    expect(sat.lodges).toEqual({ scan: 0, weather: 0, comm: 0 });
+    expect(connectedSatellites(world)).toHaveLength(1);
   });
 });

@@ -58,7 +58,6 @@ function makeState(over: Partial<IslandState> = {}): IslandState {
     auraAmpCacheVersion: -1,
     co2Kg: 0,
     funnelPending: emptyFunnel(),
-    declaredAt: null,
     aiCoreCrafted: false,
     ascendantCoreCrafted: false,
     lastResetAt: null,
@@ -204,16 +203,6 @@ describe('executeTierReset — clears progression', () => {
     expect(state.unspentSkillPoints).toBe(12 + 5);
     expect(state.unlockedNodes.size).toBe(0);
     expect(state.unlockedEdges.size).toBe(0);
-  });
-
-  it('clears declaredAt', () => {
-    const state = makeState({
-      level: 15,
-      declaredAt: 12345,
-    });
-    fund(state);
-    executeTierReset(state, 1_000);
-    expect(state.declaredAt).toBe(null);
   });
 
   it('stamps lastResetAt so subsequent canTierReset is cooldown-blocked', () => {

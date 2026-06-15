@@ -30,6 +30,7 @@ import { MAINTENANCE_DEGRADE_DURATION_MS, MAINTENANCE_THRESHOLD_MS_BY_TIER, main
 import {
   accrueXp,
   advanceIsland,
+  applySegmentSideEffects,
   cap,
   clearDerivationsMemoForTests,
   computeRates,
@@ -41,6 +42,7 @@ import {
   batteryCapacityWs,
   BATTERY_CAPACITY_WS,
   xpForLevel,
+  type BuildingRate,
   type DefCatalog,
   type IslandState,
   evaluateConditionalEffectCondition,
@@ -48,7 +50,7 @@ import {
 } from './economy.js';
 import { checkGates } from './adjacency.js';
 import { applyUpgrade, placeBuilding, validatePlacement } from './placement.js';
-import { ALL_RESOURCES, resolveRotatingOutput, XP_WEIGHT, type ResourceId } from './recipes.js';
+import { ALL_RESOURCES, RECIPES, resolveRotatingOutput, XP_WEIGHT, type ResourceId } from './recipes.js';
 import { RESOURCE_BASE_CAP, RESOURCE_STORAGE_CATEGORY, defaultCapForCategory, storageBaseFor } from './storage-categories.js';
 import { aggregateStorageCaps } from './world.js';
 import type { TerrainKind } from './island.js';
@@ -140,7 +142,6 @@ function makeState(over: Partial<IslandState> = {}): IslandState {
     auraAmpCacheVersion: -1,
     co2Kg: 0,
     funnelPending: blankFunnel(),
-    declaredAt: null,
     aiCoreCrafted: false,
     ascendantCoreCrafted: false,
     lastResetAt: null,
@@ -283,7 +284,7 @@ describe('advanceIsland — event-driven piecewise integration', () => {
     expect(state.inventory.air ?? 0).toBe(0);
   });
 
-  it('charcoal_kiln accrues co2 output to state.co2Kg via direct path', () => {
+  it('charcoal_kiln produces co2 inventory but accrues 0 climate CO₂ (biogenic)', () => {
     const defs = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
     // Strip power so no power plant is needed.
     const { power: _p1, ...ckRest } = defs.charcoal_kiln;
@@ -300,7 +301,8 @@ describe('advanceIsland — event-driven piecewise integration', () => {
     advanceIsland(state, 33_000, { defs }); // 33 s ≪ one cycle (171998.6 s)
     // Recipe: 8 wood → 2 charcoal + 1 wood_tar + 2 co2 + 3 water_vapor
     expect(state.inventory.co2).toBeCloseTo(0.0003837240535678779, 6);
-    expect(state.co2Kg).toBeCloseTo(0.0003837240535678779, 6);
+    // Biogenic CO₂ is carbon-neutral and must not count toward climate CO₂.
+    expect(state.co2Kg).toBe(0);
   });
 
   it('limekiln accrues both process-CO₂ (inventory) and fuel-CO₂ (exogenous flow)', () => {
@@ -5843,5 +5845,58 @@ describe('stacked upgrade queue (#31)', () => {
     spec.buildings[0]!.constructionRemainingMs = 0;
 
     expect(isOperationalBuilding(spec.buildings[0]!)).toBe(true);
+  });
+});
+
+describe('§10 CO₂ — biogenic net-zero (#103)', () => {
+  function brFor(recipeId: keyof typeof RECIPES, rate = 1): BuildingRate {
+    return {
+      building: { id: `b-${recipeId}`, defId: 'workshop', x: 0, y: 0 },
+      recipe: RECIPES[recipeId]!,
+      effectiveRate: rate,
+    } as unknown as BuildingRate;
+  }
+
+  it('biogenic charcoal_kiln accrues 0 climate CO₂', () => {
+    const state = makeState();
+    const charcoal = brFor('charcoal_kiln');
+    applySegmentSideEffects(
+      state,
+      [charcoal],
+      { co2: 2 } as Record<ResourceId, number>,
+      {} as Record<ResourceId, number>,
+      1,
+      1000,
+      0,
+      undefined,
+      effectiveSkillMultipliers(state),
+      false,
+      0,
+      0,
+      new Map(),
+    );
+    expect(state.co2Kg).toBe(0);
+  });
+
+  it('fossil limekiln accrues both output and exogenous CO₂', () => {
+    const state = makeState();
+    const lime = brFor('limekiln');
+    applySegmentSideEffects(
+      state,
+      [lime],
+      { co2: 11 } as Record<ResourceId, number>,
+      {} as Record<ResourceId, number>,
+      1,
+      1000,
+      0,
+      undefined,
+      effectiveSkillMultipliers(state),
+      false,
+      0,
+      0,
+      new Map(),
+    );
+    // 11 kg from outputs + 5 kg exogenous fuel-combustion, at 1 cycle/s for 1 s.
+    expect(state.co2Kg).toBeCloseTo(16, 9);
   });
 });

@@ -6,6 +6,7 @@ import { BUILDING_DEFS } from './building-defs.js';
 import type { BuildingDefId } from './building-defs.js';
 import { borderTiles, footprintKeySet, touchesBorder } from './adjacency.js';
 import type { ResourceId } from './recipes.js';
+import { sumIslandCo2 } from './weather.js';
 import type { WorldState } from './world.js';
 
 // ---------------------------------------------------------------------------
@@ -287,7 +288,7 @@ export const TUTORIAL_STEPS: ReadonlyArray<TutorialStep> = [
   {
     id: '15_co2',
     mechanic: 'CO₂ & climate',
-    triggerCondition: (w) => w.totalCo2Kg >= 100 || hasBuilding(w, ['smelter']),
+    triggerCondition: (w) => sumIslandCo2(w) >= 100 || hasBuilding(w, ['smelter']),
     hint: 'Your industry emits CO₂ (shown in the HUD). High totals worsen weather.',
     expectedAction: null,
     dismissalCondition: (w) => stepShownFor(w, '15_co2', 15_000),

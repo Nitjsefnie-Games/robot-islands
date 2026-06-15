@@ -110,7 +110,6 @@ function makeState(over: Partial<IslandState> = {}): IslandState {
     auraAmpCacheVersion: -1,
     co2Kg: 0,
     funnelPending: blankFunnel(),
-    declaredAt: null,
     aiCoreCrafted: false,
     ascendantCoreCrafted: false,
     lastResetAt: null,
@@ -679,7 +678,6 @@ describe('hasPickableSkill', () => {
     const state = makeState({
       level: 15,
       unspentSkillPoints: 0,
-      declaredAt: null,
     });
     expect(hasPickableSkill(state)).toBe(false);
   });

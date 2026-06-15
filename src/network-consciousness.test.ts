@@ -46,7 +46,6 @@ function makeState(id: string, level: number): IslandState {
     funnelPending: blankFunnel(),
     genesisTarget: null,
     lastTick: 0,
-    declaredAt: null,
     aiCoreCrafted: false,
     ascendantCoreCrafted: false,
     lastResetAt: null,

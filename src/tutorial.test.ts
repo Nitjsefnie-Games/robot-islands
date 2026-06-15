@@ -76,7 +76,6 @@ function makeTestIsland(id: string): { spec: IslandSpec; state: IslandState } {
     auraAmpCacheVersion: -1,
     co2Kg: 0,
     funnelPending: {} as Record<ResourceId, number>,
-    declaredAt: null,
     aiCoreCrafted: false,
     ascendantCoreCrafted: false,
     lastResetAt: null,
