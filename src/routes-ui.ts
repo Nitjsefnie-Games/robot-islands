@@ -542,6 +542,16 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     }
   }
 
+  // Dropdown-rebuild cache keys. Declared here — before the eager
+  // buildOptions() below — because buildOptions() seeds lastRoutesKey /
+  // lastViaBuildingsKey during mount; the `let`s must already be initialized
+  // when it runs or the assignment hits the temporal dead zone. Their
+  // companion key-functions (populatedKey/routesKey/viaBuildingsKey) are
+  // hoisted, so they stay defined further down next to their docs.
+  let lastPopulatedKey = '';
+  let lastRoutesKey = '';
+  let lastViaBuildingsKey = '';
+
   buildOptions();
   fromSel.addEventListener('change', () => {
     buildBuildingOptions();
@@ -1065,14 +1075,13 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
   // dropdown the player is mid-interaction with. Today the set is static
   // post-init, but the change-detection guard keeps this honest once
   // settlement (§12) starts mutating populated mid-game.
-  let lastPopulatedKey = '';
+  // (lastPopulatedKey is declared above the mount-time buildOptions() call.)
   function populatedKey(): string {
     let k = '';
     for (const s of deps.world.islands) if (s.populated) k += s.id + '|';
     return k;
   }
 
-  let lastRoutesKey = '';
   /** Identity key over the route set — changes when a route is added or
    *  removed (or its source building changes). Used to rebuild the VIA
    *  BUILDING select so a consumed building leaves the list and a freed
@@ -1083,7 +1092,6 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     return k;
   }
 
-  let lastViaBuildingsKey = '';
   /** Signature of the currently-selected FROM island's entire building set.
    *  The VIA BUILDING dropdown must rebuild when a transport building is
    *  placed, demolished, upgraded, or has its active floors changed, even if
