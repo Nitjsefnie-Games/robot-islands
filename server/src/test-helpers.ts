@@ -16,7 +16,7 @@ export async function resetDb(pool: Pool): Promise<void> {
 
 export function buildTestApp(
   pool: Pool,
-  opts: { wsStatePushIntervalMs?: number; wsIntentRateLimit?: number; wsIntentRateWindowMs?: number; wsCheckpointIntervalMs?: number } = {},
+  opts: { wsStatePushIntervalMs?: number; wsIntentRateLimit?: number; wsIntentRateWindowMs?: number; wsCheckpointIntervalMs?: number; wsOfflineDecision?: boolean } = {},
 ): FastifyInstance {
   return buildApp({
     pool,
@@ -27,5 +27,7 @@ export function buildTestApp(
     wsIntentRateLimit: opts.wsIntentRateLimit,
     wsIntentRateWindowMs: opts.wsIntentRateWindowMs,
     wsCheckpointIntervalMs: opts.wsCheckpointIntervalMs,
+    // Feature ON for tests; production ships it dark (off) until the client modal lands.
+    wsOfflineDecision: opts.wsOfflineDecision ?? true,
   });
 }
