@@ -730,6 +730,10 @@ export interface WorldState {
    *  read via `activeBonusMul`. Optional so legacy saves and test fixtures
    *  compile without change; `makeInitialWorld` always seeds it. */
   activeBonusMs?: number;
+  /** §9.9 Wall-clock ms of the player's last activity heartbeat/tick.
+   *  Optional on legacy saves; `deserializeWorld` defaults it to `savedAt` so
+   *  closed-game decay is unchanged. `makeInitialWorld` seeds it to 0. */
+  lastActiveMs?: number;
   /** §14.4 in-flight comm packets. Mutable. */
   commPackets: import('./orbital.js').CommPacket[];
   /** §2.1 infinite map — set of cell keys (`"cellX,cellY"`) that have

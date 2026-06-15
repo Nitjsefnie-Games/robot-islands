@@ -49,6 +49,21 @@ export function tickActiveBonus(
   world.activeBonusMs = next > 0 ? next : 0;
 }
 
+/** Apply a pre-capped focused/unfocused delta directly. Used by the server
+ *  `active-heartbeat` intent: the client already clamps focused time to
+ *  ONLINE_DT_CAP_MS per frame, so this helper only enforces non-negativity
+ *  and floors the balance at 0. */
+export function applyActiveBonusDelta(
+  world: ActiveBonusCarrier,
+  focusedMs: number,
+  unfocusedMs: number,
+): void {
+  world.activeBonusMs = Math.max(
+    0,
+    (world.activeBonusMs ?? 0) + Math.max(0, focusedMs) - ACTIVE_DECAY_RATIO * Math.max(0, unfocusedMs),
+  );
+}
+
 /** Recipe-rate multiplier derived from the balance. ≥ 1, uncapped. */
 export function activeBonusMul(world: ActiveBonusCarrier): number {
   return 1 + ((world.activeBonusMs ?? 0) / 60_000) * ACTIVE_BONUS_PER_MIN;

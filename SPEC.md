@@ -46,7 +46,7 @@ Legend: **L** = live · **P** = partial · **N** = not implemented.
 | §9.6 Network Consciousness | P | Network reachability + 3/5/10/20-island milestone tiers + global production buff. Auto-Patronage at 10-island milestone (3 default routes from nearest Patron Hub) L. |
 | §9.7 Tier Reset | L | Reset logic + cost formula + cooldown + spec'd preserve/clear sets. Merged-island reset operates on the absorber's IslandState transparently (no merge-specific code needed). UI cost preview in the Skill Tree's reset row + confirm dialog. |
 | §9.8 Trade Offers | P | Signal Exchange building and offer-generation logic are live, but trade offers are LOCAL-only post-migration: `tickTradeOffers` runs only in client LOCAL mode and there is no `accept-trade` intent server-side. Non-functional in REMOTE (the default boot mode) until server-deterministic trade intents land. Other mechanics (cooldown persistence, skill tuning) remain implemented. |
-| §9.9 Active-play production bonus | L | +0.1%/min focused, −0.3%/min away (incl. closed), floor 0, no cap; world-level recipe-rate multiplier, schema v22. |
+| §9.9 Active-play production bonus | L | +0.1%/min focused, −0.3%/min away (incl. closed), floor 0, no cap; world-level recipe-rate multiplier. REMOTE: server-authoritative via periodic `active-heartbeat` intent; load-time decay uses `lastActiveMs` so connected play is not decayed. Schema v24 (`activeBonusMs`, `lastActiveMs`). |
 | §10 Funneling | L | Per-resource consumed-on-route XP bonus while below T3. |
 | §11 Drones | P | T1/T2/T3 drone dispatch via Drone Pad; T4 omnidirectional pulse via Launch Tower; T5 path-drawn via Path Drone Foundry. Drone Pad (T2) is the gate; once built, the tier picker lets the player launch any tier from T1 up to the launching island's current tier (T1 = biofuel = cheap entry option for short scouts). Fuel auto-computed per click. |
 | §11.7 Fuel / range / dispatch | L | Per-tier fuel matching, range = fuel × efficiency, per-craft concurrency caps, lost-on-timeout failure model. |
@@ -1361,10 +1361,12 @@ A global recipe-rate buff that rewards focused presence, complementing §9.8's o
 
 * **Focus condition** — identical to §9.8.3 trading: `document.visibilityState === 'visible'` (visibility-only; `hasFocus()` dropped per owner request 2026-06-10).
 * **State** — `WorldState.activeBonusMs`, a balance of "effective focused milliseconds". Bonus fraction = `activeBonusMs / 60000 × 0.001`; the multiplier `1 + fraction` threads into `computeRates` as `RatesContext.activeBonusMul` alongside `ncBuff`. XP accrues on the boosted production, like every rate buff. Unlike `ncBuff` (networked T3+ only) it applies to every island.
-* **Accrual law** — one rule covers every loss mode: focused frame-dt accrues (clamped to the §9.8.3 3 s online-dt cap); every other wall-clock millisecond decays at 3×. A hidden-tab gap (rAF stops) is charged on the refocus frame; a closed-game gap is charged at load from the snapshot's `savedAt`, before offline catch-up runs — catch-up production uses the post-decay multiplier.
+* **Accrual law** — focused wall-clock milliseconds accrue 1:1 (clamped to the §9.8.3 3 s online-dt cap per frame); every other wall-clock millisecond decays the balance at 3×. A hidden-tab gap (rAF stops) is charged on the refocus frame.
+* **REMOTE authority** — in the default server-authoritative mode the client accumulates capped-focused + unfocused milliseconds per frame and sends them to the server via a periodic `active-heartbeat` intent. The server applies the accrual/decay to `WorldState.activeBonusMs` and stamps `WorldState.lastActiveMs` with the intent time. In LOCAL mode the same math runs per-frame client-side via `tickActiveBonus`.
+* **Load-time decay** — a closed-game gap is charged at load from `WorldState.lastActiveMs` (falling back to the snapshot's `savedAt` on legacy saves), before offline catch-up runs. Because `lastActiveMs` is updated by every heartbeat/tick while the game is connected, simply reloading the page does not decay the bonus. Legacy saves without `lastActiveMs` decay from `savedAt` exactly as before.
 * **Sampling** — the multiplier drifts 0.1%/min, so it is sampled per advance call as a constant; §15.3's constant-rate piecewise integration is unaffected.
 * **UI** — the HUD economy panel shows an always-visible "Active bonus" row (`+X.X%`, `—` at 0); the inspector recipe bonuses line appends `active ×N.NN` when above 1.
-* **Persistence** — schema v22 (`activeBonusMs`; v21 saves migrate with 0).
+* **Persistence** — schema v24 (`activeBonusMs`, `lastActiveMs`; v21 saves migrate with `activeBonusMs = 0` and v24 serialization adds `lastActiveMs`).
 
 Source of truth: `src/active-bonus.ts`.
 
@@ -2224,11 +2226,13 @@ It is being delivered in slices, each with its own design + plan under
     `rebuildWorldLayers`) is threaded back through an optional `hooks` callback;
     the server passes none, so `resolveShot` still mutates state but the render
     rebuild is skipped.
-  - Active-play bonus on the server is **read, not accrued**: server play is
-    offline/lazy, so `loadAndCatchUp` never calls `tickActiveBonus` (no online
-    frames to accrue against), but the STORED `world.activeBonusMs` is threaded
-    through `activeBonusMul` so a player who banked an active bonus while online
-    keeps benefiting during server-side catch-up.
+  - Active-play bonus on the server is **authoritative**: the client sends a
+    periodic `active-heartbeat` intent with capped-focused + unfocused ms, and
+    the server applies the accrual/decay via `applyActiveBonusDelta` before
+    stamping `world.lastActiveMs`. `loadAndCatchUp` still does not call
+    `tickActiveBonus` (no client frames on the server), but the stored balance
+    is kept live by heartbeats and is threaded through `activeBonusMul` during
+    catch-up.
   - Offline catch-up uses `Date.now()` for both wall-clock and performance-clock
     arguments to `deserializeWorld` and `advanceWorldEconomy`, so the perf shift
     collapses to the real elapsed time since the last save (which is stamped
