@@ -7,6 +7,7 @@
 import type { IslandState } from './economy.js';
 import { tickDrones, type Drone, type TickDronesResult } from './drones.js';
 import { findNextMerge, performMerge } from './island-merge.js';
+import { discoverIslandsInVision } from './vision-discovery.js';
 import {
   tickCommPackets,
   tickDebris,
@@ -129,6 +130,13 @@ export function advanceWorldSystems(
     result.steps++;
     prev = cur;
   }
+
+  // §2.2 vision-overlap discovery: merge/vehicle ticks during catch-up can
+  // flip islands to populated, extending the vision-source set. Run the
+  // idempotent sweep once after the bounded loop (it is safe to call less
+  // frequently because no system inside the loop depends on `discovered`).
+  const visionIds = discoverIslandsInVision(world);
+  result.newlyDiscoveredIslandIds.push(...visionIds);
 
   return result;
 }

@@ -87,7 +87,7 @@ import {
 } from './world.js';
 import { mountDronesUi } from './drones-ui.js';
 import { tickDrones } from './drones.js';
-import { WS_SYSTEMS_STEP_MS } from './world-systems-advance.js';
+import { WS_SYSTEMS_STEP_MS, advanceWorldSystems } from './world-systems-advance.js';
 import {
   tickTradeOffers,
   tuningFor,
@@ -2050,7 +2050,18 @@ async function main(): Promise<void> {
     for (const s of islandStates.values()) {
       if (s.lastTick < prevMs) prevMs = s.lastTick;
     }
-    const catchUp = tickDrones(worldState, catchUpNowMs, prevMs, weatherWallOffsetMs);
+    // §84 LOCAL offline catch-up: run the shared world-systems advance over the
+    // offline window so routes, orbital chores, sonar, merge, and vehicles catch
+    // up exactly as REMOTE does via the server. advanceWorldSystems already owns
+    // drone ticking, so the previous standalone tickDrones call is removed here
+    // to avoid double-counting drone flights/wear.
+    const catchUp = advanceWorldSystems(
+      worldState,
+      islandStates,
+      prevMs,
+      catchUpNowMs,
+      weatherWallOffsetMs,
+    );
     // The initial ocean/island/fog layers were baked before this catch-up;
     // re-bake if it revealed anything so the offline scan is visible on the
     // very first frame (mirrors the per-frame rebuild trigger in the ticker).

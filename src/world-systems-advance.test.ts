@@ -11,6 +11,7 @@ import {
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import {
   _resetRouteIdCounter,
+  createRouteFromBuilding,
 } from './routes.js';
 import {
   _resetVehicleIdCounter,
@@ -156,6 +157,35 @@ function makeVehicleWorld() {
   return { world, homeSpec, homeState, targetSpec, islandStates };
 }
 
+function makeRouteWorld() {
+  const homeSpec = makeIslandSpec({
+    id: 'home',
+    populated: true,
+    discovered: true,
+    buildings: [{ id: 'dock1', defId: 'dock', x: 0, y: 0 }],
+  });
+  const targetSpec = makeIslandSpec({
+    id: 'target',
+    cx: 30,
+    cy: 0,
+    populated: true,
+    discovered: true,
+  });
+  const world = freshWorld([homeSpec, targetSpec]);
+  const homeState = makeIslandState({ id: 'home' });
+  homeState.inventory.iron_ore = 100;
+  const targetState = makeIslandState({ id: 'target' });
+  const islandStates = new Map<string, IslandState>([
+    ['home', homeState],
+    ['target', targetState],
+  ]);
+  (world as typeof world & { islandStates: typeof islandStates }).islandStates = islandStates;
+  const dock = homeSpec.buildings[0]!;
+  const route = createRouteFromBuilding(dock, 'home', 'target', 'iron_ore', 30);
+  if (route) world.routes.push(route);
+  return { world, homeSpec, homeState, targetSpec, targetState, islandStates, route };
+}
+
 beforeEach(() => {
   _resetDroneIdCounter();
   _resetVehicleIdCounter();
@@ -207,6 +237,40 @@ describe('advanceWorldSystems', () => {
     const expectedStepMs = Math.max(WS_SYSTEMS_STEP_MS, Math.ceil(gapMs / WS_SYSTEMS_MAX_STEPS));
     expect(expectedStepMs).toBeGreaterThan(WS_SYSTEMS_STEP_MS);
     expect(res.dronesReturned).toHaveLength(1);
+  });
+
+  it('discovers islands that overlap populated vision halos (#59)', () => {
+    const homeSpec = makeIslandSpec({
+      id: 'home',
+      populated: true,
+      discovered: true,
+    });
+    // Within home's padded halo: r5 + VISION_PADDING_TILES (10) = 15.
+    const nearSpec = makeIslandSpec({
+      id: 'near',
+      cx: 12,
+      cy: 0,
+      populated: false,
+      discovered: false,
+    });
+    const world = freshWorld([homeSpec, nearSpec]);
+    const homeState = makeIslandState({ id: 'home' });
+    const islandStates = new Map<string, IslandState>([['home', homeState]]);
+    (world as typeof world & { islandStates: typeof islandStates }).islandStates = islandStates;
+
+    const res = advanceWorldSystems(world, islandStates, 0, 1000, 0);
+
+    expect(res.newlyDiscoveredIslandIds).toContain('near');
+    expect(nearSpec.discovered).toBe(true);
+  });
+
+  it('advances routes (dispatches + delivers cargo) over the offline window (#84)', () => {
+    const { world, islandStates } = makeRouteWorld();
+    const res = advanceWorldSystems(world, islandStates, 0, 120_000, 0);
+    expect(res.routeDispatches.length).toBeGreaterThan(0);
+    expect(res.routeArrivals.length).toBeGreaterThan(0);
+    const targetState = islandStates.get('target');
+    expect(targetState?.inventory.iron_ore ?? 0).toBeGreaterThan(0);
   });
 
   it('orbital debris/scanner rolls are identical for different nowMs inside the same step (#53)', () => {

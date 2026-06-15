@@ -2105,6 +2105,12 @@ export function findNextCapEvent(
   for (const b of state.buildings) {
     if (activeFloors(b) <= 0) continue;
     const def = defs[b.defId];
+    // §4.7 / #92: non-productive buildings never accrue wear (the segment
+    // loop skips them), so they must not emit maintenance segment boundaries
+    // either. Skipping them removes spurious segment splits with no gameplay
+    // effect.
+    const recipe = resolveRecipe(def, b, ctx?.terrainAt);
+    if (!recipe || Object.keys(recipe.outputs).length === 0) continue;
     const boundary = nextMaintenanceBoundaryMs(b, def, thresholdMul);
     if (boundary === null) continue;
     const operating = b.operatingMs ?? 0;
