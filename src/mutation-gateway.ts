@@ -51,6 +51,7 @@ import {
   buyNode,
   canBuyKeystone,
   effectiveGraph,
+  effectiveSkillMultipliers,
   keystonePrereqFor,
   unbindCrystal,
 } from './skilltree.js';
@@ -58,6 +59,7 @@ import { dispatchVehicle, settleViaSpacetimeAnchor } from './settlement.js';
 import type { VehicleKind, VehicleTier } from './settlement.js';
 import { canTierReset, executeTierReset } from './tier-reset.js';
 import { convertToServitor as pureConvertToServitor } from './servitor.js';
+import { tryRefreshMaintenance } from './maintenance.js';
 import { applyOffer, type TradeOffer } from './trade.js';
 import { editIslandBiome } from './universe-editor.js';
 import { renameIsland } from './world.js';
@@ -135,6 +137,7 @@ export interface MutationGateway {
   cancelConstruction(islandId: string, buildingId: string): GatewayReturn;
   setBuildingActiveFloors(islandId: string, buildingId: string, disabledFloors: number): GatewayReturn;
   setForceRun(islandId: string, buildingId: string, value: boolean): GatewayReturn;
+  refreshMaintenance(islandId: string, buildingId: string): GatewayReturn;
   convertToServitor(islandId: string, buildingId: string): GatewayReturn;
   relabelCargo(islandId: string, buildingId: string, newLabel: ResourceId): GatewayReturn;
   expandIsland(islandId: string, axis: Axis): GatewayReturn;
@@ -317,6 +320,22 @@ export function makeLocalGateway(
       if (!b) return err('not-found');
       b.forceRun = value ? true : undefined;
       return ok();
+    },
+
+    refreshMaintenance(islandId, buildingId) {
+      const island = resolveIsland(islandId);
+      if (!island) return err('unknown island');
+      const b = island.spec.buildings.find((bb) => bb.id === buildingId);
+      if (!b) return err('not-found');
+      const def = BUILDING_DEFS[b.defId as BuildingDefId];
+      const fired = tryRefreshMaintenance(
+        b,
+        def,
+        island.state.inventory,
+        Date.now(),
+        effectiveSkillMultipliers(island.state).maintenanceThreshold,
+      );
+      return fired ? ok() : err('maintenance not due or unaffordable');
     },
 
     convertToServitor(islandId, buildingId) {
@@ -664,6 +683,9 @@ export function makeRemoteGateway(client: GameServerClient): MutationGateway {
     },
     setForceRun(islandId, buildingId, forceRun) {
       return send('set-force-run', { islandId, buildingId, forceRun });
+    },
+    refreshMaintenance(islandId, buildingId) {
+      return send('refresh-maintenance', { islandId, buildingId });
     },
     convertToServitor(islandId, buildingId) {
       return send('convert-to-servitor', { islandId, buildingId });

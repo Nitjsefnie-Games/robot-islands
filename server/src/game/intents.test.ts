@@ -1784,3 +1784,82 @@ describe('construct-island', () => {
     );
   });
 });
+
+
+describe('refresh-maintenance', () => {
+  it('legal: refreshes a degraded building and deducts the 50% placement cost', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
+      const home = world.islands.find((s: any) => s.id === 'home');
+      const state = islandStates.get('home');
+      home.buildings.push({
+        id: 'workshop-1', defId: 'workshop', x: 0, y: 0,
+        constructionRemainingMs: 0, placedAt: now, tier: 1,
+        operatingMs: 12 * 60 * 60 * 1000 + 1,
+      });
+      state.buildings = home.buildings;
+      state.inventory.wood = 100;
+      state.inventory.stone = 100;
+      state.inventory.iron_ingot = 30;
+    });
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'refresh-maintenance', payload: { islandId: 'home', buildingId: 'workshop-1' }, seq: 2 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 2 });
+
+    const state = await homeState(uid);
+    const b = (state.buildings as Array<Record<string, unknown>>).find((bb) => bb.id === 'workshop-1')!;
+    expect(b.operatingMs).toBe(0);
+    const inv = state.inventory as Record<string, number>;
+    expect(inv.wood).toBe(25);
+    expect(inv.stone).toBe(50);
+    expect(inv.iron_ingot).toBe(15);
+  });
+
+  it('illegal: refresh is rejected when maintenance is not due', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
+      const home = world.islands.find((s: any) => s.id === 'home');
+      const state = islandStates.get('home');
+      home.buildings.push({
+        id: 'workshop-1', defId: 'workshop', x: 0, y: 0,
+        constructionRemainingMs: 0, placedAt: now, tier: 1,
+        operatingMs: 0,
+      });
+      state.buildings = home.buildings;
+      state.inventory.wood = 100;
+      state.inventory.stone = 100;
+      state.inventory.iron_ingot = 30;
+    });
+    await expectRejectNoChange(
+      uid,
+      { type: 'refresh-maintenance', payload: { islandId: 'home', buildingId: 'workshop-1' }, seq: 9 },
+      now,
+    );
+  });
+
+  it('illegal: refresh is rejected when materials are insufficient', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
+      const home = world.islands.find((s: any) => s.id === 'home');
+      const state = islandStates.get('home');
+      home.buildings.push({
+        id: 'workshop-1', defId: 'workshop', x: 0, y: 0,
+        constructionRemainingMs: 0, placedAt: now, tier: 1,
+        operatingMs: 12 * 60 * 60 * 1000 + 1,
+      });
+      state.buildings = home.buildings;
+      state.inventory.wood = 0;
+      state.inventory.stone = 0;
+      state.inventory.iron_ingot = 0;
+    });
+    await expectRejectNoChange(
+      uid,
+      { type: 'refresh-maintenance', payload: { islandId: 'home', buildingId: 'workshop-1' }, seq: 9 },
+      now,
+    );
+  });
+});
