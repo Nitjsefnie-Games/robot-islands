@@ -995,18 +995,21 @@ export function deserializeWorld(
       // (tests) safe too. Each building gets its maintenance timestamps
       // shifted into the new perf-clock domain (drone/route timestamp
       // remap mirror).
-      buildings: s.buildings.map((b) => ({
-        ...b,
-        ...(b.placedAt !== undefined
-          ? { placedAt: b.placedAt + perfShift }
-          : {}),
-        ...(b.maintainedAt !== undefined
-          ? { maintainedAt: b.maintainedAt + perfShift }
-          : {}),
-        ...(b.toxicityExpiryMs !== undefined
-          ? { toxicityExpiryMs: b.toxicityExpiryMs + perfShift }
-          : {}),
-      })),
+      // PERF: clone once, then re-stamp the perf-domain timestamps in place. The
+      // previous `...(cond ? {field} : {})` idiom allocated up to 3 throwaway
+      // objects PER building and spread-merged them (×182 buildings × every
+      // server deserialize, which runs on every push/intent/state read) — pure
+      // GC churn (deserializeWorld is the #1 self-time on the per-push profile).
+      // Byte-identical: a field absent/undefined on `b` is assigned by neither
+      // form (we only write when defined), and the perfShift values match. The
+      // casts re-stamp the two readonly timestamps on the fresh clone we own.
+      buildings: s.buildings.map((b) => {
+        const nb = { ...b };
+        if (b.placedAt !== undefined) (nb as { placedAt?: number }).placedAt = b.placedAt + perfShift;
+        if (b.maintainedAt !== undefined) (nb as { maintainedAt?: number }).maintainedAt = b.maintainedAt + perfShift;
+        if (b.toxicityExpiryMs !== undefined) nb.toxicityExpiryMs = b.toxicityExpiryMs + perfShift;
+        return nb;
+      }),
     });
   });
 
