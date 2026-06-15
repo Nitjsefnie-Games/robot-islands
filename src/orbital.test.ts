@@ -51,6 +51,7 @@ import {
   type CommPacket,
 } from './orbital.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
+import { islandCells } from './discovery.js';
 import {
   makeInitialWorld,
   type WorldState,
@@ -1486,6 +1487,49 @@ describe('§14.5 scanner dwell-ramp discovery', () => {
     const result = tickScannerDiscovery(world, 1000, 20);
     expect(result).toContain('target');
     expect(world.islands[0]!.discovered).toBe(true);
+  });
+
+  it('scanner discovery reveals every cell of the island footprint (#100)', () => {
+    // Large island centred inside coverage but with body extending far past
+    // the scanner disk. The discovery flip must reveal the WHOLE footprint,
+    // not just the cells the sat actually covers.
+    const island = makeMinimalIsland({ id: 'wide', cx: 150, cy: 0, majorRadius: 100, minorRadius: 100, discovered: false });
+    const sat = makeMinimalSat({ id: 'sat1', x: 0, y: 0, variant: 'scanner', coverageRadius: 200, locked: true });
+    const world = makeBfsWorld({
+      islands: [island],
+      islandStates: new Map(),
+      satellites: [sat],
+    });
+    // Centre cell (9,0) is covered; pre-warm it to asymptote.
+    sat.dwellByCellKey = { '9,0': SCANNER_DWELL_TIME_CONSTANT_MS * 10 };
+    const result = tickScannerDiscovery(world, 1000, 20);
+    expect(result).toContain('wide');
+    expect(island.discovered).toBe(true);
+    for (const k of islandCells(island)) {
+      expect(world.revealedCells.has(k)).toBe(true);
+    }
+  });
+
+  it('scanner discovers an island by body overlap even when its centre is outside coverage (#100)', () => {
+    // Island centre at (450, 0) is outside the 400-tile coverage disk, but a
+    // 100-tile radius puts the near edge at x≈350 inside the disk. The old
+    // centre-only rule missed this; the body-overlap rule must discover it.
+    const island = makeMinimalIsland({ id: 'straddle-sat', cx: 450, cy: 0, majorRadius: 100, minorRadius: 100, discovered: false });
+    const sat = makeMinimalSat({ id: 'sat1', x: 0, y: 0, variant: 'scanner', coverageRadius: 400, locked: true });
+    const world = makeBfsWorld({
+      islands: [island],
+      islandStates: new Map(),
+      satellites: [sat],
+    });
+    // Pre-warm a covered body cell (21,0) to asymptote. The centre cell (28,0)
+    // is not covered, but the dwell ramp now looks at covered body cells.
+    sat.dwellByCellKey = { '21,0': SCANNER_DWELL_TIME_CONSTANT_MS * 10 };
+    const result = tickScannerDiscovery(world, 1000, 20);
+    expect(result).toContain('straddle-sat');
+    expect(island.discovered).toBe(true);
+    for (const k of islandCells(island)) {
+      expect(world.revealedCells.has(k)).toBe(true);
+    }
   });
 
   it('leaves out-of-coverage island undiscovered', () => {

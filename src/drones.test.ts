@@ -22,6 +22,7 @@ import {
   type Drone,
   DRONE_T5_EFFICIENCY,
 } from './drones.js';
+import { islandCells } from './discovery.js';
 import { dronePadCentre } from './drones-ui.js';
 import { rasterizePath, rollVehicleDestruction, weather } from './weather.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
@@ -870,6 +871,85 @@ describe('tickDrones (§11 telemetry: per-cell reveal in antenna range)', () => 
     expect(r.newlyDiscoveredIslandIds).toContain('far-edge');
     // Some cell of the target was revealed.
     expect(w.revealedCells.has('4,0')).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BUG #90/#98/#99/#100 — discovery must reveal the FULL island footprint
+// ---------------------------------------------------------------------------
+
+describe('discovery reveals whole island footprint', () => {
+  function assertFootprintRevealed(w: WorldState, islandId: string): void {
+    const isl = w.islands.find((i) => i.id === islandId);
+    expect(isl).toBeDefined();
+    expect(isl!.discovered).toBe(true);
+    const footprint = new Set(islandCells(isl!));
+    for (const k of footprint) {
+      expect(w.revealedCells.has(k)).toBe(true);
+    }
+  }
+
+  it('drone corridor discovery reveals every cell of a large straddling island (#90)', () => {
+    // Large island at (70, 0) radius 30: corridor along the x-axis only
+    // grazes the near edge. The old code flipped discovered=true via the
+    // any-cell rule but left the rest of the footprint in fog.
+    const w = makeTinyWorld();
+    w.islands.push({
+      id: 'straddle-drone', name: 'straddle-drone', biome: 'plains',
+      cx: 70, cy: 0, majorRadius: 30, minorRadius: 30,
+      discovered: false, populated: false, buildings: [], modifiers: [],
+    } as any);
+    const home = makeIslandState();
+    home.inventory.biofuel = 50;
+    dispatchDrone(w, home, 0, 0, 1, 0, 50, 0);
+    tickDrones(w, 401_000, 0);
+    assertFootprintRevealed(w, 'straddle-drone');
+  });
+
+  it('T4 pulse discovery reveals every cell of a disk-straddling island (#98)', () => {
+    const w = makeTinyWorld();
+    const origin = w.islandStates!.get('home')!;
+    origin.buildings.push({
+      id: 'b_lt', defId: 'launch_tower', x: 0, y: 0, rotation: 0,
+    } as any);
+    origin.level = 30;
+    origin.inventory.cryogenic_hydrogen = 50;
+    w.islands.push({
+      id: 'straddle-pulse', name: 'straddle-pulse', biome: 'plains',
+      cx: 70, cy: 0, majorRadius: 30, minorRadius: 30,
+      discovered: false, populated: false, buildings: [], modifiers: [],
+    } as any);
+    const r = firePulse(w, origin, 0);
+    expect(r.ok).toBe(true);
+    expect(r.discoveredIslandIds).toContain('straddle-pulse');
+    assertFootprintRevealed(w, 'straddle-pulse');
+  });
+
+  it('probability-bias expanded ring reveals every cell of a rare island (#99)', () => {
+    // Same ring geometry as Fix 6.4: T5 path-drawn drone (scanRadius 12)
+    // with one probability_engine (bias 0.25 → effective radius 15) flying
+    // east along y=2. A rare island in cell row 1 (cx=30, cy=24) is only
+    // discoverable via the expanded ring; its full footprint must be revealed.
+    const w = makeTinyWorld();
+    const homeSpec = w.islands.find((i) => i.id === 'home')!;
+    homeSpec.buildings.push({ id: 'pe1', defId: 'probability_engine', x: 0, y: 0 } as any);
+    const target: IslandSpec = {
+      id: 'rare-ring', name: 'rare-ring', biome: 'plains',
+      cx: 30, cy: 24, majorRadius: 3, minorRadius: 3,
+      populated: false, discovered: false, buildings: [],
+      modifiers: ['aetheric_anomaly'],
+    };
+    w.islands.push(target);
+    const home = makeIslandState({
+      id: 'home',
+      buildings: [{ id: 'pe1', defId: 'probability_engine', x: 0, y: 0 } as any],
+    });
+    home.inventory.plasma_charge = 50;
+    const r = dispatchDrone(w, home, 0, 2, 1, 0, 15, 0, [{ x: 0, y: 2 }, { x: 60, y: 2 }]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    tickDrones(w, r.drone.expectedReturnTime + 1000, 0);
+    assertFootprintRevealed(w, 'rare-ring');
   });
 });
 
