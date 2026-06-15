@@ -28,6 +28,19 @@ import { type MutationGateway } from './mutation-gateway.js';
 import { activeFloorLevel, floorEffectMul } from './buildings.js';
 import type { RouteRenderer } from './routes-renderer.js';
 
+/** Exported pure helper for tests: signature of the FROM island's building
+ *  set that should gate VIA BUILDING dropdown rebuilds. Includes every
+ *  building's id, defId, and active floor level so placement, demolition,
+ *  upgrade, or floor-disabling all invalidate the cache. */
+export function viaBuildingKeyForIsland(island: IslandSpec | undefined): string {
+  if (!island) return '';
+  let k = island.id + ';';
+  for (const b of island.buildings) {
+    k += b.id + ':' + b.defId + ':' + activeFloorLevel(b) + '|';
+  }
+  return k;
+}
+
 function styled(el: HTMLElement, css: string): void {
   el.style.cssText = css;
 }
@@ -478,6 +491,8 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     if (prevCargo) cargoSel.value = prevCargo;
     buildBuildingOptions();
     buildLedgerFilterOptions();
+    lastRoutesKey = routesKey();
+    lastViaBuildingsKey = viaBuildingsKey();
   }
 
   /** Rebuild the VIA BUILDING select for the currently-selected FROM
@@ -1068,6 +1083,15 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     return k;
   }
 
+  let lastViaBuildingsKey = '';
+  /** Signature of the currently-selected FROM island's entire building set.
+   *  The VIA BUILDING dropdown must rebuild when a transport building is
+   *  placed, demolished, upgraded, or has its active floors changed, even if
+   *  the route set itself is unchanged. */
+  function viaBuildingsKey(): string {
+    return viaBuildingKeyForIsland(deps.islandSpecs.get(fromSel.value));
+  }
+
   // ---- API impl --------------------------------------------------------------
   function refresh(nowMs: number): void {
     const key = populatedKey();
@@ -1076,9 +1100,11 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
       lastPopulatedKey = key;
     }
     const rKey = routesKey();
-    if (rKey !== lastRoutesKey) {
+    const viaKey = viaBuildingsKey();
+    if (rKey !== lastRoutesKey || viaKey !== lastViaBuildingsKey) {
       buildBuildingOptions();
       lastRoutesKey = rKey;
+      lastViaBuildingsKey = viaKey;
     }
     refreshFormReadout();
     refreshStats();
