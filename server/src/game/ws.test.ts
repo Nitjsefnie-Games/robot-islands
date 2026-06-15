@@ -135,15 +135,17 @@ describe('game ws', () => {
     ws.close();
   });
 
-  it('round-trips a legal place-building with matching seq and a projection', async () => {
+  it('round-trips a legal place-building with matching seq; ack carries no state payload', async () => {
     const cookie = await authedCookieWithGame('wsuser1@x.com');
     const ws = new WebSocket(baseWsUrl, { headers: { cookie }, origin: TRUSTED_ORIGIN });
     await awaitOpen(ws);
     const ack = await sendAndAwait(ws, PLACE(42));
     expect(ack.seq).toBe(42);
     expect(ack.ok).toBe(true);
-    expect(ack.projection).toBeDefined();
-    expect((ack.projection as { islands: Array<{ id: string }> }).islands.some((i) => i.id === 'home')).toBe(true);
+    // The ack is minimal — authoritative state arrives via the state-delta push,
+    // not the ack. The redundant ~25 KiB projection was removed.
+    expect(ack.projection).toBeUndefined();
+    expect(Object.keys(ack).sort()).toEqual(['ok', 'seq']);
     ws.close();
   });
 
