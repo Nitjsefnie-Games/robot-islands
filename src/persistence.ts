@@ -75,7 +75,7 @@ export const STORAGE_KEY_DISPLAY = 'robot-islands:save';
 
 /** Current schema version. `loadWorld` rejects (returns null) any
  *  snapshot whose `v` is not strictly equal to this. */
-export const SCHEMA_VERSION = 24 as const;
+export const SCHEMA_VERSION = 25 as const;
 
 /** Versions that loadWorld accepts. The walker (loadWorld) chains
  *  migrateV<N>toV<N+1> functions from the lowest known version up to
@@ -83,7 +83,7 @@ export const SCHEMA_VERSION = 24 as const;
  *
  *  See AGENTS.md → "Persistence migrations" for the full "bump = migrate"
  *  policy from v7 onward. */
-export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24]);
+export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]);
 
 // ---------------------------------------------------------------------------
 // Serialized shapes
@@ -160,6 +160,9 @@ export interface SerializedWorld {
   /** §9.9 wall-clock ms of the player's last activity heartbeat/tick.
    *  Optional on legacy saves; absent ≡ savedAt for decay purposes. */
   readonly lastActiveMs?: number;
+  /** §9.8 live trade offers (wall-clock spawnedAt/expiresAt). Absent on
+   *  pre-v25 saves; the v24→v25 migration seeds `[]`. */
+  readonly tradeOffers?: ReadonlyArray<import('./trade.js').TradeOffer>;
   /** §13.3 Lattice Node island list. */
   readonly latticeNodeIslands?: ReadonlyArray<string>;
   /** §14.4 in-flight comm packets. */
@@ -699,6 +702,19 @@ export type SerializedSnapshotV23 = Omit<SaveSnapshot, 'v'> & { readonly v: 23 }
  *
  *  Lossless: every disabled building stays disabled, every enabled one stays
  *  enabled, nothing queued (the player had no queue concept at v23). */
+export type SerializedSnapshotV24 = Omit<SaveSnapshot, 'v'> & { readonly v: 24 };
+
+/** v24 → v25: introduce §9.8 server-authoritative trade offers. No live offers
+ *  exist on a v24 save (offers were runtime-only / client-LOCAL), so seed an
+ *  empty list. */
+export function migrateV24toV25(s: SerializedSnapshotV24): SaveSnapshot {
+  return {
+    ...s,
+    v: 25 as const,
+    world: { ...s.world, tradeOffers: [] },
+  } as unknown as SaveSnapshot;
+}
+
 export function migrateV23toV24(s: SerializedSnapshotV23): SaveSnapshot {
   return {
     ...s,
@@ -832,6 +848,9 @@ export function serializeWorld(
       latticeActive: world.latticeActive,
       activeBonusMs: world.activeBonusMs ?? 0,
       lastActiveMs: world.lastActiveMs,
+      // §9.8 live trade offers — wall-clock times, so a straight copy (no
+      // perfShift). Defensive shallow copy of each offer.
+      tradeOffers: (world.tradeOffers ?? []).map((o) => ({ ...o })),
       latticeNodeIslands: [...world.latticeNodeIslands],
       commPackets: [...world.commPackets],
       totalCo2Kg: world.totalCo2Kg,
@@ -932,6 +951,9 @@ export function deserializeWorld(
   }
   if ((snapshot as unknown as { v: number }).v === 23) {
     snapshot = migrateV23toV24(snapshot as unknown as SerializedSnapshotV23);
+  }
+  if ((snapshot as unknown as { v: number }).v === 24) {
+    snapshot = migrateV24toV25(snapshot as unknown as SerializedSnapshotV24);
   }
 
   if (snapshot.v !== SCHEMA_VERSION) {
@@ -1072,6 +1094,10 @@ export function deserializeWorld(
     totalCo2Kg: snapshot.world.totalCo2Kg,
     playerLat: snapshot.world.playerLat,
     playerLon: snapshot.world.playerLon,
+    // §9.8 trade offers carry wall-clock times — copied straight through (NOT
+    // perfShifted). A long disconnect leaves expired offers in the list; the
+    // trade advance / catch-up prunes them lazily on the next tick.
+    tradeOffers: (snapshot.world.tradeOffers ?? []).map((o) => ({ ...o })),
     generatedCells: deserializeGeneratedCells(islands, snapshot.world.generatedCells),
     oceanCells: new Map(snapshot.world.oceanCells ?? []),
     depthRevealedCells: new Set(snapshot.world.depthRevealedCells ?? []),

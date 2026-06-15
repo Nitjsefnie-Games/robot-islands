@@ -734,6 +734,12 @@ export interface WorldState {
    *  Optional on legacy saves; `deserializeWorld` defaults it to `savedAt` so
    *  closed-game decay is unchanged. `makeInitialWorld` seeds it to 0. */
   lastActiveMs?: number;
+  /** §9.8 server-authoritative trade offers — live, wall-clock-timed offers
+   *  the player can accept. In REMOTE the server owns this list (spawn/expire
+   *  on the activity heartbeat + catch-up); in LOCAL the client tick owns it.
+   *  Optional so legacy saves and fixtures compile; seeded `[]` by
+   *  `makeInitialWorld` and the v24→v25 migration. */
+  tradeOffers?: import('./trade.js').TradeOffer[];
   /** §14.4 in-flight comm packets. Mutable. */
   commPackets: import('./orbital.js').CommPacket[];
   /** §2.1 infinite map — set of cell keys (`"cellX,cellY"`) that have
@@ -860,7 +866,7 @@ export function makeInitialWorld(_nowMs: number): WorldState {
   // Ocean-layer §5 — depth visibility starts empty. Sonar Buoys and Scanner
   // Sat upgrades populate it as the player builds those revealers.
   const depthRevealedCells = new Set<string>();
-  return { islands, drones: [], routes: [], vehicles: [], revealedCells, seed: WORLD_SEED, satellites: [], repairDrones: [], debrisFields: [], tutorialState: { completed: new Set(), current: 'place_solar' }, endgameState: { achieved: new Set<VictoryCondition>(), firstAchievedMs: null }, latticeActive: false, latticeNodeIslands: [], activeBonusMs: 0, commPackets: [], totalCo2Kg: 0, playerLat: null, playerLon: null, generatedCells, oceanCells, depthRevealedCells, recentBuildAttempts: new Set(), recentBuildAttemptTs: new Map() };
+  return { islands, drones: [], routes: [], vehicles: [], revealedCells, seed: WORLD_SEED, satellites: [], repairDrones: [], debrisFields: [], tutorialState: { completed: new Set(), current: 'place_solar' }, endgameState: { achieved: new Set<VictoryCondition>(), firstAchievedMs: null }, latticeActive: false, latticeNodeIslands: [], activeBonusMs: 0, tradeOffers: [], commPackets: [], totalCo2Kg: 0, playerLat: null, playerLon: null, generatedCells, oceanCells, depthRevealedCells, recentBuildAttempts: new Set(), recentBuildAttemptTs: new Map() };
 }
 
 /**
