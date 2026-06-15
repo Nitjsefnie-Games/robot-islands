@@ -219,7 +219,35 @@ export function revealOceanCells(
  * terrain (§3.4). Rotation on extras is ignored — `computeIslandTiles`
  * ignores it too, so cell coverage stays consistent with what gets rendered.
  */
+// PERF: islandCells rasterizes the island footprint (O(major×minor) inscription
+// tests + a Set) into its covered cells. deserializeRevealedCells calls it for
+// every populated/discovered island on EVERY load — and the server re-loads +
+// re-deserializes the save on every periodic push / intent — so a profile showed
+// it as a steady chunk of per-push CPU. The result is a pure function of the
+// spec's footprint GEOMETRY only: cx, cy, majorRadius, minorRadius, and each
+// extraEllipses entry's major/minor/offsetX/offsetY (rotation is NOT read, same
+// as computeIslandTiles). We memoize on a content key (NOT a WeakMap on the
+// spec: deserialize builds fresh spec objects each load, so an identity key
+// would miss every time; a content key hits across loads of the same geometry).
+// A merge / §3.4 expansion changes the geometry ⇒ a new key ⇒ recompute. The
+// cache is capped and cleared wholesale when full (a few hundred live cells, as
+// with the weather cache). Callers may mutate the returned array, so we return a
+// fresh copy — the cost we eliminate is the rasterization, not the array alloc.
+const islandCellsCache = new Map<string, string[]>();
+const ISLAND_CELLS_CACHE_CAP = 4096;
+
+function islandCellsCacheKey(spec: IslandSpec): string {
+  let key = `${spec.cx}|${spec.cy}|${spec.majorRadius}|${spec.minorRadius}`;
+  if (spec.extraEllipses) {
+    for (const e of spec.extraEllipses) key += `|${e.major},${e.minor},${e.offsetX},${e.offsetY}`;
+  }
+  return key;
+}
+
 export function islandCells(spec: IslandSpec): string[] {
+  const cacheKey = islandCellsCacheKey(spec);
+  const cached = islandCellsCache.get(cacheKey);
+  if (cached !== undefined) return [...cached];
   const seen = new Set<string>();
   for (const c of islandConstituents(spec)) {
     const cxAbs = spec.cx + c.offsetX;
@@ -249,7 +277,11 @@ export function islandCells(spec: IslandSpec): string[] {
       }
     }
   }
-  return [...seen];
+  if (islandCellsCache.size >= ISLAND_CELLS_CACHE_CAP) islandCellsCache.clear();
+  const computed = [...seen];
+  islandCellsCache.set(cacheKey, computed);
+  // Return a copy so a caller mutating the result can't corrupt the cached array.
+  return [...computed];
 }
 
 /** Does the island occupy any cell in `cells`? The shared overlap predicate
