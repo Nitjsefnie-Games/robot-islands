@@ -37,10 +37,11 @@ import {
   applyRelabelStorageCap,
 } from '../../../src/placement.js';
 import type { TerrainKind } from '../../../src/island.js';
-import { displayedFloorLevel } from '../../../src/floor-levels.js';
+import { activeFloors, displayedFloorLevel } from '../../../src/floor-levels.js';
 import { dispatchDrone, firePulse, type DroneTier } from '../../../src/drones.js';
 import {
   createRouteFromBuilding,
+  drainRoutesForBuilding,
   routeProfileForBuilding,
   islandHasTeleporterPad,
   reorderPriorityList,
@@ -86,7 +87,9 @@ import type { CrystalId } from '../../../src/skilltree-graph.js';
 import { CELL_SIZE_TILES } from '../../../src/constants.js';
 import { applyActiveBonusDelta } from '../../../src/active-bonus.js';
 
-export type IntentResult = { ok: true } | { ok: false; error: string };
+export type IntentResult =
+  | { ok: true }
+  | { ok: false; error: string; persist?: boolean };
 
 export interface IntentHandler {
   apply(game: LiveGame, payload: unknown, now: number): IntentResult;
@@ -300,6 +303,9 @@ export const INTENTS: Record<string, IntentHandler> = {
       if (!island) return { ok: false, error: 'unknown island' };
       const r = demolishBuilding(island.spec, island.state, buildingId);
       if (!r.ok) return { ok: false, error: r.reason ?? 'demolish failed' };
+      // Mirror LOCAL: a transport building's routes drain when the building is
+      // removed — in-flight cargo finishes, then tickRoutes prunes them.
+      drainRoutesForBuilding(game.world, buildingId);
       return { ok: true };
     },
   },
@@ -372,8 +378,15 @@ export const INTENTS: Record<string, IntentHandler> = {
       if (disabledFloors > displayedFloorLevel(b)) {
         return { ok: false, error: 'disabledFloors out of range' };
       }
+      // Mirror LOCAL: drain routes owned by this building when its active floors
+      // drop from >0 to 0 (the building stops participating in transport).
+      const before = activeFloors(b);
       const r = setBuildingActiveFloors(island.spec, island.state, buildingId, disabledFloors);
       if (!r.ok) return { ok: false, error: r.reason ?? 'set-active-floors failed' };
+      const after = activeFloors(b);
+      if (before > 0 && after === 0) {
+        drainRoutesForBuilding(game.world, buildingId);
+      }
       return { ok: true };
     },
   },
@@ -824,8 +837,10 @@ export const INTENTS: Record<string, IntentHandler> = {
   },
 
   // delete-route — §2.4 soft-delete a route. Player supplies { routeId }.
-  // Authoritative pre-check: the route must exist. `draining = true` stops new
-  // dispatch and lets in-flight cargo land before tickRoutes prunes it.
+  // Authoritative pre-check: the route must exist. Mirror LOCAL: immediately
+  // splice the route out when nothing is in flight (power-link routes never
+  // carry cargo), otherwise set `draining = true` so in-flight cargo lands
+  // before tickRoutes prunes it.
   'delete-route': {
     apply(game: LiveGame, payload: unknown): IntentResult {
       if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
@@ -833,7 +848,12 @@ export const INTENTS: Record<string, IntentHandler> = {
       if (typeof routeId !== 'string') return { ok: false, error: 'routeId must be a string' };
       const route = resolveRoute(game, routeId);
       if (!route) return { ok: false, error: 'route not found' };
-      route.draining = true;
+      if (route.inFlight.length === 0) {
+        const idx = game.world.routes.indexOf(route);
+        if (idx >= 0) game.world.routes.splice(idx, 1);
+      } else {
+        route.draining = true;
+      }
       return { ok: true };
     },
   },
@@ -1094,6 +1114,12 @@ export const INTENTS: Record<string, IntentHandler> = {
   // { islandId, variant, targetX, targetY }. `launchSatellite` self-validates
   // spaceport, ascendant core, payload resources, target range, and the success
   // roll; deducts cost and (on success) appends a satellite.
+  //
+  // §14.7/§14.8 failure parity: a failed RNG roll still consumes the payload
+  // and may revert the Spaceport or create debris. That loss is authoritative,
+  // so the handler signals the runner to persist even though the ack is ok:false.
+  // Pre-flight validation rejections (no spaceport, bad target, etc.) do NOT
+  // spend resources and are not persisted.
   'launch-satellite': {
     apply(game: LiveGame, payload: unknown, now: number): IntentResult {
       if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
@@ -1103,7 +1129,13 @@ export const INTENTS: Record<string, IntentHandler> = {
       if (typeof targetX !== 'number' || !Number.isFinite(targetX)) return { ok: false, error: 'targetX must be finite' };
       if (typeof targetY !== 'number' || !Number.isFinite(targetY)) return { ok: false, error: 'targetY must be finite' };
       const r = launchSatellite(game.world, islandId, variant, targetX, targetY, now);
-      if (!r.ok) return { ok: false, error: r.reason };
+      if (!r.ok) {
+        // Launch-failure spent resources; persistence must keep the loss.
+        if (r.reason === 'launch-failure') {
+          return { ok: false, error: r.reason, persist: true };
+        }
+        return { ok: false, error: r.reason };
+      }
       return { ok: true };
     },
   },

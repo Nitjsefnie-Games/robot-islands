@@ -16,7 +16,7 @@ import { loadAndCatchUp } from './runtime.js';
 import { saveSnapshot } from './persistence.js';
 import { serializeWorld } from '../../../src/persistence.js';
 import { projectGame, type GameProjection } from './projection.js';
-import { INTENTS } from './intents.js';
+import { INTENTS, type IntentResult } from './intents.js';
 
 /** Client -> server intent envelope (design §4). */
 export interface IntentEnvelope {
@@ -51,7 +51,7 @@ export async function applyIntent(
     const game = await loadAndCatchUp(client, userId, now);
     if (game === null) return { seq, ok: false, error: 'no game' };
 
-    let result: { ok: true } | { ok: false; error: string };
+    let result: IntentResult;
     try {
       result = handler.apply(game, payload, now);
     } catch (err) {
@@ -65,7 +65,7 @@ export async function applyIntent(
       return { seq, ok: false, error };
     }
 
-    if (!result.ok) {
+    if (!result.ok && !result.persist) {
       // Persist NOTHING beyond catch-up. The in-memory `game` carries the
       // would-be mutation but we never call saveSnapshot for it; the tx commits
       // only the catch-up snapshot loadAndCatchUp already wrote.
@@ -73,6 +73,12 @@ export async function applyIntent(
     }
 
     await saveSnapshot(client, userId, serializeWorld(game.world, game.islandStates, now, now));
-    return { seq, ok: true, projection: projectGame(game) };
+    if (result.ok) {
+      return { seq, ok: true, projection: projectGame(game) };
+    }
+    // Persisted failure: the mutation was applied and saved, but the client
+    // still receives a failure ack (e.g. a launch RNG failure with consumed
+    // resources / debris / tier-revert per §14.7).
+    return { seq, ok: false, error: result.error };
   });
 }
