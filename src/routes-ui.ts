@@ -779,9 +779,13 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     row.appendChild(meta);
     renderCargoEditor(route, row, () => refresh(performance.now()));
 
+    const routeId = route.id;
     // Per-frame dynamic fields — recomputed in place so the row DOM (and its
-    // click handlers) survives across repaints.
+    // click handlers) survives across repaints. Re-resolve the live Route by
+    // id each refresh because applyRemoteSnapshot re-mints world.routes.
     function update(now: number): void {
+      const route = deps.world.routes.find((r) => r.id === routeId);
+      if (!route) return;
       const inFlightCount = route.inFlight.length;
       const utilPct = Math.min(1, inFlightCount / 10);
       ruleFill.style.width = `${(utilPct * 100).toFixed(2)}%`;
