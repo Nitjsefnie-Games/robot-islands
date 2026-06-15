@@ -16,7 +16,7 @@
 //     aviation kerosene, etc. No fallback to lower grades.
 
 import { computeSignalRanges, pointInSignalRange } from './antenna.js';
-import { hasOperationalBuilding, isOperationalBuilding } from './buildings.js';
+import { hasOperationalBuilding, isOperationalBuilding } from './building-operational.js';
 import { corridorCells, islandIntersectsCells, parseCellKey } from './discovery.js';
 import type { IslandState } from './economy.js';
 import { inv } from './economy.js';

@@ -230,14 +230,16 @@ describe('set-active-floors', () => {
 describe('dispatch-drone', () => {
   it('legal: launches a drone and lands it in world.drones', async () => {
     const now = Date.now();
-    // Starter inventory has no biofuel; mutate the snapshot to grant some so a
-    // T1 (biofuel) drone is affordable.
-    const snap = createInitialSnapshot(now) as unknown as {
-      islandStates: Array<{ id: string; state: { inventory: Record<string, number> } }>;
-    };
-    const home = snap.islandStates.find((e) => e.id === 'home')!;
-    home.state.inventory.biofuel = 100;
-    const uid = await userWithSnapshot(snap as unknown as SaveSnapshot);
+    const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
+      const home = world.islands.find((s: any) => s.id === 'home');
+      const state = islandStates.get('home');
+      home.buildings.push({
+        id: 'pad-1', defId: 'dronepad', x: 0, y: 0,
+        constructionRemainingMs: 0, placedAt: now,
+      });
+      state.buildings = home.buildings;
+      state.inventory.biofuel = 100;
+    });
 
     const ack = await applyIntent(
       pool, uid,
@@ -257,9 +259,36 @@ describe('dispatch-drone', () => {
     expect(fuelAfter).toBe(90);
   });
 
+  it('illegal: no operational Drone Pad is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (_world, islandStates) => {
+      const state = islandStates.get('home');
+      state.inventory.biofuel = 100;
+    });
+    const ack = await applyIntent(
+      pool, uid,
+      {
+        type: 'dispatch-drone',
+        payload: { islandId: 'home', originX: 0, originY: 0, dirX: 1, dirY: 0, fuelLoaded: 10 },
+        seq: 9,
+      },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: false, error: 'no-operational-dronepad' });
+  });
+
   it('illegal: insufficient fuel is rejected, save unchanged', async () => {
     const now = Date.now();
-    const uid = await aUserWithGame(); // starter has 0 biofuel
+    const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
+      const home = world.islands.find((s: any) => s.id === 'home');
+      const state = islandStates.get('home');
+      home.buildings.push({
+        id: 'pad-1', defId: 'dronepad', x: 0, y: 0,
+        constructionRemainingMs: 0, placedAt: now,
+      });
+      state.buildings = home.buildings;
+      // No biofuel.
+    });
     await expectRejectNoChange(
       uid,
       {
@@ -269,6 +298,33 @@ describe('dispatch-drone', () => {
       },
       now,
     );
+  });
+
+  it('illegal: path-drawn drone without an operational Path Drone Foundry is rejected', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
+      const home = world.islands.find((s: any) => s.id === 'home');
+      const state = islandStates.get('home');
+      home.buildings.push({
+        id: 'pad-1', defId: 'dronepad', x: 0, y: 0,
+        constructionRemainingMs: 0, placedAt: now,
+      });
+      state.buildings = home.buildings;
+      state.inventory.biofuel = 100;
+    });
+    const ack = await applyIntent(
+      pool, uid,
+      {
+        type: 'dispatch-drone',
+        payload: {
+          islandId: 'home', originX: 0, originY: 0, dirX: 1, dirY: 0, fuelLoaded: 10,
+          waypoints: [{ x: 5, y: 0 }, { x: 10, y: 0 }],
+        },
+        seq: 9,
+      },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: false, error: 'no-operational-path-drone-foundry' });
   });
 
   // Migration regression: the dispatch-drone handler dropped waypoints +
@@ -356,6 +412,60 @@ describe('place-building ocean validation', () => {
     );
     expect(ack.ok).toBe(false);
     expect(ack).toMatchObject({ error: expect.stringMatching(/land-overlap|illegal ocean placement/) });
+  });
+
+  it('legal: ocean building with an eligible anchor is accepted', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (_world, islandStates) => {
+      const state = islandStates.get('home');
+      state.level = 5;
+      state.inventory.steel_beam = 1000;
+      state.inventory.concrete = 10000;
+      state.inventory.iron_ingot = 1000;
+      state.inventory.wire = 1000;
+      state.inventory.microchip = 1000;
+    });
+    const ack = await applyIntent(
+      pool, uid,
+      {
+        type: 'place-building',
+        payload: {
+          islandId: 'home', defId: 'sonar_buoy', x: -160, y: 0, rotation: 0,
+          anchorIslandId: 'home',
+        },
+        seq: 1,
+      },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 1 });
+    const b = (await homeBuildings(uid)).find((bb) => bb.defId === 'sonar_buoy')!;
+    expect(b.anchorIslandId).toBe('home');
+  });
+
+  it('illegal: ocean building with an ineligible anchorIslandId is rejected', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (_world, islandStates) => {
+      const state = islandStates.get('home');
+      state.level = 5;
+      state.inventory.steel_beam = 1000;
+      state.inventory.concrete = 10000;
+      state.inventory.iron_ingot = 1000;
+      state.inventory.wire = 1000;
+      state.inventory.microchip = 1000;
+    });
+    const ack = await applyIntent(
+      pool, uid,
+      {
+        type: 'place-building',
+        payload: {
+          islandId: 'home', defId: 'sonar_buoy', x: -160, y: 0, rotation: 0,
+          anchorIslandId: 'not-a-candidate',
+        },
+        seq: 1,
+      },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: false, error: 'ineligible-anchor' });
   });
 });
 
@@ -721,10 +831,16 @@ describe('convert-to-servitor', () => {
     const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
       const home = world.islands.find((s: any) => s.id === 'home');
       const state = islandStates.get('home');
-      home.buildings.push({
-        id: 'workshop-1', defId: 'workshop', x: 0, y: 0,
-        constructionRemainingMs: 0, placedAt: now,
-      });
+      home.buildings.push(
+        {
+          id: 'workshop-1', defId: 'workshop', x: 0, y: 0,
+          constructionRemainingMs: 0, placedAt: now,
+        },
+        {
+          id: 'rf-1', defId: 'reality_forge', x: 2, y: 0,
+          constructionRemainingMs: 0, placedAt: now,
+        },
+      );
       state.buildings = home.buildings;
       state.inventory.lubricant = 100;
       state.inventory.bolt = 100;
@@ -754,10 +870,16 @@ describe('convert-to-servitor', () => {
     const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
       const home = world.islands.find((s: any) => s.id === 'home');
       const state = islandStates.get('home');
-      home.buildings.push({
-        id: 'workshop-1', defId: 'workshop', x: 0, y: 0,
-        constructionRemainingMs: 0, placedAt: now, eternalServitor: true,
-      });
+      home.buildings.push(
+        {
+          id: 'workshop-1', defId: 'workshop', x: 0, y: 0,
+          constructionRemainingMs: 0, placedAt: now, eternalServitor: true,
+        },
+        {
+          id: 'rf-1', defId: 'reality_forge', x: 2, y: 0,
+          constructionRemainingMs: 0, placedAt: now,
+        },
+      );
       state.buildings = home.buildings;
       state.inventory.lubricant = 100;
       state.inventory.bolt = 100;
@@ -776,10 +898,16 @@ describe('convert-to-servitor', () => {
     const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
       const home = world.islands.find((s: any) => s.id === 'home');
       const state = islandStates.get('home');
-      home.buildings.push({
-        id: 'workshop-1', defId: 'workshop', x: 0, y: 0,
-        constructionRemainingMs: 0, placedAt: now,
-      });
+      home.buildings.push(
+        {
+          id: 'workshop-1', defId: 'workshop', x: 0, y: 0,
+          constructionRemainingMs: 0, placedAt: now,
+        },
+        {
+          id: 'rf-1', defId: 'reality_forge', x: 2, y: 0,
+          constructionRemainingMs: 0, placedAt: now,
+        },
+      );
       state.buildings = home.buildings;
       // No Conversion Kit materials.
     });
@@ -788,6 +916,29 @@ describe('convert-to-servitor', () => {
       { type: 'convert-to-servitor', payload: { islandId: 'home', buildingId: 'workshop-1' }, seq: 9 },
       now,
     );
+  });
+
+  it('illegal: missing operational Reality Forge is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
+      const home = world.islands.find((s: any) => s.id === 'home');
+      const state = islandStates.get('home');
+      home.buildings.push({
+        id: 'workshop-1', defId: 'workshop', x: 0, y: 0,
+        constructionRemainingMs: 0, placedAt: now,
+      });
+      state.buildings = home.buildings;
+      state.inventory.lubricant = 100;
+      state.inventory.bolt = 100;
+      state.inventory.eldritch_processor = 100;
+      state.inventory.phase_converter = 100;
+    });
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'convert-to-servitor', payload: { islandId: 'home', buildingId: 'workshop-1' }, seq: 9 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: false, error: 'requires an operational Reality Forge' });
   });
 });
 
@@ -1782,6 +1933,39 @@ describe('construct-island', () => {
       },
       now,
     );
+  });
+
+  it('illegal: overlapping an existing island is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
+      const home = world.islands.find((s: any) => s.id === 'home');
+      const state = islandStates.get('home');
+      state.level = 15;
+      home.buildings.push({
+        id: 'pc-1', defId: 'platform_constructor', x: 0, y: 0,
+        constructionRemainingMs: 0, placedAt: now,
+      });
+      state.buildings = home.buildings;
+      state.inventory.steel_beam = 10000;
+      state.inventory.concrete = 10000;
+    });
+    const ack = await applyIntent(
+      pool, uid,
+      {
+        type: 'construct-island',
+        payload: {
+          founderIslandId: 'home',
+          biome: 'plains',
+          majorRadius: 4,
+          minorRadius: 4,
+          cx: 0,
+          cy: 0,
+        },
+        seq: 9,
+      },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: false, error: 'position-occupied' });
   });
 });
 
