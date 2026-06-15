@@ -21,6 +21,7 @@ import { applyIntent, type IntentEnvelope } from './intent-runner.js';
 import { catchUp, loadAndCatchUp } from './runtime.js';
 import { loadSnapshot } from './persistence.js';
 import { serializeWorld } from '../../../src/persistence.js';
+import { projectSnapshotForClient } from './projection.js';
 
 /** Interval between periodic authoritative state pushes to the client.
  *  Chosen at ECONOMY_TICK_MS-scale (~1s) so the client sees production advance
@@ -103,7 +104,7 @@ async function pushStateReadOnly(
   // the lost-update window. Authority is persisted only by accepted intents.
   const game = catchUp(await loadSnapshot(pool, userId), now);
   const snapshot = game === null ? null : serializeWorld(game.world, game.islandStates, now, now);
-  socket.send(JSON.stringify({ type: 'state', snapshot }));
+  socket.send(JSON.stringify({ type: 'state', snapshot: snapshot === null ? null : projectSnapshotForClient(snapshot) }));
   return snapshot;
 }
 
@@ -120,7 +121,7 @@ async function pushStateCheckpoint(
 ): Promise<unknown | null> {
   const game = await withAccountTx(pool, userId, (client) => loadAndCatchUp(client, userId, now));
   const snapshot = game === null ? null : serializeWorld(game.world, game.islandStates, now, now);
-  socket.send(JSON.stringify({ type: 'state', snapshot }));
+  socket.send(JSON.stringify({ type: 'state', snapshot: snapshot === null ? null : projectSnapshotForClient(snapshot) }));
   return snapshot;
 }
 
