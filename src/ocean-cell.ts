@@ -35,9 +35,19 @@ export function terrainAt(world: OceanWorld, cellX: number, cellY: number): Ocea
   return world.oceanCells.get(key(cellX, cellY))?.terrain ?? 'deep';
 }
 
-/** Returns true iff every tile under the building's footprint
+/** §5 depth-gated terrain match.
+ *
+ *  Returns true iff every cell under the building's footprint
  *  (anchorX..anchorX+w-1, anchorY..anchorY+h-1) matches one of the
- *  required terrains. */
+ *  required terrains.
+ *
+ *  When `depthRevealedCells` is provided (client preview path), a cell whose
+ *  true terrain is a rare feature (`hydrothermal_vent`, `nodule_field`,
+ *  `trench`) but whose key is NOT in `depthRevealedCells` is treated as its
+ *  non-feature base (`'deep'`) for matching. This prevents the placement
+ *  preview from confirming hidden rare terrain. When `depthRevealedCells` is
+ *  omitted (server authoritative path), the true stored terrain is used
+ *  unchanged. */
 export function footprintMatches(
   world: OceanWorld,
   anchorX: number,
@@ -45,11 +55,20 @@ export function footprintMatches(
   footprintW: number,
   footprintH: number,
   requiredTerrains: readonly OceanTerrain[],
+  depthRevealedCells?: ReadonlySet<string>,
 ): boolean {
   for (let dy = 0; dy < footprintH; dy++) {
     for (let dx = 0; dx < footprintW; dx++) {
-      const t = terrainAt(world, anchorX + dx, anchorY + dy);
-      if (!requiredTerrains.includes(t)) return false;
+      const cx = anchorX + dx;
+      const cy = anchorY + dy;
+      const t = terrainAt(world, cx, cy);
+      const effective =
+        depthRevealedCells !== undefined &&
+        RARE_TERRAINS.has(t) &&
+        !depthRevealedCells.has(key(cx, cy))
+          ? 'deep'
+          : t;
+      if (!requiredTerrains.includes(effective)) return false;
     }
   }
   return true;

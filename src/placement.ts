@@ -1338,6 +1338,11 @@ export function validateOceanPlacement(
   defId: BuildingDefId,
   cellX: number,
   cellY: number,
+  /** §5 CLIENT preview only: when provided, rare-feature terrains not in
+   *  this set are masked to `'deep'` so the preview cannot confirm hidden
+   *  vents / nodules / trenches. The SERVER place-building intent path omits
+   *  this argument and validates against the true stored terrain. */
+  depthRevealedCells?: ReadonlySet<string>,
 ): OceanPlacementValidation {
   const def = BUILDING_DEFS[defId];
   if (def.oceanPlacement !== true) {
@@ -1411,9 +1416,10 @@ export function validateOceanPlacement(
   // Terrain match. If `terrainReqs` is undefined / empty, the def accepts
   // any ocean terrain (matches the sonar_buoy "any discovered ocean" rule
   // in the §3 table). `footprintMatches` short-circuits on the first
-  // non-matching cell.
+  // non-matching cell. The optional `depthRevealedCells` is forwarded only
+  // from the client preview so it cannot leak un-scouted rare features.
   if (def.terrainReqs && def.terrainReqs.length > 0) {
-    if (!footprintMatches(world, cellX, cellY, w, h, def.terrainReqs)) {
+    if (!footprintMatches(world, cellX, cellY, w, h, def.terrainReqs, depthRevealedCells)) {
       return { ok: false, reason: 'terrain-mismatch' };
     }
   }
