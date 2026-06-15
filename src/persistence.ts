@@ -879,6 +879,7 @@ export function deserializeWorld(
   snapshot: SaveSnapshot,
   nowWallMs: number = Date.now(),
   nowPerfMs: number = performance.now(),
+  opts: { decayClosedGameActiveBonus?: boolean } = {},
 ): { world: WorldState; islandStates: Map<string, IslandState> } {
   // Walk the v7 → … → SCHEMA_VERSION migration chain, one step per version.
   if ((snapshot as unknown as { v: number }).v === 7) {
@@ -1054,13 +1055,17 @@ export function deserializeWorld(
       : { achieved: new Set<VictoryCondition>(), firstAchievedMs: null },
     latticeActive: snapshot.world.latticeActive ?? false,
     // §9.9: the closed-game gap is unfocused time — burn the balance at the
-    // decay ratio before offline catch-up runs, so catch-up production uses
-    // the post-decay multiplier. Decay is computed from time-since-last-active
-    // (not time-since-save), so connected play does not erode the bonus.
-    activeBonusMs: Math.max(
-      0,
-      (snapshot.world.activeBonusMs ?? 0) - ACTIVE_DECAY_RATIO * awayMs,
-    ),
+    // decay ratio before offline catch-up runs. This closed-game decay runs
+    // ONLY at a genuine LOCAL cold load (opt-in). The server per-intent
+    // catch-up and the REMOTE live-push path must NOT decay here: the activity
+    // heartbeat owns all in-session accrual/decay, and re-charging the
+    // inter-heartbeat window here double-counts it against the heartbeat's
+    // accrual (3× away-decay vs 1× accrual → the bonus would only ever drain).
+    // REMOTE closed-game gaps are decayed authoritatively via the first
+    // post-reconnect heartbeat's unfocused report (see main.ts boot seeding).
+    activeBonusMs: opts.decayClosedGameActiveBonus
+      ? Math.max(0, (snapshot.world.activeBonusMs ?? 0) - ACTIVE_DECAY_RATIO * awayMs)
+      : (snapshot.world.activeBonusMs ?? 0),
     lastActiveMs: lastActive,
     latticeNodeIslands: [...(snapshot.world.latticeNodeIslands ?? [])],
     commPackets: snapshot.world.commPackets.map((p) => ({ ...p, generatedMs: p.generatedMs + perfShift })),
@@ -1300,7 +1305,12 @@ export async function loadWorld(): Promise<
     }
 
     if (stored === undefined) return null;
-    const result = deserializeWorld(stored);
+    // LOCAL cold load: this is the one path that owns closed-game active-bonus
+    // decay (no server/heartbeat exists in LOCAL mode). REMOTE + server paths
+    // opt out — the activity heartbeat owns in-session accounting (§9.9).
+    const result = deserializeWorld(stored, Date.now(), performance.now(), {
+      decayClosedGameActiveBonus: true,
+    });
 
     // Migrate-write-back: if loaded from an older key, persist to current key
     // and delete the old. Future loads hit the current key directly.

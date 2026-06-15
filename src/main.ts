@@ -300,11 +300,20 @@ async function main(): Promise<void> {
   let fresh: ReturnType<typeof createNewGame> | null = null;
   let remoteClient: GameServerClient | null = null;
   let setRemoteOnState: ((handler: (snapshot: SaveSnapshot) => void) => void) | null = null;
+  // §9.9: the closed-game gap since the server's persisted `lastActiveMs` is
+  // unfocused away-time. Server catch-up no longer decays the bonus (the
+  // heartbeat owns in-session accounting), so we seed the FIRST heartbeat's
+  // unfocused accumulator with this gap to decay it authoritatively, once.
+  let remoteBootAwayMs = 0;
 
   if (isRemote) {
     const remote = await bootRemoteClient();
     remoteClient = remote.client;
     setRemoteOnState = remote.setOnState;
+    const bootLastActive = remote.snapshot.world.lastActiveMs;
+    if (typeof bootLastActive === 'number') {
+      remoteBootAwayMs = Math.max(0, Date.now() - bootLastActive);
+    }
     const d = deserializeWorld(remote.snapshot, Date.now(), performance.now());
     worldState = d.world;
     islandStates = d.islandStates;
@@ -2516,7 +2525,9 @@ async function main(): Promise<void> {
   // accumulated per frame and flushed to the server every 5s so the server
   // owns the authoritative active-bonus balance.
   let hbFocusedMs = 0;
-  let hbUnfocusedMs = 0;
+  // Seed with the boot away-gap (§9.9) so the first heartbeat decays the
+  // closed-game/disconnect time the server catch-up no longer charges.
+  let hbUnfocusedMs = remoteBootAwayMs;
   let hbLastSentMs = 0;
   const HEARTBEAT_INTERVAL_MS = 5000;
 
