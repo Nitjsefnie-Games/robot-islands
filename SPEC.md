@@ -2280,8 +2280,14 @@ It is being delivered in slices, each with its own design + plan under
     it applies `projectSnapshotForClient` before pushing a snapshot over the
     WebSocket. The projection omits every island where `discovered === false`
     and `populated === false`; only discovered and/or populated islands reach
-    the client. This keeps the fog-of-war trust boundary on the server while
-    still letting the client render known islands and vision sources.
+    the client. It also redacts fog-sensitive cell collections: `oceanCells` is
+    trimmed to keys present in `revealedCells`, and rare-feature terrains
+    (`hydrothermal_vent`, `nodule_field`, `trench`) additionally require the key
+    to be in `depthRevealedCells`; dropped cells render as the implicit `'deep'`
+    default on the client. `generatedCells` is omitted from the wire payload
+    because it is only needed for persistence/load-time reconstruction, not for
+    remote runtime rendering. This keeps the fog-of-war trust boundary on the
+    server while still letting the client render known islands and vision sources.
   - **Per-account atomicity (Slice 5 hardening).** The whole
     load→apply→persist sequence for an intent runs inside a single Postgres
     transaction that first takes a transaction-scoped advisory lock keyed on the
