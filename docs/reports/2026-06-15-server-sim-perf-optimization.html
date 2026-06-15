@@ -92,14 +92,15 @@
   <div class="page">
 
     <header class="page-head">
-      <div class="eyebrow">Robot Islands · optimizer run · 2026-06-15 · agent: claude-opus-4-8</div>
-      <h1>Server simulation — 5-iteration optimizer run</h1>
+      <div class="eyebrow">Robot Islands · optimizer run · 2026-06-15 · agent: claude-opus-4-8 · two rounds, 10 iterations</div>
+      <h1>Server simulation — 10-iteration optimizer run</h1>
       <p class="lede">The server is authoritative: the <b>entire pure simulation re-runs server-side</b> on
         every intent (<code>loadAndCatchUp</code>) and every ~1&nbsp;s periodic push (<code>catchUp</code>) —
         <code>deserializeWorld → advanceWorldEconomy → advanceWorldSystems → serializeWorld</code>. This run
         profiled that path on a real late-game save and applied behaviour-preserving optimizations under a
-        byte-identical golden gate. <b>Offline catch-up (1&nbsp;h gap): 2.27&nbsp;s → ~108&nbsp;ms (~21×).
-        Per-push (1&nbsp;s gap): 8.85&nbsp;ms → 7.26&nbsp;ms.</b> Every kept change is byte-identical;
+        byte-identical golden gate. <b>Offline catch-up (1&nbsp;h gap): 2.27&nbsp;s → ~78&nbsp;ms (~29×).
+        Per-push (1&nbsp;s gap): 8.85&nbsp;ms → 7.15&nbsp;ms.</b> 10 iterations across two rounds — 7 kept,
+        3 reverted (1 broke a contract test, 2 measured sub-noise). Every kept change is byte-identical;
         the full 3571-test suite passes.</p>
     </header>
 
@@ -140,14 +141,14 @@
           <th style="text-align:right">Δ</th><th>Significance</th><th>What dominated it</th></tr></thead>
         <tbody>
           <tr class="baseline"><td class="slate">1&nbsp;h — offline catch-up</td><td class="num">2.27 s</td>
-            <td class="num">~108 ms</td><td class="num"><span class="delta win">~21×</span></td>
+            <td class="num">~78 ms</td><td class="num"><span class="delta win">~29×</span></td>
             <td><span class="sig real">far outside band</span></td>
-            <td><code>advanceWorldSystems</code> per-step recomputes (merge tile-count, antenna ranges)</td></tr>
-          <tr><td class="slate">1&nbsp;min</td><td class="num">46.4 ms</td><td class="num">9.0 ms</td>
+            <td>per-step recomputes (tile-count, antenna ranges, route skill-mul folds)</td></tr>
+          <tr><td class="slate">1&nbsp;min</td><td class="num">46.4 ms</td><td class="num">8.7 ms</td>
             <td class="num"><span class="delta win">~5×</span></td><td><span class="sig real">outside band</span></td>
             <td>same per-step costs, fewer steps</td></tr>
           <tr><td class="slate">1&nbsp;s — periodic push / small-gap intent</td><td class="num">8.85 ms</td>
-            <td class="num">7.26 ms</td><td class="num"><span class="delta win">−18%</span></td>
+            <td class="num">7.15 ms</td><td class="num"><span class="delta win">−19%</span></td>
             <td><span class="sig real">phase-level</span></td>
             <td>deserialize + economy; single-step systems</td></tr>
         </tbody>
@@ -265,6 +266,72 @@
           <div class="full"><div class="bk">Gate</div><div class="bv">Golden byte-identical · 94 world/merge/reclamation tests pass. 1s-push systems phase 4.3× lighter.</div></div>
         </div>
       </article>
+
+      <p class="sec-intro" style="margin-top:32px"><strong>Round 2 (iterations 6–10):</strong> a second pass at
+        the user's request. The catch-up was already ~21×, so the remaining targets were route-dispatch costs
+        (real) and the per-step weather sampling (mostly a benchmark cold-anchor artifact — not chased).</p>
+
+      <article class="cand">
+        <div class="cand-head"><span class="cid">iter 6</span><span class="ct">Hoist route-dispatch skill multipliers</span>
+          <span class="pill kept">KEPT · 1h systems ~90 → ~85ms</span></div>
+        <div class="cand-body">
+          <div><div class="bk">Target</div><div class="bv"><code>dispatchPhase</code> called
+            <code>effectiveSkillMultipliers</code> per route per step (rebuilds memo signature + clones).</div></div>
+          <div><div class="bk">Fix</div><div class="bv"><code>advanceWorldSystems</code> folds per-island mults ONCE
+            (skills static in the loop) and threads them via a new <code>precomputedSkillMul</code> param. Preserves the
+            signature contract iter 3 broke — it's still called, just far less. Falls back to a live fold on any map miss.</div></div>
+          <div class="full"><div class="bk">Gate</div><div class="bv">Golden byte-identical · 241 routes/skilltree tests pass.</div></div>
+        </div>
+      </article>
+
+      <article class="cand">
+        <div class="cand-head"><span class="cid">iter 7</span><span class="ct">Thread skill mults into route-cargo <code>cap()</code></span>
+          <span class="pill kept">KEPT · 1h systems ~85 → ~69ms</span></div>
+        <div class="cand-body">
+          <div><div class="bk">Target</div><div class="bv">A call-tree trace pinned ~11% of catch-up to
+            <code>effectiveSkillMultipliers ← cap ← destinationHeadroom ← tryPush</code>: route-cargo planning called
+            <code>cap()</code> per resource per route per step WITHOUT the skill-mult arg, re-folding skills.</div></div>
+          <div><div class="bk">Fix</div><div class="bv"><code>planRouteCargo</code> resolves src/dest mults once
+            (from the iter-6 map, else one fold) and threads them into every <code>cap()</code>. Byte-identical — the
+            value passed is exactly what <code>cap()</code> would fold.</div></div>
+          <div class="full"><div class="bk">Gate</div><div class="bv">Golden byte-identical · 100 routes tests pass. Biggest round-2 win.</div></div>
+        </div>
+      </article>
+
+      <article class="cand">
+        <div class="cand-head"><span class="cid">iter 8</span><span class="ct">Memoize route path-cell rasterization (<code>lineSegmentCells</code>)</span>
+          <span class="pill revert">REVERTED · sub-noise</span></div>
+        <div class="cand-body">
+          <div><div class="bk">Target / fix</div><div class="bv">Route-path DDA rasterization recomputed per step over
+            static endpoints — memoized on a content key.</div></div>
+          <div><div class="bk">Why reverted</div><div class="bv">Golden byte-identical, but 1h moved &lt;2% — inside the 3%
+            noise floor. The neighbouring <code>advanceWalker</code> was the cold-anchor artifact, not steady cost, and
+            <code>rasterizeLineSegment</code> still maps the cells. A global cache for no measurable gain ⇒ discard.</div></div>
+        </div>
+      </article>
+
+      <article class="cand">
+        <div class="cand-head"><span class="cid">iter 9</span><span class="ct">Drop per-building conditional-spread allocations on load</span>
+          <span class="pill kept">KEPT · deserialize ~1.97 → ~1.93ms</span></div>
+        <div class="cand-body">
+          <div><div class="bk">Target</div><div class="bv"><code>deserializeWorld</code> (the #1 per-push self-time) used
+            <code>...(cond ? {f} : {})</code> ×3 per building — up to 546 throwaway objects per load (every push/intent).</div></div>
+          <div><div class="bk">Fix</div><div class="bv">Clone once, re-stamp the perf-domain timestamps in place. Byte-identical;
+            deserialize-phase distributions non-overlapping (1.93–1.94 vs 1.96–2.01) — small but real, no added state.</div></div>
+          <div class="full"><div class="bk">Gate</div><div class="bv">Golden byte-identical · 119 persistence tests pass.</div></div>
+        </div>
+      </article>
+
+      <article class="cand">
+        <div class="cand-head"><span class="cid">iter 10</span><span class="ct">Memoize <code>buildIslandIndex</code> (id→spec, per step)</span>
+          <span class="pill revert">REVERTED · sub-noise</span></div>
+        <div class="cand-body">
+          <div><div class="bk">Target / fix</div><div class="bv">Per-step id→spec index rebuild; memoized on (array ref + length),
+            provably safe (islands only change via splice/push, never in-place).</div></div>
+          <div><div class="bk">Why reverted</div><div class="bv">A controlled A/B showed ~2.5% (systems 64.1 vs 66.0 ms) —
+            below the 5–7% floor, and it adds module state. Not a clear win ⇒ discard (consistent with iter 8).</div></div>
+        </div>
+      </article>
     </section>
 
     <!-- ===== 4 · LEFT ON THE TABLE ===== -->
@@ -289,10 +356,13 @@
     </section>
 
     <div class="footer">
-      <p>Optimizer run · 2026-06-15 · agent claude-opus-4-8 · 5 iterations (4 kept, 1 reverted) · gate: golden
-        <code>sha256:8aeca541…6d1eda5</code> byte-identical after every kept change + full suite 3571 passed / 0 failed ·
-        commits <code>f91a494 · c1fe34c · 0fb9f5c · 07e3dee · 072ad35</code> on <code>master</code>.
-        No <code>SPEC.md</code> change: all kept changes are behaviour-identical internal memoization/hoisting.</p>
+      <p>Optimizer run · 2026-06-15 · agent claude-opus-4-8 · 10 iterations across two rounds (7 kept, 3 reverted) ·
+        gate: golden <code>sha256:8aeca541…6d1eda5</code> byte-identical after every kept change + full suite
+        3571 passed / 0 failed · commits <code>f91a494 · c1fe34c · 0fb9f5c · 07e3dee · 072ad35</code> (round 1) and
+        <code>1bd2724 · 784d991 · 77bb1ce</code> (round 2) on <code>master</code>.
+        No <code>SPEC.md</code> change: all kept changes are behaviour-identical internal memoization/hoisting.
+        Stopped at 10: remaining safe targets measure sub-noise; the larger ones (economy core, a per-dwell weather
+        cache) are high-risk for the payoff on this workload.</p>
     </div>
   </div>
 </body>
