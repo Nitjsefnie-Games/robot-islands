@@ -7,7 +7,7 @@ import { registerAuthRoutes } from './auth/routes.js';
 import { registerGameRoutes } from './game/routes.js';
 import { registerGameWsRoutes } from './game/ws.js';
 
-export interface AppOptions { readonly pool: Pool; readonly cookieSecure: boolean; readonly allowedWsOrigins?: ReadonlyArray<string>; readonly authRateLimitMax?: number; readonly wsStatePushIntervalMs?: number; readonly wsIntentRateLimit?: number; readonly wsIntentRateWindowMs?: number; readonly wsCheckpointIntervalMs?: number; }
+export interface AppOptions { readonly pool: Pool; readonly cookieSecure: boolean; readonly allowedWsOrigins?: ReadonlyArray<string>; readonly authRateLimitMax?: number; readonly wsStatePushIntervalMs?: number; readonly wsIntentRateLimit?: number; readonly wsIntentRateWindowMs?: number; readonly wsCheckpointIntervalMs?: number; readonly wsOfflineDecision?: boolean; }
 
 export function buildApp(opts: AppOptions): FastifyInstance {
   // trustProxy is the COUNT of trusted hops (a single nginx in front), NOT
@@ -60,6 +60,7 @@ export function buildApp(opts: AppOptions): FastifyInstance {
       intentRateLimit: opts.wsIntentRateLimit,
       intentRateWindowMs: opts.wsIntentRateWindowMs,
       checkpointIntervalMs: opts.wsCheckpointIntervalMs,
+      offlineDecision: opts.wsOfflineDecision,
     });
   });
   app.get('/health', async () => ({ ok: true }));

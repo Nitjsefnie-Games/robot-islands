@@ -12,7 +12,8 @@ import { testPool, resetDb, buildTestApp } from '../test-helpers.js';
 import { SCHEMA_VERSION, type SaveSnapshot } from '../../../src/persistence.js';
 import { applySnapshotDelta, type SnapshotDelta } from '../../../src/snapshot-delta.js';
 import { SlidingWindowLimiter, WS_MAX_SOCKETS_PER_USER } from './ws.js';
-import { loadSnapshot } from './persistence.js';
+import { loadSnapshot, saveSnapshot } from './persistence.js';
+import { createInitialSnapshot } from './new-game.js';
 
 const pool = testPool();
 const app = buildTestApp(pool);
@@ -111,6 +112,27 @@ const PLACE = (seq: number) => ({
   seq,
 });
 
+/** §9.9 offline catch-up: on a fresh connect with a gap (now > savedAt) the
+ *  server serves the pre-gap 'state' then an 'offline-pending' frame and blocks
+ *  normal intents. Accept to reach the normal play state. `sendAndAwait` skips
+ *  the state/offline-pending frames and returns on the accept ack. */
+async function acceptOffline(ws: WebSocket): Promise<void> {
+  const ack = await sendAndAwait(ws, { type: 'offline/accept', payload: {}, seq: -999 });
+  expect(ack.ok).toBe(true);
+}
+
+/** Overwrite a user's save with a fresh game stamped at `savedAt` (ms) carrying
+ *  a given active-play bonus, so a later connect sees a real offline gap. */
+async function seedSave(userId: string, savedAt: number, activeBonusMs: number): Promise<void> {
+  const snap = createInitialSnapshot(savedAt);
+  await saveSnapshot(pool, userId, {
+    ...snap,
+    savedAt,
+    savedAtPerf: savedAt,
+    world: { ...snap.world, activeBonusMs },
+  });
+}
+
 describe('game ws', () => {
   it('rejects an upgrade with a missing Origin header', async () => {
     const cookie = await authedCookieWithGame('wsoriginmissing@x.com');
@@ -139,6 +161,7 @@ describe('game ws', () => {
     const cookie = await authedCookieWithGame('wsuser1@x.com');
     const ws = new WebSocket(baseWsUrl, { headers: { cookie }, origin: TRUSTED_ORIGIN });
     await awaitOpen(ws);
+    await acceptOffline(ws);
     const ack = await sendAndAwait(ws, PLACE(42));
     expect(ack.seq).toBe(42);
     expect(ack.ok).toBe(true);
@@ -153,6 +176,7 @@ describe('game ws', () => {
     const cookie = await authedCookieWithGame('wsuser2@x.com');
     const ws = new WebSocket(baseWsUrl, { headers: { cookie }, origin: TRUSTED_ORIGIN });
     await awaitOpen(ws);
+    await acceptOffline(ws);
     const ack = await sendAndAwait(ws, {
       type: 'place-building',
       payload: { islandId: 'home', defId: 'deep_mine', x: 0, y: 0, rotation: 0 },
@@ -168,6 +192,7 @@ describe('game ws', () => {
     const cookie = await authedCookieWithGame('wsuser3@x.com');
     const ws = new WebSocket(baseWsUrl, { headers: { cookie }, origin: TRUSTED_ORIGIN });
     await awaitOpen(ws);
+    await acceptOffline(ws);
 
     // Collect the next two ack frames, then fire two placements at DIFFERENT
     // tiles back-to-back without awaiting in between (tests the per-connection
@@ -216,11 +241,21 @@ describe('game ws', () => {
     const cookie = await authedCookieWithGame('wsstate2@x.com');
     const ws = new WebSocket(baseWsUrl, { headers: { cookie }, origin: TRUSTED_ORIGIN });
     await awaitOpen(ws);
-    // The first frame is the full baseline; subsequent pushes are deltas, so we
-    // reconstruct the post-intent snapshot exactly as the real client does.
+    // Connect emits the pre-gap 'state' baseline then 'offline-pending'. Accept,
+    // apply the resolving delta to keep the baseline current, then reconstruct
+    // the post-intent snapshot exactly as the real client does.
     const base = await awaitMessage(ws);
     expect(base.type).toBe('state');
     let snapshot = base.snapshot as SaveSnapshot;
+    const pending = await awaitMessage(ws);
+    expect(pending.type).toBe('offline-pending');
+    ws.send(JSON.stringify({ type: 'offline/accept', payload: {}, seq: -999 }));
+    const accAck = await awaitMessage(ws);
+    expect(accAck.seq).toBe(-999);
+    expect(accAck.ok).toBe(true);
+    const resolved = await awaitMessage(ws);
+    expect(resolved.type).toBe('state-delta');
+    snapshot = applySnapshotDelta(snapshot, resolved.delta as SnapshotDelta);
     ws.send(JSON.stringify(PLACE(7)));
     const ack = await awaitMessage(ws);
     expect(ack.seq).toBe(7);
@@ -243,10 +278,9 @@ describe('game ws', () => {
     const url = `ws://127.0.0.1:${addr.port}/api/game/ws`;
     const ws = new WebSocket(url, { headers: { cookie }, origin: TRUSTED_ORIGIN });
     await awaitOpen(ws);
-    const base = await awaitMessage(ws); // initial full baseline
-    expect(base.type).toBe('state');
-    // The periodic tick arrives as a delta against the baseline (an idle game's
-    // tick carries only the advanced clock, but a frame is still emitted).
+    await acceptOffline(ws); // resolve the on-connect prompt so periodic ticks resume
+    // After accept, the periodic tick arrives as a delta against the baseline (an
+    // idle game's tick carries only the advanced clock, but a frame is emitted).
     const tick = await awaitMessage(ws, 1000);
     expect(tick.type).toBe('state-delta');
     ws.close();
@@ -270,6 +304,7 @@ describe('game ws', () => {
     const url = `ws://127.0.0.1:${addr.port}/api/game/ws`;
     const ws = new WebSocket(url, { headers: { cookie }, origin: TRUSTED_ORIGIN });
     await awaitOpen(ws);
+    await acceptOffline(ws); // offline-control bypasses the rate limiter, so it doesn't consume a slot
 
     const acks: Array<Record<string, unknown>> = [];
     const got = new Promise<void>((resolve) => {
@@ -320,10 +355,6 @@ describe('game ws', () => {
 
   it('periodic pushes include a bounded persisting checkpoint', async () => {
     const { cookie, userId } = await authedUserWithGame('wscheck@x.com');
-    const before = await loadSnapshot(pool, userId);
-    expect(before).not.toBeNull();
-    const initialSavedAt = before!.savedAt;
-
     const ckPool = testPool();
     const ckApp = buildTestApp(ckPool, { wsStatePushIntervalMs: 20, wsCheckpointIntervalMs: 80 });
     await ckApp.listen({ host: '127.0.0.1', port: 0 });
@@ -331,18 +362,60 @@ describe('game ws', () => {
     const url = `ws://127.0.0.1:${addr.port}/api/game/ws`;
     const ws = new WebSocket(url, { headers: { cookie }, origin: TRUSTED_ORIGIN });
     await awaitOpen(ws);
-    await awaitMessage(ws); // consume initial state
+    await acceptOffline(ws); // resolve the on-connect prompt so periodic checkpoints resume
+    const afterAccept = await loadSnapshot(ckPool, userId);
+    const baseSavedAt = afterAccept!.savedAt;
 
     // Wait long enough for at least one periodic tick to decide to checkpoint.
     await new Promise((r) => setTimeout(r, 250));
 
     const after = await loadSnapshot(ckPool, userId);
     expect(after).not.toBeNull();
-    expect(after!.savedAt).toBeGreaterThan(initialSavedAt);
+    expect(after!.savedAt).toBeGreaterThan(baseSavedAt);
 
     ws.close();
     await ckApp.close();
     await ckPool.end();
+  });
+
+  it('offline ACCEPT applies the catch-up and decays the active-play bonus (§9.9)', async () => {
+    const { cookie, userId } = await authedUserWithGame('wsofflineaccept@x.com');
+    const BONUS = 1_000_000_000; // huge so the 3×gap decay is observable, not floored
+    await seedSave(userId, Date.now() - 60_000, BONUS); // 60s offline gap
+    const ws = new WebSocket(baseWsUrl, { headers: { cookie }, origin: TRUSTED_ORIGIN });
+    await awaitOpen(ws);
+    await acceptOffline(ws);
+    const after = await loadSnapshot(pool, userId);
+    expect(after).not.toBeNull();
+    // Gap consumed (savedAt advanced to ~now) and the §9.9 bonus burned 3×gap.
+    expect(after!.savedAt).toBeGreaterThan(Date.now() - 5_000);
+    expect(after!.world.activeBonusMs!).toBeLessThan(BONUS);
+    ws.close();
+  });
+
+  it('offline REJECT forfeits the catch-up and preserves the active-play bonus', async () => {
+    const { cookie, userId } = await authedUserWithGame('wsofflinereject@x.com');
+    const BONUS = 1_000_000_000;
+    await seedSave(userId, Date.now() - 60_000, BONUS);
+    const ws = new WebSocket(baseWsUrl, { headers: { cookie }, origin: TRUSTED_ORIGIN });
+    await awaitOpen(ws);
+    const ack = await sendAndAwait(ws, { type: 'offline/reject', payload: {}, seq: -998 });
+    expect(ack.ok).toBe(true);
+    const after = await loadSnapshot(pool, userId);
+    expect(after!.world.activeBonusMs).toBe(BONUS); // preserved, no decay
+    expect(after!.savedAt).toBeGreaterThan(Date.now() - 5_000); // gap consumed
+    ws.close();
+  });
+
+  it('blocks normal intents until the offline decision is made', async () => {
+    const { cookie, userId } = await authedUserWithGame('wsofflineblock@x.com');
+    await seedSave(userId, Date.now() - 60_000, 0);
+    const ws = new WebSocket(baseWsUrl, { headers: { cookie }, origin: TRUSTED_ORIGIN });
+    await awaitOpen(ws);
+    const ack = await sendAndAwait(ws, PLACE(11));
+    expect(ack.ok).toBe(false);
+    expect(ack.error).toBe('resolve offline first');
+    ws.close();
   });
 });
 

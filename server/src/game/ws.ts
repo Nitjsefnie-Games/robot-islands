@@ -18,7 +18,7 @@ import { type Pool, withAccountTx } from '../db.js';
 import { DEFAULT_ALLOWED_WS_ORIGINS } from '../config.js';
 import { resolveSession } from '../auth/guard.js';
 import { applyIntent, type IntentEnvelope } from './intent-runner.js';
-import { catchUp, loadAndCatchUp } from './runtime.js';
+import { catchUp, loadAndCatchUp, loadAndSkipCatchUp } from './runtime.js';
 import { loadSnapshot } from './persistence.js';
 import { serializeWorld, type SaveSnapshot } from '../../../src/persistence.js';
 import { computeSnapshotDelta } from '../../../src/snapshot-delta.js';
@@ -64,6 +64,10 @@ export interface GameWsOptions {
   readonly intentRateWindowMs?: number;
   /** Override the checkpoint interval (default WS_CHECKPOINT_INTERVAL_MS). */
   readonly checkpointIntervalMs?: number;
+  /** §9.9 offline accept/reject: gate the on-connect catch-up prompt. OFF by
+   *  default so a server can ship the gating ahead of the client modal without
+   *  freezing an old client (which never sends accept/reject). Tests enable it. */
+  readonly offlineDecision?: boolean;
 }
 
 /** A sliding-window rate limiter over message timestamps. `allow(now)` records
@@ -219,10 +223,34 @@ export function registerGameWsRoutes(
     // Per-connection delta channel: first frame full, rest are deltas.
     const push = new StatePushChannel(socket);
 
+    // §9.9 accept/reject offline catch-up: while an un-decided offline gap
+    // exists, the connection is "pending" — the server serves the PRE-gap state
+    // (no catch-up committed), blocks normal intents, and waits for an
+    // `offline/accept` or `offline/reject` intent. Set at connect below.
+    let offlinePending = false;
+    const offlineDecisionEnabled = opts.offlineDecision === true;
+
     // Push the initial authoritative snapshot immediately on connect. If the
-    // account has no game yet, snapshot is null; the client can use that as a
-    // signal to create one (slice-4 boot will show auth/new-game UI).
-    chain = chain.then(async () => { push.emit(await projectReadOnly(pool, userId, Date.now())); }).catch(() => { /* socket gone */ });
+    // account has no game yet, snapshot is null; the client uses that as a
+    // signal to create one. When the offline-decision feature is enabled and
+    // there's an offline gap (now > savedAt), DON'T catch up — serve the pre-gap
+    // projection and prompt the player to choose (accept = apply catch-up +
+    // decay active bonus; reject = forfeit, keep it). When disabled, behave as
+    // before: catch up read-only to now (old clients have no modal to resolve a
+    // prompt, so the gating ships dark until the client is ready).
+    chain = chain.then(async () => {
+      const now = Date.now();
+      const snapshot = await loadSnapshot(pool, userId);
+      if (snapshot === null) { push.emit(null); return; }
+      const gapMs = Math.max(0, now - snapshot.savedAt);
+      if (offlineDecisionEnabled && gapMs > 0) {
+        offlinePending = true;
+        push.emit(projectSnapshotForClient(snapshot)); // pre-gap baseline (no catch-up)
+        socket.send(JSON.stringify({ type: 'offline-pending', gapMs }));
+      } else {
+        push.emit(await projectReadOnly(pool, userId, now));
+      }
+    }).catch(() => { /* socket gone */ });
 
     // Periodic authoritative state push: production advances even when the
     // client sends no intents. The interval is cleared on socket close.
@@ -231,6 +259,7 @@ export function registerGameWsRoutes(
     let lastCheckpointMs = 0;
     let pushBusy = false;
     const tickInterval = setInterval(() => {
+      if (offlinePending) return; // awaiting accept/reject — never catch up / checkpoint
       if (pushBusy) return; // skip if the previous push is still in flight
       pushBusy = true;
       chain = chain.then(async () => {
@@ -267,6 +296,41 @@ export function registerGameWsRoutes(
 
     socket.on('message', (raw: Buffer) => {
       const text = raw.toString();
+      // §9.9 offline-decision control messages (`offline/accept` | `offline/reject`)
+      // are handled BEFORE — and bypass — the gameplay rate limiter: a player
+      // must always be able to resolve the on-connect prompt. Peek the type
+      // cheaply; only divert when actually pending.
+      const earlyType = (() => {
+        try { const d = JSON.parse(text) as Record<string, unknown>; return typeof d.type === 'string' ? d.type : undefined; }
+        catch { return undefined; }
+      })();
+      if (earlyType === 'offline/accept' || earlyType === 'offline/reject') {
+        // Route by TYPE, then decide INSIDE the chain — `offlinePending` is set by
+        // the connect chain after an async loadSnapshot, so a synchronous read
+        // here would race it. Chaining defers the decision until after connect ran.
+        chain = chain.then(async () => {
+          const parsed = parseEnvelope(text);
+          if ('error' in parsed) { socket.send(JSON.stringify({ seq: parsed.seq, ok: false, error: parsed.error })); return; }
+          const env = parsed.env;
+          if (!offlinePending) { socket.send(JSON.stringify({ seq: env.seq, ok: true })); return; } // nothing to resolve (or already resolved)
+          const now = Date.now();
+          // accept → apply catch-up + decay the §9.9 active bonus over the gap;
+          // reject → forfeit the catch-up, keep the bonus. Both stamp savedAt=now.
+          await withAccountTx(pool, userId, (client) =>
+            env.type === 'offline/reject'
+              ? loadAndSkipCatchUp(client, userId, now)
+              : loadAndCatchUp(client, userId, now, { decayActiveBonus: true }),
+          );
+          offlinePending = false;
+          socket.send(JSON.stringify({ seq: env.seq, ok: true }));
+          try { push.emit(await projectReadOnly(pool, userId, Date.now())); } catch { /* socket gone */ }
+        }).catch((err: unknown) => {
+          // eslint-disable-next-line no-console
+          console.error('offline-decision error', err);
+          try { socket.send(JSON.stringify({ seq: -1, ok: false, error: 'internal error' })); } catch { /* socket gone */ }
+        });
+        return;
+      }
       // Rate-limit BEFORE chaining the expensive load->apply->persist so a
       // flooding client cannot grow the in-memory chain or hit the DB.
       if (!limiter.allow(Date.now())) {
@@ -289,6 +353,13 @@ export function registerGameWsRoutes(
         const parsed = parseEnvelope(text);
         if ('error' in parsed) {
           socket.send(JSON.stringify({ seq: parsed.seq, ok: false, error: parsed.error }));
+          return;
+        }
+        // While an offline decision is pending, block normal gameplay intents —
+        // no catch-up has been committed yet (the offline-control path above is
+        // the only way forward).
+        if (offlinePending) {
+          socket.send(JSON.stringify({ seq: parsed.env.seq, ok: false, error: 'resolve offline first' }));
           return;
         }
         const ack = await applyIntent(pool, userId, parsed.env, Date.now());
