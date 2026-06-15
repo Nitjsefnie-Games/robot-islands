@@ -2084,6 +2084,11 @@ async function main(): Promise<void> {
   let lastVisionSig = visionSourcesSignature(
     computeVisionSources(worldState.islands.filter((s) => s.populated)),
   );
+  // §2.2 LOCAL depth-reveal gate: sonar buoys and scanner satellites add to
+  // `depthRevealedCells` every frame. Track the size so a new depth-scout
+  // triggers the same world-layer rebuild that `discoverySignature` gates in
+  // REMOTE mode (#83).
+  let lastDepthRevealedSig = worldState.depthRevealedCells.size;
   let lastNcState = computeNcState(worldState);
   const islandPower = new Map<string, PowerBalance>();
   const islandNets = new Map<string, Record<ResourceId, number>>();
@@ -2631,6 +2636,16 @@ async function main(): Promise<void> {
       // in the same frame and any cell newly covered by either is visible to
       // the fog/glyph overlay rebuilt below.
       tickSonarBuoys(worldState);
+
+      // §2.2 LOCAL rebuild gate for depth reveals. Scanner sats and sonar buoys
+      // mutate `depthRevealedCells` per-frame; unlike surface reveals from
+      // drones, there is no `revealedCellsAdded` counter, so compare the size
+      // signature and repaint the ocean/glyph layers when it grows (#83).
+      const depthRevealedSig = worldState.depthRevealedCells.size;
+      if (depthRevealedSig !== lastDepthRevealedSig) {
+        lastDepthRevealedSig = depthRevealedSig;
+        rebuildWorldLayers();
+      }
 
       // Step-12 / §12: settlement vehicles tick after drones so a frame can
       // see new discoveries AND a brand-new arrival in the same pass. On

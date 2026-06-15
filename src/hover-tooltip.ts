@@ -169,18 +169,22 @@ function parseCellKey(cellKey: string): { x: number; y: number } | null {
   return { x, y };
 }
 
-/** Flood-fill the rare-terrain cluster containing `cellKey` and return its
- *  axis-aligned bounding box + cell membership. Mirrors `clusterAnchorOf`'s
- *  flood walk; needed here for the size readout (anchor alone doesn't carry
- *  bbox). Returns null when the cell isn't a rare-terrain ocean cell. */
+/** Flood-fill the depth-revealed subset of the rare-terrain cluster
+ *  containing `cellKey` and return its axis-aligned bounding box + cell
+ *  membership. Mirrors `clusterAnchorOf`'s flood walk but restricts the walk
+ *  to cells in `depthRevealedCells` so the tooltip only reports cells the
+ *  player has actually scouted (#87). Returns null when the cell isn't a
+ *  depth-revealed rare-terrain ocean cell. */
 function clusterBboxOf(
   world: Pick<WorldState, 'oceanCells'>,
   cellKey: string,
+  depthRevealedCells: ReadonlySet<string>,
 ): { minX: number; minY: number; maxX: number; maxY: number; cells: string[] } | null {
   const parsed = parseCellKey(cellKey);
   if (!parsed) return null;
   const cell = world.oceanCells.get(cellKey);
   if (!cell || !RARE_TERRAINS.has(cell.terrain)) return null;
+  if (!depthRevealedCells.has(cellKey)) return null;
   const wanted = cell.terrain;
   const visited = new Set<string>([cellKey]);
   const stack: Array<readonly [number, number]> = [[parsed.x, parsed.y]];
@@ -203,6 +207,7 @@ function clusterBboxOf(
     for (const n of neighbours) {
       const nk = `${n[0]},${n[1]}`;
       if (visited.has(nk)) continue;
+      if (!depthRevealedCells.has(nk)) continue;
       const nCell = world.oceanCells.get(nk);
       if (!nCell || nCell.terrain !== wanted) continue;
       visited.add(nk);
@@ -410,11 +415,10 @@ export function tileInfoForHover(
       weather: weatherInfo,
     };
   }
-  // Rare-feature path: cluster bbox + occupancy. Any cell in the cluster
-  // surfaces the same info — bbox is reconstructed by flood-fill rather
-  // than cached, so per-hover work stays bounded by the cluster size
-  // (vents/nodules ≤9 cells, trenches ≤24 per §3).
-  const bbox = clusterBboxOf(world, cellKey);
+  // Rare-feature path: cluster bbox + occupancy, restricted to the
+  // depth-revealed subset so hovering one scouted cell never leaks the
+  // extent of un-scouted cells in the same cluster (#87).
+  const bbox = clusterBboxOf(world, cellKey, world.depthRevealedCells);
   if (!bbox) {
     // Defensive: shouldn't happen if `RARE_TERRAINS.has(terrain)` was true
     // and the cell is in oceanCells, but fall back gracefully.

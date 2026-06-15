@@ -93,17 +93,24 @@ export function shouldRenderFeatureGlyph(
  *  in `"x,y"` form. Pure flood-fill, bounded by the cluster size (vents +
  *  nodule fields are ≤9 cells; trenches are ≤24 cells per §3).
  *
+ *  If `membership` is provided, the flood-fill is restricted to cells whose
+ *  keys are in that set. This is used by the feature-glyph renderer to compute
+ *  the anchor from the depth-revealed subset of a cluster instead of its full
+ *  extent, so the glyph is never anchored on an un-scouted cell (#86).
+ *
  *  Returns null when:
  *   - the cell isn't in `oceanCells` (implicit-default 'deep' cells have no
  *     persisted cluster identity — they'd flood-fill the entire ocean), OR
  *   - the cell's terrain isn't a rare feature (bulk terrains aren't
- *     clustered for glyph rendering).
+ *     clustered for glyph rendering), OR
+ *   - `membership` is provided and `cellKey` itself is not in `membership`.
  *
  *  Singleton clusters return their own cell — a 1×1 isolated trench cell
  *  flood-fills to itself and returns that one cell. */
 export function clusterAnchorOf(
   world: OceanWorld,
   cellKey: string,
+  membership?: ReadonlySet<string>,
 ): string | null {
   const idx = cellKey.indexOf(',');
   if (idx < 0) return null;
@@ -113,8 +120,10 @@ export function clusterAnchorOf(
   const cell = world.oceanCells.get(cellKey);
   if (cell === undefined) return null;
   if (!RARE_TERRAINS.has(cell.terrain)) return null;
+  if (membership !== undefined && !membership.has(cellKey)) return null;
   const wanted = cell.terrain;
-  // Flood-fill (4-connected) over cells whose stored terrain matches.
+  // Flood-fill (4-connected) over cells whose stored terrain matches AND
+  // that are in the optional membership set.
   const visited = new Set<string>([cellKey]);
   const stack: Array<readonly [number, number]> = [[startX, startY]];
   let minY = startY;
@@ -138,6 +147,7 @@ export function clusterAnchorOf(
     for (const n of neighbours) {
       const nk = key(n[0], n[1]);
       if (visited.has(nk)) continue;
+      if (membership !== undefined && !membership.has(nk)) continue;
       const nCell = world.oceanCells.get(nk);
       if (nCell === undefined) continue;
       if (nCell.terrain !== wanted) continue;

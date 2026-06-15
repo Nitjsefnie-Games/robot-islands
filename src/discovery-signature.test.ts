@@ -157,4 +157,20 @@ describe('discoverySignature', () => {
     revealedCells.add('0,0');
     expect(discoverySignature(world1)).not.toBe(sig1);
   });
+
+  it('changes when only depthRevealedCells change (#78, #83)', () => {
+    const spec = makeSpec();
+    const revealedCells = new Set<string>(['0,0']);
+    const depthRevealedCells = new Set<string>();
+    const world1 = makeWorld({ islands: [spec], revealedCells, depthRevealedCells });
+    const sig1 = discoverySignature(world1);
+
+    depthRevealedCells.add('0,0');
+    expect(discoverySignature(world1)).not.toBe(sig1);
+
+    // Surface reveal count unchanged; depth reveal count is the only delta.
+    const sig2 = discoverySignature(world1);
+    revealedCells.add('1,1');
+    expect(discoverySignature(world1)).not.toBe(sig2);
+  });
 });

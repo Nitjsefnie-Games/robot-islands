@@ -151,4 +151,34 @@ describe('§6 clusterAnchorOf', () => {
     expect(clusterAnchorOf(w, '1,1')).toBe('1,1');
     expect(clusterAnchorOf(w, '0,0')).toBe('0,0');
   });
+
+  it('with membership set, anchors only on depth-revealed cells (#86)', () => {
+    // 2×2 vent cluster at (0,0)..(1,1). The true top-left is (0,0), but if
+    // only (1,0) and (1,1) are depth-revealed, the glyph anchor must be the
+    // top-left of the depth-revealed subset — (1,0) — not the full cluster.
+    const w = mkWorld([
+      [0, 0, 'hydrothermal_vent'],
+      [1, 0, 'hydrothermal_vent'],
+      [0, 1, 'hydrothermal_vent'],
+      [1, 1, 'hydrothermal_vent'],
+    ]);
+    const depthRevealed = new Set<string>(['1,0', '1,1']);
+    expect(clusterAnchorOf(w, '1,0', depthRevealed)).toBe('1,0');
+    expect(clusterAnchorOf(w, '1,1', depthRevealed)).toBe('1,0');
+    // Starting from an un-depth-revealed cell returns null.
+    expect(clusterAnchorOf(w, '0,0', depthRevealed)).toBe(null);
+  });
+
+  it('with membership set, disconnected depth-revealed components get separate anchors', () => {
+    // 3×1 trench: cells (0,0), (1,0), (2,0). Only the ends are depth-revealed.
+    const w = mkWorld([
+      [0, 0, 'trench'],
+      [1, 0, 'trench'],
+      [2, 0, 'trench'],
+    ]);
+    const leftOnly = new Set<string>(['0,0']);
+    expect(clusterAnchorOf(w, '0,0', leftOnly)).toBe('0,0');
+    const rightOnly = new Set<string>(['2,0']);
+    expect(clusterAnchorOf(w, '2,0', rightOnly)).toBe('2,0');
+  });
 });

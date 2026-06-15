@@ -30,16 +30,23 @@ function tileOverridesDigest(
   return entries.map(([k, v]) => `${k}=${v}`).join(';');
 }
 
-/** Cheap fingerprint of the world-layer-relevant state for REMOTE rebuild
- *  gating: discovered-island count + revealed-cell count PLUS a structural
- *  fingerprint of every island's rendered geometry (buildings + terrain
- *  modifiers + populated/discovered flags + ellipse radii + tile overrides).
+/** Cheap fingerprint of the world-layer-relevant state for REMOTE/LOCAL
+ *  rebuild gating: discovered-island count + revealed-cell count +
+ *  depth-revealed-cell count PLUS a structural fingerprint of every island's
+ *  rendered geometry (buildings + terrain modifiers + populated/discovered
+ *  flags + ellipse radii + tile overrides).
+ *
  *  `renderIsland` draws building sprites and terrain tiles, so a building
  *  placed / demolished / moved / upgraded, an island expanded/merged, or a
- *  terrain-modifier/tile-override change must repaint. Non-visual fields such
- *  as forceRun, paused, cargoLabel, anchorIslandId and the construction
- *  boolean are intentionally excluded — they affect overlays/economy, not the
- *  baked world-layer texture. */
+ *  terrain-modifier/tile-override change must repaint. The ocean feature-glyph
+ *  layer (refreshed inside `rebuildWorldLayers`) is gated by both
+ *  `revealedCells` and `depthRevealedCells`; omitting `depthRevealedCells.size`
+ *  caused depth-scout reveals on already-surface-revealed cells to skip the
+ *  repaint (#78, #83).
+ *
+ *  Non-visual fields such as forceRun, paused, cargoLabel, anchorIslandId and
+ *  the construction boolean are intentionally excluded — they affect
+ *  overlays/economy, not the baked world-layer texture. */
 export function discoverySignature(worldState: WorldState): string {
   let discovered = 0;
   const parts: string[] = [];
@@ -56,5 +63,5 @@ export function discoverySignature(worldState: WorldState): string {
     }
     parts.push(seg);
   }
-  return `${discovered}|${worldState.revealedCells.size}|${parts.join('|')}`;
+  return `${discovered}|${worldState.revealedCells.size}|${worldState.depthRevealedCells.size}|${parts.join('|')}`;
 }
