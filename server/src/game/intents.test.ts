@@ -2254,3 +2254,129 @@ describe('active-heartbeat', () => {
     );
   });
 });
+
+
+/** Read the serialized snapshot's tutorial state. */
+async function tutorialSnap(uid: string): Promise<{
+  completed: string[];
+  current: string | null;
+  xpBumpClaimed?: string[];
+}> {
+  const snap = await loadSnapshot(pool, uid);
+  return snap!.world.tutorialState as {
+    completed: string[];
+    current: string | null;
+    xpBumpClaimed?: string[];
+  };
+}
+
+describe('mark-tutorial-completed', () => {
+  it('marks the step completed and grants the home island XP once', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'mark-tutorial-completed', payload: { stepId: '01_location' }, seq: 1 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 1 });
+
+    const ts = await tutorialSnap(uid);
+    expect(ts.completed).toContain('01_location');
+    expect(ts.xpBumpClaimed).toContain('01_location');
+
+    const home = await homeState(uid);
+    const expectedXp = (1 / 100) * ((home.level as number) + 1) ** 2.2 * 25;
+    expect(home.xp as number).toBeCloseTo(expectedXp, 5);
+
+    // Idempotent: second completion for the same step must grant no extra XP.
+    const before = home.xp as number;
+    const dup = await applyIntent(
+      pool, uid,
+      { type: 'mark-tutorial-completed', payload: { stepId: '01_location' }, seq: 2 },
+      now,
+    );
+    expect(dup).toMatchObject({ ok: true, seq: 2 });
+    const homeAfter = await homeState(uid);
+    expect(homeAfter.xp as number).toBe(before);
+  });
+
+  it('indexes the ramp off the claimed count', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+
+    await applyIntent(
+      pool, uid,
+      { type: 'mark-tutorial-completed', payload: { stepId: '01_location' }, seq: 1 },
+      now,
+    );
+    const homeAfter1 = await homeState(uid);
+    const xp1 = homeAfter1.xp as number;
+
+    await applyIntent(
+      pool, uid,
+      { type: 'mark-tutorial-completed', payload: { stepId: '02_inventory' }, seq: 2 },
+      now,
+    );
+    const homeAfter2 = await homeState(uid);
+    const xp2 = homeAfter2.xp as number;
+    const delta = xp2 - xp1;
+
+    // The second completion should grant 2% (not 1%) of the next-level threshold.
+    const expectedDelta = (2 / 100) * ((homeAfter2.level as number) + 1) ** 2.2 * 25;
+    expect(delta).toBeCloseTo(expectedDelta, 5);
+  });
+
+  it('rejects a non-string stepId and leaves save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+    await expectRejectNoChange(
+      uid,
+      { type: 'mark-tutorial-completed', payload: { stepId: 123 }, seq: 1 },
+      now,
+    );
+  });
+});
+
+describe('skip-tutorial', () => {
+  it('fills completed and xpBumpClaimed with every tutorial id', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'skip-tutorial', payload: {}, seq: 1 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 1 });
+
+    const ts = await tutorialSnap(uid);
+    expect(ts.completed.length).toBe(72);
+    expect(ts.xpBumpClaimed!.length).toBe(72);
+  });
+});
+
+describe('restart-tutorial', () => {
+  it('clears completed while preserving xpBumpClaimed', async () => {
+    const now = Date.now();
+    const uid = await aUserWithGame();
+
+    await applyIntent(
+      pool, uid,
+      { type: 'skip-tutorial', payload: {}, seq: 1 },
+      now,
+    );
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'restart-tutorial', payload: {}, seq: 2 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 2 });
+
+    const ts = await tutorialSnap(uid);
+    expect(ts.completed.length).toBe(0);
+    expect(ts.xpBumpClaimed!.length).toBe(72);
+  });
+});
