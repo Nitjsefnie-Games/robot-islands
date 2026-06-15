@@ -17,6 +17,7 @@ import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
 import { activeFloors, activeFloorLevel } from './floor-levels.js';
 import type { PausedReason } from './economy.js';
 import { TILE_PX, desaturate, lighten } from './island.js';
+import { isOperationalBuilding } from './building-operational.js';
 import type { ResourceId } from './recipes.js';
 import { footprintTiles, type Rotation } from './shape-mask.js';
 
@@ -158,36 +159,13 @@ export interface PlacedBuilding {
   forceRun?: boolean;
 }
 
-/** Returns true iff at least one placed building of `defId` in `buildings`
- *  is operational: not invalid, not still under construction, not
- *  player-disabled. Accepts both `state.buildings` and `spec.buildings`
- *  (the arrays are aliased per `world.ts:1036`'s
- *  `makeInitialIslandState`).
- *
- *  Consolidates the ~25 scattered `buildings.some(b => b.defId === '…')`
- *  provider-scan call sites so adding a new "is this thing actually
- *  available?" filter (e.g. §NEW disabled toggle) is a single-line edit
- *  here instead of a fan-out across the tree. Pure. */
-export function isOperationalBuilding(
-  b: { invalid?: boolean; constructionRemainingMs?: number; floorLevel?: number; disabledFloors?: number },
-): boolean {
-  if (b.invalid === true) return false;
-  if ((b.constructionRemainingMs ?? 0) > 0) return false;
-  if (activeFloors(b) <= 0) return false;          // floor-disable
-  return true;
-}
-
-export function hasOperationalBuilding(
-  buildings: ReadonlyArray<{ defId: string; invalid?: boolean; constructionRemainingMs?: number; floorLevel?: number; disabledFloors?: number }>,
-  defId: BuildingDefId,
-): boolean {
-  for (const b of buildings) {
-    if (b.defId !== defId) continue;
-    if (!isOperationalBuilding(b)) continue;
-    return true;
-  }
-  return false;
-}
+/** Operational predicates now live in `building-operational.ts` (no PixiJS)
+ *  so the server can use them; re-export them here for existing render-layer
+ *  callers. */
+export {
+  isOperationalBuilding,
+  hasOperationalBuilding,
+} from './building-operational.js';
 
 /** §4.5 cluster membership: a building participates in (connects, and
  *  contributes floor-capacity to) its same-category cluster unless it is
