@@ -149,6 +149,33 @@ beforeEach(() => {
 // Snapshot shape
 // ---------------------------------------------------------------------------
 
+describe('deserializeWorld — §9.9 active-bonus decay ownership', () => {
+  // Regression: the closed-game decay must NOT run on the server per-intent
+  // catch-up or the REMOTE live-push path — only at a genuine LOCAL cold load.
+  // Otherwise every per-intent reload re-charges the inter-heartbeat window as
+  // "away" (3×) while the heartbeat accrues the same window (1×) → the bonus
+  // only ever drains, never ticks up. The heartbeat owns in-session accounting.
+  it('does NOT erode activeBonusMs without an explicit closed-game decay opt-in', () => {
+    const world = makeInitialWorld(0);
+    world.activeBonusMs = 10_000;
+    world.lastActiveMs = 1_000_000;
+    const snap = serializeWorld(world, new Map(), /* savedAt */ 1_000_000, /* savedAtPerf */ 0);
+    // 5 s later, no decay requested (server catch-up / REMOTE push path).
+    const d = deserializeWorld(snap, /* nowWall */ 1_005_000, /* nowPerf */ 5_000);
+    expect(d.world.activeBonusMs).toBe(10_000);
+  });
+
+  it('still applies closed-game decay at LOCAL cold load (decay opt-in)', () => {
+    const world = makeInitialWorld(0);
+    world.activeBonusMs = 10_000;
+    world.lastActiveMs = 1_000_000;
+    const snap = serializeWorld(world, new Map(), 1_000_000, 0);
+    // awayMs = 5000, decay 3× → 10000 − 15000, floored at 0.
+    const d = deserializeWorld(snap, 1_005_000, 5_000, { decayClosedGameActiveBonus: true });
+    expect(d.world.activeBonusMs).toBe(0);
+  });
+});
+
 describe('serializeWorld', () => {
   it('produces a snapshot with the current schema version and a savedAt timestamp', () => {
     const world = makeInitialWorld(0);
@@ -2598,8 +2625,11 @@ describe('schema v22 — activeBonusMs (§9.9)', () => {
     const snap = serializeWorld(world, new Map(), 1_000_000, 500);
     expect(snap.v).toBe(24);
     expect(snap.world.activeBonusMs).toBe(600_000);
-    // Reload 1 minute of wall-clock later: decay 3 × 60_000.
-    const { world: loaded } = deserializeWorld(snap, 1_000_000 + 60_000, 9_999);
+    // Reload 1 minute of wall-clock later: decay 3 × 60_000. Closed-game decay
+    // is the LOCAL cold-load path → opt in (§9.9 heartbeat owns REMOTE).
+    const { world: loaded } = deserializeWorld(snap, 1_000_000 + 60_000, 9_999, {
+      decayClosedGameActiveBonus: true,
+    });
     expect(loaded.activeBonusMs).toBe(420_000); // 600_000 − 3 × 60_000
   });
 
@@ -2608,7 +2638,9 @@ describe('schema v22 — activeBonusMs (§9.9)', () => {
     world.activeBonusMs = 600_000;
     const snap = serializeWorld(world, new Map(), 1_000_000, 500);
     const eightHours = 8 * 3600 * 1000;
-    const { world: loaded } = deserializeWorld(snap, 1_000_000 + eightHours, 9_999);
+    const { world: loaded } = deserializeWorld(snap, 1_000_000 + eightHours, 9_999, {
+      decayClosedGameActiveBonus: true,
+    });
     expect(loaded.activeBonusMs).toBe(0);
   });
 
@@ -2635,7 +2667,9 @@ describe('schema v22 — activeBonusMs (§9.9)', () => {
     // the full minute and the legacy path would also decay. The new behaviour
     // shows that lastActiveMs is carried through and the decay is computed
     // from now - lastActiveMs.
-    const { world: loaded } = deserializeWorld(snap, savedAt + 60_000, 9_999);
+    const { world: loaded } = deserializeWorld(snap, savedAt + 60_000, 9_999, {
+      decayClosedGameActiveBonus: true,
+    });
     expect(loaded.activeBonusMs).toBe(420_000); // 600_000 − 3 × 60_000
     expect(loaded.lastActiveMs).toBe(savedAt);
   });
@@ -2648,7 +2682,9 @@ describe('schema v22 — activeBonusMs (§9.9)', () => {
     // Player sent a heartbeat 100 ms ago: only 100 ms of true away time.
     world.lastActiveMs = now - 100;
     const snap = serializeWorld(world, new Map(), savedAt, 500);
-    const { world: loaded } = deserializeWorld(snap, now, 9_999);
+    const { world: loaded } = deserializeWorld(snap, now, 9_999, {
+      decayClosedGameActiveBonus: true,
+    });
     expect(loaded.activeBonusMs).toBe(599_700); // 600_000 − 3 × 100
     expect(loaded.lastActiveMs).toBe(now - 100);
   });
