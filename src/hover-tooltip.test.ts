@@ -186,6 +186,30 @@ describe('§6 tileInfoForHover', () => {
     expect(info.occupancy).toEqual({ used: 1, capacity: 1 });
   });
 
+  it('only counts depth-revealed cells in the cluster bbox + occupancy (#87)', () => {
+    // 3×3 nodule cluster. Only the left column is depth-revealed.
+    const cells: Array<[number, number, OceanCellSpec['terrain']]> = [
+      [5, 5, 'nodule_field'], [6, 5, 'nodule_field'], [7, 5, 'nodule_field'],
+      [5, 6, 'nodule_field'], [6, 6, 'nodule_field'], [7, 6, 'nodule_field'],
+      [5, 7, 'nodule_field'], [6, 7, 'nodule_field'], [7, 7, 'nodule_field'],
+    ];
+    const revealed = cells.map(([x, y]) => `${x},${y}`);
+    const depthRevealed = ['5,5', '5,6', '5,7']; // left column only
+    const world = makeWorld({
+      oceanCells: cells,
+      revealed,
+      depthRevealed,
+      islands: [makeWideVisionHome()],
+    });
+    const tileX = 5 * CELL_SIZE_TILES;
+    const tileY = 5 * CELL_SIZE_TILES;
+    const info = tileInfoForHover(world, tileX, tileY, NOW) as OceanRareInfo;
+    expect(info.kind).toBe('ocean-rare');
+    // The tooltip must report only the depth-revealed subset, not the full 3×3.
+    expect(info.clusterSize).toEqual({ width: 1, height: 3 });
+    expect(info.occupancy).toEqual({ used: 0, capacity: 0 });
+  });
+
   it('returns "Unscouted depths" when a cell is surface-revealed but not depth-revealed', () => {
     const world = makeWorld({
       oceanCells: [[5, 5, 'hydrothermal_vent']],

@@ -284,7 +284,9 @@ export function mountFeatureGlyphs(): FeatureGlyphsHandle {
       if (!shouldRenderFeatureGlyph(cellKey, revealedCells, depthRevealedCells, oceanCells)) {
         continue;
       }
-      const anchor = clusterAnchorOf({ oceanCells }, cellKey);
+      // Anchor from the depth-revealed subset so the glyph never leaks the
+      // position of un-scouted rare-terrain cells (#86).
+      const anchor = clusterAnchorOf({ oceanCells }, cellKey, depthRevealedCells);
       if (anchor === null) continue;
       if (emittedAnchors.has(anchor)) continue;
       emittedAnchors.add(anchor);
