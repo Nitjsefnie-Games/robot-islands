@@ -1,0 +1,299 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Robot Islands — Server simulation optimizer run (5 iterations)</title>
+  <style>
+    :root {
+      --ivory:#1B1A17; --slate:#F5F3EC; --clay:#D97757; --oat:#3A352B; --olive:#8FA56E;
+      --rust:#E08B7F; --warn:#E0B47F; --gray-150:#2E2C27; --gray-300:#3A3833;
+      --gray-500:#8F8D82; --gray-700:#CFCCC2; --white:#252420;
+      --serif:ui-serif,Georgia,'Times New Roman',serif; --sans:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+      --mono:ui-monospace,'SF Mono',Menlo,Monaco,monospace; --radius:12px; --border:1.5px solid var(--gray-300);
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:var(--sans); background:var(--ivory); color:var(--gray-700); line-height:1.58;
+      padding:56px 32px 120px; -webkit-font-smoothing:antialiased; }
+    .page { margin:0 auto; max-width:1080px; }
+    header.page-head { margin-bottom:30px; max-width:980px; }
+    .eyebrow { font-family:var(--mono); font-size:12px; letter-spacing:0.08em; text-transform:uppercase;
+      color:var(--gray-500); margin-bottom:12px; }
+    h1 { font-family:var(--serif); font-weight:500; font-size:36px; line-height:1.14; color:var(--slate);
+      margin-bottom:16px; letter-spacing:-0.01em; }
+    .lede { font-size:16px; color:var(--gray-700); max-width:880px; }
+    .lede b { color:var(--slate); }
+
+    .toc { display:flex; gap:8px; flex-wrap:wrap; margin:24px 0 34px; }
+    .toc a { font-family:var(--mono); font-size:12px; color:var(--gray-700); text-decoration:none;
+      border:var(--border); border-radius:999px; padding:5px 13px; }
+    .toc a:hover { border-color:var(--clay); color:var(--clay); }
+
+    .method { background:var(--white); border:var(--border); border-radius:var(--radius); padding:18px 22px; margin-bottom:18px; }
+    .method .label { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.06em;
+      color:var(--gray-500); margin-bottom:10px; }
+    .method .grid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; font-size:13.5px; }
+    @media (max-width:860px){ .method .grid { grid-template-columns:repeat(2,1fr); } }
+    .method .cell .k { font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:0.05em;
+      color:var(--gray-500); margin-bottom:3px; }
+    .method .cell .v { color:var(--slate); font-weight:600; }
+
+    .noise { background:#2E211C; border:1.5px solid #5C3D2E; border-radius:var(--radius); padding:14px 20px;
+      margin-bottom:40px; font-size:14px; color:var(--gray-700); display:flex; gap:12px; max-width:980px; }
+    .noise .glyph { color:var(--warn); font-weight:700; }
+    .noise b { color:var(--warn); }
+
+    section { margin-bottom:54px; scroll-margin-top:20px; }
+    .sec-head { display:flex; align-items:baseline; gap:14px; margin-bottom:8px; }
+    .sec-head .num { font-family:var(--mono); font-size:12px; background:var(--oat); color:var(--slate);
+      padding:3px 9px; border-radius:8px; }
+    .sec-head h2 { font-family:var(--serif); font-weight:500; font-size:26px; color:var(--slate); letter-spacing:-0.01em; }
+    .sec-intro { font-size:14.5px; color:var(--gray-500); max-width:860px; margin-bottom:22px; }
+    p.body { font-size:14.5px; max-width:860px; margin-bottom:14px; }
+    code { font-family:var(--mono); font-size:0.88em; background:var(--gray-150); border:1px solid var(--gray-300);
+      border-radius:5px; padding:1px 5px; color:#C9B98A; }
+
+    .tbl { width:100%; border:var(--border); border-radius:var(--radius); border-collapse:separate;
+      border-spacing:0; overflow:hidden; font-size:13.5px; margin-bottom:14px; }
+    .tbl th, .tbl td { text-align:left; padding:11px 16px; border-bottom:1px solid var(--gray-300); vertical-align:top; }
+    .tbl th { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.05em;
+      color:var(--gray-500); background:var(--gray-150); font-weight:600; }
+    .tbl tr:last-child td { border-bottom:none; }
+    .tbl td.slate { color:var(--slate); font-weight:600; }
+    .tbl td.num { font-family:var(--mono); font-size:13px; text-align:right; font-variant-numeric:tabular-nums; }
+    .tbl tr.baseline { background:var(--gray-150); }
+    .delta { font-family:var(--mono); font-size:12.5px; font-weight:600; }
+    .delta.win { color:var(--olive); } .delta.noise { color:var(--gray-500); }
+    .sig { display:inline-block; font-family:var(--mono); font-size:10.5px; padding:2px 8px; border-radius:999px; letter-spacing:0.04em; }
+    .sig.real { background:#2D3A24; color:var(--olive); } .sig.noise { background:var(--gray-150); color:var(--gray-500); border:1px solid var(--gray-300); }
+
+    .diagram-wrap { background:var(--white); border:var(--border); border-radius:var(--radius); padding:22px; margin:8px 0 22px; overflow-x:auto; }
+    .diagram-cap { font-family:var(--mono); font-size:11px; color:var(--gray-500); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:14px; }
+    svg { display:block; max-width:100%; } svg text { font-family:var(--mono); font-size:10.5px; fill:var(--gray-500); }
+
+    .cand { background:var(--white); border:var(--border); border-radius:var(--radius); margin-bottom:18px; overflow:hidden; }
+    .cand-head { display:flex; align-items:center; gap:12px; padding:14px 20px; background:var(--gray-150); border-bottom:var(--border); flex-wrap:wrap; }
+    .cand-head .cid { font-family:var(--mono); font-size:12px; color:var(--gray-500); }
+    .cand-head .ct { font-family:var(--serif); font-size:17px; color:var(--slate); flex:1; min-width:200px; }
+    .pill { display:inline-block; font-family:var(--mono); font-size:10.5px; padding:2px 9px; border-radius:999px; letter-spacing:0.04em; }
+    .pill.kept { background:#2D3A24; color:var(--olive); } .pill.revert { background:#4A2A1C; color:var(--rust); }
+    .cand-body { padding:14px 20px; display:grid; grid-template-columns:1fr 1fr; gap:14px 28px; font-size:13.5px; }
+    @media (max-width:820px){ .cand-body { grid-template-columns:1fr; } }
+    .cand-body .bk { font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:0.07em; color:var(--gray-500); margin-bottom:5px; }
+    .cand-body .bv strong { color:var(--slate); }
+    .cand-body .bv code { font-size:12px; }
+    .full { grid-column:1 / -1; }
+    ul.tight { margin:0 0 0 18px; font-size:14px; } ul.tight li { margin-bottom:6px; }
+    .footer { color:var(--gray-500); font-size:13px; margin-top:64px; padding-top:22px; border-top:1px solid var(--gray-300); }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Robot Islands · optimizer run · 2026-06-15 · agent: claude-opus-4-8</div>
+      <h1>Server simulation — 5-iteration optimizer run</h1>
+      <p class="lede">The server is authoritative: the <b>entire pure simulation re-runs server-side</b> on
+        every intent (<code>loadAndCatchUp</code>) and every ~1&nbsp;s periodic push (<code>catchUp</code>) —
+        <code>deserializeWorld → advanceWorldEconomy → advanceWorldSystems → serializeWorld</code>. This run
+        profiled that path on a real late-game save and applied behaviour-preserving optimizations under a
+        byte-identical golden gate. <b>Offline catch-up (1&nbsp;h gap): 2.27&nbsp;s → ~108&nbsp;ms (~21×).
+        Per-push (1&nbsp;s gap): 8.85&nbsp;ms → 7.26&nbsp;ms.</b> Every kept change is byte-identical;
+        the full 3571-test suite passes.</p>
+    </header>
+
+    <nav class="toc">
+      <a href="#method">Method</a>
+      <a href="#results">Results</a>
+      <a href="#chart">Trajectory</a>
+      <a href="#iters">Iterations</a>
+      <a href="#left">Left on the table</a>
+    </nav>
+
+    <div class="method" id="method">
+      <div class="label">Method · framework built for this run (scripts/profile-server-catchup.ts)</div>
+      <div class="grid">
+        <div class="cell"><div class="k">Metric</div><div class="v">catch-up wall time ↓</div></div>
+        <div class="cell"><div class="k">Workload</div><div class="v">real save: 5 pop. islands, 182 buildings, 8 drones, 3 routes, 374 ocean cells</div></div>
+        <div class="cell"><div class="k">Runs / gap</div><div class="v">1s×300 · 1min×80 · 1h×6 (warmup 60)</div></div>
+        <div class="cell"><div class="k">Behaviour gate</div><div class="v">golden <code>sha256:8aeca541…</code> + full vitest</div></div>
+      </div>
+    </div>
+
+    <div class="noise">
+      <span class="glyph">±</span>
+      <span><b>Noise floor (spread p90−min): 1h ≈ 1–3% · 1min ≈ 10–30% · 1s ≈ 17–23%.</b>
+        The 1h offline-catch-up gap is the cleanest signal (≈1–3%); per-step costs there are large, stable
+        fractions. The 1s push sits near its own floor, so single-component wins are judged on the per-phase
+        timing (deserialize / economy / systems), each separately measured. A “win” inside the band is noise —
+        the byte-identical golden hash, re-checked after every change, is the real keep/revert gate.</span>
+    </div>
+
+    <!-- ===== 1 · RESULTS ===== -->
+    <section id="results">
+      <div class="sec-head"><span class="num">1</span><h2>Results — before → after (4 kept iterations)</h2></div>
+      <p class="sec-intro">Lower is better (median wall time). Significance compares each delta against the gap's
+        noise floor — arithmetic, not judgment. All deltas are at byte-identical behaviour.</p>
+      <table class="tbl">
+        <thead><tr><th>Scenario (gap)</th><th style="text-align:right">Baseline</th><th style="text-align:right">After</th>
+          <th style="text-align:right">Δ</th><th>Significance</th><th>What dominated it</th></tr></thead>
+        <tbody>
+          <tr class="baseline"><td class="slate">1&nbsp;h — offline catch-up</td><td class="num">2.27 s</td>
+            <td class="num">~108 ms</td><td class="num"><span class="delta win">~21×</span></td>
+            <td><span class="sig real">far outside band</span></td>
+            <td><code>advanceWorldSystems</code> per-step recomputes (merge tile-count, antenna ranges)</td></tr>
+          <tr><td class="slate">1&nbsp;min</td><td class="num">46.4 ms</td><td class="num">9.0 ms</td>
+            <td class="num"><span class="delta win">~5×</span></td><td><span class="sig real">outside band</span></td>
+            <td>same per-step costs, fewer steps</td></tr>
+          <tr><td class="slate">1&nbsp;s — periodic push / small-gap intent</td><td class="num">8.85 ms</td>
+            <td class="num">7.26 ms</td><td class="num"><span class="delta win">−18%</span></td>
+            <td><span class="sig real">phase-level</span></td>
+            <td>deserialize + economy; single-step systems</td></tr>
+        </tbody>
+      </table>
+      <p class="body" style="font-size:13.5px;color:var(--gray-500)">Per-phase at the 1&nbsp;s push (median):
+        deserialize <b>2.48 → 1.96 ms</b> · systems <b>0.77 → 0.16 ms</b> · economy ~4.9 ms (unchanged) ·
+        serialize 0.08 ms · project 0.02 ms.</p>
+    </section>
+
+    <!-- ===== 2 · CHART ===== -->
+    <section id="chart">
+      <div class="sec-head"><span class="num">2</span><h2>Trajectory — 1&nbsp;h offline catch-up</h2></div>
+      <p class="sec-intro">The expensive real scenario (a user returning after hours; <code>loadAndCatchUp</code>
+        holds the per-account advisory lock for the whole catch-up). Bars are median total wall time, linear scale.</p>
+      <div class="diagram-wrap">
+        <div class="diagram-cap">1h catch-up total (ms) · lower = better</div>
+        <svg viewBox="0 0 860 240" role="img" aria-label="1h catch-up wall time across iterations">
+          <line x1="120" y1="210" x2="850" y2="210" stroke="#3A3833" stroke-width="1.5"/>
+          <text x="112" y="214" text-anchor="end">0</text>
+          <text x="112" y="40" text-anchor="end">2270</text>
+          <!-- scale: bar height = (val/2270)*170, top y = 210 - h -->
+          <!-- baseline 2270 -->
+          <rect x="150" y="40"  width="120" height="170" fill="#8F8D82"/>
+          <text x="210" y="32"  text-anchor="middle" fill="#CFCCC2">2270 ms</text>
+          <text x="210" y="228" text-anchor="middle">baseline</text>
+          <!-- iter1 162 → h=12.1 -->
+          <rect x="330" y="198" width="120" height="12" fill="#8FA56E"/>
+          <text x="390" y="190" text-anchor="middle" fill="#CFCCC2">162 ms</text>
+          <text x="390" y="228" text-anchor="middle">+iter 1</text>
+          <text x="390" y="241" text-anchor="middle">tile-count memo</text>
+          <!-- iter2 108 → h=8.1 -->
+          <rect x="510" y="202" width="120" height="8" fill="#8FA56E"/>
+          <text x="570" y="194" text-anchor="middle" fill="#CFCCC2">108 ms</text>
+          <text x="570" y="228" text-anchor="middle">+iter 2</text>
+          <text x="570" y="241" text-anchor="middle">signal-range hoist</text>
+          <!-- final 108 -->
+          <rect x="690" y="202" width="120" height="8" fill="#8FA56E"/>
+          <text x="750" y="194" text-anchor="middle" fill="#CFCCC2">~108 ms</text>
+          <text x="750" y="228" text-anchor="middle">final (4,5)</text>
+          <text x="750" y="241" text-anchor="middle">push-path fixes</text>
+        </svg>
+      </div>
+      <p class="body" style="font-size:13.5px;color:var(--gray-500)">Iterations 4 &amp; 5 target the high-frequency
+        1&nbsp;s push (deserialize + single-step systems) rather than the 1&nbsp;h gap, so they barely move this chart
+        while improving every push.</p>
+    </section>
+
+    <!-- ===== 3 · ITERATIONS ===== -->
+    <section id="iters">
+      <div class="sec-head"><span class="num">3</span><h2>Iteration log</h2></div>
+      <p class="sec-intro">One optimization per iteration: profile → pick the biggest target → apply one change →
+        re-benchmark + re-check the golden gate + targeted tests → keep only if it beats the noise floor and the
+        gate is byte-identical, else revert. 5 iterations: 4 kept, 1 reverted.</p>
+
+      <article class="cand">
+        <div class="cand-head"><span class="cid">iter 1</span><span class="ct">Memoize <code>islandTileCount</code></span>
+          <span class="pill kept">KEPT · 1h 2.27s → 162ms</span></div>
+        <div class="cand-body">
+          <div><div class="bk">Target</div><div class="bv"><code>islandTileCount</code> — <strong>50.9% of all CPU</strong>.
+            <code>findNextMerge</code> rasterized every island's ellipse footprint (O(major×minor) + a Set of <code>"x,y"</code> keys)
+            once per island <em>per catch-up step</em> (≈3600× for 1h), over static geometry.</div></div>
+          <div><div class="bk">Fix</div><div class="bv">Memoize on the spec; recompute only when live geometry changed.
+            Exact field compare (not object identity — a merge mutates <code>extraEllipses</code> in place; not a hash — zero collision risk).</div></div>
+          <div class="full"><div class="bk">Gate</div><div class="bv">Golden byte-identical · 94 world/merge/reclamation tests pass. Killed >50% self-time + most GC churn.</div></div>
+        </div>
+      </article>
+
+      <article class="cand">
+        <div class="cand-head"><span class="cid">iter 2</span><span class="ct">Hoist antenna signal-range recompute out of the step loop</span>
+          <span class="pill kept">KEPT · 1h 162 → 108ms</span></div>
+        <div class="cand-body">
+          <div><div class="bk">Target</div><div class="bv"><code>computeSignalRanges</code> — ~10% of catch-up.
+            <code>tickDrones</code> rebuilt it (O(buildings)) every step; ranges are static except across a merge or vehicle settle.</div></div>
+          <div><div class="bk">Fix</div><div class="bv"><code>advanceWorldSystems</code> computes ranges once, recomputes only at those topology
+            changes, passes via a new optional <code>precomputedRanges</code> param (client per-frame path unchanged). Reproduces the per-step result exactly.</div></div>
+          <div class="full"><div class="bk">Gate</div><div class="bv">Golden byte-identical · 209 drones/settlement/merge/antenna tests pass.</div></div>
+        </div>
+      </article>
+
+      <article class="cand">
+        <div class="cand-head"><span class="cid">iter 3</span><span class="ct">Skip <code>skillMulSignature</code> via the version counter</span>
+          <span class="pill revert">REVERTED · broke a contract test</span></div>
+        <div class="cand-body">
+          <div><div class="bk">Target</div><div class="bv"><code>skillMulSignature</code> — 11.5% self. Route dispatch calls
+            <code>effectiveSkillMultipliers</code> per route per step; the memo rebuilt the full signature each time. <code>auraAmpVersion</code>
+            already bumps 1:1 with every <code>unlockedNodes</code> mutation, so a version match seemed to prove the signature unchanged.</div></div>
+          <div><div class="bk">Why reverted</div><div class="bv">The golden passed, but a unit test —
+            <strong>“signature catches a direct Set add, no version bump”</strong> — failed: the signature is a <em>deliberate</em> safety net
+            for direct <code>unlockedNodes</code> mutation that bypasses the version bump. The test suite is part of the gate, so: revert.</div></div>
+          <div class="full"><div class="bk">Lesson</div><div class="bv">The golden gate is necessary but not sufficient — targeted unit tests caught a
+            documented contract the golden's 1h catch-up never exercises. “Behaviour identical” means <em>all</em> observable behaviour, not just the sampled path.</div></div>
+        </div>
+      </article>
+
+      <article class="cand">
+        <div class="cand-head"><span class="cid">iter 4</span><span class="ct">Content-key memo for <code>islandCells</code></span>
+          <span class="pill kept">KEPT · deserialize 2.4 → 2.0ms / push</span></div>
+        <div class="cand-body">
+          <div><div class="bk">Target</div><div class="bv"><code>deserializeRevealedCells</code> rasterizes every island's footprint via
+            <code>islandCells</code> on <em>every load</em> — and the server re-loads on every push/intent.</div></div>
+          <div><div class="bk">Fix</div><div class="bv">Memoize on a <em>content</em> key (a WeakMap on the spec misses every load — fresh objects;
+            a content key hits across loads of the same geometry). Capped + cleared wholesale; returns a fresh copy so callers may mutate.</div></div>
+          <div class="full"><div class="bk">Gate</div><div class="bv">Golden byte-identical · 154 discovery/persistence tests pass. Deserialize phase −18% on every server op.</div></div>
+        </div>
+      </article>
+
+      <article class="cand">
+        <div class="cand-head"><span class="cid">iter 5</span><span class="ct">Content-key <code>islandTileCount</code> — also covers the per-push case</span>
+          <span class="pill kept">KEPT · 1s systems 0.70 → 0.16ms</span></div>
+        <div class="cand-body">
+          <div><div class="bk">Target</div><div class="bv">After iter 4, re-profiling the 1s push showed <code>computeIslandTileCount</code>
+            back at 5% — iter 1's WeakMap (object identity) misses the single-step push because each deserialize builds fresh spec objects.</div></div>
+          <div><div class="bk">Fix</div><div class="bv">Switch to a content key (radii + extraEllipses; cx/cy and rotation not read — count is position-independent).
+            Hits across pushes <em>and</em> keeps the catch-up benefit; supersedes iter 1's WeakMap and makes the in-place-mutation concern moot.</div></div>
+          <div class="full"><div class="bk">Gate</div><div class="bv">Golden byte-identical · 94 world/merge/reclamation tests pass. 1s-push systems phase 4.3× lighter.</div></div>
+        </div>
+      </article>
+    </section>
+
+    <!-- ===== 4 · LEFT ON THE TABLE ===== -->
+    <section id="left">
+      <div class="sec-head"><span class="num">4</span><h2>Left on the table</h2></div>
+      <p class="sec-intro">The remaining 1&nbsp;h-catch-up cost is dominated by <code>dispatchPhase</code> (routes, ~63% inclusive).
+        These are bigger but blocked by behaviour-preservation or invasiveness — a correct optimizer outcome to report, not force.</p>
+      <ul class="tight">
+        <li><b>Per-step weather sampling</b> (<code>routeCapacityMultiplierForWeather</code> → <code>weather</code>, ~30% incl):
+          recomputed every 1&nbsp;s step over weather that only changes per dwell (30 min–4 h). A per-dwell cache is the win but is
+          behaviour-risky (intricate; the golden's single cadence could pass while a latent divergence hides).</li>
+        <li><b>Per-route-per-step skill multipliers</b> (the iter-3 target): the safe form is hoisting precomputed per-source
+          multipliers into the systems loop, but the calls are spread across routes/drones/orbital (11 sites) — invasive for this budget.</li>
+        <li><b>Route cargo planning</b> (<code>planRouteCargo</code> / <code>destinationHeadroom</code>, ~24% / ~16% incl): per-route-per-step
+          headroom math; needs analysis to separate genuinely-dynamic from static-per-gap work.</li>
+        <li><b>Economy advance</b> (~4.9 ms, the bulk of the 1&nbsp;s push): already heavily memoized
+          (<code>derivationsSignature</code> / <code>getDerivationsMemo</code>); the comments explicitly reject the obvious shortcuts (number-hash keys).
+          Near the noise floor — further wins need a different angle.</li>
+        <li><b>Note:</b> the 24&nbsp;h gap (~50 s/sample at baseline) was excluded from the per-iteration gate (too slow); it benefits
+          identically from iters 1–2 and is opt-in via <code>--include-24h</code>.</li>
+      </ul>
+    </section>
+
+    <div class="footer">
+      <p>Optimizer run · 2026-06-15 · agent claude-opus-4-8 · 5 iterations (4 kept, 1 reverted) · gate: golden
+        <code>sha256:8aeca541…6d1eda5</code> byte-identical after every kept change + full suite 3571 passed / 0 failed ·
+        commits <code>f91a494 · c1fe34c · 0fb9f5c · 07e3dee · 072ad35</code> on <code>master</code>.
+        No <code>SPEC.md</code> change: all kept changes are behaviour-identical internal memoization/hoisting.</p>
+    </div>
+  </div>
+</body>
+</html>
