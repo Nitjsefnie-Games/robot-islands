@@ -56,6 +56,11 @@ EPS = 1e-9
 CLUSTER_RATE = 0.05            # §4.5 CATEGORY_ADJACENCY_RATE (every category)
 STOCK_BOUNDARY_EPS = 1e-6      # §15.3 cap/zero classification dust band
 PLAN_STEP_CAP = 800
+PAYBACK_CAP = 300             # max payback-gated scale steps per plan (the
+                              # optional speedup); beyond it, accept slow
+                              # accumulation instead of looping to PLAN_STEP_CAP
+                              # (a huge cost like 30000 steel_beam otherwise pays
+                              # off a sliver per scale and never converges)
 PARALLEL_BUILD_SLOTS = 1       # bootstrap: 1 + Robotics(0) + structural(0)
 COAL_CYCLE_SEC = 30            # §5.2 furnace fuel-burn cycle
 MIN_HEAT_FACTOR = 0.1          # §5.2 below this a heat consumer fully stalls
@@ -906,7 +911,13 @@ def scale_action(sim, inv, crate_for, r):
         return None
     mutate(s, {}, a1)
     dR = net_rates(s, inv, crate_for)[0].get(r, 0.0) - cur
-    n_clear = ceil((EPS - cur) / dR) if dR > 1e-12 else 1
+    # If one scale of the best producer doesn't raise r's rate, r is limited by
+    # something OTHER than this producer's count (an upstream tile-locked input
+    # that's pinned) — scaling is futile and would loop. Give up; the caller
+    # treats r as unfixable (it pins at 0 and throttles its consumers).
+    if dR <= 1e-12:
+        return None
+    n_clear = ceil((EPS - cur) / dR)
     n = max(1, min(int(n_clear), SCALE_JUMP_CAP))
     acts = [a1]
     for _ in range(n - 1):
@@ -973,6 +984,7 @@ def plan_for(state, want):
     want_cost = cost_of(want)
     plan = [want]
     mutate(sim, cf, want)
+    payback_used = 0
     for _ in range(PLAN_STEP_CAP):
         # 1. topology
         gated = [r for r in BUILDINGS[want[1]]["in"] if not has_producer(sim, r)]
@@ -998,16 +1010,25 @@ def plan_for(state, want):
                 _FAIL[0] = "can't add power"
                 return None
             plan.append(a); mutate(sim, cf, a); continue
-        # 4. genuine drains (a non-pinned resource consumed faster than produced)
+        # 4. genuine drains (a non-pinned resource consumed faster than produced).
+        #    Fix the first FIXABLE drain by scaling its producer.  A drain we
+        #    CAN'T fix (its producer is a tile-locked extractor already at the
+        #    floor cap — e.g. the clustered steel chain out-drawing the single
+        #    coal deposit) is NOT fatal: under event-driven integration that
+        #    resource simply pins at 0 and throttles its consumers (the chain
+        #    runs slower).  So skip unfixable drains and proceed rather than
+        #    exploding the extractor floor (v2's "cascade cost" failure mode).
         net = net_rates(sim, inv, cf)[0]
         drains = sorted(r for r, v in net.items() if v < -EPS)
-        if drains:
-            acts = scale_action(sim, inv, cf, drains[0])
-            if acts is None:
-                _FAIL[0] = f"can't fix draining {drains[0]}"
-                return None
-            for a in acts:
-                plan.append(a); mutate(sim, cf, a)
+        fixed = False
+        for r in drains:
+            acts = scale_action(sim, inv, cf, r)
+            if acts:
+                for a in acts:
+                    plan.append(a); mutate(sim, cf, a)
+                fixed = True
+                break
+        if fixed:
             continue
         # 5. affordability — a cost resource we lack with ZERO production anywhere
         gross = net_rates(sim, inv, cf, production_only=True)[0]
@@ -1027,10 +1048,12 @@ def plan_for(state, want):
             for a in acts:
                 plan.append(a); mutate(sim, cf, a)
             continue
-        # 6. payback-gated speedup for the slowest cost resource
-        a = payback_scale(sim, cf, inv, want_cost)
-        if a is not None:
-            plan.append(a); mutate(sim, cf, a); continue
+        # 6. payback-gated speedup for the slowest cost resource (bounded)
+        if payback_used < PAYBACK_CAP:
+            a = payback_scale(sim, cf, inv, want_cost)
+            if a is not None:
+                payback_used += 1
+                plan.append(a); mutate(sim, cf, a); continue
         return plan
     _FAIL[0] = f"step cap {PLAN_STEP_CAP} hit (want={want[1]})"
     return None
