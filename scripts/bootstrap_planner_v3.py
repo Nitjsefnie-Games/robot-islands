@@ -55,10 +55,14 @@ SEED_MODE = bool(SEED_PATH)
 EPS = 1e-9
 CLUSTER_RATE = 0.05            # §4.5 CATEGORY_ADJACENCY_RATE (every category)
 STOCK_BOUNDARY_EPS = 1e-6      # §15.3 cap/zero classification dust band
-PLAN_STEP_CAP = 4000
+PLAN_STEP_CAP = 800
 PARALLEL_BUILD_SLOTS = 1       # bootstrap: 1 + Robotics(0) + structural(0)
 COAL_CYCLE_SEC = 30            # §5.2 furnace fuel-burn cycle
 MIN_HEAT_FACTOR = 0.1          # §5.2 below this a heat consumer fully stalls
+MIN_PF = 0.5                   # power-provisioning floor: add windmills only to
+                               # keep brownout pf >= this (full power front-loads
+                               # iron_ingot on windmills and starves the smelter
+                               # bootstrap; the game runs fine on partial power)
 _FAIL = [""]
 
 # §9.3 base construction time per tier (ms in game → seconds here).
@@ -286,6 +290,20 @@ for _b in BUILDINGS:
         PRODUCERS_OF.setdefault(_r, []).append(_b)
 TILE_LOCKED_RES = {r for r, prods in PRODUCERS_OF.items()
                    if all(TERRAIN_CAPS[p] < GRASS_CAP for p in prods)}
+
+# §4.6 force-run targets: a "waste" byproduct is produced but never consumed as
+# a recipe input nor spent as a placement cost (slag, co, co2, mill_scale,
+# water_vapor, wood_tar, hydrogen, refinery_gas, argon, nitrogen, …). Such a
+# byproduct fills its small cap and would otherwise cap-gate its whole building
+# to 0 — stalling the USEFUL output (e.g. slag/co capping stalls smelter's
+# iron_ingot). So any building emitting a waste byproduct is force-run
+# (ignoreOutputCap): it keeps producing, the overflow byproduct is voided.
+# Pure-useful producers (concrete/cement/…) are NOT force-run, so they still
+# stockpile into crate-backed caps. This is the "force-run only where it helps".
+_CONSUMED_RES = ({r for b in BUILDINGS.values() for r in b["in"]}
+                 | {r for b in BUILDINGS.values() for r in b["cost"]})
+WASTE_RES = {r for b in BUILDINGS.values() for r in b["out"]} - _CONSUMED_RES
+FORCE_RUN = {n for n in BUILDINGS if any(r in WASTE_RES for r in BUILDINGS[n]["out"])}
 
 _CATEGORY = {n: BUILDINGS[n]["category"] for n in BUILDINGS}
 _CLUSTERED = {n: BUILDINGS[n]["clusters"] for n in BUILDINGS}
@@ -627,7 +645,10 @@ def _flow_specs(placed, pf, heat_factor, Kc):
             base_rate = mul * hf / cyc            # cycles/sec for this instance
             produces = {r: u * base_rate * scale_pf for r, u in d["out"].items() if u > 0}
             consumes = {r: u * base_rate * scale_pf for r, u in d["in"].items() if u > 0}
-            specs.append({"produces": produces, "consumes": consumes})
+            # §4.6 force-run waste-byproduct producers so a dead-end byproduct
+            # cap can't stall the useful output.
+            specs.append({"produces": produces, "consumes": consumes,
+                          "ignore_output_cap": name in FORCE_RUN})
             meta.append((name, i, base_rate, consumes_power))
     return specs, meta
 
@@ -933,12 +954,27 @@ def payback_scale(sim, cf, inv, cost):
 
 
 def plan_for(state, want):
+    """Place `want` + the prerequisite fixes that make it AFFORDABLE and its
+    operating state sustainable, returning the ordered action list (or None).
+
+    With the exact solver, resources PIN (net 0 at cap, or balanced at zero)
+    rather than going negative — so the v2 "every rate > EPS" invariant is wrong
+    (it loops forever trying to 'fix' a full bin).  The v3 invariants are:
+      1. TOPOLOGY  — every recipe input of `want` has a producer.
+      2. HEAT      — every heat consumer is served (single-source thermal budget).
+      3. POWER     — supply >= demand (no brownout) so producers aren't gated low.
+      4. NO DRAIN  — no resource is genuinely draining (net < -EPS, not just pinned).
+      5. AFFORD    — every cost resource of `want` can accumulate (net or §4.9
+                     gross production > 0); if one has NO production, scale it.
+    Then a payback-gated scale to speed the slowest cost resource."""
     sim = state.copy_placed()
     cf = {k: list(v) for k, v in state.crate_for.items()}
     inv = state.inv
+    want_cost = cost_of(want)
     plan = [want]
     mutate(sim, cf, want)
     for _ in range(PLAN_STEP_CAP):
+        # 1. topology
         gated = [r for r in BUILDINGS[want[1]]["in"] if not has_producer(sim, r)]
         if gated:
             acts = scale_action(sim, inv, cf, gated[0])
@@ -948,37 +984,55 @@ def plan_for(state, want):
             for a in acts:
                 plan.append(a); mutate(sim, cf, a)
             continue
+        # 2. heat
         hf = needs_heat_fix(sim)
         if hf is not None:
             plan.append(hf); mutate(sim, cf, hf); continue
+        # 3. power — add windmills only up to the MIN_PF brownout floor (full
+        #    power would front-load iron_ingot on windmills and starve the
+        #    smelter bootstrap; partial power just runs producers slower).
+        sup, dem = power_state(sim)
+        if dem > 1e-9 and sup < MIN_PF * dem - 1e-9:
+            a = balanced_scale(sim, "windmill")
+            if a is None:
+                _FAIL[0] = "can't add power"
+                return None
+            plan.append(a); mutate(sim, cf, a); continue
+        # 4. genuine drains (a non-pinned resource consumed faster than produced)
         net = net_rates(sim, inv, cf)[0]
-        # A resource pinned at its storage CAP (full/surplus) legitimately nets
-        # ~0 under the exact solver (producers throttle to consumer draw) — that
-        # is NOT a deficit, so exclude it.  Starter stock above the normal cap
-        # (e.g. 600 wood vs cap 100) would otherwise look "starved" forever.
-        capped = {r for r in net if inv.get(r, 0.0) >= nominal_cap(r, cf) - STOCK_BOUNDARY_EPS}
-        negs = sorted(r for r, v in net.items() if v < EPS and r not in capped)
-        if negs:
-            r = negs[0]
-            sup, dem = power_state(sim)
-            brownout = dem > sup + 1e-9
-            full = net_rates(sim, inv, cf, force_full_power=True)[0] if brownout else net
-            if brownout and full.get(r, 0.0) >= EPS:
-                acts = [balanced_scale(sim, "windmill")]
-            else:
-                acts = scale_action(sim, inv, cf, r)
-                if acts is None:
-                    _FAIL[0] = f"can't scale starved {r}"
-                    return None
+        drains = sorted(r for r, v in net.items() if v < -EPS)
+        if drains:
+            acts = scale_action(sim, inv, cf, drains[0])
+            if acts is None:
+                _FAIL[0] = f"can't fix draining {drains[0]}"
+                return None
             for a in acts:
                 plan.append(a); mutate(sim, cf, a)
             continue
-        a = payback_scale(sim, cf, inv, cost_of(want))
+        # 5. affordability — a cost resource we lack with ZERO production anywhere
+        gross = net_rates(sim, inv, cf, production_only=True)[0]
+        unaccum = None
+        for r, n in want_cost.items():
+            if inv.get(r, 0.0) >= n:
+                continue
+            if net.get(r, 0.0) > 1e-12 or gross.get(r, 0.0) > 1e-12:
+                continue
+            unaccum = r
+            break
+        if unaccum is not None:
+            acts = scale_action(sim, inv, cf, unaccum)
+            if acts is None:
+                _FAIL[0] = f"can't produce cost resource {unaccum}"
+                return None
+            for a in acts:
+                plan.append(a); mutate(sim, cf, a)
+            continue
+        # 6. payback-gated speedup for the slowest cost resource
+        a = payback_scale(sim, cf, inv, want_cost)
         if a is not None:
             plan.append(a); mutate(sim, cf, a); continue
         return plan
-    _FAIL[0] = (f"step cap {PLAN_STEP_CAP} hit; still negative: "
-                f"{sorted(x for x, v in net_rates(sim, inv, cf)[0].items() if v < EPS)[:6]}")
+    _FAIL[0] = f"step cap {PLAN_STEP_CAP} hit (want={want[1]})"
     return None
 
 
@@ -986,23 +1040,45 @@ def plan_for(state, want):
 # COMMIT
 # ====================================================================
 def advance(state, cost):
-    net = net_rates(state.placed, state.inv, state.crate_for)[0]
-    gross = net_rates(state.placed, state.inv, state.crate_for, production_only=True)[0]
-    dt = time_to_afford(state.inv, cost, net, state.crate_for, gross)
-    if dt == float("inf"):
-        return False
-    for r in set(net) | set(cost):
-        rate = net.get(r, 0.0)
-        if rate <= 1e-12 and (cost.get(r, 0) - state.inv.get(r, 0)) > 0:
-            rate = gross.get(r, 0.0)
-        before = state.inv.get(r, 0)
-        after = before + rate * dt
-        if rate > 0:
-            after = min(after, max(nominal_cap(r, state.crate_for), before))
-        state.inv[r] = after
-    state.t += dt
+    """Event-driven piecewise integration (mirrors §15.3 advanceIsland +
+    findNextCapEvent): advance time toward affording `cost`, but SPLIT each
+    segment at the soonest moment a draining resource hits 0, so rates are
+    recomputed (the exhausted resource pins, its consumers throttle) instead of
+    integrating a constant rate straight into negative stock.  Inventory is
+    clamped to [0, cap] every segment.  Returns False if `cost` is unaffordable."""
+    for _seg in range(5000):
+        net = net_rates(state.placed, state.inv, state.crate_for)[0]
+        gross = net_rates(state.placed, state.inv, state.crate_for, production_only=True)[0]
+
+        def eff_rate(r):
+            # §4.9: a cost resource stalled at net<=0 accrues at GROSS (a capped
+            # producer refills as it's spent). Otherwise the realized net rate.
+            rate = net.get(r, 0.0)
+            if rate <= 1e-12 and (cost.get(r, 0) - state.inv.get(r, 0.0)) > 0:
+                return gross.get(r, 0.0)
+            return rate
+
+        dt_afford = time_to_afford(state.inv, cost, net, state.crate_for, gross)
+        if dt_afford == float("inf"):
+            return False
+        # soonest zero-crossing of any actively-draining stocked resource
+        dt_event = float("inf")
+        for r in set(net) | set(cost):
+            rate = eff_rate(r)
+            before = state.inv.get(r, 0.0)
+            if rate < -1e-12 and before > 1e-12:
+                dt_event = min(dt_event, before / (-rate))
+        dt = min(dt_afford, dt_event)
+        for r in set(net) | set(cost):
+            before = state.inv.get(r, 0.0)
+            after = before + eff_rate(r) * dt
+            capr = max(nominal_cap(r, state.crate_for), before)
+            state.inv[r] = min(capr, max(0.0, after))
+        state.t += dt
+        if dt >= dt_afford - 1e-9:
+            break
     for r, n in cost.items():
-        state.inv[r] = state.inv.get(r, 0) - n
+        state.inv[r] = state.inv.get(r, 0.0) - n
     return True
 
 
@@ -1045,10 +1121,16 @@ def ready(placed, name):
 
 
 def assert_positive(state, label):
+    """Sanity guard.  Under the exact solver a resource only goes net-negative
+    while it still has STOCK to drain (it then pins at 0 and throttles its
+    consumers next segment) — that is legal.  A negative at ~0 stock would mean
+    the solver failed to pin a zero-bounded resource: THAT is the real bug."""
     net = net_rates(state.placed, state.inv, state.crate_for)[0]
-    bad = {r: round(v * 3600, 4) for r, v in net.items() if v < -1e-6}
+    bad = {r: round(v * 3600, 4) for r, v in net.items()
+           if v < -1e-6 and state.inv.get(r, 0.0) <= STOCK_BOUNDARY_EPS}
     if bad:
-        raise AssertionError(f"NEGATIVE rate after {label} @ {fmt_dur(state.t)}: {bad}")
+        raise AssertionError(f"NEGATIVE rate at empty bin after {label} "
+                             f"@ {fmt_dur(state.t)}: {bad}")
 
 
 def show_breakdown(state):
@@ -1111,6 +1193,12 @@ def main():
                         return 0
             return 1
         oi = {n: i for i, n in enumerate(TARGET)}
+        # (tier, TARGET-order): raw producers (logger/quarry/mines/clay) are
+        # front-loaded so the stone/wood/ore faucets exist before their consumers
+        # drain the starter cache.  Cost-first ordering was tried and BROKE this
+        # (it placed stone-consumers before quarry, bankrupting starter stone).
+        # The expensive apex producers are last in TARGET order, so they're only
+        # attempted once everything cheaper is placed/deferred.
         cand = sorted((n for n in TARGET if n in need and ready(state.placed, n) and n not in deferred),
                       key=lambda n: (tier(n), oi[n]))
         progressed = False
