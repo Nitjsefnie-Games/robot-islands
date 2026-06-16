@@ -56,11 +56,14 @@ EPS = 1e-9
 CLUSTER_RATE = 0.05            # §4.5 CATEGORY_ADJACENCY_RATE (every category)
 STOCK_BOUNDARY_EPS = 1e-6      # §15.3 cap/zero classification dust band
 PLAN_STEP_CAP = 800
-PAYBACK_CAP = 300             # max payback-gated scale steps per plan (the
-                              # optional speedup); beyond it, accept slow
-                              # accumulation instead of looping to PLAN_STEP_CAP
-                              # (a huge cost like 30000 steel_beam otherwise pays
-                              # off a sliver per scale and never converges)
+PAYBACK_CAP = 0               # payback speedup DISABLED: it scales producers
+                              # against transient inventory stockpiles, building
+                              # hundreds of buildings whose combined placement
+                              # cost then can't be afforded/stored (steel_mill's
+                              # 337-action plan needed stone 1.4M / concrete
+                              # 2.4M). Feasibility (topology+heat+power+afford)
+                              # alone completes the build; accumulation runs at
+                              # base rate (slower sim-time, but it converges).
 PARALLEL_BUILD_SLOTS = 1       # bootstrap: 1 + Robotics(0) + structural(0)
 COAL_CYCLE_SEC = 30            # §5.2 furnace fuel-burn cycle
 MIN_HEAT_FACTOR = 0.1          # §5.2 below this a heat consumer fully stalls
@@ -1010,15 +1013,16 @@ def plan_for(state, want):
                 _FAIL[0] = "can't add power"
                 return None
             plan.append(a); mutate(sim, cf, a); continue
-        # 4. genuine drains (a non-pinned resource consumed faster than produced).
-        #    Fix the first FIXABLE drain by scaling its producer.  A drain we
-        #    CAN'T fix (its producer is a tile-locked extractor already at the
-        #    floor cap — e.g. the clustered steel chain out-drawing the single
-        #    coal deposit) is NOT fatal: under event-driven integration that
-        #    resource simply pins at 0 and throttles its consumers (the chain
-        #    runs slower).  So skip unfixable drains and proceed rather than
-        #    exploding the extractor floor (v2's "cascade cost" failure mode).
-        net = net_rates(sim, inv, cf)[0]
+        # 4. genuine drains, judged at STEADY STATE (empty inventory ⇒ every
+        #    resource zero-pinned ⇒ consumers throttle to real production).  This
+        #    is the key: judging drains against the live inventory is wrong —
+        #    transient stockpiles (e.g. pig_iron banked while blast_furnace ran
+        #    during the long advance) make an input-limited producer LOOK
+        #    scalable, so the planner scaled steel_mill 8925× chasing a steel
+        #    drain that only existed because it was burning a finite pig_iron
+        #    stock.  At steady state no resource drains, so step 4 fixes only
+        #    genuinely sustainable shortfalls; the rest pin and throttle.
+        net = net_rates(sim, {}, cf)[0]
         drains = sorted(r for r, v in net.items() if v < -EPS)
         fixed = False
         for r in drains:
@@ -1055,7 +1059,12 @@ def plan_for(state, want):
                 payback_used += 1
                 plan.append(a); mutate(sim, cf, a); continue
         return plan
-    _FAIL[0] = f"step cap {PLAN_STEP_CAP} hit (want={want[1]})"
+    from collections import Counter
+    hist = Counter(a[1] for a in plan)
+    net_now = net_rates(sim, inv, cf)[0]
+    drains_now = sorted((round(v * 3600, 2), r) for r, v in net_now.items() if v < -EPS)[:5]
+    _FAIL[0] = (f"step cap {PLAN_STEP_CAP} hit (want={want[1]}); "
+                f"top scaled: {hist.most_common(6)}; drains/h: {drains_now}")
     return None
 
 
@@ -1063,43 +1072,29 @@ def plan_for(state, want):
 # COMMIT
 # ====================================================================
 def advance(state, cost):
-    """Event-driven piecewise integration (mirrors §15.3 advanceIsland +
-    findNextCapEvent): advance time toward affording `cost`, but SPLIT each
-    segment at the soonest moment a draining resource hits 0, so rates are
-    recomputed (the exhausted resource pins, its consumers throttle) instead of
-    integrating a constant rate straight into negative stock.  Inventory is
-    clamped to [0, cap] every segment.  Returns False if `cost` is unaffordable."""
-    for _seg in range(5000):
-        net = net_rates(state.placed, state.inv, state.crate_for)[0]
-        gross = net_rates(state.placed, state.inv, state.crate_for, production_only=True)[0]
-
-        def eff_rate(r):
-            # §4.9: a cost resource stalled at net<=0 accrues at GROSS (a capped
-            # producer refills as it's spent). Otherwise the realized net rate.
-            rate = net.get(r, 0.0)
-            if rate <= 1e-12 and (cost.get(r, 0) - state.inv.get(r, 0.0)) > 0:
-                return gross.get(r, 0.0)
-            return rate
-
-        dt_afford = time_to_afford(state.inv, cost, net, state.crate_for, gross)
-        if dt_afford == float("inf"):
-            return False
-        # soonest zero-crossing of any actively-draining stocked resource
-        dt_event = float("inf")
-        for r in set(net) | set(cost):
-            rate = eff_rate(r)
-            before = state.inv.get(r, 0.0)
-            if rate < -1e-12 and before > 1e-12:
-                dt_event = min(dt_event, before / (-rate))
-        dt = min(dt_afford, dt_event)
-        for r in set(net) | set(cost):
-            before = state.inv.get(r, 0.0)
-            after = before + eff_rate(r) * dt
-            capr = max(nominal_cap(r, state.crate_for), before)
-            state.inv[r] = min(capr, max(0.0, after))
-        state.t += dt
-        if dt >= dt_afford - 1e-9:
-            break
+    """Advance time until `cost` is affordable, integrating inventory at the
+    current rates, then deduct it.  Single-segment with a [0, cap] clamp on BOTH
+    bounds (the clamp is what keeps a draining resource from going negative —
+    e.g. quicklime to -1655 — without the cost of event-driven sub-segments,
+    which exploded into thousands of tiny steps on a near-zero oscillating
+    resource over a multi-hundred-day accumulation).  Intermediate resources may
+    be integrated slightly past a mid-segment pin, but that doesn't affect the
+    affordability of `cost` (time_to_afford only reads cost resources), which is
+    all the schedule depends on.  Returns False if `cost` can never be afforded."""
+    net = net_rates(state.placed, state.inv, state.crate_for)[0]
+    gross = net_rates(state.placed, state.inv, state.crate_for, production_only=True)[0]
+    dt = time_to_afford(state.inv, cost, net, state.crate_for, gross)
+    if dt == float("inf"):
+        return False
+    for r in set(net) | set(cost):
+        rate = net.get(r, 0.0)
+        if rate <= 1e-12 and (cost.get(r, 0) - state.inv.get(r, 0.0)) > 0:
+            rate = gross.get(r, 0.0)          # §4.9 gross fallback for stalled cost resources
+        before = state.inv.get(r, 0.0)
+        after = before + rate * dt
+        capr = max(nominal_cap(r, state.crate_for), before)
+        state.inv[r] = min(capr, max(0.0, after))   # clamp [0, cap]
+    state.t += dt
     for r, n in cost.items():
         state.inv[r] = state.inv.get(r, 0.0) - n
     return True
