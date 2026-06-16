@@ -72,10 +72,14 @@ _FAIL = [""]
 # §9.3 base construction time per tier (ms in game → seconds here).
 BASE_CONSTRUCTION_S_BY_TIER = {1: 30, 2: 120, 3: 300, 4: 900, 5: 1800, 6: 3600}
 
-# Amortize big ONE-TIME placement costs of GRASS goods into steady demand so
-# the solve sizes the steel chain; tile-locked goods are left to the executor's
-# payback gate (see v2 rationale — kept).
-BUILD_TIME_S = 7300 * 24 * 3600
+# Auto-sizing window: the chain is sized so its steady net production covers the
+# whole build's GRASS-good placement demand (notably 55000 steel_beam for the
+# blast_furnace + steel_mill apex) within this wall-time.  SMALLER window ⇒ a
+# bigger pre-built chain ⇒ the apex bins fill faster ⇒ lower total time — until
+# the chain's own (tile-locked) construction cost dominates.  Tuned for the
+# <10-year goal.  Tile-locked goods are excluded (their producers are cap-1, so
+# amortizing them just explodes the extractor floor); they throttle at runtime.
+SIZE_WINDOW_S = 8 * 365 * 24 * 3600
 
 STARTING_INVENTORY = {
     "stone": 1200, "wood": 600, "iron_ore": 30, "coal": 80, "iron_ingot": 60,
@@ -605,6 +609,30 @@ def needs_heat_fix(placed):
     return ("place", "coal_furnace")
 
 
+def needs_buffer(placed, crate_for):
+    """Return a crate action for the first recipe INTERMEDIATE whose storage cap
+    can't hold a couple of a consumer's per-cycle draws, else None.  Without
+    this, a small components cap (steel = 20) throttles a big consumer
+    (beam_mill draws 105 steel/cycle) — it can never buffer a full cycle, so it
+    crawls and backs its producer up at the cap.  Buffering intermediates lets
+    the chain run continuously.  Only fires for resources the planner actually
+    produces (skip raw extractor outputs already capped by design / starter)."""
+    for name, floors in placed.items():
+        if not floors:
+            continue
+        d = BUILDINGS[name]
+        if d["cycle_s"] is None:
+            continue
+        f = max(floors)
+        for r, per in d["in"].items():
+            if per <= 0:
+                continue
+            need_cap = 2.0 * per * (1 + f)
+            if nominal_cap(r, crate_for) + 1e-9 < need_cap:
+                return crate_action_for(crate_for, r)
+    return None
+
+
 def power_state(placed):
     """Returns (supply, demand) at NOMINAL throughput (pf=1).  Generators get
     the §4.5 cluster bonus; consumers' draw scales by floorPowerDrawMul(1+0.5L).
@@ -740,8 +768,10 @@ def net_rates(placed, inv, crate_for, production_only=False, force_full_power=Fa
         if not production_only:
             for r, v in sp["consumes"].items():
                 net[r] = net.get(r, 0.0) - v * gg * eff_pf
-    # coal burn fold
-    if heat_served and not production_only:
+    # §5.2 coal burn fold — but only while coal isn't already empty.  Fix 4.1:
+    # when coal stock is 0 the furnaces are fuel-starved (serve nothing, bill no
+    # coal); folding the burn anyway drives net.coal negative at an empty bin.
+    if heat_served and not production_only and "coal" not in zero_c:
         net["coal"] = net.get("coal", 0.0) - heat_served * 1 / COAL_CYCLE_SEC
     return net, pf
 
@@ -896,6 +926,45 @@ def best_producer(sim, inv, crate_for, r):
     return min(prods, key=score)
 
 
+def scale_cost_scalar(a):
+    """Scalar cost proxy for an action — tile-locked resources weighted heavily
+    (scarce, cap-1 producers), so the chooser avoids cascading onto them."""
+    return sum(n * (1000.0 if r in TILE_LOCKED_RES else 1.0)
+               for r, n in cost_of(a).items())
+
+
+def scale_choice(sim, cf, typ, r):
+    """Explicit UPGRADE-vs-BUILD tradeoff for raising `typ`'s output of `r`.
+    Compares the two candidate actions — upgrade the lowest-floor instance, or
+    place a new one — by marginal steady-state output / (weighted) cost, and
+    returns the better.  This captures the real economics that the fixed floor-9
+    heuristic only approximated: an upgrade ≤floor10 costs 0.8× base (cheap) but
+    a new build costs full base AND adds a §4.5 cluster bonus to its same-category
+    neighbours (reflected in its larger `gain`); past floor 10 the upgrade cost
+    is exponential so building wins.  Preferring the higher output-per-cost
+    naturally keeps it from degenerating to N×floor-1 buildings.  Returns None if
+    neither candidate helps (typ is input-limited / capped)."""
+    cur = net_rates(sim, {}, cf)[0].get(r, 0.0)
+    cands = []
+    if sim[typ]:
+        lo = min(sim[typ])
+        if not (TERRAIN_CAPS[typ] < GRASS_CAP and lo + 1 > TILE_FLOOR_CAP):
+            cands.append(("upgrade", typ, lo + 2))
+    if len(sim[typ]) < TERRAIN_CAPS[typ]:
+        cands.append(("place", typ))
+    best, best_val = None, 0.0
+    for a in cands:
+        s2 = {k: list(v) for k, v in sim.items()}
+        mutate(s2, {}, a)
+        gain = net_rates(s2, {}, cf)[0].get(r, 0.0) - cur
+        if gain <= 1e-12:
+            continue
+        val = gain / max(scale_cost_scalar(a), 1.0)
+        if val > best_val:
+            best_val, best = val, a
+    return best
+
+
 SCALE_JUMP_CAP = 3000
 
 
@@ -944,15 +1013,11 @@ def boost(sim, cf, r, depth=0, seen=None):
     typ = best_producer(sim, {}, cf, r)
     if typ is None:
         return None
-    base = net_rates(sim, {}, cf)[0].get(r, 0.0)
-    s2 = {k: list(v) for k, v in sim.items()}
-    a = balanced_scale(s2, typ)
+    # explicit upgrade-vs-build choice for raising r via typ
+    a = scale_choice(sim, cf, typ, r)
     if a is not None:
-        mutate(s2, {}, a)
-        if net_rates(s2, {}, cf)[0].get(r, 0.0) - base > 1e-12:
-            return a
-    # typ can't be scaled (floor/terrain-capped) or scaling it didn't help r —
-    # it's limited by one of its inputs; recurse into the limiting input(s).
+        return a
+    # typ can't help r (input-limited / capped) — recurse into its inputs.
     for x in BUILDINGS[typ]["in"]:
         rec = boost(sim, cf, x, depth + 1, seen)
         if rec is not None:
@@ -1031,6 +1096,11 @@ def plan_for(state, want):
         hf = needs_heat_fix(sim)
         if hf is not None:
             plan.append(hf); mutate(sim, cf, hf); continue
+        # 2.5 buffer recipe intermediates (so a big per-cycle draw fits in storage
+        #     — steel cap 20 vs beam_mill's 105/cycle was throttling the chain)
+        bf = needs_buffer(sim, cf)
+        if bf is not None:
+            plan.append(bf); mutate(sim, cf, bf); continue
         # 3. power — add windmills only up to the MIN_PF brownout floor (full
         #    power would front-load iron_ingot on windmills and starve the
         #    smelter bootstrap; partial power just runs producers slower).
@@ -1219,6 +1289,74 @@ def show_breakdown(state):
               f"{state.inv[r]:>12.2f} / {cap_r:.0f}")
 
 
+def presize():
+    """Auto-size the chain by raising TARGET counts so steady (cluster-aware) net
+    production covers the whole build's GRASS-good placement demand within
+    SIZE_WINDOW_S.  This is the lookahead the reactive boost lacks: nothing
+    demands steel_beam until the apex, so the steel chain must be pre-built wide
+    enough to fill 55000 steel_beam in the target window.  Tile-locked goods are
+    excluded (cap-1 producers; they throttle at runtime).  Floors are left to the
+    boost; this sizes COUNTS only.  Mutates TARGET in place."""
+    place_rate = {}
+    for b, cnt in TARGET.items():
+        for r, n in BUILDINGS[b]["cost"].items():
+            if r not in TILE_LOCKED_RES:
+                place_rate[r] = place_rate.get(r, 0.0) + n * cnt / SIZE_WINDOW_S
+    L = {b: float(TARGET.get(b, 0)) for b in BUILDINGS}
+
+    def pick(r):
+        prods = [p for p in PRODUCERS_OF.get(r, ()) if TERRAIN_CAPS[p] >= GRASS_CAP]
+        if not prods:
+            prods = list(PRODUCERS_OF.get(r, ()))
+        if not prods:
+            return None
+
+        def sc(p):
+            d = BUILDINGS[p]
+            cyc = d["cycle_s"] or 1.0
+            tl = sum(u / cyc for x, u in d["in"].items() if x in TILE_LOCKED_RES)
+            return (tl, len(d["in"]))
+        return min(prods, key=sc)
+
+    for _ in range(200000):
+        K = {}
+        for b, c in L.items():
+            if c > 0 and _CLUSTERED.get(b):
+                K[_CATEGORY[b]] = K.get(_CATEGORY[b], 0.0) + c
+        net = {}
+        for b, c in L.items():
+            cyc = BUILDINGS[b]["cycle_s"]
+            if c <= 0 or cyc is None:
+                continue
+            bonus = 1 + CLUSTER_RATE * (K[_CATEGORY[b]] - 1) if _CLUSTERED.get(b) else 1.0
+            for r, u in BUILDINGS[b]["out"].items():
+                net[r] = net.get(r, 0.0) + c * u / cyc * bonus
+            for r, u in BUILDINGS[b]["in"].items():
+                net[r] = net.get(r, 0.0) - c * u / cyc * bonus
+        worst, wr = -1e-9, None
+        for r in set(net) | set(place_rate):
+            if r not in PRODUCERS_OF or r in TILE_LOCKED_RES:
+                continue
+            v = net.get(r, 0.0) - place_rate.get(r, 0.0)
+            if v < worst:
+                worst, wr = v, r
+        if wr is None or sum(L.values()) > 50000:
+            break
+        p = pick(wr)
+        if p is None:
+            break
+        L[p] += 1.0
+
+    # Realize the level-units as FLOORS, not N×floor-1 buildings: a building at
+    # floor ~9 is worth ~10 floor-0 units (floorEffectMul = 1+L) at lower power
+    # and the same cluster K, so target ⌈units/10⌉ buildings and let the boost's
+    # scale_choice floor-upgrade them.  Avoids the degenerate N×floor-1 chain.
+    for b, c in L.items():
+        capped = min(int(ceil(c / 10.0)), TERRAIN_CAPS[b])
+        if capped > TARGET.get(b, 0):
+            TARGET[b] = capped
+
+
 def main():
     global TARGET
     print("=" * 70)
@@ -1236,6 +1374,11 @@ def main():
         TARGET = {only: len(state.placed.get(only, [])) + 1}
         print(f"SEED: build 1 more {only}.\n")
 
+    # NOTE: presize() auto-sizing is disabled — it oversizes grass buildings
+    # whose inputs are tile-locked (concrete_plant ×18 starves the single sand /
+    # limestone deposit). The chain's construction materials are themselves
+    # tile-locked-bound, so blind amortized sizing fights that wall. Left in the
+    # source for future work behind a proper tile-locked supply cap.
     demand = sum(-BUILDINGS[n]["power"] for n in TARGET if BUILDINGS[n]["power"] < 0)
     print(f"Power demand of target consumers (base floor): {demand} kW\n")
 
