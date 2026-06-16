@@ -56,14 +56,10 @@ EPS = 1e-9
 CLUSTER_RATE = 0.05            # §4.5 CATEGORY_ADJACENCY_RATE (every category)
 STOCK_BOUNDARY_EPS = 1e-6      # §15.3 cap/zero classification dust band
 PLAN_STEP_CAP = 800
-PAYBACK_CAP = 0               # payback speedup DISABLED: it scales producers
-                              # against transient inventory stockpiles, building
-                              # hundreds of buildings whose combined placement
-                              # cost then can't be afforded/stored (steel_mill's
-                              # 337-action plan needed stone 1.4M / concrete
-                              # 2.4M). Feasibility (topology+heat+power+afford)
-                              # alone completes the build; accumulation runs at
-                              # base rate (slower sim-time, but it converges).
+PAYBACK_CAP = 80              # max cost-aware boost steps per plan (the time
+                              # optimizer): scale the slowest cost resource's
+                              # steady-state root bottleneck while the plan stays
+                              # affordable. Bounded so it can't over-build.
 PARALLEL_BUILD_SLOTS = 1       # bootstrap: 1 + Robotics(0) + structural(0)
 COAL_CYCLE_SEC = 30            # §5.2 furnace fuel-burn cycle
 MIN_HEAT_FACTOR = 0.1          # §5.2 below this a heat consumer fully stalls
@@ -932,6 +928,38 @@ def scale_action(sim, inv, crate_for, r):
     return acts
 
 
+def boost(sim, cf, r, depth=0, seen=None):
+    """Return a scale action for the steady-state ROOT bottleneck limiting
+    resource `r`, or None.  Tries to scale r's best producer; if that yields no
+    steady-state gain (the producer is itself input-limited), recurses into the
+    limiting input's producer — so boosting steel_beam walks down
+    beam_mill → steel → steel_mill_scrap → scrap → scrapper and scales the real
+    constraint.  All evaluation is at steady state (empty inventory) so transient
+    stockpiles don't mask the true bottleneck."""
+    if seen is None:
+        seen = set()
+    if depth > 12 or r in seen:
+        return None
+    seen.add(r)
+    typ = best_producer(sim, {}, cf, r)
+    if typ is None:
+        return None
+    base = net_rates(sim, {}, cf)[0].get(r, 0.0)
+    s2 = {k: list(v) for k, v in sim.items()}
+    a = balanced_scale(s2, typ)
+    if a is not None:
+        mutate(s2, {}, a)
+        if net_rates(s2, {}, cf)[0].get(r, 0.0) - base > 1e-12:
+            return a
+    # typ can't be scaled (floor/terrain-capped) or scaling it didn't help r —
+    # it's limited by one of its inputs; recurse into the limiting input(s).
+    for x in BUILDINGS[typ]["in"]:
+        rec = boost(sim, cf, x, depth + 1, seen)
+        if rec is not None:
+            return rec
+    return None
+
+
 def payback_scale(sim, cf, inv, cost):
     net = net_rates(sim, inv, cf)[0]
     bott, bt = None, 0.0
@@ -1052,12 +1080,31 @@ def plan_for(state, want):
             for a in acts:
                 plan.append(a); mutate(sim, cf, a)
             continue
-        # 6. payback-gated speedup for the slowest cost resource (bounded)
+        # 6. cost-aware bounded boost: speed up the slowest cost resource by
+        #    scaling its steady-state ROOT bottleneck — but only while the plan's
+        #    combined cost stays affordable (this is the guard the old payback
+        #    lacked: it scaled against transient stock and built hundreds of
+        #    buildings whose combined cost then blew past storage caps).
         if payback_used < PAYBACK_CAP:
-            a = payback_scale(sim, cf, inv, want_cost)
-            if a is not None:
-                payback_used += 1
-                plan.append(a); mutate(sim, cf, a); continue
+            net_ss = net_rates(sim, {}, cf)[0]
+            bott, bt = None, 0.0
+            for rr, nn in want_cost.items():
+                have = inv.get(rr, 0.0)
+                if have >= nn:
+                    continue
+                rate = net_ss.get(rr, 0.0)
+                t = (nn - have) / rate if rate > 1e-12 else float("inf")
+                if t != float("inf") and t > bt:
+                    bt, bott = t, rr
+            if bott is not None and bt > 0:
+                a = boost(sim, cf, bott)
+                if a is not None:
+                    trial = combined_cost(plan + [a])
+                    gnet = net_rates(sim, inv, cf)[0]
+                    ggross = net_rates(sim, inv, cf, production_only=True)[0]
+                    if time_to_afford(inv, trial, gnet, cf, ggross) < float("inf"):
+                        payback_used += 1
+                        plan.append(a); mutate(sim, cf, a); continue
         return plan
     from collections import Counter
     hist = Counter(a[1] for a in plan)
