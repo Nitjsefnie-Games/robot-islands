@@ -277,8 +277,8 @@ TARGET = {
     "clay_pit": 1, "smelter": 1, "workshop": 1, "limestone_quarry": 1,
     "copper_mine": 1, "copper_smelter": 1, "sand_pit": 1, "glassworks": 1,
     "well": 1, "coastal_pump": 1, "limekiln": 1, "cement_mill": 1,
-    "concrete_plant": 1, "assembler": 1, "steel_mill_scrap": 1, "brick_kiln": 1,
-    "beam_mill": 1, "pipe_mill": 1, "coke_oven": 1, "blast_furnace": 1,
+    "concrete_plant": 1, "assembler": 1, "steel_mill_scrap": 3, "brick_kiln": 1,
+    "beam_mill": 4, "pipe_mill": 1, "coke_oven": 1, "blast_furnace": 1,
     "air_separator": 1, "steel_mill": 1,
 }
 
