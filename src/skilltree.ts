@@ -1590,11 +1590,13 @@ export function costToUnlock(
 ): CheapestPathResult | null {
   if (ownedNodes.has(target)) return { path: [], totalCost: 0 };
 
-  // Build adjacency from outgoing edges (since edges are directed). §9.3 tier
-  // gate: drop any edge whose destination node is tier-locked at the island's
-  // current level, so cost/reachability never offers a path the hard gate in
-  // `buyNode` will reject. The target itself is included in this filter — a
-  // tier-locked target becomes unreachable (returns null), matching buyNode.
+  // Build adjacency from the mixed graph: standard edges are bidirectional,
+  // edges into keystones are directed except for threshold-bridges, and
+  // AND-prereq edges are purchase gates (never traversable). §9.3 tier gate:
+  // drop any edge whose destination node is tier-locked at the island's current
+  // level, so cost/reachability never offers a path the hard gate in `buyNode`
+  // will reject. The target itself is included in this filter — a tier-locked
+  // target becomes unreachable (returns null), matching buyNode.
   const nodeDepth = new Map<NodeId, number>();
   for (const n of graph.nodes) nodeDepth.set(n.id as NodeId, n.depth);
   const nodeCostById = new Map<NodeId, number>();
@@ -1803,9 +1805,9 @@ export function nodePurchaseStatus(
   target: NodeId,
 ): NodePurchaseStatus {
   if (state.unlockedNodes.has(target)) return 'owned';
-  // §9.3 keystones: bought via `buyKeystone` (AND-prereqs + flat SP cost; the
-  // depth→tier gate does not apply per spec). Unmet prereqs render as locked,
-  // OR an active threshold-bridge can unlock the keystone without the AND path.
+  // §9.3 keystones: the AND path uses `buyKeystone` (every prereq owned + flat
+  // SP cost; depth→tier gate does not apply). When the AND prereqs are unmet,
+  // an active threshold-bridge can unlock the keystone via `buyNode` instead.
   const ks = keystonePrereqFor(target);
   if (ks) {
     // AND path: every required notable owned.

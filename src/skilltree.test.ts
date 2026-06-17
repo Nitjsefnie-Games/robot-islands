@@ -1876,6 +1876,7 @@ describe('queue mirror nodes', () => {
     expect(ids.has('robotics.keystone.queueConstruction')).toBe(true);
   });
 });
+
 describe('keystone bridge-OR unlock', () => {
   it('keystone is purchasable via an active bridge without its AND prereqs', () => {
     const state = makeState({ level: 70, unspentSkillPoints: 1_000_000 });
