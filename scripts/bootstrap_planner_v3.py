@@ -54,6 +54,21 @@ SEED_PATH = os.environ.get("RI_SEED")
 SEED_MODE = bool(SEED_PATH)
 VERBOSE = "--verbose" in sys.argv or "-v" in sys.argv  # print per-target fix breakdown
 
+
+def _arg_int(flag):
+    """Read `--flag N` or `--flag=N` from argv; None if absent."""
+    for i, a in enumerate(sys.argv):
+        if a == flag and i + 1 < len(sys.argv):
+            return int(sys.argv[i + 1])
+        if a.startswith(flag + "="):
+            return int(a.split("=", 1)[1])
+    return None
+
+
+# Stop once placed_n (the [N/total] progress counter) reaches this many fully
+# satisfied targets — the displayed step at [N/total] is the last one emitted.
+TARGET_LIMIT = _arg_int("--target")
+
 EPS = 1e-9
 CLUSTER_RATE = 0.05            # §4.5 CATEGORY_ADJACENCY_RATE (every category)
 STOCK_BOUNDARY_EPS = 1e-6      # §15.3 cap/zero classification dust band
@@ -1723,6 +1738,8 @@ def main():
         cand = sorted((n for n in TARGET if n in need and ready(state.placed, n) and n not in deferred),
                       key=lambda n: (tier(n), oi[n]))
         progressed = False
+        stop = False
+        placed_n = 0
         for name in cand:
             plan = plan_for(state, ("place", name))
             if plan is None or not commit(state, plan):
@@ -1738,6 +1755,12 @@ def main():
                 print(f"            fixes: {fix_summary(fixes)}", flush=True)
             deferred.clear()
             progressed = True
+            if TARGET_LIMIT is not None and placed_n >= TARGET_LIMIT:
+                stop = True
+            break
+
+        if stop:
+            print(f"\n>>> Stopped at --target {TARGET_LIMIT} ({placed_n}/{len(TARGET)} placed).")
             break
 
         if not progressed:
