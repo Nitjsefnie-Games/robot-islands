@@ -1130,7 +1130,7 @@ Tiers are passive thresholds that gate building and recipe availability:
 
 ### 9.3 Skill Tree Structure
 
-The skill tree is a **directed graph** of nodes connected by edges. Five top-level branches each contain four sub-paths (20 sub-paths total).
+The skill tree is a graph of nodes connected by edges. Standard filler-chain edges and notable-anchor edges are **traversable in both directions**: owning a deeper node lets you walk back and claim shallower nodes you skipped. Edges into keystones remain directed, except for threshold-bridges. Five top-level branches each contain four sub-paths (20 sub-paths total).
 
 **Extraction**
 
@@ -1174,8 +1174,10 @@ The skill tree is a **directed graph** of nodes connected by edges. Five top-lev
 * You can "skip" to a deep notable by paying through its filler chain in one action.
 * You can reach a distant notable via an active threshold-bridge if you have invested enough in its source branch.
 * Redundant edges (multiple paths to the same node) are allowed; the cheapest available path is always charged.
+* Edges can be walked "downward" as well as upward. If you own a depth-4 node, you can later buy depth-3, depth-2, and depth-1 of the same chain without re-climbing from the bottom.
+* **Keystones have two unlock paths:** (1) own every node in their AND-prerequisite list and pay the flat keystone cost, OR (2) reach the keystone through an active threshold-bridge from another owned node.
 
-**Keystone gates.** Each keystone has an AND-prerequisite list of specific upstream nodes that must already be owned before the keystone can be purchased (`canBuyKeystone` / `buyKeystone`). This is separate from the graph pathing — even if a path exists, the keystone stays locked until every prereq is satisfied.
+**Keystone gates.** Each keystone has an AND-prerequisite list of specific upstream nodes (`canBuyKeystone` / `buyKeystone`). In addition, a keystone is unlocked if it can be reached through an active threshold-bridge (`buyNode`). The two paths are independent: satisfying either one unlocks the keystone.
 
 **Aura amplification.** Notables may carry an aura (radius 1–2 edges, bonus up to +15%). Every owned node adjacent to an aura source has its effect magnitude multiplied by the aura bonus. Multiple auras stack multiplicatively per target, capped at ×1.50.
 
