@@ -21,6 +21,7 @@ import {
   MASS_DRIVER_CAPACITY_UNITS_PER_SEC,
   MASS_DRIVER_DIESEL_PER_UNIT,
   nextRouteId,
+  retargetRoute,
   routeFloorMultiplier,
   routeProfileForBuilding,
   reorderPriorityList,
@@ -173,6 +174,60 @@ function cableRoute(
 beforeEach(() => {
   _resetRouteIdCounter();
   _resetDroneIdCounter();
+});
+
+describe('retargetRoute — §2.4 change destination', () => {
+  const pad = { id: 'pad1', defId: 'dronepad' as const, x: 0, y: 0 };
+  function setup(): { world: WorldState; route: Route } {
+    const from = makeIslandSpec('a', 0, 0);
+    from.buildings = [pad];
+    const oldTo = makeIslandSpec('b', 30, 0);
+    const newTo = makeIslandSpec('c', 0, 40);
+    const route = createRouteFromBuilding(pad, 'a', 'b', 'iron_ore', 30)!;
+    return { world: makeWorld([route], [from, oldTo, newTo]), route };
+  }
+
+  it('drains the old route and spawns a new one to the new island, inheriting cargo + mode', () => {
+    const { world, route } = setup();
+    route.mode = 'split';
+    route.cargo = [{ resourceId: 'iron_ore' }, { resourceId: 'coal' }];
+    route.inFlight = [{ resourceId: 'iron_ore', amount: 1, arrivalTime: 1e9, dispatchTime: 0 }];
+    const res = retargetRoute(world, route.id, 'c');
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    // Old route stays (cargo en route to the OLD target) but is draining.
+    expect(route.draining).toBe(true);
+    expect(route.to).toBe('b');
+    // New route → 'c', same source building, cargo + mode carried over.
+    expect(res.route.to).toBe('c');
+    expect(res.route.from).toBe('a');
+    expect(res.route.sourceBuildingId).toBe('pad1');
+    expect(res.route.mode).toBe('split');
+    expect(res.route.cargo.map((c) => c.resourceId)).toEqual(['iron_ore', 'coal']);
+    expect(world.routes).toContain(res.route);
+  });
+
+  it('removes the old route immediately when nothing is in flight', () => {
+    const { world, route } = setup();
+    const res = retargetRoute(world, route.id, 'c');
+    expect(res.ok).toBe(true);
+    expect(world.routes).not.toContain(route);
+    expect(world.routes.filter((r) => r.to === 'c')).toHaveLength(1);
+  });
+
+  it('rejects same target, unknown island, and unknown route', () => {
+    const { world, route } = setup();
+    expect(retargetRoute(world, route.id, 'b').ok).toBe(false);
+    expect(retargetRoute(world, route.id, 'zzz').ok).toBe(false);
+    expect(retargetRoute(world, 'no-such-route', 'c').ok).toBe(false);
+  });
+
+  it('rejects retarget to an unpopulated island', () => {
+    const { world, route } = setup();
+    world.islands.find((s) => s.id === 'c')!.populated = false;
+    const res = retargetRoute(world, route.id, 'c');
+    expect(res.ok).toBe(false);
+  });
 });
 
 describe('dispatchAttempt — filter route happy path', () => {

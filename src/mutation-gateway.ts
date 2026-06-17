@@ -35,6 +35,7 @@ import {
   createRouteFromBuilding,
   islandHasTeleporterPad,
   reorderPriorityList,
+  retargetRoute as retargetRoutePure,
   routeProfileForBuilding,
   type Route,
 } from './routes.js';
@@ -215,6 +216,8 @@ export interface MutationGateway {
     filterResource?: ResourceId | null,
   ): GatewayReturn;
   deleteRoute(routeId: string): GatewayReturn;
+  /** §2.4 retarget: drain `routeId` and re-create it to `toIslandId`. */
+  retargetRoute(routeId: string, toIslandId: string): GatewayReturn;
   setRouteMode(routeId: string, mode: CargoMode): GatewayReturn;
   setCargoWeight(routeId: string, cargoIndex: number, weight: number): GatewayReturn;
   setCargoFloorPct(routeId: string, cargoIndex: number, sourceFloorPct?: number): GatewayReturn;
@@ -731,6 +734,11 @@ export function makeLocalGateway(
       return ok();
     },
 
+    retargetRoute(routeId, toIslandId) {
+      const r = retargetRoutePure(world, routeId, toIslandId);
+      return r.ok ? ok() : err(r.error);
+    },
+
     setRouteMode(routeId, mode) {
       if (!isValidCargoMode(mode)) return err('invalid cargo mode');
       const route = findRoute(routeId);
@@ -1003,6 +1011,9 @@ export function makeRemoteGateway(client: GameServerClient): MutationGateway {
     },
     deleteRoute(routeId) {
       return send('delete-route', { routeId });
+    },
+    retargetRoute(routeId, toIslandId) {
+      return send('retarget-route', { routeId, toIslandId });
     },
     setRouteMode(routeId, mode) {
       return send('set-route-mode', { routeId, mode });
