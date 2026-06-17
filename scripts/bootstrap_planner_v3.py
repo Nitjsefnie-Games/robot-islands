@@ -48,9 +48,11 @@ Control flow is v2's proven skeleton, UNCHANGED in spirit:
 from math import ceil, floor
 import os
 import json
+import sys
 
 SEED_PATH = os.environ.get("RI_SEED")
 SEED_MODE = bool(SEED_PATH)
+VERBOSE = "--verbose" in sys.argv or "-v" in sys.argv  # print per-target fix breakdown
 
 EPS = 1e-9
 CLUSTER_RATE = 0.05            # §4.5 CATEGORY_ADJACENCY_RATE (every category)
@@ -1085,6 +1087,14 @@ def fmt_dur(s):
     return f"{h:.2f} h" if h < 48 else f"{h / 24:.2f} days"
 
 
+def fix_summary(fixes):
+    """One-line breakdown of a plan's balancing actions (the '+N fixes'):
+    e.g. 'place windmill x6, upgrade quarry x4, crate stone x3'."""
+    from collections import Counter
+    c = Counter((a[0], a[1]) for a in fixes)
+    return ", ".join(f"{kind} {nm}x{n}" for (kind, nm), n in c.most_common())
+
+
 def floor_breakdown(floors):
     hist = {}
     for f in floors:
@@ -1500,6 +1510,26 @@ def crate_action_for(crate_for, r):
 
 
 def commit(state, plan):
+    # Transactional: the crate-provisioning loop below MUTATES real state
+    # (mints crates via advance()+mutate, spending inventory and time) BEFORE
+    # the final affordability advance is known to succeed.  If a later step
+    # fails, every mutation so far must be undone — otherwise a failed commit
+    # LEAKS crates + inventory + time into authoritative state (e.g. the
+    # front-loaded smelter attempt minting a wood+stone crate, burning 224 wood,
+    # then failing on un-producible clay).  Snapshot up front; restore on any
+    # failure path so commit() is all-or-nothing.
+    snap_placed = state.copy_placed()
+    snap_crate = {k: list(v) for k, v in state.crate_for.items()}
+    snap_inv = dict(state.inv)
+    snap_t = state.t
+
+    def rollback():
+        state.placed = snap_placed
+        state.crate_for = snap_crate
+        state.inv = snap_inv
+        state.t = snap_t
+        return False
+
     for _ in range(2000):
         cost = combined_cost(plan)
         cr = crate_needed(cost, state.inv, state.crate_for)
@@ -1507,12 +1537,12 @@ def commit(state, plan):
             break
         ca = crate_action_for(state.crate_for, cr)
         if not advance(state, cost_of(ca)):
-            return False
+            return rollback()
         mutate(state.placed, state.crate_for, ca)
     else:
-        return False
+        return rollback()
     if not advance(state, combined_cost(plan)):
-        return False
+        return rollback()
     for a in plan:
         mutate(state.placed, state.crate_for, a)
     return True
@@ -1699,10 +1729,13 @@ def main():
                 deferred.add(name)
                 continue
             assert_positive(state, f"place {name}")
-            schedule.append((state.t, name, len(plan) - 1))
+            fixes = list(plan[1:])
+            schedule.append((state.t, name, fixes))
             placed_n = sum(1 for n in TARGET if len(state.placed[n]) >= TARGET[n])
             print(f"   [{placed_n:>2}/{len(TARGET)}] {fmt_dur(real_time(state.t)):>12}  place {name:<22} "
-                  f"(+{len(plan) - 1} fixes)", flush=True)
+                  f"(+{len(fixes)} fixes)", flush=True)
+            if VERBOSE and fixes:
+                print(f"            fixes: {fix_summary(fixes)}", flush=True)
             deferred.clear()
             progressed = True
             break
@@ -1731,8 +1764,10 @@ def main():
             return
 
     print("Schedule (cumulative time -> target placed):")
-    for ts, name, nfix in schedule:
-        print(f"   {fmt_dur(real_time(ts)):>12}  place {name:<22} (+{nfix} balancing actions)")
+    for ts, name, fixes in schedule:
+        print(f"   {fmt_dur(real_time(ts)):>12}  place {name:<22} (+{len(fixes)} balancing actions)")
+        if VERBOSE and fixes:
+            print(f"                fixes: {fix_summary(fixes)}")
     print(f"\n>>> Full target build placed in: {fmt_dur(real_time(state.t))}  "
           f"({sum(len(v) for v in state.placed.values())} buildings, "
           f"{sum(len(v) for v in state.crate_for.values())} crates)\n")
