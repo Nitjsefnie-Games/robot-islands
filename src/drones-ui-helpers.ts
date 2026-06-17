@@ -2,6 +2,7 @@
 // reachability gating and T5 path-mode range gating + fuel computation.
 
 import { MAX_FUEL_PER_DRONE } from './drones.js';
+import { corridorCells } from './discovery.js';
 
 export interface Point {
   readonly x: number;
@@ -80,4 +81,29 @@ export function popTrailingDuplicate(
     return waypoints.slice(0, n - 1);
   }
   return waypoints;
+}
+
+/** Union of stratification cells revealed by a drone corridor preview.
+ *  Builds the polyline `[origin, ...waypoints]` and, when `cursor` is
+ *  provided, appends it as a trailing preview point. Returns the union of
+ *  `corridorCells(..., scanRadius)` over every consecutive segment. Empty
+ *  set when the resulting path has fewer than 2 points. */
+export function scanPreviewCells(
+  origin: Point,
+  waypoints: ReadonlyArray<Point>,
+  cursor: Point | null,
+  scanRadius: number,
+): Set<string> {
+  const points: Array<Point> = [origin, ...waypoints];
+  if (cursor) points.push(cursor);
+  if (points.length < 2) return new Set();
+  const out = new Set<string>();
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1]!;
+    const b = points[i]!;
+    for (const key of corridorCells(a.x, a.y, b.x, b.y, scanRadius)) {
+      out.add(key);
+    }
+  }
+  return out;
 }

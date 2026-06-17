@@ -16,6 +16,7 @@ import {
   DRONE_SPEED_TILES_PER_SEC,
   DRONE_T5_SPEED_TILES_PER_SEC,
   DRONE_TIER_EFFICIENCY,
+  DRONE_TIER_SCAN_RADIUS,
   MAX_FUEL_PER_DRONE,
   T4_PULSE_FUEL_COST,
   dispatchDrone,
@@ -29,8 +30,10 @@ import {
   wouldExceedRange,
   fuelForPath,
   popTrailingDuplicate,
+  scanPreviewCells,
 } from './drones-ui-helpers.js';
 import { TILE_PX } from './island.js';
+import { CELL_SIZE_TILES, parseCellKey } from './discovery.js';
 import { fuelForTier } from './recipes.js';
 import { activeFloors } from './floor-levels.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
@@ -127,6 +130,10 @@ export interface DroneUiHandle {
    *  in world-tile space so the green/red trajectory hint stays correct
    *  at any zoom). Visibility managed internally by setLaunchMode. */
   readonly launchPreviewLayer: Container;
+  /** Container for the path-mode scan-corridor preview. Add to world (world-tile
+   *  space). Renders translucent green `CELL_PX` squares for the cells the
+   *  drone corridor would reveal. Visibility managed internally. */
+  readonly scanPreviewLayer: Container;
   /** Container for the selected-pad highlight outline. Add to world (world-tile
    *  space so it pans/zooms with the camera). Visibility managed internally by
    *  refresh(). */
@@ -346,7 +353,10 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   padSelect.addEventListener('change', () => {
     selectedPadId = padSelect.value || null;
     refresh(performance.now());
-    if (launchMode) repaintRangeRing();
+    if (launchMode) {
+      repaintRangeRing();
+      repaintScanPreview();
+    }
   });
   padStat.valueEl.appendChild(padSelect);
 
@@ -377,7 +387,10 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     selectedTier = Number(tierSelect.value) as DroneTier;
     waypointBuffer = []; // reset buffer on any tier switch
     refresh(performance.now());
-    if (launchMode) repaintRangeRing();
+    if (launchMode) {
+      repaintRangeRing();
+      repaintScanPreview();
+    }
   });
   tierStat.valueEl.appendChild(tierSelect);
 
@@ -404,7 +417,10 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     pathMode = pathCheckbox.checked;
     waypointBuffer = [];
     refresh(performance.now());
-    if (launchMode) repaintRangeRing();
+    if (launchMode) {
+      repaintRangeRing();
+      repaintScanPreview();
+    }
   });
   pathToggle.appendChild(pathCheckbox);
   const pathToggleText = document.createElement('span');
@@ -505,7 +521,9 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
       armBtn.style.background = 'rgba(245, 167, 66, 0.08)';
       reticleLayer.visible = true;
       launchPreviewLayer.visible = true;
+      scanPreviewLayer.visible = true;
       repaintRangeRing();
+      repaintScanPreview();
       rangeRingLayer.visible = true;
     } else {
       armBtn.textContent = '◇ ARM LAUNCH';
@@ -514,7 +532,9 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
       armBtn.style.background = 'var(--ri-elev)';
       reticleLayer.visible = false;
       launchPreviewLayer.visible = false;
+      scanPreviewLayer.visible = false;
       rangeRingLayer.visible = false;
+      repaintScanPreview();
     }
     deps.onLaunchModeChanged?.(on);
   }
@@ -634,6 +654,17 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   selectedPadHighlightLayer.visible = false;
   const selectedPadHighlightGfx = new Graphics();
   selectedPadHighlightLayer.addChild(selectedPadHighlightGfx);
+
+  // Pixi layer: path-mode scan-corridor preview (WORLD space).
+  // Renders translucent green cell squares for the corridor the drone would
+  // reveal. Visibility is tied to launch-mode + path-mode; cleared otherwise.
+  const scanPreviewLayer = new Container();
+  scanPreviewLayer.label = 'scan-preview';
+  scanPreviewLayer.visible = false;
+  const scanPreviewGfx = new Graphics();
+  scanPreviewLayer.addChild(scanPreviewGfx);
+  const CELL_PX = CELL_SIZE_TILES * TILE_PX;
+  const SCAN_PREVIEW_GREEN = 0x4ade80;
 
   function repaintSelectedPadHighlight(): void {
     selectedPadHighlightGfx.clear();
@@ -787,6 +818,29 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
       .stroke({ width: PREVIEW_LINE_WIDTH, color, alpha: 0.85 });
   }
 
+  /** Repaint the path-mode scan-corridor preview: translucent green
+   *  `CELL_PX` squares for every stratification cell the corridor would
+   *  reveal. Cleared when not in launch mode + path mode. */
+  function repaintScanPreview(): void {
+    scanPreviewGfx.clear();
+    if (!launchMode || !pathMode) {
+      scanPreviewLayer.visible = false;
+      return;
+    }
+    const spec = deps.getOriginSpec();
+    const padCentre = selectedPadCentre(spec, deps.getOrigin(), selectedPadId);
+    const originTile = { x: padCentre?.x ?? spec.cx, y: padCentre?.y ?? spec.cy };
+    const scanRadius = DRONE_TIER_SCAN_RADIUS[selectedTier];
+    const cells = scanPreviewCells(originTile, waypointBuffer, cursorTile, scanRadius);
+    for (const key of cells) {
+      const { cellX, cellY } = parseCellKey(key);
+      scanPreviewGfx
+        .rect(cellX * CELL_PX, cellY * CELL_PX, CELL_PX, CELL_PX)
+        .fill({ color: SCAN_PREVIEW_GREEN, alpha: 0.18 });
+    }
+    scanPreviewLayer.visible = cells.size > 0;
+  }
+
   /** Stroke a dashed line from `a` to `b` on the supplied Graphics.
    *  Pattern: 8px on, 4px off (world pixels — same units as the line). */
   function drawDashedSegment(
@@ -850,6 +904,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
       etaStat.valueEl.textContent = `${etaSec.toFixed(0)}s to target`;
       etaStat.valueEl.style.color = 'var(--ri-accent)';
     }
+    repaintScanPreview();
   }
   function hideReticleFn(): void {
     reticleGfx.position.set(-9999, -9999);
@@ -1219,6 +1274,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     repaintLedger(nowMs);
     repaintDroneLayer(nowMs);
     paintLaunchPreview();
+    repaintScanPreview();
     repaintSelectedPadHighlight();
   }
 
@@ -1256,6 +1312,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
         return { ok: false, reason: 'over-range' };
       }
       waypointBuffer.push(next);
+      repaintScanPreview();
       return { ok: true };
     }
     const originSpec = deps.getOriginSpec();
@@ -1310,6 +1367,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   function popWaypoint(): void {
     if (!pathMode) return;
     waypointBuffer.pop();
+    repaintScanPreview();
   }
 
   /** Finalize the path: drop trailing-duplicate (browser click+dblclick
@@ -1394,6 +1452,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     reticleLayer,
     rangeRingLayer,
     launchPreviewLayer,
+    scanPreviewLayer,
     selectedPadHighlightLayer,
   };
 }

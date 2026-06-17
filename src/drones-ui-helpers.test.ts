@@ -5,8 +5,10 @@ import {
   wouldExceedRange,
   fuelForPath,
   popTrailingDuplicate,
+  scanPreviewCells,
 } from './drones-ui-helpers.js';
 import { DRONE_TIER_EFFICIENCY, MAX_FUEL_PER_DRONE } from './drones.js';
+import { corridorCells } from './discovery.js';
 
 describe('tileDist', () => {
   it('returns 0 for identical points', () => {
@@ -156,5 +158,61 @@ describe('Fix 6.6: wouldExceedRange and fuelForPath respect efficiencyMul', () =
     expect(wouldExceedRange({ x: 0, y: 0 }, [{ x: 749, y: 0 }], { x: 750, y: 0 }, tierEfficiency)).toBe(false);
     expect(wouldExceedRange({ x: 0, y: 0 }, [{ x: 749, y: 0 }], { x: 751, y: 0 }, tierEfficiency, 1)).toBe(true);
     expect(wouldExceedRange({ x: 0, y: 0 }, [{ x: 749, y: 0 }], { x: 751, y: 0 }, tierEfficiency)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #125 — scan-corridor preview cells
+// ---------------------------------------------------------------------------
+
+describe('scanPreviewCells', () => {
+  const origin = { x: 0, y: 0 };
+  const target = { x: 20, y: 0 };
+
+  it('returns an empty set when the path has fewer than 2 points', () => {
+    expect(scanPreviewCells(origin, [], null, 2).size).toBe(0);
+    // A cursor with no committed waypoints still forms an origin → cursor segment.
+    expect(scanPreviewCells(origin, [], { x: 5, y: 0 }, 2).size).toBeGreaterThan(0);
+    // One committed waypoint forms an origin → waypoint segment.
+    expect(scanPreviewCells(origin, [{ x: 5, y: 0 }], null, 2).size).toBeGreaterThan(0);
+  });
+
+  it('covers the corridor cells for a straight two-point path', () => {
+    const result = scanPreviewCells(origin, [], target, 2);
+    const expected = new Set(corridorCells(origin.x, origin.y, target.x, target.y, 2));
+    expect(result).toEqual(expected);
+    expect(result.size).toBeGreaterThan(0);
+  });
+
+  it('extends coverage when a cursor point is appended', () => {
+    const wp = { x: 10, y: 0 };
+    const cursor = { x: 20, y: 0 };
+    const committed = scanPreviewCells(origin, [wp], null, 2);
+    const withCursor = scanPreviewCells(origin, [wp], cursor, 2);
+    expect(withCursor.size).toBeGreaterThan(committed.size);
+    for (const key of committed) {
+      expect(withCursor.has(key)).toBe(true);
+    }
+  });
+
+  it('unions cells from every segment of a multi-segment path', () => {
+    const wp1 = { x: 10, y: 0 };
+    const wp2 = { x: 10, y: 20 };
+    const result = scanPreviewCells(origin, [wp1, wp2], null, 2);
+    const expected = new Set([
+      ...corridorCells(origin.x, origin.y, wp1.x, wp1.y, 2),
+      ...corridorCells(wp1.x, wp1.y, wp2.x, wp2.y, 2),
+    ]);
+    expect(result).toEqual(expected);
+  });
+
+  it('widens the set as scanRadius increases', () => {
+    const farTarget = { x: 250, y: 0 };
+    const small = scanPreviewCells(origin, [], farTarget, 2);
+    const large = scanPreviewCells(origin, [], farTarget, 20);
+    expect(large.size).toBeGreaterThan(small.size);
+    for (const key of small) {
+      expect(large.has(key)).toBe(true);
+    }
   });
 });
