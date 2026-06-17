@@ -133,10 +133,13 @@ describe('resolveHeatAssignments — §5.2', () => {
     expect(res.assignedSource.get('bf')).toBe('cf');
   });
 
-  it('two consumers sharing one Coal Furnace → served count = 2', () => {
+  it('two consumers sharing one Coal Furnace → billing capped at furnace output', () => {
     // Coal Furnace 1×1 at (3,1) — east of blast furnace A.
     // Blast Furnace B sits at (4,0)..(6,2) — its west-border includes (3,0),
-    // (3,1),(3,2). The coal furnace at (3,1) is adjacent to both.
+    // (3,1),(3,2). The coal furnace at (3,1) is adjacent to both. Its 830 kW
+    // splits between them (415 each, throttle 415/3000≈0.138, both served).
+    // #114: billing is ∝ delivered heat, so a maxed furnace bills 830/830 = 1.0
+    // — NOT one-per-consumer; it cannot output more than its capacity.
     const buildings: PlacedBuilding[] = [
       { id: 'bf-a', defId: 'blast_furnace', x: 0, y: 0 },
       { id: 'bf-b', defId: 'blast_furnace', x: 4, y: 0 },
@@ -145,13 +148,16 @@ describe('resolveHeatAssignments — §5.2', () => {
     const res = resolveHeatAssignments(buildings);
     expect(res.hasHeat.get('bf-a')).toBe(true);
     expect(res.hasHeat.get('bf-b')).toBe(true);
-    expect(res.coalConsumersByFurnace.get('cf')).toBe(2);
+    expect(res.heatThrottleFactor.get('bf-a')).toBeCloseTo(415 / 3000, 3);
+    expect(res.coalConsumersByFurnace.get('cf')).toBeCloseTo(1, 5);
   });
 
-  it('free source overrides coal: consumer adjacent to BOTH → coalConsumers=0', () => {
+  it('free + coal AGGREGATE for one consumer (#114): free fills first, coal tops up', () => {
     // Blast Furnace at (0,0)..(2,2). Coal Furnace at (3,1). Geothermal Vent at
     // (-2,0)..(-1,1) — west border of blast furnace at column -1 intersects
-    // vent tiles (-1,0) and (-1,1). Both adjacent → free wins.
+    // vent tiles (-1,0) and (-1,1). Both adjacent. Pre-#114 free "won" and coal
+    // sat idle; now they SUM: GV gives 1000, coal tops up 830 (BF demand 3000),
+    // so the coal furnace IS billed (∝ delivered = 830/830 = 1.0).
     const buildings: PlacedBuilding[] = [
       { id: 'bf', defId: 'blast_furnace', x: 0, y: 0 },
       { id: 'cf', defId: 'coal_furnace', x: 3, y: 1 },
@@ -159,7 +165,9 @@ describe('resolveHeatAssignments — §5.2', () => {
     ];
     const res = resolveHeatAssignments(buildings);
     expect(res.hasHeat.get('bf')).toBe(true);
-    expect(res.coalConsumersByFurnace.size).toBe(0);
+    expect(res.heatThrottleFactor.get('bf')).toBeCloseTo(1830 / 3000, 3);
+    expect(res.coalConsumersByFurnace.get('cf')).toBeCloseTo(1, 5);
+    // assignedSource = largest contributor → the 1000 kW vent.
     expect(res.assignedSource.get('bf')).toBe('gv');
   });
 
@@ -187,37 +195,39 @@ describe('resolveHeatAssignments — §5.2', () => {
     expect(res.hasHeat.get('bf')).toBe(false);
   });
 
-  it('deterministic coal pick: lowest-id when multiple coal sources are adjacent', () => {
-    // Two coal furnaces flank the blast furnace on its east side. With
-    // both adjacent, §5.2 says pick the lowest cost-per-cycle, tie-break
-    // lowest building id. Both have the same coalPerCycle=1, so id breaks.
-    // "cf-a" < "cf-z" lexicographically, so cf-a wins.
+  it('aggregates multiple adjacent coal furnaces; assignedSource breaks ties by id', () => {
+    // Two coal furnaces flank the blast furnace on its east side, both adjacent.
+    // Pre-#114 only the lowest-id one was picked; now the BF (3000 kW) pools
+    // BOTH (830+830=1660, throttle 1660/3000≈0.553) — each maxed → billed 1.0.
+    // assignedSource is the largest contributor; equal here, so lowest id wins.
     const buildings: PlacedBuilding[] = [
       { id: 'bf', defId: 'blast_furnace', x: 0, y: 0 },
       { id: 'cf-z', defId: 'coal_furnace', x: 3, y: 2 },
       { id: 'cf-a', defId: 'coal_furnace', x: 3, y: 0 },
     ];
     const res = resolveHeatAssignments(buildings);
+    expect(res.heatThrottleFactor.get('bf')).toBeCloseTo(1660 / 3000, 3);
     expect(res.assignedSource.get('bf')).toBe('cf-a');
-    expect(res.coalConsumersByFurnace.get('cf-a')).toBe(1);
-    expect(res.coalConsumersByFurnace.has('cf-z')).toBe(false);
+    expect(res.coalConsumersByFurnace.get('cf-a')).toBeCloseTo(1, 5);
+    expect(res.coalConsumersByFurnace.get('cf-z')).toBeCloseTo(1, 5);
   });
 
-  it('coal pick prefers the lowest cost-per-cycle over the lowest id (§5.2)', () => {
-    // §5.2: "the source with the lowest cost-per-cycle bills (deterministic
-    // tie-break: lowest source building ID)". The pricey source (coalPerCycle
-    // 5) has the lexicographically LOWER id, so an id-only sort would pick it;
-    // the cost-first sort must pick the cheaper coal_furnace (coalPerCycle 1).
-    // Blast Furnace at (0,0)..(2,2): east border column 3 rows 0..2. Pricey
-    // source at (3,0); coal furnace at (3,2) — both adjacent.
+  it('fills the cheapest coal source first; pricier sits idle when capacity is ample (§5.2)', () => {
+    // §5.2 cost order: cheaper coalPerCycle is consumed before pricier. With a
+    // small consumer (coke_oven 60 kW) and two 830 kW furnaces, the cheaper one
+    // alone covers demand, so the pricey source bills nothing — even though it
+    // has the lexicographically LOWER id (proves cost beats id).
+    // Coke Oven 2×2 at (0,0)..(1,1): south border row 2 cols 0,1; east border
+    // col 2 rows 0,1. Pricey at (0,2); cheap at (2,0) — both adjacent.
     const buildings: PlacedBuilding[] = [
-      { id: 'bf', defId: 'blast_furnace', x: 0, y: 0 },
-      { id: 'aa-pricey', defId: '__test_pricey_coal_source' as any, x: 3, y: 0 },
-      { id: 'zz-cheap', defId: 'coal_furnace', x: 3, y: 2 },
+      { id: 'co', defId: 'coke_oven', x: 0, y: 0 },
+      { id: 'aa-pricey', defId: '__test_pricey_coal_source' as any, x: 0, y: 2 },
+      { id: 'zz-cheap', defId: 'coal_furnace', x: 2, y: 0 },
     ];
     const res = resolveHeatAssignments(buildings);
-    expect(res.assignedSource.get('bf')).toBe('zz-cheap');
-    expect(res.coalConsumersByFurnace.get('zz-cheap')).toBe(1);
+    expect(res.hasHeat.get('co')).toBe(true);
+    expect(res.assignedSource.get('co')).toBe('zz-cheap');
+    expect(res.coalConsumersByFurnace.get('zz-cheap')).toBeCloseTo(60 / 830, 4);
     expect(res.coalConsumersByFurnace.has('aa-pricey')).toBe(false);
   });
 
@@ -257,7 +267,8 @@ describe('resolveHeatAssignments — §5.2', () => {
     expect(res.hasHeat.get('co')).toBe(true);
     // EAF is pure-electric: not tracked by the heat resolver at all.
     expect(res.hasHeat.has('eaf')).toBe(false);
-    expect(res.coalConsumersByFurnace.get('cf')).toBe(1);
+    // #114: coke_oven (60 kW) on an 830 kW furnace bills ∝ delivered: 60/830.
+    expect(res.coalConsumersByFurnace.get('cf')).toBeCloseTo(60 / 830, 4);
   });
 
   it('Smelter (T1) is NOT a heat consumer — preserves the bootstrap chain', () => {
@@ -442,8 +453,9 @@ describe('heat — brownout below MIN_HEAT_FACTOR', () => {
     for (const id of ['bf-w', 'bf-n', 'bf-e']) {
       expect(res.hasHeat.get(id)).toBe(false);
     }
-    // Billing reflects SERVED consumers only: cf-ok bills 1, cf-starved 0.
-    expect(res.coalConsumersByFurnace.get('cf-ok')).toBe(1);
+    // Billing reflects SERVED, delivered heat: cf-ok serves the coke oven
+    // (60/830); cf-starved's three BFs all browned out → un-billed (absent).
+    expect(res.coalConsumersByFurnace.get('cf-ok')).toBeCloseTo(60 / 830, 4);
     expect(res.coalConsumersByFurnace.has('cf-starved')).toBe(false);
   });
 
@@ -462,5 +474,66 @@ describe('heat — brownout below MIN_HEAT_FACTOR', () => {
       expect(result.heatThrottleFactor.get(id)).toBeLessThan(MIN_HEAT_FACTOR);
       expect(result.hasHeat.get(id)).toBe(false);
     }
+  });
+});
+
+describe('heat — floor-scaling + M:N aggregation (#114)', () => {
+  it('four fresh coal furnaces jointly fully heat one blast furnace', () => {
+    // BF 3×3 at (0,0)..(2,2). Four 1×1 coal furnaces, one per border edge:
+    // E (3,0), W (-1,0), N (0,-1), S (0,3). 4 × 830 = 3320 ≥ 3000 → full heat.
+    const buildings: PlacedBuilding[] = [
+      { id: 'bf', defId: 'blast_furnace', x: 0, y: 0 },
+      { id: 'cf-e', defId: 'coal_furnace', x: 3, y: 0 },
+      { id: 'cf-w', defId: 'coal_furnace', x: -1, y: 0 },
+      { id: 'cf-n', defId: 'coal_furnace', x: 0, y: -1 },
+      { id: 'cf-s', defId: 'coal_furnace', x: 0, y: 3 },
+    ];
+    const res = resolveHeatAssignments(buildings);
+    expect(res.hasHeat.get('bf')).toBe(true);
+    expect(res.heatThrottleFactor.get('bf')).toBeCloseTo(1, 5);
+  });
+
+  it('one floor-4 coal furnace alone fully heats a blast furnace', () => {
+    // floorLevel 3 = displayed floor 4 → thermalKW × (1+3) = 830 × 4 = 3320.
+    const buildings: PlacedBuilding[] = [
+      { id: 'bf', defId: 'blast_furnace', x: 0, y: 0 },
+      { id: 'cf', defId: 'coal_furnace', x: 3, y: 1, floorLevel: 3 },
+    ];
+    const res = resolveHeatAssignments(buildings);
+    expect(res.hasHeat.get('bf')).toBe(true);
+    expect(res.heatThrottleFactor.get('bf')).toBeCloseTo(1, 5);
+    // Billing ∝ delivered: 3000 kW delivered / 830 thermalKW.
+    expect(res.coalConsumersByFurnace.get('cf')).toBeCloseTo(3000 / 830, 4);
+  });
+
+  it('floor-scaling is symmetric: floor-4 furnace + floor-4 BF reproduce the base ratio', () => {
+    // BF demand 3000×4 = 12000; furnace supply 830×4 = 3320 → 3320/12000,
+    // identical to the fresh 830/3000 ratio. Both sides scale together.
+    const buildings: PlacedBuilding[] = [
+      { id: 'bf', defId: 'blast_furnace', x: 0, y: 0, floorLevel: 3 },
+      { id: 'cf', defId: 'coal_furnace', x: 3, y: 1, floorLevel: 3 },
+    ];
+    const res = resolveHeatAssignments(buildings);
+    expect(res.heatThrottleFactor.get('bf')).toBeCloseTo(830 / 3000, 4);
+    expect(res.hasHeat.get('bf')).toBe(true);
+  });
+
+  it('boolean-heat consumer occupies zero capacity — does not starve a kW consumer', () => {
+    // A boolean-heat consumer (no heatDemandKW) and a blast furnace both border
+    // one floor-4 coal furnace (3320 kW). The boolean consumer bills +1 but
+    // takes NO thermal capacity, so the BF still gets its full 3000.
+    // Furnace 1×1 at (0,0). Boolean consumer 1×1 at (1,0) (east border).
+    // BF 3×3 at (-3,-1)..(-1,1): east border col 0 rows -1,0,1 → touches (0,0).
+    const buildings: PlacedBuilding[] = [
+      { id: 'cf', defId: 'coal_furnace', x: 0, y: 0, floorLevel: 3 },
+      { id: 'bc', defId: '__test_consumer_no_kw' as any, x: 1, y: 0 },
+      { id: 'bf', defId: 'blast_furnace', x: -3, y: -1 },
+    ];
+    const res = resolveHeatAssignments(buildings);
+    expect(res.hasHeat.get('bc')).toBe(true);
+    expect(res.hasHeat.get('bf')).toBe(true);
+    expect(res.heatThrottleFactor.get('bf')).toBeCloseTo(1, 5);
+    // billing = boolean +1, plus BF delivered 3000/830.
+    expect(res.coalConsumersByFurnace.get('cf')).toBeCloseTo(1 + 3000 / 830, 4);
   });
 });
