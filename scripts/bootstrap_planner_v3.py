@@ -268,6 +268,10 @@ BUILDINGS = {
                    "power": -70, "cycle_s": 28666.4,
                    "in": {"iron_ingot": 5, "wood": 10, "bolt": 5}, "out": {"foundation_kit": 1},
                    "category": "manufacturing", "clusters": True, "tier": 1},
+    "slag_reprocessor": {"cost": {"concrete": 8000, "stone": 6000, "iron_ingot": 2000,
+                            "gear": 300, "copper_ingot": 400}, "power": -100, "cycle_s": 8322.5,
+                   "in": {"slag": 10}, "out": {"gold_ore": 1, "silver_ore": 1, "rare_earth": 1},
+                   "category": "smelting", "clusters": True, "tier": 2},
     "crate":      {"cost": {"wood": 80, "stone": 30}, "power": 0, "cycle_s": None,
                    "in": {}, "out": {}, "category": "storage", "clusters": False, "tier": 1},
 }
@@ -283,7 +287,7 @@ TERRAIN_CAPS = {
     "evaporator": 999, "crude_oil_cracker": 999, "chemical_reactor": 999,
     "chlor_alkali_plant": 999, "lubricant_refinery": 999, "wastewater_treatment": 999,
     "biofuel_plant": 999, "antenna_t2": 999, "dronepad": 999, "lighthouse_t1": 999,
-    "kit_assembler": 999,
+    "kit_assembler": 999, "slag_reprocessor": 999,
     "windmill": 999, "smelter": 999, "copper_smelter": 999, "coke_oven": 999,
     "blast_furnace": 999, "steel_mill": 999, "steel_mill_scrap": 999,
     "brick_kiln": 999, "limekiln": 999, "cement_mill": 999, "concrete_plant": 999,
@@ -311,6 +315,7 @@ STORAGE_CAT = {
     "asphalt": "liquid_gas", "salt": "dry_goods", "sulfur": "dry_goods",
     "chlorine": "liquid_gas", "sodium_hydroxide": "liquid_gas",
     "calcium_sulfonate": "dry_goods", "lubricant": "liquid_gas", "biofuel": "liquid_gas",
+    "gold_ore": "dry_goods", "silver_ore": "dry_goods", "rare_earth": "dry_goods",
 }
 CAT_DEFAULT_CAP = {"dry_goods": 100, "liquid_gas": 100, "temp_sensitive": 50,
                    "components": 20, "rare": 1}
@@ -351,7 +356,7 @@ TARGET = {
     "chemical_reactor": 1, "chlor_alkali_plant": 1, "lubricant_refinery": 1,
     # biofuel + infrastructure
     "biofuel_plant": 1, "antenna_t2": 1, "dronepad": 1, "lighthouse_t1": 1,
-    "kit_assembler": 1,
+    "kit_assembler": 1, "slag_reprocessor": 1,
 }
 
 NEEDED_RES = {r for b in BUILDINGS.values()
@@ -367,19 +372,26 @@ for _b in BUILDINGS:
 TILE_LOCKED_RES = {r for r, prods in PRODUCERS_OF.items()
                    if all(TERRAIN_CAPS[p] < GRASS_CAP for p in prods)}
 
-# §4.6 force-run targets: a "waste" byproduct is produced but never consumed as
-# a recipe input nor spent as a placement cost (slag, co, co2, mill_scale,
-# water_vapor, wood_tar, hydrogen, refinery_gas, argon, nitrogen, …). Such a
-# byproduct fills its small cap and would otherwise cap-gate its whole building
-# to 0 — stalling the USEFUL output (e.g. slag/co capping stalls smelter's
-# iron_ingot). So any building emitting a waste byproduct is force-run
-# (ignoreOutputCap): it keeps producing, the overflow byproduct is voided.
-# Pure-useful producers (concrete/cement/…) are NOT force-run, so they still
-# stockpile into crate-backed caps. This is the "force-run only where it helps".
-_CONSUMED_RES = ({r for b in BUILDINGS.values() for r in b["in"]}
-                 | {r for b in BUILDINGS.values() for r in b["cost"]})
-WASTE_RES = {r for b in BUILDINGS.values() for r in b["out"]} - _CONSUMED_RES
-FORCE_RUN = {n for n in BUILDINGS if any(r in WASTE_RES for r in BUILDINGS[n]["out"])}
+# §4.6 force-run targets. A resource is a PRIMARY product if some building makes
+# it as its SOLE output (a dedicated producer — cement, concrete, quicklime,
+# salt, gear, bolt, …) OR it is a placement cost we stockpile (steel_beam,
+# concrete, iron_ingot, gear, pipe, …). Everything else a building emits is a
+# BYPRODUCT (slag, co, co2, mill_scale, water_vapor, gold_ore, NaOH, …) — over-
+# produced relative to any minor consumer, so it fills its small cap and would
+# cap-gate its whole building to 0, stalling the useful output. A building that
+# emits ANY non-primary output is therefore force-run (ignoreOutputCap): it keeps
+# running and the byproduct overflow is voided.
+#   Why not "never consumed"?  slag_reprocessor lightly consumes slag, but one
+# reprocessor can't absorb the whole steel chain's slag — so slag must stay a
+# voidable byproduct or steel_mill_scrap (slag its only byproduct) loses force-run
+# and the slag cap stalls the steel chain. Dedicated producers (cement_mill,
+# limekiln's quicklime, evaporator, …) keep their SOLE useful output un-voided and
+# throttle to demand instead of wasting tile-locked inputs.
+_PLACEMENT_RES = {r for b in BUILDINGS.values() for r in b["cost"]}
+_SOLE_OUTPUT_RES = {next(iter(b["out"])) for b in BUILDINGS.values() if len(b["out"]) == 1}
+PRIMARY_RES = _PLACEMENT_RES | _SOLE_OUTPUT_RES
+FORCE_RUN = {n for n in BUILDINGS
+             if any(r not in PRIMARY_RES for r in BUILDINGS[n]["out"])}
 
 _CATEGORY = {n: BUILDINGS[n]["category"] for n in BUILDINGS}
 _CLUSTERED = {n: BUILDINGS[n]["clusters"] for n in BUILDINGS}
