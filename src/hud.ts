@@ -811,7 +811,7 @@ export function mountHud(
     const need = xpForLevel(state.level + 1);
     const xpPct = need > 0 ? Math.min(100, Math.round((state.xp / need) * 100)) : 100;
     if (tier >= 5) {
-      setXpK(`Level ${state.level} · MAX TIER`);
+      setXpK(`Level ${state.level} · MAX ISLAND TIER`);
     } else {
       const gap = NEXT_TIER_LEVEL[tier] - state.level;
       setXpK(`Level ${state.level} · ${gap} to T${tier + 1}`);
