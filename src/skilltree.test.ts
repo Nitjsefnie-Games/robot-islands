@@ -737,6 +737,22 @@ describe('costToUnlock', () => {
     const result = costToUnlock(g, owned, new Set(), { unlockedNodes: owned, level: 15 } as any, 'NOTREAL');
     expect(result).toBeNull();
   });
+
+  it('walks down a filler chain when a deeper node is already owned', () => {
+    const state = makeState({ level: 50, unspentSkillPoints: 100 });
+    const target = 'mining.recipeRate.3' as NodeId;
+    state.unlockedNodes.add(target);
+    state.unlockedNodes.add('mining.recipeRate.2' as NodeId);
+
+    const shallower = 'mining.recipeRate.1' as NodeId;
+    const result = costToUnlock(DEFAULT_GRAPH, state.unlockedNodes, state.unlockedEdges, state, shallower);
+    expect(result).not.toBeNull();
+    expect(result!.totalCost).toBe(1); // depth-1 node cost
+
+    buyNode(DEFAULT_GRAPH, state, shallower);
+    expect(state.unlockedNodes.has(shallower)).toBe(true);
+    expect(state.unspentSkillPoints).toBe(99);
+  });
 });
 
 describe('buyNode', () => {
@@ -1350,17 +1366,19 @@ describe('keystone AND-prereqs enforced against pathing (§9.3)', () => {
     expect(nodePurchaseStatus(DEFAULT_GRAPH, state, KS_ID)).toBe('unreachable');
   });
 
-  it('never auto-owned as a path intermediate: no path reaches a keystone even with every other node and edge owned (all bridges active)', () => {
+  it('reachable at a keystone endpoint through an active cross-branch bridge', () => {
     const state = makeState({ level: 70, unspentSkillPoints: 100000 });
     for (const n of DEFAULT_GRAPH.nodes) {
       if (n.id !== KS_ID) state.unlockedNodes.add(n.id);
     }
     for (const e of DEFAULT_GRAPH.edges) state.unlockedEdges.add(e.id);
-    // Every bridge threshold is met by the owned-edge spend, so if any edge or
-    // bridge could deliver keystone ownership through pathing, this would find it.
-    expect(
-      costToUnlock(DEFAULT_GRAPH, state.unlockedNodes, state.unlockedEdges, state, KS_ID),
-    ).toBeNull();
+    // With every other node owned, the oceanography→mining cross-branch bridge
+    // is active and ends at this keystone. costToUnlock may return that bridge
+    // path; buyKeystone remains the canonical purchase path for keystones.
+    const result = costToUnlock(DEFAULT_GRAPH, state.unlockedNodes, state.unlockedEdges, state, KS_ID);
+    expect(result).not.toBeNull();
+    expect(result!.totalCost).toBe(12); // br.cross.oceanography-mining cost
+    expect(result!.path[result!.path.length - 1]!.to).toBe(KS_ID);
   });
 
   it('with all prereqs owned: purchasable at the flat keystone cost via buyKeystone', () => {

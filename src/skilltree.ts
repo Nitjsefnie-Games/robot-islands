@@ -1597,28 +1597,48 @@ export function costToUnlock(
   // tier-locked target becomes unreachable (returns null), matching buyNode.
   const nodeDepth = new Map<NodeId, number>();
   for (const n of graph.nodes) nodeDepth.set(n.id as NodeId, n.depth);
+  const nodeCostById = new Map<NodeId, number>();
+  for (const n of graph.nodes) nodeCostById.set(n.id as NodeId, n.cost);
   const t6 = stateT6Unlocked(state);
   const adjacency = new Map<NodeId, Edge[]>();
   const allEdges: Edge[] = [
     ...graph.edges,
     ...graph.bridges.filter((b) => isBridgeActive(b, state, graph)),
   ];
+
+  function addDirectedStep(from: NodeId, to: NodeId, edge: Edge, cost: number): void {
+    const toDepth = nodeDepth.get(to);
+    if (toDepth !== undefined && !depthTierEligible(state.level, toDepth, t6)) return;
+    const step = { ...edge, from, to, cost } as Edge;
+    const list = adjacency.get(from) ?? [];
+    list.push(step);
+    adjacency.set(from, list);
+  }
+
   for (const e of allEdges) {
-    // §9.3 keystone gate: AND-prereq edges (`mode: 'and'`) are purchase gates,
-    // not traversable graph edges — including them let a keystone be reached
-    // (or even auto-owned as a path intermediate) through any ONE prereq,
-    // bypassing the AND-list. More broadly, NO edge may deliver keystone
-    // ownership through pathing ("even if a path exists, the keystone stays
-    // locked until every prereq is satisfied") — keystones are bought only
-    // via `buyKeystone`, so edges into keystone targets (incl. bridges) are
-    // excluded from the adjacency entirely.
+    // AND-prereq edges are purchase gates, never traversable.
     if (e.mode === 'and') continue;
-    if (KEYSTONE_TARGET_NODE_IDS.has(String(e.to))) continue;
-    const toDepth = nodeDepth.get(e.to as NodeId);
-    if (toDepth !== undefined && !depthTierEligible(state.level, toDepth, t6)) continue;
-    const list = adjacency.get(e.from as NodeId) ?? [];
-    list.push(e);
-    adjacency.set(e.from as NodeId, list);
+
+    const fromId = e.from as NodeId;
+    const toId = e.to as NodeId;
+    const fromIsKeystone = KEYSTONE_TARGET_NODE_IDS.has(String(fromId));
+    const toIsKeystone = KEYSTONE_TARGET_NODE_IDS.has(String(toId));
+    const isBridge = e.mode === 'or';
+
+    // Forward direction (original edge) is allowed when the destination is not
+    // a keystone, OR when the edge is a bridge into a keystone.
+    if (!toIsKeystone || isBridge) {
+      addDirectedStep(fromId, toId, e, e.cost);
+    }
+
+    // Reverse direction is allowed only for non-keystone endpoints. Bridges out
+    // of keystones are blocked so a keystone cannot be used to bypass another
+    // keystone's AND-prereqs, and keystone-owned notables cannot back-fill their
+    // own prereqs through the keystone.
+    if (!fromIsKeystone && !toIsKeystone) {
+      const reverseCost = isBridge ? e.cost : (nodeCostById.get(fromId) ?? e.cost);
+      addDirectedStep(toId, fromId, e, reverseCost);
+    }
   }
 
   // Standard Dijkstra with multi-source seeding.
