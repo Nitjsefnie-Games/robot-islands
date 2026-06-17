@@ -20,6 +20,7 @@ import {
   createRouteFromBuilding,
   eligibleTransportBuildings,
   islandHasTeleporterPad,
+  retargetRoute as retargetRoutePure,
   type Route,
 } from './routes.js';
 import { type IslandSpec, type WorldState } from './world.js';
@@ -753,6 +754,33 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
         refresh(performance.now());
       });
       top.appendChild(delBtn);
+
+      // §2.4 retarget — drain to the current target, then re-route to a new
+      // island. Candidates: every OTHER populated island (not the source, not
+      // the current destination). Picking one fires the retarget mutation.
+      const reSel = document.createElement('select');
+      reSel.title = 'retarget — drains in-flight cargo to the current target, then re-routes to a new island';
+      styled(reSel, ['font-size: 9px', 'max-width: 96px', 'background: transparent', `color: ${'var(--ri-accent)'}`].join(';'));
+      const ph = document.createElement('option');
+      ph.value = '';
+      ph.textContent = '↪ retarget…';
+      reSel.appendChild(ph);
+      for (const isl of deps.world.islands) {
+        if (!isl.populated) continue;
+        if (isl.id === route.from || isl.id === route.to) continue;
+        const opt = document.createElement('option');
+        opt.value = isl.id;
+        opt.textContent = islandLabel(isl.id);
+        reSel.appendChild(opt);
+      }
+      reSel.addEventListener('change', async () => {
+        const target = reSel.value;
+        if (!target) return;
+        if (deps.gateway) await deps.gateway.retargetRoute(route.id, target);
+        else retargetRoutePure(deps.world, route.id, target);
+        refresh(performance.now());
+      });
+      top.appendChild(reSel);
     }
 
     const mid = document.createElement('div');

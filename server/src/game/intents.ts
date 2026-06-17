@@ -42,6 +42,7 @@ import { dispatchDrone, firePulse, type DroneTier } from '../../../src/drones.js
 import {
   createRouteFromBuilding,
   drainRoutesForBuilding,
+  retargetRoute,
   routeProfileForBuilding,
   islandHasTeleporterPad,
   reorderPriorityList,
@@ -865,6 +866,22 @@ export const INTENTS: Record<string, IntentHandler> = {
         route.draining = true;
       }
       return { ok: true };
+    },
+  },
+
+  // retarget-route — §2.4 drain a route and re-create it to a new destination.
+  // Player supplies { routeId, toIslandId }. All eligibility (endpoints
+  // populated, transport building present, teleporter-pad gate) and the
+  // drain-old + spawn-new logic live in the shared pure `retargetRoute`, so
+  // LOCAL and the server agree exactly.
+  'retarget-route': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { routeId, toIslandId } = payload;
+      if (typeof routeId !== 'string') return { ok: false, error: 'routeId must be a string' };
+      if (typeof toIslandId !== 'string') return { ok: false, error: 'toIslandId must be a string' };
+      const r = retargetRoute(game.world, routeId, toIslandId);
+      return r.ok ? { ok: true } : { ok: false, error: r.error };
     },
   },
 

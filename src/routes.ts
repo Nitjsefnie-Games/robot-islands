@@ -1122,6 +1122,67 @@ export function createRouteFromBuilding(
   };
 }
 
+export type RetargetResult =
+  | { readonly ok: true; readonly route: Route }
+  | { readonly ok: false; readonly error: string };
+
+/** Retarget an existing route to a different destination island.
+ *
+ *  In-flight batches carry no destination of their own (`deliverArrivals`
+ *  reads the route's live `to`), so we CANNOT just flip `to` while cargo is
+ *  airborne — it would misdeliver. Instead we drain the old route (its
+ *  in-flight cargo finishes to the OLD destination, then `tickRoutes` prunes
+ *  it — no cargo lost; mirrors `deleteRoute`) and spawn a fresh route from the
+ *  same source building to `newToIslandId`, inheriting the old route's cargo
+ *  list and split mode so the player's configuration carries over. A route
+ *  with nothing in flight is removed immediately rather than left draining.
+ *
+ *  Pure except for the mutation of `world.routes`. Returns the new route, or a
+ *  reason on rejection (mirrors the create-route eligibility checks). */
+export function retargetRoute(
+  world: WorldState,
+  routeId: string,
+  newToIslandId: string,
+): RetargetResult {
+  const old = world.routes.find((r) => r.id === routeId);
+  if (!old) return { ok: false, error: 'route not found' };
+  if (old.draining) return { ok: false, error: 'route is draining' };
+  if (old.to === newToIslandId) return { ok: false, error: 'route already targets that island' };
+  if (old.sourceBuildingId === undefined) {
+    return { ok: false, error: 'legacy route has no source building to retarget' };
+  }
+  const fromSpec = world.islands.find((s) => s.id === old.from);
+  if (!fromSpec) return { ok: false, error: 'unknown from island' };
+  const toSpec = world.islands.find((s) => s.id === newToIslandId);
+  if (!toSpec) return { ok: false, error: 'unknown to island' };
+  if (!fromSpec.populated) return { ok: false, error: 'from island is not populated' };
+  if (!toSpec.populated) return { ok: false, error: 'to island is not populated' };
+  const building = fromSpec.buildings.find((b) => b.id === old.sourceBuildingId);
+  if (!building) return { ok: false, error: 'source building not found' };
+  const profile = routeProfileForBuilding(building.defId);
+  if (profile === null) return { ok: false, error: 'building is not a transport building' };
+  if (profile.type === 'teleporter' && !islandHasTeleporterPad(toSpec)) {
+    return { ok: false, error: 'destination has no teleporter pad' };
+  }
+  const dx = fromSpec.cx - toSpec.cx;
+  const dy = fromSpec.cy - toSpec.cy;
+  const dist = Math.sqrt(dx * dx + dy * dy);
+  const next = createRouteFromBuilding(building, old.from, newToIslandId, null, dist);
+  if (next === null) return { ok: false, error: 'route could not be created' };
+  // Carry the player's cargo config + split mode onto the retargeted route.
+  next.cargo = old.cargo.map((c) => ({ ...c }));
+  next.mode = old.mode;
+  world.routes.push(next);
+  // Drain the old route (or drop it outright if nothing is in flight).
+  if (old.inFlight.length === 0) {
+    const idx = world.routes.indexOf(old);
+    if (idx >= 0) world.routes.splice(idx, 1);
+  } else {
+    old.draining = true;
+  }
+  return { ok: true, route: next };
+}
+
 /** Soft-delete every route owned by `buildingId` (set on demolish). The
  *  routes finish their in-flight cargo, then `tickRoutes` prunes them.
  *  Returns the number of routes newly set to draining. */
