@@ -539,9 +539,13 @@ export const INTENTS: Record<string, IntentHandler> = {
   // calling buyNode. This validates unspentSkillPoints covers the path cost and
   // the depth→tier gate, on server state.
   //
-  // Bridge-reachable keystones are accepted here: nodePurchaseStatus returns
-  // 'purchasable' for a keystone whose active bridge source is owned, so the
-  // same pre-check gates them without a special case.
+  // Keystone AND-path exclusion: a keystone whose AND prereqs are satisfied
+  // must be bought via `buy-keystone`, not this intent. `nodePurchaseStatus`
+  // reports such keystones as 'purchasable', but `buyNode` has no keystone
+  // branch and would throw 'unreachable'. It also prevents a client from
+  // underpaying when a bridge into the keystone exists with a lower cost than
+  // the flat keystone cost. Only bridge-OR keystones (AND prereqs unmet but an
+  // active bridge path exists) proceed through the status check and `buyNode`.
   'unlock-skill-node': {
     apply(game: LiveGame, payload: unknown): IntentResult {
       if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
@@ -551,6 +555,12 @@ export const INTENTS: Record<string, IntentHandler> = {
       const island = resolveIsland(game, islandId);
       if (!island) return { ok: false, error: 'unknown island' };
       const { state } = island;
+      // AND-ready keystones are the `buy-keystone` intent's surface, not this
+      // one. Reject before nodePurchaseStatus so buyNode never sees them.
+      const ks = keystonePrereqFor(nodeId);
+      if (ks !== undefined && canBuyKeystone(ks, state)) {
+        return { ok: false, error: 'keystone not purchasable via this intent' };
+      }
       // Authoritative purchasability pre-check (anti-cheat): SP sufficiency +
       // depth→tier gate + reachability (including bridge-reachable keystones),
       // all recomputed from server state. Only a 'purchasable' status proceeds.

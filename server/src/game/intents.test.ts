@@ -919,6 +919,22 @@ describe('unlock-skill-node', () => {
     );
   });
 
+  it('illegal: an AND-ready keystone is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (_world, islandStates) => {
+      const state = islandStates.get('home')!;
+      state.level = 50;
+      state.unspentSkillPoints = 100;
+      state.unlockedNodes.add('mining.notable.deepVein');
+      state.unlockedNodes.add('mining.notable.efficientDrills');
+    });
+    await expectRejectNoChange(
+      uid,
+      { type: 'unlock-skill-node', payload: { islandId: 'home', nodeId: 'mining.keystone.veinmaster' }, seq: 2 },
+      now,
+    );
+  });
+
   it('legal: a keystone reachable via an active bridge can be bought', async () => {
     const now = Date.now();
     const uid = await aUserWithModifiedGame(now, (_world, islandStates) => {
@@ -947,6 +963,10 @@ describe('unlock-skill-node', () => {
       now,
     );
     expect(ack).toMatchObject({ ok: true, seq: 2 });
+
+    const state = await homeState(uid);
+    expect(state.unlockedNodes).toContain('electronics.keystone.quantumYield');
+    expect(state.unspentSkillPoints).toBe(1_000_000 - 12); // bridge edge cost
   });
 
   // Migration regression (Fix 2): mini-tree nodes only exist in `effectiveGraph`
