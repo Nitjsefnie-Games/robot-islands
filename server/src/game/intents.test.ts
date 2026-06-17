@@ -21,6 +21,7 @@ import type { SaveSnapshot } from '../../../src/persistence.js';
 import { serializeWorld } from '../../../src/persistence.js';
 import { createNewGame } from '../../../src/new-game.js';
 import { makeInitialIslandState } from '../../../src/world.js';
+import { DEFAULT_GRAPH } from '../../../src/skilltree.js';
 
 const pool = testPool();
 beforeEach(() => resetDb(pool));
@@ -908,24 +909,44 @@ describe('unlock-skill-node', () => {
     );
   });
 
-  it('illegal: a keystone target is rejected, save unchanged', async () => {
+  it('illegal: a keystone without AND prereqs or bridge path is rejected', async () => {
     const now = Date.now();
-    // Even with ample SP, a keystone node must NOT be purchasable via this
-    // intent: buyNode throws for keystones (they are bought via buyKeystone),
-    // and the no-throw handler contract forbids relying on the runner backstop.
-    // The handler rejects keystones explicitly before any buyNode path.
     const uid = await aUserAtLevel5(100);
-    const ack = await applyIntent(
-      pool, uid,
+    await expectRejectNoChange(
+      uid,
       { type: 'unlock-skill-node', payload: { islandId: 'home', nodeId: 'mining.keystone.veinmaster' }, seq: 2 },
       now,
     );
-    expect(ack.ok).toBe(false);
-    await expectRejectNoChange(
-      uid,
-      { type: 'unlock-skill-node', payload: { islandId: 'home', nodeId: 'mining.keystone.veinmaster' }, seq: 9 },
+  });
+
+  it('legal: a keystone reachable via an active bridge can be bought', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (_world, islandStates) => {
+      const state = islandStates.get('home')!;
+      state.level = 70;
+      state.unspentSkillPoints = 1_000_000;
+      // Own bridge source and many nodes to satisfy thresholds.
+      const target = 'electronics.keystone.quantumYield';
+      const andPrereqs = new Set<string>([
+        'electronics.notable.cleanRoom',
+        'electronics.notable.quantumEtching',
+      ]);
+      state.unlockedNodes.add('robotics.keystone.parallelConstruction');
+      for (const n of DEFAULT_GRAPH.nodes) {
+        if (n.id === target) continue;
+        if (andPrereqs.has(n.id)) continue;
+        if (n.subPath === 'mining' || n.subPath === 'forestry' || n.subPath === 'drilling' ||
+            n.subPath === 'smelting' || n.subPath === 'chemistry' || n.subPath === 'electronics') {
+          state.unlockedNodes.add(n.id);
+        }
+      }
+    });
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'unlock-skill-node', payload: { islandId: 'home', nodeId: 'electronics.keystone.quantumYield' }, seq: 2 },
       now,
     );
+    expect(ack).toMatchObject({ ok: true, seq: 2 });
   });
 
   // Migration regression (Fix 2): mini-tree nodes only exist in `effectiveGraph`
