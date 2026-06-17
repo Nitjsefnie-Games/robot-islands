@@ -304,6 +304,10 @@ BUILDINGS = {
                    "cycle_s": 2665978.7, "in": {"steel": 28, "lubricant": 3},
                    "out": {"bearing": 100, "mill_scale": 1},
                    "category": "manufacturing", "clusters": True, "tier": 2},
+    "metal_rolling_mill": {"cost": {"concrete": 12000, "stone": 7000, "iron_ingot": 4000,
+                            "gear": 250, "clay": 2500, "copper_ingot": 400}, "power": -200,
+                   "cycle_s": 3784, "in": {"steel": 11}, "out": {"wire": 20, "mill_scale": 1},
+                   "category": "manufacturing", "clusters": True, "tier": 2},
     "spring_press": {"cost": {"concrete": 8000, "stone": 5000, "iron_ingot": 2500, "gear": 150,
                             "clay": 1500, "copper_ingot": 250}, "power": -60, "cycle_s": 945992.4,
                    "in": {"steel": 11}, "out": {"spring": 50, "mill_scale": 1},
@@ -326,6 +330,7 @@ TERRAIN_CAPS = {
     "kit_assembler": 999, "slag_reprocessor": 999, "silicon_crusher": 999,
     "lime_slaker": 999, "mortar_mixer": 999, "naphtha_cracker": 999,
     "sulfuric_acid_plant": 999, "hcl_plant": 999, "bearing_assembler": 999, "spring_press": 999,
+    "metal_rolling_mill": 999,
     "windmill": 999, "smelter": 999, "copper_smelter": 999, "coke_oven": 999,
     "blast_furnace": 999, "steel_mill": 999, "steel_mill_scrap": 999,
     "brick_kiln": 999, "limekiln": 999, "cement_mill": 999, "concrete_plant": 999,
@@ -356,7 +361,7 @@ STORAGE_CAT = {
     "gold_ore": "dry_goods", "silver_ore": "dry_goods", "rare_earth": "dry_goods",
     "silicon": "components", "slaked_lime": "dry_goods", "mortar": "dry_goods",
     "naphtha": "liquid_gas", "aviation_kerosene_crude": "liquid_gas", "diesel": "liquid_gas",
-    "sulfuric_acid": "liquid_gas", "hydrochloric_acid": "liquid_gas", "bearing": "components", "spring": "components",
+    "sulfuric_acid": "liquid_gas", "hydrochloric_acid": "liquid_gas", "bearing": "components", "spring": "components", "wire": "components",
 }
 CAT_DEFAULT_CAP = {"dry_goods": 100, "liquid_gas": 100, "temp_sensitive": 50,
                    "components": 20, "rare": 1}
@@ -400,6 +405,7 @@ TARGET = {
     "kit_assembler": 1, "slag_reprocessor": 1, "silicon_crusher": 1,
     "lime_slaker": 1, "mortar_mixer": 1, "naphtha_cracker": 1,
     "sulfuric_acid_plant": 1, "hcl_plant": 1, "bearing_assembler": 1, "spring_press": 1,
+    "metal_rolling_mill": 1,
 }
 
 NEEDED_RES = {r for b in BUILDINGS.values()
