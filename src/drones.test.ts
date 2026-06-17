@@ -15,6 +15,7 @@ import {
   dispatchDrone,
   droneCurrentPosition,
   firePulse,
+  isTerminalDroneStatus,
   pointToSegmentDistSq,
   probabilityBiasForIsland,
   tickDrones,
@@ -174,6 +175,19 @@ describe('pointToSegmentDistSq', () => {
     expect(pointToSegmentDistSq(0, 0, 3, 4, 3, 4)).toBe(25);
     // P at the same point → 0.
     expect(pointToSegmentDistSq(3, 4, 3, 4, 3, 4)).toBe(0);
+  });
+});
+
+describe('isTerminalDroneStatus', () => {
+  it('returns true for terminal statuses (lost, returned, stranded)', () => {
+    expect(isTerminalDroneStatus('lost')).toBe(true);
+    expect(isTerminalDroneStatus('returned')).toBe(true);
+    expect(isTerminalDroneStatus('stranded')).toBe(true);
+  });
+
+  it('returns false for active and undefined statuses', () => {
+    expect(isTerminalDroneStatus('active')).toBe(false);
+    expect(isTerminalDroneStatus(undefined)).toBe(false);
   });
 });
 

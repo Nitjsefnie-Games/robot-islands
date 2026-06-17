@@ -91,6 +91,12 @@ export interface Drone {
   readonly doomedAtMs?: number;
 }
 
+/** Shared terminal-status predicate. Drone UI and tick logic both need to
+ *  treat `lost`, `returned`, and `stranded` drones as finished flights. */
+export function isTerminalDroneStatus(status: Drone['status']): boolean {
+  return status === 'lost' || status === 'returned' || status === 'stranded';
+}
+
 /** Drone fuel efficiency — round-trip tiles per unit of fuel, per drone
  *  tier. Tiered ramp (base 3, +3 per tier): a drone's reach scales with
  *  its tier, and a light scout drone out-ranges ship/helicopter per fuel.
@@ -711,7 +717,7 @@ export function tickDrones(
   for (const d of world.drones) {
     // Terminal-status drones are kept in the array for UI/history but
     // no longer participate in reveals or weather rolls.
-    if (d.status === 'lost' || d.status === 'returned' || d.status === 'stranded') {
+    if (isTerminalDroneStatus(d.status)) {
       remaining.push(d);
       continue;
     }
