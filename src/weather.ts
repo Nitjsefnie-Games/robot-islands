@@ -1,5 +1,9 @@
+import { BUILDING_DEFS } from './building-defs.js';
+import { isOperationalBuilding } from './building-operational.js';
 import { CELL_SIZE_TILES } from './constants.js';
 import { dayPhaseName } from './daynight.js';
+import { LIGHTHOUSE_VISION_RADII } from './lighthouse.js';
+import { shapeHeight, shapeWidth } from './shape-mask.js';
 import { makeSeededRng } from './rng.js';
 import type { VisionSource } from './vision-source.js';
 import {
@@ -478,6 +482,24 @@ export function computeWeatherVisionSources(
       cy: spec.cy,
       radius,
     });
+    // 2b) Lighthouse circles — current-weather visibility follows general
+    //     vision (§2.6 / §vision): wherever a Lighthouse reveals the map you
+    //     can also read the current weather, so the overlay must cover those
+    //     cells too. Mirrors `computeVisionSources` step 2 (lighthouse.ts).
+    //     Current-cycle only — the forecast still requires an Advanced
+    //     Weather Station, so these do NOT feed `forecast`.
+    for (const b of spec.buildings) {
+      if (!isOperationalBuilding(b)) continue;
+      const lhRadius = LIGHTHOUSE_VISION_RADII[b.defId];
+      if (lhRadius === undefined) continue;
+      const def = BUILDING_DEFS[b.defId];
+      current.push({
+        kind: 'circle',
+        cx: spec.cx + b.x + shapeWidth(def.footprint) / 2,
+        cy: spec.cy + b.y + shapeHeight(def.footprint) / 2,
+        radius: lhRadius,
+      });
+    }
     // 3) Forecast circle (Advanced Weather Station only). Same radius as
     //    the current-cycle circle — the station unlocks a temporal lookup,
     //    not a wider spatial range.

@@ -366,6 +366,21 @@ describe('§2.6 computeWeatherVisionSources', () => {
     }
   });
 
+  it('a Lighthouse adds a current-weather circle (its vision radius) but NO forecast', () => {
+    // Vision from a Lighthouse must light up the weather overlay too: current
+    // weather is readable wherever you can see, so the overlay needs a circle
+    // at the Lighthouse's vision radius. Forecast still needs a weather station.
+    const islands = [
+      makeIsland('a', 0, 0, [{ id: 'lh', defId: 'lighthouse_t2', x: 0, y: 0 }]),
+    ];
+    const sources = computeWeatherVisionSources(islands);
+    const circles = sources.current.filter((s) => s.kind === 'circle');
+    // base weather circle + lighthouse_t2 vision circle (LIGHTHOUSE_VISION_RADII = 80).
+    expect(circles.length).toBe(2);
+    expect(circles.some((c) => c.kind === 'circle' && c.radius === 80)).toBe(true);
+    expect(sources.forecast.length).toBe(0);
+  });
+
   it('T2 Weather Station extends the per-island circle by +3 tiles', () => {
     const islands = [
       makeIsland('a', 0, 0, [{ id: 'ws', defId: 'weather_station_t2', x: 0, y: 0 }]),
