@@ -926,7 +926,7 @@ describe('unlock-skill-node', () => {
       state.level = 50;
       state.unspentSkillPoints = 100;
       state.unlockedNodes.add('mining.notable.deepVein');
-      state.unlockedNodes.add('mining.notable.efficientDrills');
+      state.unlockedNodes.add('mining.notable.blastOptimization');
     });
     await expectRejectNoChange(
       uid,
