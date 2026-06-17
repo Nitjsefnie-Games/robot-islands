@@ -48,7 +48,7 @@ Legend: **L** = live · **P** = partial · **N** = not implemented.
 | §9.8 Trade Offers | L | Server-authoritative and functional in REMOTE (the default): the §9.9 activity heartbeat advances the offer lifecycle server-side (online-time burns `tradeCooldownMs`, spawns/expires offers), and `accept-trade` / `reject-trade` intents resolve them. Offers persist as `WorldState.tradeOffers` (schema v25, wall-clock times). LOCAL keeps the client-side `tickTradeOffers`. |
 | §9.9 Active-play production bonus | L | +0.1%/min focused, −0.3%/min away (incl. closed), floor 0, no cap; world-level recipe-rate multiplier. REMOTE: server-authoritative via periodic `active-heartbeat` intent; load-time decay uses `lastActiveMs` so connected play is not decayed. Schema v24 (`activeBonusMs`, `lastActiveMs`). |
 | §10 Funneling | L | Per-resource consumed-on-route XP bonus while below T3. |
-| §11 Drones | P | T1/T2/T3 drone dispatch via Drone Pad; T4 omnidirectional pulse via Launch Tower; T5 path-drawn via Path Drone Foundry. Drone Pad (T2) is the gate; once built, the tier picker lets the player launch any tier from T1 up to the launching island's current tier (T1 = biofuel = cheap entry option for short scouts). Fuel auto-computed per click. Per-pad concurrent in-flight cap = the pad's active floors (`1 + L`, §4.9). |
+| §11 Drones | P | T1–T6 drone dispatch via Drone Pad; T4 omnidirectional pulse via Launch Tower; T5+ Path mode (one-way drawn drone) available on any Tier 5+ island. Drone Pad (T2) is the gate; once built, the tier picker lets the player launch any tier from T1 up to the launching island's current tier (T1 = biofuel = cheap entry option for short scouts). Fuel auto-computed per click. Per-pad concurrent in-flight cap = the pad's active floors (`1 + L`, §4.9). |
 | §11.7 Fuel / range / dispatch | L | Per-tier fuel matching, range = fuel × efficiency, per-craft concurrency caps, lost-on-timeout failure model. |
 | §12 Settlement vehicles | P | Ship + helicopter dispatch + arrival + Foundation Kit for T1-T4. Per-tier vehicle stats per `SHIP_STATS` / `HELICOPTER_STATS`; T5 Spacetime Anchor bypass N. Auto-placed dock lands at island centre regardless of geometry. |
 | §13.1 T5 access | L | Level 50 + AI core flip. |
@@ -1064,7 +1064,7 @@ The recipe ties T6 launch fuel back to the T4 antimatter chain — a player who 
 |Platform Constructor|4x4|T3|Builds artificial islands|
 |Patron Hub|2x2|T3|Manages funneling routes outbound|
 |Launch Tower|3x3|T4|T4 omnidirectional drone pulse|
-|Path Drone Foundry|3x3|T5|Required to launch T5 path-drawn drones|
+|Path Drone Foundry|3x3|T5|Formerly gated path-drawn drones; no longer required for Path mode|
 |Probability Engine|2x2|T5|Manipulates RNG outcomes for the island|
 |Genesis Chamber|4x4|T5|Creates raw matter from energy|
 |Lattice Node|2x2|T5|Network unity (one per island, requires N to activate)|
@@ -1438,7 +1438,7 @@ Drone launches originate from the Drone Pad's footprint centre on the launching 
 
 Drones travel in real time at speed determined by tier. They scan a **capsule-shaped corridor** along their flight path: the set of all points within scan radius `r` of any point on the path. In 2D this is a swept-disk shape (rectangle along the path with circular end-caps at launch and turnaround points). An island is revealed when any of its **footprint cells** (not merely its centre) falls inside the corridor. Reveals are delivered live each tick while the drone's position sits inside an antenna's signal range; cells scanned out of antenna range are buffered and reported on return (see §11.3 and §11.6).
 
-For T1-T3 drones, the path is a straight outbound line + return; for T5 path-drawn drones, the path follows the player-drawn waypoint sequence. T4 omnidirectional pulse is a special case — a single disk of radius R centered on the Launch Tower (no flight path).
+For straight-line drones, the path is a straight outbound line + return; for path-drawn drones, the path follows the player-drawn waypoint sequence. T4 omnidirectional pulse is a special case — a single disk of radius R centered on the Launch Tower (no flight path).
 
 ### 11.3 Return
 
@@ -1459,21 +1459,21 @@ Drone Pad (T2) gates drone launches; once built, the player picks any tier from 
 * T2: range R, scan corridor radius W (capsule shape per §11.2), biome-type detection at distance
 * T3: range 3R, scan corridor radius 2W, multi-target — records all islands within the capsule corridor
 * T4: omnidirectional pulse from Launch Tower — single disk of radius `R\_T4 = 3R` centered on origin (no flight path; not corridor-shaped). `R` is the stratification cell side length (§2.1), so T4 covers a 3-cell-radius disk per launch.
-* T5: path-drawn drone with dark-mode telemetry — flights are **one-way** along the drawn path; see Section 11.6
+* T5: Path mode unlocked — any tier up to the island's current tier can be flown as a one-way drawn drone; see Section 11.6
 
 * T6: Spaceport-launched long-range drone; available only when T6 access is unlocked (`ascendantCoreCrafted && hasSpaceport`). Burns Antimatter Propellant (§11.7 / §14.10). `tier_efficiency = 18` (placeholder), scan corridor radius `= 16 tiles` (placeholder), weather-destruction multiplier `= 0.2` (most rugged tier).
 
 **Implementation note — T6 drone constants are design-spec-locked placeholders.** `DRONE_TIER_EFFICIENCY[6] = 18`, `DRONE_TIER_SCAN_RADIUS[6] = 16`, `DRONE_TIER_MULTIPLIERS[6] = 0.2` in `drones.ts`; launch building is the Spaceport (§14.2).
 
-### 11.6 T5 Path-Drawn Drone
+### 11.6 Path-Drawn Drone (T5+)
 
-Available only on islands with Tier 5 access (level 50, AI core crafted, Path Drone Foundry built).
+Available on any island that has reached Tier 5 (level 50). The mode toggle is separate from the tier picker: the player chooses a tier (T1 up to the island's current tier) and independently chooses Path (one-way drawn polyline) or Simple (round-trip straight line). Tier determines fuel grade, efficiency, scan radius, and weather ruggedness; mode determines geometry, direction, and speed.
 
 **Launch process:**
 
 The player draws a path on the world map as a sequence of waypoints. The path can have arbitrary length up to a fuel-imposed limit. Path-drawn flights are **one-way**: the drone follows the drawn path and ends at the final waypoint (the terminus). There is no return leg, so the usable reach is the full drawn-path length, not half a round-trip budget.
 
-The drone follows the path at T5 speed, scanning a wide corridor along the entire route.
+The drone follows the path at path-mode speed, which is tier-independent, scanning a wide corridor along the entire route.
 
 **Telemetry and dark mode:**
 
@@ -1532,7 +1532,7 @@ range\_in\_cells = fuel\_units \* tier\_efficiency
 
 Where `tier\_efficiency` is a per-tier per-vehicle base value (placeholder), further scaled at dispatch by the launching island's skilltree drone-fuel-efficiency multiplier (and the scan-corridor radius by a drone-scan-radius multiplier). Higher-tier vehicles have higher efficiency — they go farther per unit of their (more expensive) fuel. A T3 drone burns more T3 fuel per range unit than a T1 drone burns T1 fuel in absolute material count, but its T3 fuel grade is harder to produce, so the effective economic cost ratio between tiers is what tuning targets.
 
-**Straight-line vs. path-drawn range.** Straight-line drones fly out and back, so the outbound distance is half the total `range\_in\_cells`. Path-drawn drones are one-way, so the full drawn-path length must fit inside `range\_in\_cells`; there is no return budget.
+**Straight-line vs. path-drawn range.** Both modes use the selected tier's own `tier\_efficiency` (the old special path-only efficiency has been removed). Straight-line drones fly out and back, so the outbound distance is half the total `range\_in\_cells` = `fuel × tier\_efficiency / 2`. Path-drawn drones are one-way, so the full drawn-path length must fit inside `range\_in\_cells` = `fuel × tier\_efficiency`; there is no return budget. Balance consequence: a T5 path drone's one-way reach is now `fuel × 15` tiles (was `fuel × 8`).
 
 **Dispatch capacity.** One craft in flight per launch building:
 
@@ -1540,7 +1540,7 @@ Where `tier\_efficiency` is a per-tier per-vehicle base value (placeholder), fur
 |-|-|-|
 |Drone Pad (T2+)|1 drone|Builds and launches scout drones|
 |Launch Tower (T4)|1 drone|Independent of Drone Pad on the same island; T4 omnidirectional pulse|
-|Path Drone Foundry (T5)|1 path-drawn drone|T5 only|
+|Path Drone Foundry (T5)|—|No longer gates path-drawn drones; retained as a T5 building for other systems|
 |Shipyard (T1)|1 ship|Coastal placement required|
 |Helipad (T2)|1 helicopter||
 |Spaceport (T6)|1 satellite or 1 repair drone|Cannot dispatch a sat and a repair drone simultaneously|

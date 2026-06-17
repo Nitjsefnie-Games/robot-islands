@@ -14,7 +14,6 @@ import { mountPanel, Zone } from './ui-zones.js';
 import { inv } from './economy.js';
 import {
   DRONE_SPEED_TILES_PER_SEC,
-  DRONE_T5_EFFICIENCY,
   DRONE_T5_SPEED_TILES_PER_SEC,
   DRONE_TIER_EFFICIENCY,
   MAX_FUEL_PER_DRONE,
@@ -169,7 +168,10 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   // Player-selected drone tier, capped at island tier at refresh time. Defaults
   // to 1 (cheapest / biofuel) so a fresh L5 player can experience T1 drones
   // without having to first build the T2 diesel chain.
-  let selectedTier: DroneTier | '5-path' = 1;
+  let selectedTier: DroneTier = 1;
+  // True when the player has toggled Path mode (one-way drawn polyline) instead
+  // of Simple mode (round-trip straight line). Only available on T5+ islands.
+  let pathMode = false;
   let selectedPadId: string | null = null;
   let prevOriginId: string | null = null;
   // Cached at refresh() so attemptLaunch + range-ring see the same numbers.
@@ -323,13 +325,10 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     return { row, labelEl: l, valueEl: v };
   }
 
-  /** SPEC §11.6 gate: path mode requires L≥5, AI core crafted, foundry built. */
+  /** Path mode is available on any island that has reached Tier 5. */
   function canUsePathMode(): boolean {
     const origin = deps.getOrigin();
-    if (tierForLevel(origin.level) < 5) return false;
-    if (!origin.aiCoreCrafted) return false;
-    if (!hasOperationalBuilding(origin.buildings, 'path_drone_foundry')) return false;
-    return true;
+    return tierForLevel(origin.level) >= 5;
   }
 
   const padStat = statRow('PAD');
@@ -374,24 +373,44 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     opt.textContent = `T${t}`;
     tierSelect.appendChild(opt);
   }
-  // Always mount the T5 path option; refresh() toggles disabled so it
-  // surfaces automatically when path mode is unlocked mid-session.
-  const pathOpt = document.createElement('option');
-  pathOpt.value = '5-path';
-  pathOpt.textContent = 'T5 Path';
-  tierSelect.appendChild(pathOpt);
   tierSelect.addEventListener('change', () => {
-    const v = tierSelect.value;
-    if (v === '5-path') {
-      selectedTier = '5-path';
-    } else {
-      selectedTier = Number(v) as DroneTier;
-    }
+    selectedTier = Number(tierSelect.value) as DroneTier;
     waypointBuffer = []; // reset buffer on any tier switch
     refresh(performance.now());
     if (launchMode) repaintRangeRing();
   });
   tierStat.valueEl.appendChild(tierSelect);
+
+  // Path / Simple mode toggle. Enabled only on T5+ islands; when disabled it
+  // is unchecked and Path mode is forced off.
+  const pathToggle = document.createElement('label');
+  pathToggle.style.cssText = [
+    'display: inline-flex',
+    'align-items: center',
+    'gap: 4px',
+    'margin-left: 8px',
+    'color: var(--ri-fg-2)',
+    'font-size: 10px',
+    'letter-spacing: 0.1em',
+    'cursor: pointer',
+  ].join(';');
+  const pathCheckbox = document.createElement('input');
+  pathCheckbox.type = 'checkbox';
+  pathCheckbox.style.cssText = [
+    'accent-color: var(--ri-accent)',
+    'cursor: pointer',
+  ].join(';');
+  pathCheckbox.addEventListener('change', () => {
+    pathMode = pathCheckbox.checked;
+    waypointBuffer = [];
+    refresh(performance.now());
+    if (launchMode) repaintRangeRing();
+  });
+  pathToggle.appendChild(pathCheckbox);
+  const pathToggleText = document.createElement('span');
+  pathToggleText.textContent = 'PATH';
+  pathToggle.appendChild(pathToggleText);
+  tierStat.valueEl.appendChild(pathToggle);
   // Fuel label is dynamic — §11.7 tier-matched grade per the launching
   // island's tier. The row's left-hand label is overwritten in refresh()
   // (e.g. BIOFUEL on a T1 island, AVIATION KEROSENE on a T3 island).
@@ -643,7 +662,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     rangeRingGfx.clear();
     const originSpec = deps.getOriginSpec();
     const origin = deps.getOrigin();
-    const outboundTiles = selectedTier === '5-path'
+    const outboundTiles = pathMode
       ? maxLaunchFuel * currentEfficiency
       : (maxLaunchFuel * currentEfficiency) / 2;
     if (outboundTiles <= 0) return;
@@ -735,7 +754,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     const originTile = { x: ox, y: oy };
     const originPx = tileToWorldPx(ox, oy);
 
-    if (selectedTier === '5-path') {
+    if (pathMode) {
       // Solid polyline through committed waypoints.
       let prevPx = originPx;
       for (const wp of waypointBuffer) {
@@ -747,7 +766,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
       }
       // Dashed segment from last anchor to cursor.
       if (cursorTile) {
-        const wouldExceed = wouldExceedRange(originTile, waypointBuffer, cursorTile, currentFuelEffMul);
+        const wouldExceed = wouldExceedRange(originTile, waypointBuffer, cursorTile, DRONE_TIER_EFFICIENCY[selectedTier], currentFuelEffMul);
         const color = wouldExceed ? PREVIEW_COLOR_BAD : PREVIEW_COLOR_OK;
         const cursorPx = tileToWorldPx(cursorTile.x, cursorTile.y);
         drawDashedSegment(launchPreviewGfx, prevPx, cursorPx, color);
@@ -815,14 +834,13 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     const dx = wp.x - originX;
     const dy = wp.y - originY;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    const isPathMode = selectedTier === '5-path';
-    const outbound = isPathMode
+    const outbound = pathMode
       ? maxLaunchFuel * currentEfficiency
       : (maxLaunchFuel * currentEfficiency) / 2;
     ensurePainted(dist > outbound ? RETICLE_WARN : RETICLE_OK);
-    // ETA prediction — one-way for T5 path mode (#117), round-trip for
-    // numeric tiers. Updates the FLIGHT readout live as the cursor moves.
-    const etaSec = isPathMode
+    // ETA prediction — one-way for Path mode (#117), round-trip for Simple.
+    // Path speed is tier-independent.
+    const etaSec = pathMode
       ? dist / DRONE_T5_SPEED_TILES_PER_SEC
       : (2 * dist) / DRONE_SPEED_TILES_PER_SEC;
     if (dist > outbound) {
@@ -1050,10 +1068,14 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     // tiers. Default to the island's tier on first arming if selectedTier
     // was never explicitly chosen via the picker.
     const islandTier = tierForLevel(origin.level);
-    if (typeof selectedTier === 'number' && selectedTier > islandTier) {
+    if (selectedTier > islandTier) {
       selectedTier = islandTier as DroneTier;
-    } else if (selectedTier === '5-path' && !canUsePathMode()) {
-      selectedTier = islandTier as DroneTier;
+    }
+    // Path mode is only available on T5+ islands; fall back to Simple if the
+    // island drops below T5 or if the toggle is disabled for any reason.
+    const pathAllowed = canUsePathMode();
+    if (pathMode && !pathAllowed) {
+      pathMode = false;
       waypointBuffer = [];
     }
     // Disable out-of-range tier options + sync the select's current value.
@@ -1063,40 +1085,39 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     for (let i = 0; i < tierSelect.options.length; i++) {
       const opt = tierSelect.options[i];
       if (!opt) continue;
-      if (opt.value === '5-path') {
-        opt.disabled = !canUsePathMode();
-      } else {
-        const tierNum = Number(opt.value);
-        opt.disabled = tierNum > islandTier;
-      }
+      const tierNum = Number(opt.value);
+      opt.disabled = tierNum > islandTier;
     }
     if (tierSelect.value !== String(selectedTier)) {
       tierSelect.value = String(selectedTier);
     }
+    // Sync the PATH toggle state; uncheck+disable when path mode is unavailable.
+    pathCheckbox.disabled = !pathAllowed;
+    pathToggle.style.opacity = pathAllowed ? '1' : '0.5';
+    pathToggle.style.cursor = pathAllowed ? 'pointer' : 'not-allowed';
+    pathCheckbox.checked = pathMode;
+
     // §11.7 tier-matched fuel — label + on-hand inventory follow the
     // PLAYER-SELECTED drone tier (T1 → BIOFUEL, T2 → DIESEL, …) not the
     // island tier, so a T5 island launching a T2 drone shows DIESEL here.
-    const fuelResource = selectedTier === '5-path' ? 'plasma_charge' : fuelForTier(selectedTier);
+    const fuelResource = fuelForTier(selectedTier);
     fuelStatLabelEl.textContent = fuelResource.toUpperCase().replace(/_/g, ' ');
     const onhand = inv(origin, fuelResource);
     // Fuel auto-computed at click time. The OUTBND + FLIGHT readouts show
-    // the MAX-affordable range for this island right now. Numeric tiers are
-    // round-trip: min(MAX_FUEL, available) × current efficiency / 2. T5 path
+    // the MAX-affordable range for this island right now. Simple mode is
+    // round-trip: min(MAX_FUEL, available) × current efficiency / 2. Path
     // mode (#117) is one-way: min(MAX_FUEL, available) × current efficiency.
     // Cached on the closure so attemptLaunch + the range ring agree.
-    const eff = selectedTier === '5-path'
-      ? DRONE_T5_EFFICIENCY
-      : DRONE_TIER_EFFICIENCY[selectedTier];
+    const eff = DRONE_TIER_EFFICIENCY[selectedTier];
     currentFuelEffMul = effectiveSkillMultipliers(origin).droneFuelEfficiency;
     currentEfficiency = eff * currentFuelEffMul;
     maxLaunchFuel = Math.floor(Math.min(MAX_FUEL_PER_DRONE, onhand));
-    const isPathModeStats = selectedTier === '5-path';
-    const maxOutbound = isPathModeStats
+    const maxOutbound = pathMode
       ? maxLaunchFuel * currentEfficiency
       : (maxLaunchFuel * currentEfficiency) / 2;
     fuelStat.valueEl.style.color = maxLaunchFuel > 0 ? 'var(--ri-fg-1)' : 'var(--ri-warn)';
     rangeStat.valueEl.textContent = `${maxOutbound.toFixed(0)} t max`;
-    const maxFlightSec = isPathModeStats
+    const maxFlightSec = pathMode
       ? (maxLaunchFuel * currentEfficiency) / DRONE_T5_SPEED_TILES_PER_SEC
       : (maxLaunchFuel * currentEfficiency) / DRONE_SPEED_TILES_PER_SEC;
     etaStat.valueEl.textContent = `${maxFlightSec.toFixed(0)}s max`;
@@ -1104,15 +1125,15 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     // DIST / PATH row update. §11.1: distance + path length measured from the
     // Drone Pad footprint centre — the actual launch origin — not the island
     // centre, so the readouts match the preview line and the actual flight.
-    if (selectedTier === '5-path') {
+    if (pathMode) {
       const s = deps.getOriginSpec();
       const pc = selectedPadCentre(s, origin, selectedPadId);
       const originPt = { x: pc?.x ?? s.cx, y: pc?.y ?? s.cy };
       const pathLen = totalPathTiles(originPt, waypointBuffer);
-      const fuel = fuelForPath(originPt, waypointBuffer, currentFuelEffMul);
+      const fuel = fuelForPath(originPt, waypointBuffer, DRONE_TIER_EFFICIENCY[selectedTier], currentFuelEffMul);
       distStat.labelEl.textContent = 'PATH';
       distStat.valueEl.textContent = `${pathLen.toFixed(0)} tiles`;
-      fuelStat.valueEl.textContent = `${fuel} / ${MAX_FUEL_PER_DRONE} plasma_charge`;
+      fuelStat.valueEl.textContent = `${fuel} / ${MAX_FUEL_PER_DRONE} ${fuelResource.replace(/_/g, ' ')}`;
     } else {
       fuelStat.valueEl.textContent = `${onhand.toFixed(0)} u`;
       if (cursorTile) {
@@ -1224,14 +1245,14 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     targetWorldTileY: number,
     nowMs: number,
   ): { ok: boolean; reason?: string } {
-    if (selectedTier === '5-path') {
+    if (pathMode) {
       // Add waypoint; reject if would exceed fuel cap. §11.1: range check
       // anchors on the Drone Pad footprint centre, not the island centre.
       const spec = deps.getOriginSpec();
       const pc = selectedPadCentre(spec, deps.getOrigin(), selectedPadId);
       const origin = { x: pc?.x ?? spec.cx, y: pc?.y ?? spec.cy };
       const next = { x: targetWorldTileX, y: targetWorldTileY };
-      if (wouldExceedRange(origin, waypointBuffer, next, currentFuelEffMul)) {
+      if (wouldExceedRange(origin, waypointBuffer, next, DRONE_TIER_EFFICIENCY[selectedTier], currentFuelEffMul)) {
         return { ok: false, reason: 'over-range' };
       }
       waypointBuffer.push(next);
@@ -1287,7 +1308,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   /** Pop the last committed waypoint (right-click in path mode). No-op
    *  if buffer is empty or path mode isn't selected. */
   function popWaypoint(): void {
-    if (selectedTier !== '5-path') return;
+    if (!pathMode) return;
     waypointBuffer.pop();
   }
 
@@ -1296,7 +1317,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
    *  The engine requires waypoints.length≥2 to enter the isPathDrawn branch;
    *  we prepend origin to deduped, so deduped.length≥1 is the minimum. */
   function finalizePath(nowMs: number): { ok: boolean; reason?: string } {
-    if (selectedTier !== '5-path') return { ok: false, reason: 'not-path-mode' };
+    if (!pathMode) return { ok: false, reason: 'not-path-mode' };
     const deduped = popTrailingDuplicate(waypointBuffer);
     if (deduped.length < 1) return { ok: false, reason: 'no-waypoints' };
     const spec = deps.getOriginSpec();
@@ -1309,17 +1330,15 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     const ox = pc?.x ?? spec.cx;
     const oy = pc?.y ?? spec.cy;
     const originTile = { x: ox, y: oy };
-    const fuel = fuelForPath(originTile, deduped, currentFuelEffMul);
-    // Engine signature (drones.ts:330-346): dispatchDrone(world, origin,
-    // originX, originY, dirX, dirY, fuelLoaded, nowMs, waypoints?, selectedTier?).
-    // Direction must have magnitude > 0 (line 350 validation); the path-drawn
-    // branch at line 361-369 overrides direction internally from the waypoint
-    // array. Tests at drones.test.ts:1045-1086 pass (originX=0, originY=0,
-    // dirX=1, dirY=0) — match that convention. selectedTier omitted: line 369
-    // forces resolvedTier=5 when isPathDrawn (waypoints.length≥2).
+    const fuel = fuelForPath(originTile, deduped, DRONE_TIER_EFFICIENCY[selectedTier], currentFuelEffMul);
+    // Engine signature: dispatchDrone(world, origin, originX, originY, dirX,
+    // dirY, fuelLoaded, nowMs, waypoints?, selectedTier?). Direction must have
+    // magnitude > 0; the path-drawn branch derives the actual heading from the
+    // waypoint array. Pass the selected tier so the server/pure layer uses the
+    // chosen fuel grade and efficiency instead of defaulting to island tier.
     const waypointsForDispatch = [originTile, ...deduped];
     const gatewayResult = deps.gateway
-      ? deps.gateway.dispatchDrone(originState.id, ox, oy, 1, 0, fuel, nowMs, waypointsForDispatch)
+      ? deps.gateway.dispatchDrone(originState.id, ox, oy, 1, 0, fuel, nowMs, waypointsForDispatch, selectedTier)
       : undefined;
     if (gatewayResult instanceof Promise) {
       void (async () => {
@@ -1338,7 +1357,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
       fuel,
       nowMs,
       waypointsForDispatch,
-      undefined,
+      selectedTier,
       deps.weatherWallOffsetMs ?? 0,
     );
     if (result.ok) {
@@ -1352,7 +1371,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   /** Cancel an in-progress path (Esc). Clears buffer + disarms. */
   function cancelPath(): void {
     waypointBuffer = [];
-    if (selectedTier === '5-path') {
+    if (pathMode) {
       setLaunchMode(false);
     }
   }

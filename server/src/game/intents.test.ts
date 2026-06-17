@@ -357,7 +357,7 @@ describe('dispatch-drone', () => {
     );
   });
 
-  it('illegal: path-drawn drone without an operational Path Drone Foundry is rejected', async () => {
+  it('legal: path-drawn drone with selectedTier+waypoints succeeds without a Path Drone Foundry', async () => {
     const now = Date.now();
     const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
       const home = world.islands.find((s: any) => s.id === 'home');
@@ -367,7 +367,8 @@ describe('dispatch-drone', () => {
         constructionRemainingMs: 0, placedAt: now,
       });
       state.buildings = home.buildings;
-      state.inventory.biofuel = 100;
+      state.level = 50;
+      state.inventory.diesel = 100;
     });
     const ack = await applyIntent(
       pool, uid,
@@ -376,12 +377,17 @@ describe('dispatch-drone', () => {
         payload: {
           islandId: 'home', originX: 0, originY: 0, dirX: 1, dirY: 0, fuelLoaded: 10,
           waypoints: [{ x: 5, y: 0 }, { x: 10, y: 0 }],
+          selectedTier: 2,
         },
         seq: 9,
       },
       now,
     );
-    expect(ack).toMatchObject({ ok: false, error: 'no-operational-path-drone-foundry' });
+    expect(ack).toMatchObject({ ok: true, seq: 9 });
+
+    const after = await loadSnapshot(pool, uid);
+    expect(after!.world.drones.length).toBe(1);
+    expect(after!.world.drones[0]!.tier).toBe(2);
   });
 
   // Migration regression: the dispatch-drone handler dropped waypoints +

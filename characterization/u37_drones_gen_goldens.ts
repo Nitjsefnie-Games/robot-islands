@@ -12,7 +12,7 @@ import {
   DRONE_TIER_SCAN_RADIUS,
   DRONE_TIER_MULTIPLIERS,
   DRONE_SPEED_TILES_PER_SEC,
-  DRONE_T5_EFFICIENCY,
+
   DRONE_T5_SPEED_TILES_PER_SEC,
   DRONE_T5_WEATHER_MULTIPLIER,
   DRONE_T5_SCAN_RADIUS_TILES,
@@ -90,7 +90,7 @@ const out: any = {
     scan_radius_by_tier: DRONE_TIER_SCAN_RADIUS,
     weather_multiplier_by_tier: DRONE_TIER_MULTIPLIERS,
     straight_line_speed_tiles_per_sec: DRONE_SPEED_TILES_PER_SEC,
-    path_drawn_efficiency: DRONE_T5_EFFICIENCY,
+    path_drawn_efficiency: DRONE_TIER_EFFICIENCY[5],
     path_drawn_speed_tiles_per_sec: DRONE_T5_SPEED_TILES_PER_SEC,
     path_drawn_weather_multiplier: DRONE_T5_WEATHER_MULTIPLIER,
     path_drawn_scan_radius: DRONE_T5_SCAN_RADIUS_TILES,
@@ -288,12 +288,12 @@ dispatchCase('selected_tier_6_unreachable_via_level', {
 dispatchCase('pathdrawn_t5_ok', {
   island: { id: 'home', level: 50, inventory: { plasma_charge: 100 } },
   call: { origin_x: 0, origin_y: 0, heading_x: 1, heading_y: 0, fuel_units: 10, at_ms: 1000, waypoints: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }] },
-}, 'path length 20, round-trip 40 <= fuel 10 * path-eff 8 = 80; forces tier 5, trip_half 20, return 1000+(40/0.8)*1000');
+}, 'path length 20, one-way 20 <= fuel 10 * tier-eff 15 = 150; tier 5, trip_half 20, return 1000+(20/0.8)*1000');
 
 dispatchCase('pathdrawn_path_too_long', {
   island: { id: 'home', level: 50, inventory: { plasma_charge: 100 } },
-  call: { origin_x: 0, origin_y: 0, heading_x: 1, heading_y: 0, fuel_units: 10, at_ms: 1000, waypoints: [{ x: 0, y: 0 }, { x: 100, y: 0 }] },
-}, 'path length 100, round-trip 200 > 80 -> path-too-long');
+  call: { origin_x: 0, origin_y: 0, heading_x: 1, heading_y: 0, fuel_units: 10, at_ms: 1000, waypoints: [{ x: 0, y: 0 }, { x: 200, y: 0 }] },
+}, 'path length 200, one-way 200 > fuel 10 * tier-eff 15 = 150 -> path-too-long');
 
 // Re-key the result onto NEUTRAL field names (not the original Drone interface
 // keys). The implementer names its own record; goldens assert these neutral

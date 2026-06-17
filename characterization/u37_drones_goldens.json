@@ -27,7 +27,7 @@
       "6": 0.2
     },
     "straight_line_speed_tiles_per_sec": 0.5,
-    "path_drawn_efficiency": 8,
+    "path_drawn_efficiency": 15,
     "path_drawn_speed_tiles_per_sec": 0.8,
     "path_drawn_weather_multiplier": 0.5,
     "path_drawn_scan_radius": 12,
@@ -735,7 +735,7 @@
             "trip_half_tiles": 20,
             "scan_half_width": 12,
             "launch_at_ms": 1000,
-            "return_at_ms": 51000,
+            "return_at_ms": 26000,
             "tier": 5,
             "fuel_units": 10,
             "fuel_kind": "plasma_charge",
@@ -754,7 +754,6 @@
                 "y": 10
               }
             ],
-            "dark": false,
             "rare_bias": 0
           }
         },
@@ -763,7 +762,7 @@
           "plasma_charge": 90
         }
       },
-      "note": "path length 20, round-trip 40 <= fuel 10 * path-eff 8 = 80; forces tier 5, trip_half 20, return 1000+(40/0.8)*1000"
+      "note": "path length 20, one-way 20 <= fuel 10 * tier-eff 15 = 150; tier 5, trip_half 20, return 1000+(20/0.8)*1000"
     },
     {
       "name": "pathdrawn_path_too_long",
@@ -788,7 +787,7 @@
               "y": 0
             },
             {
-              "x": 100,
+              "x": 200,
               "y": 0
             }
           ]
@@ -804,7 +803,7 @@
           "plasma_charge": 100
         }
       },
-      "note": "path length 100, round-trip 200 > 80 -> path-too-long"
+      "note": "path length 200, one-way 200 > fuel 10 * tier-eff 15 = 150 -> path-too-long"
     }
   ],
   "pulse": [

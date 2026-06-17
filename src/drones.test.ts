@@ -19,7 +19,6 @@ import {
   probabilityBiasForIsland,
   tickDrones,
   type Drone,
-  DRONE_T5_EFFICIENCY,
 } from './drones.js';
 import { islandCells } from './discovery.js';
 import { dronePadCentre } from './drones-ui.js';
@@ -979,6 +978,7 @@ describe('discovery reveals whole island footprint', () => {
     w.islands.push(target);
     const home = makeIslandState({
       id: 'home',
+      level: 50,
       buildings: [
         { id: 'pe1', defId: 'probability_engine', x: 0, y: 0 } as any,
         { id: 'a1', defId: 'antenna_t1', x: 0, y: 0 } as any,
@@ -1254,7 +1254,7 @@ describe('T5 path-drawn drone', () => {
     };
   }
 
-  it('dispatches with waypoints and sets tier=5', () => {
+  it('dispatches with waypoints and defaults to island tier (T5)', () => {
     const world = freshWorld();
     const home = makeIslandState({ level: 50, aiCoreCrafted: true });
     home.inventory.plasma_charge = 50;
@@ -1268,53 +1268,78 @@ describe('T5 path-drawn drone', () => {
     expect(result.drone.probabilityBias).toBe(0);
   });
 
-  it('rejects an over-long path (one-way range limit)', () => {
+  it('path-drawn with selectedTier=2 uses T2 economics and scan radius on a T5 island', () => {
+    const world = freshWorld();
+    const home = makeIslandState({ level: 50, aiCoreCrafted: true });
+    home.inventory.diesel = 50;
+    const waypoints = [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }] as const;
+    const result = dispatchDrone(world, home, 0, 0, 1, 0, 10, 1000, waypoints, 2);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.drone.tier).toBe(2);
+    expect(result.drone.fuelResource).toBe('diesel');
+    expect(result.drone.scanRadius).toBe(DRONE_TIER_SCAN_RADIUS[2]);
+    expect(result.drone.waypoints).toEqual(waypoints);
+  });
+
+  it('rejects an over-long T5 path using T5 one-way efficiency', () => {
     const world = freshWorld();
     const home = makeIslandState({ level: 50, aiCoreCrafted: true });
     home.inventory.plasma_charge = 50;
-    // 10 fuel × 8 efficiency = 80 tiles one-way.
-    // Path (0,0)→(50,0)→(50,50) = 100 tiles > 80.
-    const waypoints = [{ x: 0, y: 0 }, { x: 50, y: 0 }, { x: 50, y: 50 }] as const;
+    // 10 fuel × 15 efficiency = 150 tiles one-way.
+    // Path (0,0)→(100,0)→(100,100) = 200 tiles > 150.
+    const waypoints = [{ x: 0, y: 0 }, { x: 100, y: 0 }, { x: 100, y: 100 }] as const;
     const result = dispatchDrone(world, home, 0, 0, 1, 0, 10, 0, waypoints);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toBe('path-too-long');
   });
 
-  it('accepts a path exactly at the one-way fuel limit', () => {
+  it('accepts a T5 path exactly at the one-way fuel limit', () => {
     const world = freshWorld();
     const home = makeIslandState({ level: 50, aiCoreCrafted: true });
     home.inventory.plasma_charge = 50;
-    // 10 fuel × 8 efficiency = 80 tiles one-way.
-    // Path (0,0)→(80,0) = 80 tiles = exactly at limit.
-    const waypoints = [{ x: 0, y: 0 }, { x: 80, y: 0 }] as const;
+    // 10 fuel × 15 efficiency = 150 tiles one-way.
+    // Path (0,0)→(150,0) = 150 tiles = exactly at limit.
+    const waypoints = [{ x: 0, y: 0 }, { x: 150, y: 0 }] as const;
     const result = dispatchDrone(world, home, 0, 0, 1, 0, 10, 0, waypoints);
     expect(result.ok).toBe(true);
   });
 
-  it('path-drawn dispatch uses one-way range and timing', () => {
+  it('rejects an over-long T2 path using T2 efficiency', () => {
+    const world = freshWorld();
+    const home = makeIslandState({ level: 50, aiCoreCrafted: true });
+    home.inventory.diesel = 50;
+    // 10 fuel × 6 efficiency = 60 tiles one-way.
+    // Path (0,0)→(50,0)→(50,50) = 100 tiles > 60.
+    const waypoints = [{ x: 0, y: 0 }, { x: 50, y: 0 }, { x: 50, y: 50 }] as const;
+    const result = dispatchDrone(world, home, 0, 0, 1, 0, 10, 0, waypoints, 2);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('path-too-long');
+  });
+
+  it('path-drawn dispatch uses one-way range and path speed', () => {
     const world = freshWorld();
     const home = makeIslandState({ level: 50, aiCoreCrafted: true });
     home.inventory.plasma_charge = 50;
-    // Path length 60; old round-trip limit would be 40, so this would have
-    // been rejected. Under one-way semantics it dispatches fine.
+    // Path length 60; one-way semantics means it fits with plenty of margin.
     const waypoints = [{ x: 0, y: 0 }, { x: 30, y: 0 }, { x: 30, y: 30 }] as const;
     const result = dispatchDrone(world, home, 0, 0, 1, 0, 10, 1000, waypoints);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.drone.outboundTiles).toBeCloseTo(60);
-    // One-way travel time: 60 tiles / 0.8 t/s = 75s.
+    // Path-mode speed is tier-independent.
     expect(result.drone.expectedReturnTime).toBe(1000 + 75_000);
   });
 
-  it('straight-line dispatch stays round-trip', () => {
+  it('straight-line dispatch with selectedTier=5 stays round-trip', () => {
     const world = freshWorld();
     const home = makeIslandState({ level: 50, aiCoreCrafted: true });
     home.inventory.plasma_charge = 50;
-    // T5 island launching a straight-line drone still resolves to T5, but no
-    // waypoints means round-trip math. Tier-5 straight-line uses
-    // DRONE_TIER_EFFICIENCY[5] = 15 and base drone speed 0.5 t/s.
-    const result = dispatchDrone(world, home, 0, 0, 1, 0, 10, 1000);
+    // T5 island launching a straight-line T5 drone: no waypoints means
+    // round-trip math using DRONE_TIER_EFFICIENCY[5] = 15 and simple speed.
+    const result = dispatchDrone(world, home, 0, 0, 1, 0, 10, 1000, undefined, 5);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.drone.waypoints.length).toBe(0);
@@ -1906,14 +1931,14 @@ describe('Fix 6.2: T5 L-shaped path scans true polyline not chord', () => {
   it('L-shaped path (0,0)→(30,0)→(30,30): elbow cell is scanned but chord-only cell is not', () => {
     // Path-drawn flights are one-way, so the drone only travels
     // (0,0)→(30,0)→(30,30). Total path = 60 tiles.
-    // At DRONE_T5_EFFICIENCY=8, need 60/8 = 7.5 → 8 fuel.
+    // At DRONE_TIER_EFFICIENCY[5]=15, need 60/15 = 4 fuel.
     // Elbow at approx (30,0) — tile cell covering (30,0) should be in scanBuffer.
     // A chord-only cell at roughly (21, 12) (diagonal from origin to apex) should NOT be in scanBuffer.
     const w = worldNoAntenna();
     const home = makeIslandState({ level: 50, aiCoreCrafted: true });
     home.inventory.plasma_charge = 50;
     const waypoints = [{ x: 0, y: 0 }, { x: 30, y: 0 }, { x: 30, y: 30 }] as const;
-    const fuel = Math.ceil(60 / DRONE_T5_EFFICIENCY); // 8
+    const fuel = Math.ceil(60 / DRONE_TIER_EFFICIENCY[5]); // 4
     const r = dispatchDrone(w, home, 0, 0, 1, 0, fuel, 0, waypoints);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
@@ -2174,6 +2199,7 @@ describe('Fix 6.4: rare-bias ring discovers rare islands only', () => {
   function flyRingProbe(w: WorldState, island: IslandSpec): void {
     const home = makeIslandState({
       id: 'home',
+      level: 50,
       buildings: [
         { id: 'pe1', defId: 'probability_engine', x: 0, y: 0 },
         { id: 'a1', defId: 'antenna_t1', x: 0, y: 0 },
@@ -2181,7 +2207,7 @@ describe('Fix 6.4: rare-bias ring discovers rare islands only', () => {
     });
     home.inventory.plasma_charge = 50;
     w.islands.push(island);
-    // Path 60 tiles one-way; 15 fuel is more than enough (limit = 120 tiles).
+    // Path 60 tiles one-way; 15 fuel is more than enough (limit = 225 tiles).
     const waypoints = [{ x: 0, y: 2 }, { x: 60, y: 2 }] as const;
     const r = dispatchDrone(w, home, 0, 2, 1, 0, 15, 0, waypoints);
     expect(r.ok).toBe(true);
