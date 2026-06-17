@@ -753,7 +753,9 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
         }
         refresh(performance.now());
       });
-      top.appendChild(delBtn);
+      const right = document.createElement('div');
+      styled(right, 'display: flex; align-items: baseline; gap: 6px');
+      right.appendChild(delBtn);
 
       // §2.4 retarget — drain to the current target, then re-route to a new
       // island. Candidates: every OTHER populated island (not the source, not
@@ -780,7 +782,8 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
         else retargetRoutePure(deps.world, route.id, target);
         refresh(performance.now());
       });
-      top.appendChild(reSel);
+      right.appendChild(reSel);
+      top.appendChild(right);
     }
 
     const mid = document.createElement('div');
