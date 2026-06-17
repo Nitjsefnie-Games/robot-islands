@@ -15,6 +15,7 @@ import { inv } from './economy.js';
 import {
   DRONE_SPEED_TILES_PER_SEC,
   DRONE_T5_EFFICIENCY,
+  DRONE_T5_SPEED_TILES_PER_SEC,
   DRONE_TIER_EFFICIENCY,
   MAX_FUEL_PER_DRONE,
   T4_PULSE_FUEL_COST,
@@ -598,10 +599,10 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   }
 
   // Pixi layer: range ring (WORLD space, inside world container).
-  // Drawn around the active origin when launch mode is armed. Radius =
-  // max-affordable outbound = (min(MAX_FUEL, on-hand) × efficiency) / 2
-  // tiles. Clicking inside the ring auto-computes the exact fuel cost
-  // for the round-trip; clicking outside is rejected by the reticle.
+  // Drawn around the active origin when launch mode is armed. Radius is
+  // mode-conditional: numeric tiers use round-trip outbound
+  // (min(MAX_FUEL, on-hand) × efficiency) / 2; T5 path-drawn drones are
+  // one-way (#117) so radius = min(MAX_FUEL, on-hand) × efficiency.
   const rangeRingLayer = new Container();
   rangeRingLayer.label = 'launch-range-ring';
   rangeRingLayer.visible = false;
@@ -642,7 +643,9 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     rangeRingGfx.clear();
     const originSpec = deps.getOriginSpec();
     const origin = deps.getOrigin();
-    const outboundTiles = (maxLaunchFuel * currentEfficiency) / 2;
+    const outboundTiles = selectedTier === '5-path'
+      ? maxLaunchFuel * currentEfficiency
+      : (maxLaunchFuel * currentEfficiency) / 2;
     if (outboundTiles <= 0) return;
     const radiusPx = outboundTiles * TILE_PX;
     // §11.1: range ring centres on the Drone Pad footprint centre (the actual
@@ -812,17 +815,21 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     const dx = wp.x - originX;
     const dy = wp.y - originY;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    const outbound = (maxLaunchFuel * currentEfficiency) / 2;
+    const isPathMode = selectedTier === '5-path';
+    const outbound = isPathMode
+      ? maxLaunchFuel * currentEfficiency
+      : (maxLaunchFuel * currentEfficiency) / 2;
     ensurePainted(dist > outbound ? RETICLE_WARN : RETICLE_OK);
-    // ETA prediction — round-trip flight time at DRONE_SPEED_TILES_PER_SEC
-    // for the cursor target. Updates the FLIGHT readout live as the cursor
-    // moves so the player previews their target's ETA before committing.
-    const roundTripSec = (2 * dist) / DRONE_SPEED_TILES_PER_SEC;
+    // ETA prediction — one-way for T5 path mode (#117), round-trip for
+    // numeric tiers. Updates the FLIGHT readout live as the cursor moves.
+    const etaSec = isPathMode
+      ? dist / DRONE_T5_SPEED_TILES_PER_SEC
+      : (2 * dist) / DRONE_SPEED_TILES_PER_SEC;
     if (dist > outbound) {
-      etaStat.valueEl.textContent = `${roundTripSec.toFixed(0)}s · out of range`;
+      etaStat.valueEl.textContent = `${etaSec.toFixed(0)}s · out of range`;
       etaStat.valueEl.style.color = 'var(--ri-warn)';
     } else {
-      etaStat.valueEl.textContent = `${roundTripSec.toFixed(0)}s to target`;
+      etaStat.valueEl.textContent = `${etaSec.toFixed(0)}s to target`;
       etaStat.valueEl.style.color = 'var(--ri-accent)';
     }
   }
@@ -1073,19 +1080,25 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     fuelStatLabelEl.textContent = fuelResource.toUpperCase().replace(/_/g, ' ');
     const onhand = inv(origin, fuelResource);
     // Fuel auto-computed at click time. The OUTBND + FLIGHT readouts show
-    // the MAX-affordable range for this island right now = min(MAX_FUEL,
-    // available) units × current efficiency / 2 (round-trip). Cached on
-    // the closure so attemptLaunch + the range ring agree on the limit.
+    // the MAX-affordable range for this island right now. Numeric tiers are
+    // round-trip: min(MAX_FUEL, available) × current efficiency / 2. T5 path
+    // mode (#117) is one-way: min(MAX_FUEL, available) × current efficiency.
+    // Cached on the closure so attemptLaunch + the range ring agree.
     const eff = selectedTier === '5-path'
       ? DRONE_T5_EFFICIENCY
       : DRONE_TIER_EFFICIENCY[selectedTier];
     currentFuelEffMul = effectiveSkillMultipliers(origin).droneFuelEfficiency;
     currentEfficiency = eff * currentFuelEffMul;
     maxLaunchFuel = Math.floor(Math.min(MAX_FUEL_PER_DRONE, onhand));
-    const maxOutbound = (maxLaunchFuel * currentEfficiency) / 2;
+    const isPathModeStats = selectedTier === '5-path';
+    const maxOutbound = isPathModeStats
+      ? maxLaunchFuel * currentEfficiency
+      : (maxLaunchFuel * currentEfficiency) / 2;
     fuelStat.valueEl.style.color = maxLaunchFuel > 0 ? 'var(--ri-fg-1)' : 'var(--ri-warn)';
     rangeStat.valueEl.textContent = `${maxOutbound.toFixed(0)} t max`;
-    const maxFlightSec = (maxLaunchFuel * currentEfficiency) / DRONE_SPEED_TILES_PER_SEC;
+    const maxFlightSec = isPathModeStats
+      ? (maxLaunchFuel * currentEfficiency) / DRONE_T5_SPEED_TILES_PER_SEC
+      : (maxLaunchFuel * currentEfficiency) / DRONE_SPEED_TILES_PER_SEC;
     etaStat.valueEl.textContent = `${maxFlightSec.toFixed(0)}s max`;
 
     // DIST / PATH row update. §11.1: distance + path length measured from the
