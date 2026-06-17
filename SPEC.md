@@ -273,6 +273,8 @@ When multiple weather stations are placed on the same island their visibility bo
 |Heavy Lift (T3)|x0.9|
 |VTOL Tilt-Rotor (T4)|x0.7|
 
+For T5 path-drawn drones the weather-destruction sample path is the **outbound polyline only** — path-drawn flights have no return leg, so the sampled cell sequence is the same at dispatch time and at the legacy return-time fallback.
+
 Final per-tile destruction chance = state\_chance × vehicle\_multiplier, applied at each cell traversed.
 
 **Cell traversal rule.** The vehicle's flight path is rasterized into the ordered sequence of cells it crosses from source to destination. For each cell on that sequence, exactly one destruction roll happens — at the timestamp the path enters the cell. Dwell time within a cell does not increase destruction probability; only the act of entering counts. Per-cell entry timestamps are deterministic functions of the launch parameters (origin, direction, speed, fuel) so offline simulation produces identical resolutions to online play.
@@ -1440,7 +1442,7 @@ For T1-T3 drones, the path is a straight outbound line + return; for T5 path-dra
 
 ### 11.3 Return
 
-While in flight, a drone reveals corridor cells live each tick whenever its position is inside an antenna's signal range. Cells scanned out of antenna range are buffered onboard and flushed on return — this buffered dark-mode telemetry applies to every drone, not just the T5 path drone (§11.6). New islands become visible on the world map. Discovered islands cannot be developed or used as route endpoints until populated by a settlement vehicle (see Section 12).
+While in flight, a drone reveals corridor cells live each tick whenever its position is inside an antenna's signal range. Cells scanned out of antenna range are buffered onboard and flushed on return — this buffered dark-mode telemetry applies to every drone, not just the T5 path drone (§11.6). Straight-line drones flush on return to the origin; path-drawn drones flush at the terminus, and only if the terminus is inside antenna range. New islands become visible on the world map. Discovered islands cannot be developed or used as route endpoints until populated by a settlement vehicle (see Section 12).
 
 ### 11.4 Failure
 
@@ -1457,7 +1459,7 @@ Drone Pad (T2) gates drone launches; once built, the player picks any tier from 
 * T2: range R, scan corridor radius W (capsule shape per §11.2), biome-type detection at distance
 * T3: range 3R, scan corridor radius 2W, multi-target — records all islands within the capsule corridor
 * T4: omnidirectional pulse from Launch Tower — single disk of radius `R\_T4 = 3R` centered on origin (no flight path; not corridor-shaped). `R` is the stratification cell side length (§2.1), so T4 covers a 3-cell-radius disk per launch.
-* T5: path-drawn drone with dark-mode telemetry (see Section 11.6)
+* T5: path-drawn drone with dark-mode telemetry — flights are **one-way** along the drawn path; see Section 11.6
 
 * T6: Spaceport-launched long-range drone; available only when T6 access is unlocked (`ascendantCoreCrafted && hasSpaceport`). Burns Antimatter Propellant (§11.7 / §14.10). `tier_efficiency = 18` (placeholder), scan corridor radius `= 16 tiles` (placeholder), weather-destruction multiplier `= 0.2` (most rugged tier).
 
@@ -1469,14 +1471,24 @@ Available only on islands with Tier 5 access (level 50, AI core crafted, Path Dr
 
 **Launch process:**
 
-The player draws a path on the world map as a sequence of waypoints. The path can have arbitrary length up to a fuel-imposed limit. The drone follows the path at T5 speed, scanning a wide corridor along the entire route.
+The player draws a path on the world map as a sequence of waypoints. The path can have arbitrary length up to a fuel-imposed limit. Path-drawn flights are **one-way**: the drone follows the drawn path and ends at the final waypoint (the terminus). There is no return leg, so the usable reach is the full drawn-path length, not half a round-trip budget.
+
+The drone follows the path at T5 speed, scanning a wide corridor along the entire route.
 
 **Telemetry and dark mode:**
 
 * Within an antenna's signal range (computed from populated islands' Antenna buildings, not island vision range): the drone transmits live. Discovered islands appear on the map immediately as the drone passes them.
-* Beyond any antenna's signal range: the drone enters **dark mode**. It continues recording everything it scans, but transmits nothing. All findings are reported only on return.
+* Beyond any antenna's signal range: the drone enters **dark mode**. It continues recording everything it scans, but transmits nothing. Buffered findings are recovered only if the drone later reaches a recovery point.
 
-This makes long-range path drones high-risk, high-reward. The player commits fuel and a Foundation Kit equivalent of components to send a drone far. If it returns, it dumps a complete record of everything in its corridor. If it fails (fuel, weather), all that data is lost.
+For path-drawn drones, the recovery point is the **terminus**. If the terminus lies inside any Antenna's signal range, the drone transmits its full buffer on arrival and becomes `stranded`. If the terminus is outside antenna range, the buffered telemetry is **forfeited** and the drone becomes `stranded` with no data recovered.
+
+This makes long-range path drones high-risk, high-reward. The player commits fuel and a Foundation Kit equivalent of components to send a drone far. If the terminus is in antenna range, it dumps a complete record of everything in its corridor. If it fails (fuel, weather) or stops out of antenna range, all that data is lost.
+
+**Terminal status:**
+
+* `returned` — straight-line drones that completed their round-trip and reported their data.
+* `stranded` — path-drawn drones that survived to the terminus. Telemetry is recovered if the terminus was in antenna range, otherwise forfeited.
+* `lost` — destroyed by weather or fuel exhaustion; data lost.
 
 **Use cases:**
 
@@ -1486,13 +1498,14 @@ This makes long-range path drones high-risk, high-reward. The player commits fue
 
 **Failure modes:**
 
-* Fuel exhausted mid-path: lost, no data returned
-* Destroyed by weather (in dark mode the player may not learn for hours of real time that it failed)
-* Returns successfully: full data dump, including everything found in dark mode
+* Fuel exhausted mid-path: `lost`, no data returned
+* Destroyed by weather (in dark mode the player may not learn for hours of real time that it failed): `lost`, no data returned
+* Reaches the terminus inside antenna range: `stranded`, full data dump including everything found in dark mode
+* Reaches the terminus outside antenna range: `stranded`, buffered data forfeited
 
 **Weather interaction:**
 
-T5 path drones have x0.5 destruction multiplier. They are still vulnerable in severe storms, especially over long paths. Weather visibility does not help once the drone is in dark mode: a storm developing in its corridor while it is out of range is unforeseeable.
+T5 path drones have x0.5 destruction multiplier. Weather-destruction rolls sample the outbound polyline only (there is no return leg). They are still vulnerable in severe storms, especially over long paths. Weather visibility does not help once the drone is in dark mode: a storm developing in its corridor while it is out of range is unforeseeable.
 
 ### 11.7 Fuel, Range, and Dispatch
 
@@ -1518,6 +1531,8 @@ range\_in\_cells = fuel\_units \* tier\_efficiency
 ```
 
 Where `tier\_efficiency` is a per-tier per-vehicle base value (placeholder), further scaled at dispatch by the launching island's skilltree drone-fuel-efficiency multiplier (and the scan-corridor radius by a drone-scan-radius multiplier). Higher-tier vehicles have higher efficiency — they go farther per unit of their (more expensive) fuel. A T3 drone burns more T3 fuel per range unit than a T1 drone burns T1 fuel in absolute material count, but its T3 fuel grade is harder to produce, so the effective economic cost ratio between tiers is what tuning targets.
+
+**Straight-line vs. path-drawn range.** Straight-line drones fly out and back, so the outbound distance is half the total `range\_in\_cells`. Path-drawn drones are one-way, so the full drawn-path length must fit inside `range\_in\_cells`; there is no return budget.
 
 **Dispatch capacity.** One craft in flight per launch building:
 

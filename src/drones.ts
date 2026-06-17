@@ -66,8 +66,9 @@ export interface Drone {
    *  burned without re-deriving from level (which is mutable post-launch). */
   readonly fuelResource: ResourceId;
   /** §2.6 weather-destruction fate. `active` while in flight; `lost` if the
-   *  weather roll destroyed it; `returned` after a successful landing. */
-  status?: 'active' | 'lost' | 'returned';
+   *  weather roll destroyed it; `returned` after a successful round-trip landing;
+   *  `stranded` for a one-way path-drawn drone that survived to its terminus. */
+  status?: 'active' | 'lost' | 'returned' | 'stranded';
   /** For T5 path-drawn drones: sequence of waypoints. Empty for straight-line drones. */
   readonly waypoints: ReadonlyArray<{ readonly x: number; readonly y: number }>;
   /** Accumulated discoveries while out of antenna range (dark mode). */
@@ -280,8 +281,9 @@ export function probabilityBiasForIsland(state: { buildings: ReadonlyArray<{ def
 }
 
 /** Rasterize a polyline path for weather destruction rolls.
- *  Returns the same {cx, cy, entryMs} shape as `rasterizePath` but follows
- *  the waypoint polyline outbound and its reverse inbound. */
+ *  Path-drawn flights are one-way, so this samples the OUTBOUND polyline only
+ *  — the dispatch-time fate and the legacy return-time fallback must see the
+ *  same cell/time sequence. */
 function rasterizeWaypointPathForWeather(
   waypoints: ReadonlyArray<{ x: number; y: number }>,
   speedTilesPerSec: number,
@@ -290,27 +292,10 @@ function rasterizeWaypointPathForWeather(
 ): Array<{ cx: number; cy: number; entryMs: number }> {
   const result: Array<{ cx: number; cy: number; entryMs: number }> = [];
   let elapsedMs = 0;
-  // Outbound: follow waypoints in order.
+  // Outbound only: path-drawn drones do not retrace their route.
   for (let i = 0; i < waypoints.length - 1; i++) {
     const a = waypoints[i]!;
     const b = waypoints[i + 1]!;
-    const segLen = Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
-    if (segLen === 0) continue;
-    const dirX = (b.x - a.x) / segLen;
-    const dirY = (b.y - a.y) / segLen;
-    const segPath = rasterizePath(a.x, a.y, dirX, dirY, segLen, speedTilesPerSec, launchTimeMs + elapsedMs, cellSizeTiles);
-    for (const p of segPath) {
-      const last = result[result.length - 1];
-      if (!last || last.cx !== p.cx || last.cy !== p.cy || Math.abs(last.entryMs - p.entryMs) > 0.001) {
-        result.push(p);
-      }
-    }
-    elapsedMs += (segLen / speedTilesPerSec) * 1000;
-  }
-  // Inbound: follow waypoints in reverse order.
-  for (let i = waypoints.length - 1; i > 0; i--) {
-    const a = waypoints[i]!;
-    const b = waypoints[i - 1]!;
     const segLen = Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
     if (segLen === 0) continue;
     const dirX = (b.x - a.x) / segLen;
@@ -329,9 +314,10 @@ function rasterizeWaypointPathForWeather(
 
 
 /** Build the §2.6 weather-roll path for a drone flight: the T5 waypoint
- *  polyline when `waypoints` has ≥ 2 points, otherwise the straight-line
- *  outbound + return legs concatenated with exact (cell, time) dedup so
- *  both legs are evaluated by `rollVehicleDestruction`.
+ *  polyline (outbound only — path-drawn flights are one-way) when `waypoints`
+ *  has ≥ 2 points, otherwise the straight-line outbound + return legs
+ *  concatenated with exact (cell, time) dedup so both legs are evaluated by
+ *  `rollVehicleDestruction`.
  *
  *  Shared by the dispatch-time fate roll and the return-time legacy
  *  fallback (old saves without `doomedAtMs`): the destruction RNG stream
@@ -492,20 +478,20 @@ export function dispatchDrone(
   let travelSec: number;
 
   if (isPathDrawn) {
-    // Path-drawn: total path length is sum of segment lengths. Drone travels
-    // out along the path, then back along the reverse path.
+    // Path-drawn flights are ONE-WAY: the drone flies the drawn path and
+    // ends at the terminus. Range is the full drawn length, not half a
+    // round-trip; travel time has no return leg.
     let totalPathLength = 0;
     for (let i = 0; i < waypoints.length - 1; i++) {
       const a = waypoints[i]!;
       const b = waypoints[i + 1]!;
       totalPathLength += Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
     }
-    // Range check: total round-trip = 2 × totalPathLength
-    if (totalPathLength * 2 > fuelLoaded * efficiency) {
+    if (totalPathLength > fuelLoaded * efficiency) {
       return { ok: false, reason: 'path-too-long' };
     }
     outboundTiles = totalPathLength;
-    travelSec = (totalPathLength * 2) / speed;
+    travelSec = totalPathLength / speed;
   } else {
     // Straight-line: range = fuel × efficiency, outbound = half.
     const rangeTiles = fuelLoaded * efficiency;
@@ -577,6 +563,8 @@ export function dispatchDrone(
 export interface TickDronesResult {
   returned: Drone[];
   lost: Drone[];
+  /** One-way path-drawn drones that survived to their terminus. */
+  stranded: Drone[];
   newlyDiscoveredIslandIds: string[];
   /** Number of cells added to `world.revealedCells` this tick. */
   revealedCellsAdded: number;
@@ -594,9 +582,12 @@ export interface TickDronesResult {
  *      Antenna signal range, add the cell key to `world.revealedCells`.
  *      Out-of-range cells are dropped — there is no onboard buffer.
  *   4. Drones whose `expectedReturnTime` has elapsed undergo a §2.6 weather
- *      destruction roll. Destroyed drones are marked `status: 'lost'` and
- *      kept in `world.drones` for UI/history. Successful drones are marked
- *      `status: 'returned'` and also kept.
+ *      destruction roll. Destroyed drones are marked `status: 'lost'`. Straight-
+ *      line survivors are marked `status: 'returned'`. Path-drawn (one-way)
+ *      survivors are marked `status: 'stranded'` at their terminus; their buffered
+ *      telemetry is flushed only if the terminus is inside an Antenna signal range,
+ *      otherwise it is forfeited. Terminal drones are kept in `world.drones` for
+ *      UI/history.
  *   5. After cell reveals, walk every island whose `discovered` is false;
  *      if any of its footprint cells is now in `revealedCells`, flip
  *      `discovered = true`. This is the new "any-cell" rule that replaces
@@ -707,6 +698,7 @@ export function tickDrones(
 ): TickDronesResult {
   const returned: Drone[] = [];
   const lost: Drone[] = [];
+  const stranded: Drone[] = [];
   const newlyDiscoveredIslandIds: string[] = [];
   const remaining: Drone[] = [];
 
@@ -720,22 +712,20 @@ export function tickDrones(
   for (const d of world.drones) {
     // Terminal-status drones are kept in the array for UI/history but
     // no longer participate in reveals or weather rolls.
-    if (d.status === 'lost' || d.status === 'returned') {
+    if (d.status === 'lost' || d.status === 'returned' || d.status === 'stranded') {
       remaining.push(d);
       continue;
     }
 
     // 1) per-tick corridor reveal. The drone's path is piecewise-linear:
-    //    out from origin to the outbound endpoint, then back. Compute the
+    //    straight-line drones go out to the outbound endpoint then back;
+    //    path-drawn drones go one-way along their waypoints. Compute the
     //    waypoints actually visited in [prevTickMs, nowMs] and union the
     //    corridor across each linear segment between consecutive waypoints.
     //
     //    Clamping to [launchTime, expectedReturnTime] avoids the
-    //    degenerate "drone has been back at origin forever" case where
-    //    both endpoints fold to origin and the corridor collapses to a
-    //    point — which would silently lose reveals for the legitimate
-    //    "single tick spans the whole flight" case (the cell-test goes
-    //    over a one-tick flight from launch to return).
+    //    degenerate "drone has already arrived" case where both endpoints
+    //    fold to the terminus/origin and the corridor collapses to a point.
     const segStartMs = Math.max(prevTickMs, d.launchTime);
     // §Fix 6.3: clamp segEndMs to doomedAtMs so a drone fated to be destroyed
     // never live-reveals cells past its destruction point. If doomedAtMs is
@@ -752,11 +742,9 @@ export function tickDrones(
 
       if (d.waypoints.length >= 2) {
         // Fix 6.2: T5 path-drawn — insert every waypoint-crossing time that
-        // falls strictly inside (segStartMs, segEndMs). The waypoints are
-        // visited outbound in order, then inbound in reverse.
-        // Compute cumulative timing for each waypoint crossing.
+        // falls strictly inside (segStartMs, segEndMs). One-way flights visit
+        // waypoints in order only; there is no return leg.
         const wps = d.waypoints;
-        // Outbound crossings: waypoint[i] is reached at launchTime + dist(0..i)/speed*1000
         let cumOutMs = 0;
         for (let i = 0; i < wps.length - 1; i++) {
           const a = wps[i]!;
@@ -764,30 +752,6 @@ export function tickDrones(
           const segLen = Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
           cumOutMs += (segLen / speed) * 1000;
           const crossingMs = d.launchTime + cumOutMs;
-          if (crossingMs > segStartMs && crossingMs < segEndMs) {
-            segWaypoints.push({ x: b.x, y: b.y });
-          }
-        }
-        // Apex (turn point) is already at launchTime + outboundTiles/speed*1000.
-        // Insert it if inside window (same as the straight-line apex below).
-        if (apexMs > segStartMs && apexMs < segEndMs) {
-          // The apex position is the last waypoint; only add if not just added
-          // (avoid duplicating the final outbound waypoint).
-          const lastAdded = segWaypoints[segWaypoints.length - 1]!;
-          const apexPos = droneCurrentPosition(d, apexMs);
-          if (Math.abs(lastAdded.x - apexPos.x) > 1e-9 || Math.abs(lastAdded.y - apexPos.y) > 1e-9) {
-            segWaypoints.push(apexPos);
-          }
-        }
-        // Inbound crossings: drone retraces the path in reverse.
-        // waypoints[n-1-i] is reached at apexMs + dist_for_inbound_leg_i/speed*1000.
-        let cumRetMs = 0;
-        for (let i = wps.length - 1; i > 0; i--) {
-          const a = wps[i]!;
-          const b = wps[i - 1]!;
-          const segLen = Math.sqrt((b.x - a.x) ** 2 + (b.y - a.y) ** 2);
-          cumRetMs += (segLen / speed) * 1000;
-          const crossingMs = apexMs + cumRetMs;
           if (crossingMs > segStartMs && crossingMs < segEndMs) {
             segWaypoints.push({ x: b.x, y: b.y });
           }
@@ -907,13 +871,27 @@ export function tickDrones(
       continue;
     }
 
-    // Before marking 'returned' or flushing existing darkModeDiscoveries
-    // at the landing site, call the unified flush — drains regardless of
-    // current antenna range. This is the "survives the trip → reports
-    // everything" guarantee per SPEC §11.6 telemetry rule.
-    cellsAddedThisTick += flushDroneBuffers(d, world, newlyDiscoveredIslandIds);
-    d.status = 'returned';
-    returned.push(d);
+    if (d.waypoints.length >= 2) {
+      // One-way path-drawn survivor: it ends at the terminus. Telemetry is
+      // recovered only if the terminus lies inside an Antenna's signal range;
+      // otherwise the buffered data is forfeited.
+      const terminus = d.waypoints[d.waypoints.length - 1]!;
+      if (pointInSignalRange(ranges, terminus.x, terminus.y)) {
+        cellsAddedThisTick += flushDroneBuffers(d, world, newlyDiscoveredIslandIds);
+      } else {
+        d.scanBuffer.clear();
+        d.darkModeDiscoveries = [];
+      }
+      d.status = 'stranded';
+      stranded.push(d);
+    } else {
+      // Straight-line survivor: drains everything on return regardless of
+      // current antenna range. This is the "survives the trip → reports
+      // everything" guarantee per SPEC §11.6 telemetry rule.
+      cellsAddedThisTick += flushDroneBuffers(d, world, newlyDiscoveredIslandIds);
+      d.status = 'returned';
+      returned.push(d);
+    }
     remaining.push(d);
   }
 
@@ -936,6 +914,7 @@ export function tickDrones(
   return {
     returned,
     lost,
+    stranded,
     newlyDiscoveredIslandIds,
     revealedCellsAdded: cellsAddedThisTick,
   };
@@ -946,33 +925,27 @@ export function tickDrones(
  * Current world-tile position of a drone given the wall-clock time. Used by
  * the renderer to draw the moving cyan dot.
  *
- * The flight is a straight line out then back. Distance travelled along
- * the path (one-way) at time `t` past launch is `speed × elapsedSec`
- * clamped into `[0, 2 × outboundTiles]`. Position = origin + dir × (path
- * distance, folded so the second half retreats back toward origin).
+ * Straight-line drones (T1-T4) fly out then back: distance travelled is
+ * clamped into `[0, 2 × outboundTiles]` and folded at the apex.
  *
- * If the drone is already past its return time, position folds back to
- * origin (caller should remove the drone before this point — used as a
- * safety value).
+ * Path-drawn drones (T5, `waypoints.length >= 2`) are ONE-WAY: distance is
+ * clamped into `[0, outboundTiles]` and the drone stops at the final
+ * waypoint once the arrival time elapses.
  */
 export function droneCurrentPosition(d: Drone, nowMs: number): { x: number; y: number } {
   const elapsedSec = Math.max(0, (nowMs - d.launchTime) / 1000);
   const speed = droneSpeed(d);
   const travelled = elapsedSec * speed;
-  const total = 2 * d.outboundTiles;
-  const clamped = Math.min(travelled, total);
 
   if (d.waypoints.length >= 2) {
-    // T5 path-drawn: travel along waypoints outbound, then reverse inbound.
-    if (clamped <= d.outboundTiles) {
-      return positionAlongPolyline(d.waypoints, clamped);
-    } else {
-      const returnDist = clamped - d.outboundTiles;
-      return positionAlongPolyline([...d.waypoints].reverse(), returnDist);
-    }
+    // T5 path-drawn: one-way along the drawn polyline.
+    const clamped = Math.min(travelled, d.outboundTiles);
+    return positionAlongPolyline(d.waypoints, clamped);
   }
 
-  // Straight-line behavior (T1-T4).
+  // Straight-line behavior (T1-T4): out then back.
+  const total = 2 * d.outboundTiles;
+  const clamped = Math.min(travelled, total);
   const along = clamped <= d.outboundTiles ? clamped : total - clamped;
   return {
     x: d.originX + d.dirX * along,

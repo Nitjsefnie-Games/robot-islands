@@ -964,9 +964,12 @@ describe('discovery reveals whole island footprint', () => {
     // with one probability_engine (bias 0.25 → effective radius 15) flying
     // east along y=2. A rare island in cell row 1 (cx=30, cy=24) is only
     // discoverable via the expanded ring; its full footprint must be revealed.
+    // An antenna at home is added so the one-way drone's terminus (60,2) is
+    // inside signal range and the buffered discovery is recovered.
     const w = makeTinyWorld();
     const homeSpec = w.islands.find((i) => i.id === 'home')!;
     homeSpec.buildings.push({ id: 'pe1', defId: 'probability_engine', x: 0, y: 0 } as any);
+    homeSpec.buildings.push({ id: 'a1', defId: 'antenna_t1', x: 0, y: 0 } as any);
     const target: IslandSpec = {
       id: 'rare-ring', name: 'rare-ring', biome: 'plains',
       cx: 30, cy: 24, majorRadius: 3, minorRadius: 3,
@@ -976,7 +979,10 @@ describe('discovery reveals whole island footprint', () => {
     w.islands.push(target);
     const home = makeIslandState({
       id: 'home',
-      buildings: [{ id: 'pe1', defId: 'probability_engine', x: 0, y: 0 } as any],
+      buildings: [
+        { id: 'pe1', defId: 'probability_engine', x: 0, y: 0 } as any,
+        { id: 'a1', defId: 'antenna_t1', x: 0, y: 0 } as any,
+      ],
     });
     home.inventory.plasma_charge = 50;
     const r = dispatchDrone(w, home, 0, 2, 1, 0, 15, 0, [{ x: 0, y: 2 }, { x: 60, y: 2 }]);
@@ -1262,31 +1268,61 @@ describe('T5 path-drawn drone', () => {
     expect(result.drone.probabilityBias).toBe(0);
   });
 
-  it('rejects an over-long path', () => {
+  it('rejects an over-long path (one-way range limit)', () => {
     const world = freshWorld();
     const home = makeIslandState({ level: 50, aiCoreCrafted: true });
     home.inventory.plasma_charge = 50;
-    // 10 fuel × 8 efficiency = 80 tiles round-trip → 40 tiles outbound max.
-    // Path (0,0)→(30,0)→(30,30) = 60 tiles outbound > 40.
-    const waypoints = [{ x: 0, y: 0 }, { x: 30, y: 0 }, { x: 30, y: 30 }] as const;
+    // 10 fuel × 8 efficiency = 80 tiles one-way.
+    // Path (0,0)→(50,0)→(50,50) = 100 tiles > 80.
+    const waypoints = [{ x: 0, y: 0 }, { x: 50, y: 0 }, { x: 50, y: 50 }] as const;
     const result = dispatchDrone(world, home, 0, 0, 1, 0, 10, 0, waypoints);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toBe('path-too-long');
   });
 
-  it('accepts a path exactly at the fuel limit', () => {
+  it('accepts a path exactly at the one-way fuel limit', () => {
     const world = freshWorld();
     const home = makeIslandState({ level: 50, aiCoreCrafted: true });
     home.inventory.plasma_charge = 50;
-    // 10 fuel × 8 efficiency = 80 tiles round-trip → 40 tiles outbound max.
-    // Path (0,0)→(40,0) = 40 tiles outbound = exactly at limit.
-    const waypoints = [{ x: 0, y: 0 }, { x: 40, y: 0 }] as const;
+    // 10 fuel × 8 efficiency = 80 tiles one-way.
+    // Path (0,0)→(80,0) = 80 tiles = exactly at limit.
+    const waypoints = [{ x: 0, y: 0 }, { x: 80, y: 0 }] as const;
     const result = dispatchDrone(world, home, 0, 0, 1, 0, 10, 0, waypoints);
     expect(result.ok).toBe(true);
   });
 
-  it('droneCurrentPosition follows waypoints outbound then reverse inbound', () => {
+  it('path-drawn dispatch uses one-way range and timing', () => {
+    const world = freshWorld();
+    const home = makeIslandState({ level: 50, aiCoreCrafted: true });
+    home.inventory.plasma_charge = 50;
+    // Path length 60; old round-trip limit would be 40, so this would have
+    // been rejected. Under one-way semantics it dispatches fine.
+    const waypoints = [{ x: 0, y: 0 }, { x: 30, y: 0 }, { x: 30, y: 30 }] as const;
+    const result = dispatchDrone(world, home, 0, 0, 1, 0, 10, 1000, waypoints);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.drone.outboundTiles).toBeCloseTo(60);
+    // One-way travel time: 60 tiles / 0.8 t/s = 75s.
+    expect(result.drone.expectedReturnTime).toBe(1000 + 75_000);
+  });
+
+  it('straight-line dispatch stays round-trip', () => {
+    const world = freshWorld();
+    const home = makeIslandState({ level: 50, aiCoreCrafted: true });
+    home.inventory.plasma_charge = 50;
+    // T5 island launching a straight-line drone still resolves to T5, but no
+    // waypoints means round-trip math. Tier-5 straight-line uses
+    // DRONE_TIER_EFFICIENCY[5] = 15 and base drone speed 0.5 t/s.
+    const result = dispatchDrone(world, home, 0, 0, 1, 0, 10, 1000);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.drone.waypoints.length).toBe(0);
+    expect(result.drone.outboundTiles).toBe(75); // 150 tiles round-trip / 2
+    expect(result.drone.expectedReturnTime).toBe(1000 + (150 / DRONE_SPEED_TILES_PER_SEC) * 1000);
+  });
+
+  it('droneCurrentPosition follows waypoints one-way and stops at the terminus', () => {
     const waypoints = [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }] as const;
     const drone: Drone = {
       id: 'd-t5',
@@ -1298,7 +1334,7 @@ describe('T5 path-drawn drone', () => {
       outboundTiles: 20,
       scanRadius: 12,
       launchTime: 0,
-      expectedReturnTime: 50_000,
+      expectedReturnTime: 25_000,
       tier: 5,
       fuelLoaded: 10,
       fuelResource: 'plasma_charge',
@@ -1310,16 +1346,14 @@ describe('T5 path-drawn drone', () => {
     };
     // At launch
     expect(droneCurrentPosition(drone, 0)).toEqual({ x: 0, y: 0 });
-    // Halfway outbound: 10 tiles along the path → at (10, 0)
-    const halfOutboundMs = (10 / DRONE_T5_SPEED_TILES_PER_SEC) * 1000;
-    expect(droneCurrentPosition(drone, halfOutboundMs)).toEqual({ x: 10, y: 0 });
-    // Apex: 20 tiles outbound → at (10, 10)
-    const apexMs = (20 / DRONE_T5_SPEED_TILES_PER_SEC) * 1000;
-    expect(droneCurrentPosition(drone, apexMs)).toEqual({ x: 10, y: 10 });
-    // Halfway back: 10 tiles back → at (10, 0)
-    expect(droneCurrentPosition(drone, apexMs + halfOutboundMs)).toEqual({ x: 10, y: 0 });
-    // Returned
-    expect(droneCurrentPosition(drone, 50_000)).toEqual({ x: 0, y: 0 });
+    // Halfway along path: 10 tiles → at (10, 0)
+    const halfPathMs = (10 / DRONE_T5_SPEED_TILES_PER_SEC) * 1000;
+    expect(droneCurrentPosition(drone, halfPathMs)).toEqual({ x: 10, y: 0 });
+    // Terminus: 20 tiles → at (10, 10)
+    const terminusMs = (20 / DRONE_T5_SPEED_TILES_PER_SEC) * 1000;
+    expect(droneCurrentPosition(drone, terminusMs)).toEqual({ x: 10, y: 10 });
+    // After arrival the drone stays at the terminus.
+    expect(droneCurrentPosition(drone, 50_000)).toEqual({ x: 10, y: 10 });
   });
 });
 
@@ -1366,8 +1400,45 @@ describe('dark-mode telemetry', () => {
     };
   }
 
+  function worldWithAntenna(islands: IslandSpec[]): WorldState {
+    const home: IslandSpec = {
+      id: 'home',
+      name: 'home',
+      biome: 'plains',
+      cx: 0,
+      cy: 0,
+      majorRadius: 5,
+      minorRadius: 5,
+      populated: true,
+      discovered: true,
+      buildings: [{ id: 'home-a1', defId: 'antenna_t1', x: 0, y: 0 }],
+      modifiers: [],
+    };
+    return {
+      islands: [home, ...islands],
+      drones: [],
+      routes: [],
+      vehicles: [],
+      revealedCells: new Set(),
+      satellites: [],
+      repairDrones: [],
+      debrisFields: [],
+      endgameState: { achieved: new Set(), firstAchievedMs: null },
+      latticeActive: false,
+      latticeNodeIslands: [],
+      commPackets: [],
+      totalCo2Kg: 0,
+      playerLat: null,
+      playerLon: null,
+      oceanCells: new Map(),
+      depthRevealedCells: new Set(),
+      seed: 'test-seed',
+      recentBuildAttempts: new Set(),
+      recentBuildAttemptTs: new Map(),
+    };
+  }
+
   it('T5 drone enters dark mode when out of antenna range', () => {
-    // Target island within scan corridor but no antenna on home.
     const target = makeIslandSpec({
       id: 'near-target',
       cx: 30,
@@ -1379,22 +1450,21 @@ describe('dark-mode telemetry', () => {
     const w = worldNoAntenna([target]);
     const home = makeIslandState({ level: 50, aiCoreCrafted: true });
     home.inventory.plasma_charge = 50;
-    // T5 drone with waypoints flying east to x=40 (within corridor of target at x=30).
     dispatchDrone(w, home, 0, 0, 1, 0, 10, 0, [{ x: 0, y: 0 }, { x: 40, y: 0 }]);
     expect(w.drones[0]!.tier).toBe(5);
-    // Tick at mid-flight (apex, 50s). Drone is out of antenna range, has not
-    // returned yet — dark-mode discoveries should be buffered.
-    tickDrones(w, 50_000, 0);
+    // Tick at mid-flight (25s), before the one-way arrival at 50s.
+    tickDrones(w, 25_000, 0);
     // Cells should NOT be revealed.
     expect(w.revealedCells.size).toBe(0);
     // But the island discovery should be buffered.
     expect(w.drones[0]!.darkModeDiscoveries.length).toBeGreaterThan(0);
     expect(w.drones[0]!.darkModeDiscoveries[0]!.islandId).toBe('near-target');
-    // Island not yet discovered (flush happens on return).
+    // Island not yet discovered (flush happens only at a recovery point).
     expect(target.discovered).toBe(false);
+    expect(w.drones[0]!.status).toBe('active');
   });
 
-  it('flushes dark mode discoveries on successful return', () => {
+  it('recovers buffered telemetry when the terminus is inside antenna range', () => {
     const target = makeIslandSpec({
       id: 'near-target',
       cx: 30,
@@ -1403,16 +1473,95 @@ describe('dark-mode telemetry', () => {
       minorRadius: 5,
       discovered: false,
     });
+    const w = worldWithAntenna([target]);
+    const home = makeIslandState({ level: 50, aiCoreCrafted: true });
+    home.inventory.plasma_charge = 50;
+    const r = dispatchDrone(w, home, 0, 0, 1, 0, 10, 0, [{ x: 0, y: 0 }, { x: 40, y: 0 }]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const tickResult = tickDrones(w, r.drone.expectedReturnTime + 1_000, 0);
+    expect(w.drones[0]!.status).toBe('stranded');
+    expect(tickResult.stranded).toContain(w.drones[0]);
+    expect(r.drone.darkModeDiscoveries.length).toBe(0);
+    expect(r.drone.scanBuffer.size).toBe(0);
+    expect(target.discovered).toBe(true);
+    expect(tickResult.newlyDiscoveredIslandIds).toContain('near-target');
+    expect(w.revealedCells.size).toBeGreaterThan(0);
+  });
+
+  it('forfeits buffered telemetry when the terminus is outside antenna range', () => {
+    const target = makeIslandSpec({
+      id: 'far-target',
+      cx: 50,
+      cy: 0,
+      majorRadius: 5,
+      minorRadius: 5,
+      discovered: false,
+    });
     const w = worldNoAntenna([target]);
     const home = makeIslandState({ level: 50, aiCoreCrafted: true });
     home.inventory.plasma_charge = 50;
-    dispatchDrone(w, home, 0, 0, 1, 0, 10, 0, [{ x: 0, y: 0 }, { x: 40, y: 0 }]);
-    // Full flight; weather is clear for this seed + short path.
-    const r = tickDrones(w, 100_000, 0);
-    expect(w.drones[0]!.status).toBe('returned');
-    expect(r.newlyDiscoveredIslandIds).toContain('near-target');
-    expect(target.discovered).toBe(true);
+    const r = dispatchDrone(w, home, 0, 0, 1, 0, 20, 0, [{ x: 0, y: 0 }, { x: 100, y: 0 }]);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    const tickResult = tickDrones(w, r.drone.expectedReturnTime + 1_000, 0);
+    expect(w.drones[0]!.status).toBe('stranded');
+    expect(tickResult.stranded).toContain(w.drones[0]);
+    expect(target.discovered).toBe(false);
     expect(w.drones[0]!.darkModeDiscoveries.length).toBe(0);
+    expect(w.drones[0]!.scanBuffer.size).toBe(0);
+    expect(w.revealedCells.size).toBe(0);
+  });
+
+  it('a stranded drone frees its pad slot for another launch', () => {
+    const w = worldWithAntenna([]);
+    const home = makeIslandState({ level: 50, aiCoreCrafted: true });
+    home.inventory.plasma_charge = 50;
+    const r1 = dispatchDrone(w, home, 0, 0, 1, 0, 10, 0, [{ x: 0, y: 0 }, { x: 40, y: 0 }]);
+    expect(r1.ok).toBe(true);
+    if (!r1.ok) return;
+    tickDrones(w, r1.drone.expectedReturnTime + 1_000, 0);
+    expect(r1.drone.status).toBe('stranded');
+    // Same launch origin: second dispatch succeeds because 'stranded' no longer
+    // counts toward the per-pad in-flight cap.
+    const r2 = dispatchDrone(
+      w, home, 0, 0, 0, 1, 10,
+      r1.drone.expectedReturnTime + 2_000,
+      [{ x: 0, y: 0 }, { x: 40, y: 0 }],
+    );
+    expect(r2.ok).toBe(true);
+  });
+
+  it('one-way path-drawn drone destroyed by weather is lost, not stranded', () => {
+    const w = worldNoAntenna([]);
+    const d: Drone = {
+      id: 'doomed-path',
+      fromIslandId: 'home',
+      originX: 0,
+      originY: 0,
+      dirX: 1,
+      dirY: 0,
+      outboundTiles: 20,
+      scanRadius: 12,
+      launchTime: 0,
+      expectedReturnTime: 25_000,
+      tier: 5,
+      fuelLoaded: 10,
+      fuelResource: 'plasma_charge',
+      status: 'active',
+      waypoints: [{ x: 0, y: 0 }, { x: 10, y: 0 }, { x: 10, y: 10 }],
+      darkModeDiscoveries: [],
+      scanBuffer: new Set<string>(['0,0', '1,0']),
+      probabilityBias: 0,
+      doomedAtMs: 10_000,
+    };
+    w.drones.push(d);
+    const r = tickDrones(w, 100_000, 0);
+    expect(d.status).toBe('lost');
+    expect(r.lost).toContain(d);
+    expect(r.stranded).toHaveLength(0);
+    expect(d.scanBuffer.size).toBe(0);
+    expect(d.darkModeDiscoveries.length).toBe(0);
   });
 
   it('discards dark mode discoveries on destruction', () => {
@@ -1755,25 +1904,26 @@ describe('Fix 6.2: T5 L-shaped path scans true polyline not chord', () => {
   }
 
   it('L-shaped path (0,0)→(30,0)→(30,30): elbow cell is scanned but chord-only cell is not', () => {
-    // Path is outbound (0,0)→(30,0)→(30,30), inbound reversed.
-    // Total outbound = 30 + 30 = 60 tiles. Round-trip = 120 tiles.
-    // At DRONE_T5_EFFICIENCY=8, need 120/8 = 15 fuel.
+    // Path-drawn flights are one-way, so the drone only travels
+    // (0,0)→(30,0)→(30,30). Total path = 60 tiles.
+    // At DRONE_T5_EFFICIENCY=8, need 60/8 = 7.5 → 8 fuel.
     // Elbow at approx (30,0) — tile cell covering (30,0) should be in scanBuffer.
     // A chord-only cell at roughly (21, 12) (diagonal from origin to apex) should NOT be in scanBuffer.
     const w = worldNoAntenna();
     const home = makeIslandState({ level: 50, aiCoreCrafted: true });
     home.inventory.plasma_charge = 50;
     const waypoints = [{ x: 0, y: 0 }, { x: 30, y: 0 }, { x: 30, y: 30 }] as const;
-    const fuel = Math.ceil(120 / DRONE_T5_EFFICIENCY); // 15
+    const fuel = Math.ceil(60 / DRONE_T5_EFFICIENCY); // 8
     const r = dispatchDrone(w, home, 0, 0, 1, 0, fuel, 0, waypoints);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     const d = r.drone;
 
-    // Single tick spanning the whole outbound flight.
-    // Speed=0.8 t/s, outbound=60 tiles → outbound time=75000ms
+    // Tick at mid-outbound (before arrival at the terminus), so the buffer has
+    // not been forfeited by stranding without an antenna.
     const outboundMs = (60 / DRONE_T5_SPEED_TILES_PER_SEC) * 1000; // 75000
-    tickDrones(w, outboundMs + 1, 0);
+    tickDrones(w, Math.floor(outboundMs / 2), 0);
+    expect(d.status).toBe('active');
 
     // Elbow cell: (30,0) → cell coords = floor(30/16), floor(0/16) = (1,0)
     // The drone passes through the elbow, so cell (1,0) must be in the scanBuffer.
@@ -2002,7 +2152,10 @@ describe('Fix 6.4: rare-bias ring discovers rare islands only', () => {
         id: 'home', name: 'home', biome: 'plains',
         cx: 0, cy: 0, majorRadius: 5, minorRadius: 5,
         populated: true, discovered: true,
-        buildings: [{ id: 'pe1', defId: 'probability_engine', x: 0, y: 0 }],
+        buildings: [
+        { id: 'pe1', defId: 'probability_engine', x: 0, y: 0 },
+        { id: 'a1', defId: 'antenna_t1', x: 0, y: 0 },
+      ],
         modifiers: [],
       }],
       drones: [], routes: [], vehicles: [],
@@ -2021,20 +2174,23 @@ describe('Fix 6.4: rare-bias ring discovers rare islands only', () => {
   function flyRingProbe(w: WorldState, island: IslandSpec): void {
     const home = makeIslandState({
       id: 'home',
-      buildings: [{ id: 'pe1', defId: 'probability_engine', x: 0, y: 0 }],
+      buildings: [
+        { id: 'pe1', defId: 'probability_engine', x: 0, y: 0 },
+        { id: 'a1', defId: 'antenna_t1', x: 0, y: 0 },
+      ],
     });
     home.inventory.plasma_charge = 50;
     w.islands.push(island);
-    // Path 60 tiles → round-trip 120 = 15 fuel × DRONE_T5_EFFICIENCY (8).
+    // Path 60 tiles one-way; 15 fuel is more than enough (limit = 120 tiles).
     const waypoints = [{ x: 0, y: 2 }, { x: 60, y: 2 }] as const;
     const r = dispatchDrone(w, home, 0, 2, 1, 0, 15, 0, waypoints);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.drone.probabilityBias).toBe(0.25); // guard: engine counted
     tickDrones(w, r.drone.expectedReturnTime + 1000, 0);
-    // Guard: drone survived, so the return flush DID run — an undiscovered
-    // ordinary island below is not explained by drone loss.
-    expect(r.drone.status).toBe('returned');
+    // Guard: drone survived to the terminus, which is inside the antenna's
+    // range, so the buffered data is recovered — not lost.
+    expect(r.drone.status).toBe('stranded');
   }
 
   it('ordinary island only in the expanded ring stays undiscovered', () => {
