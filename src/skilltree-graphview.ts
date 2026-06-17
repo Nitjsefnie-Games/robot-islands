@@ -348,36 +348,23 @@ export function mountSkillGraphView(
   async function handleNodeClick(nodeId: GNodeId): Promise<void> {
     const state = deps.getState();
     if (state.unlockedNodes.has(nodeId)) return;
-    // Keystones are AND-gated (§9.3): bought via buyKeystone, which requires
-    // EVERY prereq node owned plus the flat keystone cost. They are excluded
-    // from the Dijkstra solver, so buyNode would report them unreachable.
     const ks = keystonePrereqFor(nodeId);
-    if (ks) {
-      // AND-prereq path first.
-      if (canBuyKeystone(ks, state)) {
-        if (deps.gateway) {
-          const res = await deps.gateway.buyKeystone(state.id, nodeId);
-          if (!res.ok) return;
-        } else {
-          try { buyKeystone(ks, state); } catch { return; }
-        }
-        refresh();
-        return;
-      }
-      // Bridge-OR fallback: use the Dijkstra path.
-      const graph = effectiveGraph(state);
+    if (ks && canBuyKeystone(ks, state)) {
+      // Keystones are AND-gated (§9.3): bought via buyKeystone, which requires
+      // EVERY prereq node owned plus the flat keystone cost. They are excluded
+      // from the Dijkstra solver, so buyNode would report them unreachable.
       if (deps.gateway) {
-        const res = await deps.gateway.unlockSkillNode(state.id, nodeId);
+        const res = await deps.gateway.buyKeystone(state.id, nodeId);
         if (!res.ok) return;
       } else {
-        try { buyNode(graph, state, nodeId); } catch { return; }
+        try { buyKeystone(ks, state); } catch { return; }
       }
       refresh();
       return;
     }
-    // Dijkstra path for fillers and notables. buyNode handles the root-node
-    // fallback for depth-1 fillers (no incoming edges) and walks the cheapest
-    // path otherwise, auto-owning intermediates.
+    // Dijkstra path for fillers, notables, and keystones reached via bridge-OR.
+    // buyNode handles the root-node fallback for depth-1 fillers (no incoming
+    // edges) and walks the cheapest path otherwise, auto-owning intermediates.
     const graph = effectiveGraph(state);
     if (deps.gateway) {
       const res = await deps.gateway.unlockSkillNode(state.id, nodeId);
