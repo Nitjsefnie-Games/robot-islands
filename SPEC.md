@@ -245,10 +245,13 @@ Practical effect: a player observing one cell's current state can typically infe
 
 The player only sees weather in cells within visibility range of any populated island. Default range R\_weather (placeholder: 5 cells in each direction). Outside this range, weather is unknown; the player must commit launches blind.
 
+Current-weather visibility also follows general vision: any cell revealed by a **Lighthouse**'s vision circle (radius per Lighthouse tier, §vision) shows the current weather too — wherever you can see the map you can read the weather. Lighthouses extend the *current-cycle* overlay only; the 1-cycle-ahead forecast still requires an Advanced Weather Station.
+
 Visibility is extended by:
 
 * Weather Station (T2): +3 cells from this island
 * Advanced Weather Station (T3): +6 cells, plus 1-cycle ahead forecasting
+* Lighthouse (any tier): current weather across its full vision circle (current-cycle only, no forecast)
 
 When multiple weather stations are placed on the same island their visibility bonuses **stack additively** (e.g. one Weather Station + one Advanced Weather Station = baseline + 9 cells). The Advanced Weather Station's forecast layer covers the same radius as its current-cycle reveal — the T3 station's gift is the temporal lookahead, not extra spatial range beyond what its `+6` already provides. Because cell dwell varies (30 min – 4 h, no fixed cycle length), "1-cycle ahead" is sampled at the dwell midpoint (~2 real-time hours) so the forecast lands one typical dwell into the future.
 
