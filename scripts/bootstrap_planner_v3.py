@@ -70,7 +70,7 @@ MIN_PF = 0.5                   # power-provisioning floor: add windmills only to
 _FAIL = [""]
 
 # §9.3 base construction time per tier (ms in game → seconds here).
-BASE_CONSTRUCTION_S_BY_TIER = {1: 30, 2: 120, 3: 300, 4: 900, 5: 1800, 6: 3600}
+BASE_CONSTRUCTION_S_BY_TIER = {0: 30, 1: 30, 2: 120, 3: 300, 4: 900, 5: 1800, 6: 3600}
 
 # Auto-sizing window: the chain is sized so its steady net production covers the
 # whole build's GRASS-good placement demand (notably 55000 steel_beam for the
@@ -312,6 +312,33 @@ BUILDINGS = {
                             "clay": 1500, "copper_ingot": 250}, "power": -60, "cycle_s": 945992.4,
                    "in": {"steel": 11}, "out": {"spring": 50, "mill_scale": 1},
                    "category": "manufacturing", "clusters": True, "tier": 2},
+    "charcoal_kiln": {"cost": {"stone": 150, "wood": 80, "iron_ingot": 20}, "power": -40, "cycle_s": 171998.6, "in": {"wood": 8}, "out": {"charcoal": 2, "wood_tar": 1, "co2": 2, "water_vapor": 3}, "category": "chemistry", "clusters": True, "tier": 1, "requiresHeat": True, "heat_demand_kw": None},
+    "electrolyzer": {"cost": {"stone": 40, "wood": 20, "iron_ingot": 20, "copper_ingot": 10}, "power": -100, "cycle_s": 206398.3, "in": {"fresh_water": 9}, "out": {"hydrogen": 1, "oxygen": 8}, "category": "chemistry", "clusters": True, "tier": 1},
+    "diesel_refinery": {"cost": {"concrete": 10000, "stone": 6000, "iron_ingot": 3000, "gear": 200, "clay": 2000, "copper_ingot": 400}, "power": -180, "cycle_s": 626.6, "in": {"heavy_oil": 10, "hydrogen": 1}, "out": {"diesel": 10, "sulfur": 0.2}, "category": "chemistry", "clusters": True, "tier": 2, "soft_gate": "exhaust_scrubber"},
+    "plastic_polymerizer_a": {"cost": {"concrete": 8000, "stone": 5000, "iron_ingot": 2000, "gear": 150, "clay": 1500, "copper_ingot": 300}, "power": -120, "cycle_s": 358.3, "in": {"naphtha": 1}, "out": {"plastic_precursor": 1}, "category": "chemistry", "clusters": True, "tier": 2},
+    "lithography_lab": {"cost": {"steel_beam": 1500, "concrete": 20000, "glass": 500, "wire": 200}, "power": -600, "cycle_s": 67187.0, "in": {"silicon": 1, "wire": 1}, "out": {"microchip": 1}, "category": "electronics", "clusters": True, "tier": 3},
+    "cell_press": {"cost": {"copper_ingot": 10, "iron_ingot": 2, "saltwater": 5, "wood": 1}, "power": -20, "cycle_s": 537495.7, "in": {"saltwater": 1, "iron_ingot": 1, "wire": 1}, "out": {"saltwater_cell": 1}, "category": "manufacturing", "clusters": True, "tier": 1},
+    "ceramic_kiln": {"cost": {"concrete": 5000, "stone": 4000, "iron_ingot": 1200, "gear": 80, "clay": 2000}, "power": -80, "cycle_s": 10749.9, "in": {"clay": 2, "sand": 1}, "out": {"ceramic_insulator": 1}, "category": "manufacturing", "clusters": True, "tier": 2, "requiresHeat": True, "heat_demand_kw": None},
+    "coolant_synthesizer": {"cost": {"concrete": 6000, "stone": 4000, "iron_ingot": 1500, "gear": 150, "glass": 300, "copper_ingot": 200}, "power": -100, "cycle_s": 716.7, "in": {"fresh_water": 2, "salt": 1, "naphtha": 1}, "out": {"coolant": 2}, "category": "manufacturing", "clusters": True, "tier": 2},
+    "glass_panel_press": {"cost": {"concrete": 5000, "stone": 3000, "iron_ingot": 1500, "gear": 100, "clay": 1000}, "power": -60, "cycle_s": 67012.5, "in": {"glass": 2}, "out": {"glass_panel": 1}, "category": "manufacturing", "clusters": True, "tier": 2},
+    "lumber_mill": {"cost": {"stone": 100, "wood": 100, "iron_ingot": 30}, "power": -40, "cycle_s": 85999.3, "in": {"wood": 1}, "out": {"lumber": 1}, "category": "manufacturing", "clusters": True, "tier": 1},
+    "cable_mill": {"cost": {"concrete": 9000, "stone": 6000, "iron_ingot": 2800, "gear": 180, "clay": 2000, "copper_ingot": 400}, "power": -80, "cycle_s": 14447.9, "in": {"steel": 42}, "out": {"heavy_cable": 5, "mill_scale": 2}, "category": "manufacturing", "clusters": True, "tier": 2},
+    "biomass_plant": {"cost": {"steel_beam": 400, "clay": 150, "stone": 100, "pipe": 30, "wood": 80}, "power": 0, "cycle_s": None, "in": {}, "out": {}, "category": "power", "clusters": False, "tier": 1},
+    "dock": {"cost": {"stone": 150, "wood": 100, "iron_ingot": 30}, "power": 0, "cycle_s": None, "in": {}, "out": {}, "category": "logistics", "clusters": False, "tier": 1},
+    "helipad": {"cost": {"stone": 200, "wood": 60, "iron_ingot": 60}, "power": -60, "cycle_s": None, "in": {}, "out": {}, "category": "logistics", "clusters": False, "tier": 1},
+    "shipyard": {"cost": {"stone": 400, "wood": 250, "iron_ingot": 100}, "power": -80, "cycle_s": None, "in": {}, "out": {}, "category": "logistics", "clusters": False, "tier": 1},
+    "signal_exchange": {"cost": {"wood": 40, "stone": 20}, "power": 0, "cycle_s": None, "in": {}, "out": {}, "category": "logistics", "clusters": False, "tier": 1},
+    "geothermal_vent": {"cost": {"stone": 200, "iron_ingot": 80, "wood": 30}, "power": 1000, "cycle_s": None, "in": {}, "out": {}, "category": "power", "clusters": True, "tier": 1},
+    "newcomen_engine": {"cost": {"stone": 200, "iron_ingot": 80, "copper_ingot": 40, "wood": 30, "bolt": 5}, "power": 4, "cycle_s": None, "in": {}, "out": {}, "category": "power", "clusters": True, "tier": 1},
+    "water_wheel": {"cost": {"wood": 50, "stone": 30, "iron_ingot": 5}, "power": 20, "cycle_s": None, "in": {}, "out": {}, "category": "power", "clusters": True, "tier": 0},
+    "antenna_t1": {"cost": {"stone": 20, "wood": 20, "iron_ingot": 10, "copper_ingot": 5}, "power": 0, "cycle_s": None, "in": {}, "out": {}, "category": "special", "clusters": False, "tier": 1},
+    "cooling_tower": {"cost": {"steel_beam": 250, "concrete": 6000, "gear": 80, "pipe": 120, "glass": 300}, "power": -40, "cycle_s": None, "in": {}, "out": {}, "category": "special", "clusters": False, "tier": 2},
+    "land_reclamation_hub": {"cost": {"concrete": 15000, "stone": 10000, "iron_ingot": 5000, "gear": 400, "clay": 3000}, "power": 0, "cycle_s": None, "in": {}, "out": {}, "category": "special", "clusters": False, "tier": 2},
+    "component_warehouse": {"cost": {"steel_beam": 160, "concrete": 2000, "stone": 800, "iron_ingot": 500, "gear": 150, "copper_ingot": 200}, "power": 0, "cycle_s": None, "in": {}, "out": {}, "category": "storage", "clusters": False, "tier": 2},
+    "silo": {"cost": {"steel": 5500, "stone": 1500, "iron_ingot": 200}, "power": 0, "cycle_s": None, "in": {}, "out": {}, "category": "storage", "clusters": False, "tier": 1},
+    "tank": {"cost": {"steel": 8000, "concrete": 3000, "stone": 1000, "gear": 200, "pipe": 300}, "power": 0, "cycle_s": None, "in": {}, "out": {}, "category": "storage", "clusters": False, "tier": 2},
+    "sheet_metal_mill": {"cost": {"concrete": 12000, "stone": 8000, "iron_ingot": 4000, "gear": 300, "clay": 3000}, "power": -100, "cycle_s": 18231.9, "in": {"steel": 53}, "out": {"sheet_metal": 10, "mill_scale": 3}, "category": "manufacturing", "clusters": True, "tier": 2},
+    "plant_a_tree": {"cost": {"wood": 5, "fresh_water": 1}, "power": 0, "cycle_s": None, "in": {}, "out": {}, "category": "special", "clusters": False, "tier": 1},
     "crate":      {"cost": {"wood": 80, "stone": 30}, "power": 0, "cycle_s": None,
                    "in": {}, "out": {}, "category": "storage", "clusters": False, "tier": 1},
 }
@@ -331,6 +358,7 @@ TERRAIN_CAPS = {
     "lime_slaker": 999, "mortar_mixer": 999, "naphtha_cracker": 999,
     "sulfuric_acid_plant": 999, "hcl_plant": 999, "bearing_assembler": 999, "spring_press": 999,
     "metal_rolling_mill": 999,
+    "charcoal_kiln": 999, "electrolyzer": 999, "diesel_refinery": 999, "plastic_polymerizer_a": 999, "lithography_lab": 999, "cell_press": 999, "ceramic_kiln": 999, "coolant_synthesizer": 999, "glass_panel_press": 999, "lumber_mill": 999, "cable_mill": 999, "biomass_plant": 999, "dock": 999, "helipad": 999, "shipyard": 999, "signal_exchange": 999, "geothermal_vent": 999, "newcomen_engine": 999, "water_wheel": 999, "antenna_t1": 999, "cooling_tower": 999, "land_reclamation_hub": 999, "component_warehouse": 999, "silo": 999, "tank": 999, "sheet_metal_mill": 999, "plant_a_tree": 999,
     "windmill": 999, "smelter": 999, "copper_smelter": 999, "coke_oven": 999,
     "blast_furnace": 999, "steel_mill": 999, "steel_mill_scrap": 999,
     "brick_kiln": 999, "limekiln": 999, "cement_mill": 999, "concrete_plant": 999,
@@ -362,6 +390,7 @@ STORAGE_CAT = {
     "silicon": "components", "slaked_lime": "dry_goods", "mortar": "dry_goods",
     "naphtha": "liquid_gas", "aviation_kerosene_crude": "liquid_gas", "diesel": "liquid_gas",
     "sulfuric_acid": "liquid_gas", "hydrochloric_acid": "liquid_gas", "bearing": "components", "spring": "components", "wire": "components",
+    "ceramic_insulator": "components", "charcoal": "dry_goods", "coolant": "liquid_gas", "glass_panel": "components", "heavy_cable": "components", "lumber": "dry_goods", "microchip": "components", "plastic_precursor": "liquid_gas", "sheet_metal": "components",
 }
 CAT_DEFAULT_CAP = {"dry_goods": 100, "liquid_gas": 100, "temp_sensitive": 50,
                    "components": 20, "rare": 1}
@@ -406,6 +435,7 @@ TARGET = {
     "lime_slaker": 1, "mortar_mixer": 1, "naphtha_cracker": 1,
     "sulfuric_acid_plant": 1, "hcl_plant": 1, "bearing_assembler": 1, "spring_press": 1,
     "metal_rolling_mill": 1,
+    "charcoal_kiln": 1, "electrolyzer": 1, "diesel_refinery": 1, "plastic_polymerizer_a": 1, "lithography_lab": 1, "cell_press": 1, "ceramic_kiln": 1, "coolant_synthesizer": 1, "glass_panel_press": 1, "lumber_mill": 1, "cable_mill": 1, "biomass_plant": 1, "dock": 1, "helipad": 1, "shipyard": 1, "signal_exchange": 1, "geothermal_vent": 1, "newcomen_engine": 1, "water_wheel": 1, "antenna_t1": 1, "cooling_tower": 1, "land_reclamation_hub": 1, "component_warehouse": 1, "silo": 1, "tank": 1, "sheet_metal_mill": 1, "plant_a_tree": 1,
 }
 
 NEEDED_RES = {r for b in BUILDINGS.values()
