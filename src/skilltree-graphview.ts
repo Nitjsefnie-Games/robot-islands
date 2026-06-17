@@ -353,12 +353,24 @@ export function mountSkillGraphView(
     // from the Dijkstra solver, so buyNode would report them unreachable.
     const ks = keystonePrereqFor(nodeId);
     if (ks) {
-      if (!canBuyKeystone(ks, state)) return;
+      // AND-prereq path first.
+      if (canBuyKeystone(ks, state)) {
+        if (deps.gateway) {
+          const res = await deps.gateway.buyKeystone(state.id, nodeId);
+          if (!res.ok) return;
+        } else {
+          try { buyKeystone(ks, state); } catch { return; }
+        }
+        refresh();
+        return;
+      }
+      // Bridge-OR fallback: use the Dijkstra path.
+      const graph = effectiveGraph(state);
       if (deps.gateway) {
-        const res = await deps.gateway.buyKeystone(state.id, nodeId);
+        const res = await deps.gateway.unlockSkillNode(state.id, nodeId);
         if (!res.ok) return;
       } else {
-        try { buyKeystone(ks, state); } catch { return; }
+        try { buyNode(graph, state, nodeId); } catch { return; }
       }
       refresh();
       return;
