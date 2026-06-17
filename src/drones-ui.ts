@@ -32,6 +32,7 @@ import {
 } from './drones-ui-helpers.js';
 import { TILE_PX } from './island.js';
 import { fuelForTier } from './recipes.js';
+import { activeFloors } from './floor-levels.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
 import { effectiveSkillMultipliers, tierForLevel } from './skilltree.js';
 import { tileToWorldPx, VISION_BLUE, type IslandSpec, type WorldState } from './world.js';
@@ -1129,8 +1130,11 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
         const def = BUILDING_DEFS[p.defId as BuildingDefId];
         const px = originSpec.cx + p.x + shapeWidth(def.footprint) / 2;
         const py = originSpec.cy + p.y + shapeHeight(def.footprint) / 2;
-        if (active.some((d) => Math.abs(d.originX - px) < 0.5
-                                && Math.abs(d.originY - py) < 0.5)) {
+        // §4.9: a pad sustains up to its active-floor count of concurrent
+        // drones, so it's only "busy" once its in-flight count reaches that cap.
+        const inFlight = active.filter((d) => Math.abs(d.originX - px) < 0.5
+                                && Math.abs(d.originY - py) < 0.5).length;
+        if (inFlight >= Math.max(1, activeFloors(p))) {
           busyPadIds.add(p.id);
         }
       }
