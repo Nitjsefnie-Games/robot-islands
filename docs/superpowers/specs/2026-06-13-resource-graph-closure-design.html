@@ -1,0 +1,766 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Design spec — Resource-graph closure: CO₂ atmosphere, byproduct-gas consumers, 43 orphan sinks</title>
+  <style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--ivory);
+      color: var(--gray-700);
+      line-height: 1.58;
+      padding: 56px 32px 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { margin: 0 auto; max-width: 1080px; }
+
+    /* ---------- TOC ---------- */
+    .toc {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 20px 26px;
+      margin-bottom: 48px;
+      max-width: 820px;
+    }
+    .toc .toc-label {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--gray-500);
+      margin-bottom: 12px;
+    }
+    .toc ol { list-style: none; display: flex; flex-direction: column; gap: 2px; }
+    .toc li { padding: 2px 0; }
+    .toc a { font-size: 13.5px; color: var(--clay); text-decoration: none; transition: color 0.15s; }
+    .toc a:hover { color: var(--slate); }
+    .toc .toc-part {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); margin: 10px 0 4px;
+    }
+    .toc .toc-sub { padding-left: 16px; }
+
+    /* ---------- header ---------- */
+    header.page-head { margin-bottom: 40px; max-width: 840px; }
+    .eyebrow {
+      font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--gray-500); margin-bottom: 12px;
+    }
+    h1 {
+      font-family: var(--serif); font-weight: 500; font-size: 38px;
+      line-height: 1.14; color: var(--slate); margin-bottom: 18px; letter-spacing: -0.01em;
+    }
+    .context-box {
+      background: var(--gray-150); border: var(--border); border-radius: var(--radius);
+      padding: 16px 20px; font-size: 14.5px; color: var(--gray-700);
+    }
+    .context-box .label {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); display: block; margin-bottom: 6px;
+    }
+
+    /* ---------- summary strip ---------- */
+    .summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 56px; }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell { background: var(--white); border: var(--border); border-radius: var(--radius); padding: 18px 20px; }
+    .summary .k {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 6px;
+    }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent  { color: var(--clay); }
+    .summary .v.ok      { color: var(--olive); }
+
+    /* ---------- part divider ---------- */
+    .part-divider { display: flex; align-items: center; gap: 16px; margin: 72px 0 48px; }
+    .part-divider .part-badge {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.1em;
+      color: var(--clay); background: rgba(217,119,87,0.12); border: 1px solid rgba(217,119,87,0.28);
+      border-radius: 8px; padding: 4px 12px; white-space: nowrap;
+    }
+    .part-divider h2 { font-family: var(--serif); font-size: 30px; font-weight: 500; color: var(--slate); letter-spacing: -0.01em; }
+    .part-divider hr { flex: 1; border: none; border-top: var(--border); }
+
+    /* ---------- decision banner ---------- */
+    .decision {
+      background: var(--white); border: var(--border); border-left: 4px solid var(--clay);
+      border-radius: var(--radius); padding: 22px 26px; margin-bottom: 56px;
+    }
+    .decision .d-tag {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--clay); margin-bottom: 8px;
+    }
+    .decision .d-head {
+      font-family: var(--serif); font-size: 22px; font-weight: 500; color: var(--slate);
+      margin-bottom: 10px; letter-spacing: -0.01em;
+    }
+    .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 820px; }
+    .decision .d-body + .d-body { margin-top: 8px; }
+    .decision code { font-family: var(--mono); font-size: 0.9em; color: #C9B98A; }
+
+    /* ---------- section chrome ---------- */
+    section { margin-bottom: 60px; }
+    .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+    .sec-head .num {
+      font-family: var(--mono); font-size: 12px; background: var(--oat);
+      color: var(--slate); padding: 3px 9px; border-radius: 8px;
+    }
+    .sec-head h2 { font-family: var(--serif); font-weight: 500; font-size: 26px; color: var(--slate); letter-spacing: -0.01em; }
+    .sec-intro { font-size: 14.5px; color: var(--gray-500); max-width: 820px; margin-bottom: 24px; }
+    p.body { font-size: 14.5px; max-width: 820px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+
+    /* ---------- subsection ---------- */
+    .subsec { margin: 28px 0 18px; }
+    .subsec h3 { font-family: var(--serif); font-size: 18px; font-weight: 500; color: var(--slate); margin-bottom: 8px; letter-spacing: -0.01em; }
+
+    code {
+      font-family: var(--mono); font-size: 0.88em; background: var(--gray-150);
+      border: 1px solid var(--gray-300); border-radius: 5px; padding: 1px 5px; color: #C9B98A;
+    }
+    pre.codeblock {
+      background: var(--gray-150); border: var(--border); border-radius: var(--radius);
+      padding: 18px 22px; font-family: var(--mono); font-size: 12.5px; color: var(--gray-700);
+      overflow-x: auto; max-width: 820px; margin-bottom: 18px; line-height: 1.65;
+    }
+    pre.codeblock .kw  { color: #C9B98A; }
+    pre.codeblock .cm  { color: var(--gray-500); }
+    pre.codeblock .ty  { color: var(--olive); }
+    pre.formula {
+      background: var(--gray-150); border: var(--border); border-radius: var(--radius);
+      padding: 18px 22px; font-family: var(--mono); font-size: 13px; color: var(--gray-700);
+      overflow-x: auto; max-width: 820px; margin-bottom: 18px; line-height: 1.6;
+    }
+    pre.formula b { color: var(--clay); font-weight: 600; }
+
+    /* ---------- generic data table ---------- */
+    .tbl {
+      width: 100%; border: var(--border); border-radius: var(--radius);
+      border-collapse: separate; border-spacing: 0; overflow: hidden;
+      font-size: 13.5px; margin-bottom: 18px;
+    }
+    .tbl th, .tbl td { text-align: left; padding: 11px 16px; border-bottom: 1px solid var(--gray-300); vertical-align: top; }
+    .tbl th {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--gray-500); background: var(--gray-150); font-weight: 600;
+    }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl td.mono { font-family: var(--mono); font-size: 12.5px; color: #C9B98A; }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+
+    .pill {
+      font-family: var(--mono); font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.04em;
+      padding: 2px 8px; border-radius: 6px; white-space: nowrap; display: inline-block;
+    }
+    .pill.input   { color: var(--olive);   background: rgba(143,165,110,0.14); border: 1px solid rgba(143,165,110,0.30); }
+    .pill.place   { color: var(--clay);    background: rgba(217,119,87,0.12);  border: 1px solid rgba(217,119,87,0.28); }
+    .pill.refine  { color: #C9B98A;        background: var(--gray-150);        border: 1px solid var(--gray-300); }
+    .pill.newb    { color: var(--rust);    background: rgba(224,139,127,0.12); border: 1px solid rgba(224,139,127,0.30); }
+    .pill.mech    { color: var(--slate);   background: var(--oat);             border: 1px solid var(--gray-300); }
+
+    /* ---------- change inventory ---------- */
+    .changes { display: flex; flex-direction: column; gap: 12px; }
+    .change {
+      background: var(--white); border: var(--border); border-radius: var(--radius);
+      padding: 16px 20px; display: grid; grid-template-columns: 220px 1fr; gap: 4px 24px;
+    }
+    @media (max-width: 720px) { .change { grid-template-columns: 1fr; } }
+    .change .file { font-family: var(--mono); font-size: 12.5px; color: var(--clay); word-break: break-all; }
+    .change .what { font-size: 14px; color: var(--gray-700); }
+    .change .what .lead { color: var(--slate); font-weight: 600; }
+
+    /* ---------- note callout ---------- */
+    .note {
+      background: var(--oat); border: var(--border); border-left: 4px solid var(--gray-500);
+      border-radius: 10px; padding: 14px 18px; font-size: 13.5px; color: var(--gray-700);
+      max-width: 820px; margin: 16px 0;
+    }
+    .note strong { color: var(--slate); }
+    .note.warn { border-left-color: var(--clay); }
+
+    /* ---------- checklist (sign-off affordance) ---------- */
+    .checklist { display: flex; flex-direction: column; gap: 10px; max-width: 860px; }
+    .check {
+      display: flex; gap: 12px; align-items: flex-start;
+      background: var(--white); border: var(--border); border-radius: 10px; padding: 12px 16px;
+    }
+    .check .box { width: 18px; height: 18px; border-radius: 5px; border: 2px solid var(--gray-500); flex-shrink: 0; margin-top: 2px; }
+    .check .ck-text { font-size: 14px; color: var(--gray-700); }
+    .check .ck-text strong { color: var(--slate); }
+
+    /* ---------- deferred / out-of-scope cards ---------- */
+    .deferred { display: flex; flex-direction: column; gap: 14px; max-width: 840px; }
+    .defer {
+      background: var(--white); border: var(--border); border-left: 4px solid var(--gray-500);
+      border-radius: 10px; padding: 16px 20px;
+    }
+    .defer .dt { font-weight: 600; font-size: 15px; color: var(--slate); margin-bottom: 4px; }
+    .defer .dd { font-size: 13.5px; color: var(--gray-500); }
+
+    .footer {
+      color: var(--gray-500); font-size: 13px; margin-top: 64px;
+      padding-top: 22px; border-top: 1px solid var(--gray-300);
+    }
+
+    /* ---------- bold list ---------- */
+    ul.blist { list-style: none; display: flex; flex-direction: column; gap: 6px; max-width: 820px; margin-bottom: 14px; }
+    ul.blist li { font-size: 14px; color: var(--gray-700); padding-left: 18px; position: relative; }
+    ul.blist li:before { content: '·'; position: absolute; left: 4px; color: var(--clay); }
+    ul.blist li strong { color: var(--slate); }
+    ul.blist li code { font-family: var(--mono); font-size: 0.88em; color: #C9B98A; background: var(--gray-150); border: 1px solid var(--gray-300); border-radius: 5px; padding: 1px 5px; }
+
+    .legend { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Design spec · Robot Islands · Resource-graph closure · 2026-06-13</div>
+      <h1>Closing the resource graph: CO₂ atmosphere, byproduct-gas consumers, and 43 orphan sinks</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        A recipe + building-cost inspection found <strong>43 resources that are produced by a real chain but
+        consumed by nothing</strong>, plus a class of <strong>byproduct gases that silently throttle their own
+        producers</strong> (a capped output bin stalls the furnace that fills it), and a <strong>CO₂
+        double-booking bug</strong> (the <code>co2</code> resource and the <code>co2Kg</code> climate scalar
+        diverge — capture drains only the scalar). This spec closes the entire graph with real production chains,
+        unifies CO₂ into a single global atmosphere, and turns the orphaned <code>self_replication_module</code>
+        into a relief valve for the §4.9 exponential upgrade-cost curve. Delivered in three independently-mergeable
+        phases; correctness lands first.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Phases</div><div class="v accent">3 (correctness → closures → endgame)</div></div>
+      <div class="cell"><div class="k">Schema bump</div><div class="v accent">v24 → v25</div></div>
+      <div class="cell"><div class="k">Resources closed</div><div class="v ok">43 orphans + 7 byproducts</div></div>
+      <div class="cell"><div class="k">Status</div><div class="v accent">Draft — for review</div></div>
+    </div>
+
+    <!-- TOC -->
+    <div class="toc">
+      <div class="toc-label">Contents</div>
+      <ol>
+        <li class="toc-sub"><a href="#s0">§0 Problem &amp; locked decisions</a></li>
+        <li class="toc-part">Phase 1 — Correctness: CO₂ + byproduct gases</li>
+        <li class="toc-sub"><a href="#s1">§1 Root cause — CO₂ double-booking &amp; the throttle</a></li>
+        <li class="toc-sub"><a href="#s2">§2 CO₂ as a single global atmosphere</a></li>
+        <li class="toc-sub"><a href="#s3">§3 CO₂ sinks — global capture + feedstock chains</a></li>
+        <li class="toc-sub"><a href="#s4">§4 Byproduct-gas consumers</a></li>
+        <li class="toc-sub"><a href="#s5">§5 SPEC.md + persistence (v24 → v25)</a></li>
+        <li class="toc-part">Phase 2 — Closures: ocean / alloy / chemistry / materials</li>
+        <li class="toc-sub"><a href="#s6">§6 Ocean Task-9 refines</a></li>
+        <li class="toc-sub"><a href="#s7">§7 Alloy &amp; coating mills</a></li>
+        <li class="toc-sub"><a href="#s8">§8 Grounded chemistry &amp; mineral closures</a></li>
+        <li class="toc-sub"><a href="#s9">§9 Build-material tails</a></li>
+        <li class="toc-part">Phase 3 — Endgame components &amp; mechanics</li>
+        <li class="toc-sub"><a href="#s10">§10 Phase-10 machines → placement baskets</a></li>
+        <li class="toc-sub"><a href="#s11">§11 Endgame components → eponymous buildings</a></li>
+        <li class="toc-sub"><a href="#s12">§12 Fantasy T5 raws</a></li>
+        <li class="toc-sub"><a href="#s13">§13 self_replication_module — free-floor tokens vs §4.9</a></li>
+        <li class="toc-part">Cross-cutting</li>
+        <li class="toc-sub"><a href="#s14">§14 Mass-balance / auditor impact</a></li>
+        <li class="toc-sub"><a href="#s15">§15 Decisions needing sign-off</a></li>
+        <li class="toc-sub"><a href="#s16">§16 Out of scope</a></li>
+      </ol>
+    </div>
+
+    <!-- §0 -->
+    <section id="s0">
+      <div class="sec-head"><span class="num">00</span><h2>Problem &amp; locked decisions</h2></div>
+      <p class="sec-intro">Three distinct problems, one graph. The catalog grew faster than its consumption side: content phases (ocean §3, Phase 10/11/12, the §7.2 alloy cluster) shipped producers without wiring the consumers.</p>
+
+      <p class="body">
+        Of 262 catalog resources, <strong>117 never appear as a recipe input</strong>. Subtracting the ones
+        consumed by non-recipe systems (60 skill crystals via <code>skilltree-crystals.ts</code>; satellites /
+        repair via <code>orbital.ts</code>; <code>biofuel</code>/<code>aviation_kerosene</code> via the
+        <code>fuelForTier</code> vehicle ladder) leaves <strong>43 genuinely orphaned</strong> resources plus a
+        class of <strong>byproduct gases</strong> that accrue with no sink. <code>genesis_cell</code> is the sole
+        legitimately-terminal resource (spec: no win state).
+      </p>
+
+      <table class="tbl">
+        <thead><tr><th>#</th><th>Decision</th><th>Locked choice</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">1</td><td>Scope</td><td>Full — CO₂ + all byproduct gases + 43 orphan consumers</td></tr>
+          <tr><td class="slate">2</td><td>CO₂ atmosphere</td><td>Single global counter; leaves the per-island inventory/cap system; never throttles</td></tr>
+          <tr><td class="slate">3</td><td>CO₂ capture</td><td>Global — capture anywhere debits the one counter</td></tr>
+          <tr><td class="slate">4</td><td>CO₂ sinks</td><td>Capture <strong>+</strong> productive feedstock chains</td></tr>
+          <tr><td class="slate">5</td><td>Byproduct gases</td><td>Real consumers for every gas (no venting)</td></tr>
+          <tr><td class="slate">6</td><td>Content shape</td><td>Prefer existing-recipe input adds + placement edits; new buildings only where forced</td></tr>
+          <tr><td class="slate">7</td><td>Delivery</td><td>One phased doc; correctness (P1) lands first</td></tr>
+          <tr><td class="slate">8</td><td>Mass balance</td><td>Strict — every new recipe balances; <code>exogenousFlow</code> only for genuine physics</td></tr>
+          <tr><td class="slate">9</td><td><code>self_replication_module</code></td><td>New mechanic — <strong>free-floor tokens</strong> against the §4.9 cost curve</td></tr>
+        </tbody>
+      </table>
+
+      <div class="legend">
+        <span class="pill input">recipe-input add</span>
+        <span class="pill place">placement-cost add</span>
+        <span class="pill refine">new refine recipe</span>
+        <span class="pill newb">new building (forced)</span>
+        <span class="pill mech">new mechanic</span>
+      </div>
+      <p class="body" style="color:var(--gray-500); font-size:13px;">These tags appear in every mapping table below to show the cheapest closure that fits each orphan under decision #6.</p>
+    </section>
+
+    <!-- ===================== PHASE 1 ===================== -->
+    <div class="part-divider" id="phase1">
+      <span class="part-badge">Phase 1</span>
+      <h2>Correctness — CO₂ + byproduct gases</h2>
+      <hr>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision (locked)</div>
+      <div class="d-head">CO₂ becomes a single global atmospheric quantity — an emission-side twin of the existing <code>air</code> flow — never an inventory resource. Capture and feedstock recipes debit it as atmospheric flows.</div>
+      <div class="d-body">
+        Today <code>co2</code> is double-booked: recipe output accrues to <strong>both</strong>
+        <code>inventory['co2']</code> (capped <code>liquid_gas</code>) <strong>and</strong> the per-island
+        <code>state.co2Kg</code> scalar, while capture drains only the scalar. The inventory copy has no sink, so it
+        fills its bin and the flow solver <strong>stalls every CO₂-emitting furnace</strong>. Unifying to one global
+        counter fixes the double-booking <em>and</em> the throttle in a single move.
+      </div>
+      <div class="d-body">
+        The only climate reader, <code>weather.ts:152 sumIslandCo2()</code>, already returns a <em>sum</em> of
+        per-island values — so the global counter is the natural shape it was already reaching for.
+      </div>
+    </div>
+
+    <!-- §1 -->
+    <section id="s1">
+      <div class="sec-head"><span class="num">01</span><h2>Root cause — CO₂ double-booking &amp; the throttle</h2></div>
+      <p class="sec-intro">Two parallel ledgers for the same quantity, plus a capped bin nothing drains.</p>
+
+      <div class="subsec">
+        <h3>1.1 The double-booking</h3>
+        <p class="body">In <code>advanceIsland</code>, a recipe's <code>co2</code> output takes two paths:</p>
+        <pre class="codeblock"><span class="cm">// economy.ts:2148 — Path A: net rates → inventory (co2 is a capped liquid_gas)</span>
+state.inventory[r] = clamped;                 <span class="cm">// r === 'co2' lands here</span>
+
+<span class="cm">// economy.ts:2352 — Path B: same production also feeds the climate scalar</span>
+state.co2Kg += (production.co2 ?? 0) * dtSec;</pre>
+        <p class="body">
+          Capture only touches Path B (<code>state.co2Kg = Math.max(0, state.co2Kg − drainKg)</code>,
+          economy.ts:2380). The <code>inventory['co2']</code> copy is never drained. Because Path A and Path B
+          use the <strong>same</strong> <code>production.co2 × dtSec</code>, they accrue identically — the bug is
+          purely that one of the two is never consumed.
+        </p>
+      </div>
+
+      <div class="subsec">
+        <h3>1.2 The throttle (generalises beyond CO₂)</h3>
+        <p class="body">
+          Every byproduct gas is a capped <code>liquid_gas</code> with no sink (<code>storage-categories.ts</code>):
+          <code>co</code>, <code>co2</code>, <code>refinery_gas</code>, <code>wood_tar</code>,
+          <code>water_vapor</code>, <code>cryo_coolant_vented</code> — and the solid byproduct
+          <code>mill_scale</code>. Per the §15.3 flow solver, a producer at a full output bin runs at net 0. So on
+          a long run / offline catch-up, every emitter eventually <strong>self-throttles on its own exhaust</strong>:
+        </p>
+        <ul class="blist">
+          <li><code>co2</code>/<code>co</code>: <code>blast_furnace</code>, <code>coke_oven</code>, <code>steel_mill</code>, <code>smelter</code>, <code>limekiln</code>, <code>oxygen_converter</code>, <code>charcoal_kiln</code></li>
+          <li><code>refinery_gas</code>: <code>coke_oven</code>, <code>naphtha_cracker</code></li>
+          <li><code>wood_tar</code>: <code>coke_oven</code>, <code>charcoal_kiln</code></li>
+          <li><code>water_vapor</code>: <code>brick_kiln</code>, <code>charcoal_kiln</code></li>
+          <li><code>cryo_coolant_vented</code>: <code>cryogenic_generator</code></li>
+          <li><code>mill_scale</code>: <code>sheet_mill</code>, <code>pipe_mill</code>, <code>beam_mill</code>, <code>cable_mill</code>, <code>bearing_assembler</code>, <code>spring_press</code>, <code>metal_rolling_mill</code></li>
+        </ul>
+        <div class="note warn"><strong>This is a correctness bug, not cosmetic.</strong> It is arguably higher priority than the orphan content — a long-idle steel chain can grind to a halt on a full CO₂/CO bin. Phase 1 fixes it for the whole class.</div>
+      </div>
+    </section>
+
+    <!-- §2 -->
+    <section id="s2">
+      <div class="sec-head"><span class="num">02</span><h2>CO₂ as a single global atmosphere</h2></div>
+      <p class="sec-intro">One world-level counter; <code>co2</code> leaves the inventory system and joins the <code>air</code>/atmosphere exogenous-flow family.</p>
+
+      <div class="subsec">
+        <h3>2.1 Data model</h3>
+        <ul class="blist">
+          <li><strong>Add</strong> <code>WorldState.atmosphericCo2Kg: number</code> — the single global counter.</li>
+          <li><strong>Remove</strong> <code>IslandState.co2Kg</code> (economy.ts:346).</li>
+          <li><strong>Remove</strong> <code>co2</code> from <code>ALL_RESOURCES</code> inventory semantics: drop its <code>RESOURCE_STORAGE_CATEGORY</code> entry and zero its inventory role. It stays a <code>ResourceId</code> only as the label for an atmospheric flow.</li>
+        </ul>
+      </div>
+
+      <div class="subsec">
+        <h3>2.2 Atmospheric-flow semantics (mirrors <code>air</code>)</h3>
+        <p class="body">
+          The integrator already special-cases <code>air</code> as drawn from the atmosphere, not inventory
+          (<code>economy.ts:647</code>, <code>:1545</code>, <code>:1888</code>:
+          <code>exogenousFlow === 'atmosphere' && id === 'air'</code>). <code>co2</code> becomes the
+          <em>emission-side</em> twin:
+        </p>
+        <pre class="formula"><b>air</b>   : atmospheric SOURCE — consumed from the atmosphere, never inventory
+<b>co2</b>   : atmospheric SINK/SOURCE — credited/debited on the GLOBAL counter, never inventory
+
+emission (recipe output co2)        →  atmosphericCo2Kg += rate·dt
+combustion (exogenousFlow CO₂)       →  atmosphericCo2Kg += exogenousFlowKg·rate·dt   (unchanged path)
+capture (co2CaptureKgPerCycle)       →  atmosphericCo2Kg −= drainKg                    (was state.co2Kg)
+feedstock (recipe input co2)         →  atmosphericCo2Kg −= rate·dt   (the H₂/inputs side stays inventory)</pre>
+        <p class="body">
+          A recipe declaring <code>co2</code> as an <strong>input</strong> consumes it from the global counter via
+          this hook — not from inventory (which no longer holds it). So feedstock recipes (§3.2) are "mixed-source":
+          their non-CO₂ inputs come from inventory normally; their CO₂ input debits the atmosphere. This keeps
+          <strong>one source of truth</strong>.
+        </p>
+      </div>
+
+      <div class="subsec">
+        <h3>2.3 Why this kills the throttle</h3>
+        <p class="body">
+          <code>co2</code> no longer occupies a per-island capped bin, so no emitter can stall on it. The global
+          counter is unbounded — it <em>is</em> the climate-pressure signal. It only ever decreases via capture or
+          feedstock consumption.
+        </p>
+        <p class="body">
+          <strong><code>weather.ts</code> retarget:</strong> <code>sumIslandCo2(world)</code> →
+          <code>return world.atmosphericCo2Kg ?? 0</code> (or keep the name as a thin alias). No coefficient
+          rescale expected: Path-A and Path-B accrued identically today, so the global counter tracks the same
+          magnitude the climate model already saw — minus the inventory-cap clamping that used to (wrongly) bound it.
+        </p>
+      </div>
+    </section>
+
+    <!-- §3 -->
+    <section id="s3">
+      <div class="sec-head"><span class="num">03</span><h2>CO₂ sinks — global capture + feedstock chains</h2></div>
+      <p class="sec-intro">Capture is the bulk sink; feedstock chains give CO₂ a productive reason to exist and reward the climate loop.</p>
+
+      <div class="subsec">
+        <h3>3.1 Global capture</h3>
+        <p class="body">
+          Existing <code>co2CaptureKgPerCycle</code> buildings (e.g. <code>exhaust_scrubber</code>,
+          <code>wastewater_treatment</code>) now debit <code>atmosphericCo2Kg</code> instead of the per-island
+          scalar. Capture <strong>anywhere</strong> lowers the one global number — the well-mixed-atmosphere model
+          (decision #3). No allocation rule needed: there is only one counter to decrement. The
+          <code>co2CaptureAdjacency</code> gate (requires a neighbouring emitter) is preserved.
+        </p>
+      </div>
+
+      <div class="subsec">
+        <h3>3.2 Feedstock consumers (new, mixed-source recipes)</h3>
+        <table class="tbl">
+          <thead><tr><th>Recipe</th><th>Inputs</th><th>Output</th><th>Basis</th></tr></thead>
+          <tbody>
+            <tr><td class="slate">Sabatier / power-to-gas</td><td class="mono">co2 (atmos) + hydrogen (inv)</td><td class="mono">→ natural_gas / methanol</td><td>real CO₂ + H₂ methanation</td></tr>
+            <tr><td class="slate">Concrete CO₂ curing</td><td class="mono">co2 (atmos) + concrete inputs</td><td class="mono">→ concrete (faster/cheaper)</td><td>real CO₂ concrete cure</td></tr>
+            <tr><td class="slate">Algae / agriculture boost</td><td class="mono">co2 (atmos)</td><td class="mono">→ biofuel / forest-regrowth</td><td>greenhouse CO₂ enrichment</td></tr>
+          </tbody>
+        </table>
+        <div class="note"><strong>Design payoff:</strong> these make capture a <em>resource</em>, not just mitigation — and they pull H₂/concrete demand through, tightening the graph. Exact ratios &amp; host buildings are tuned in Appendix A; each is mass-balanced with a <code>fuel-combustion-CO₂</code>-style exogenous tag only where physics demands.</div>
+      </div>
+    </section>
+
+    <!-- §4 -->
+    <section id="s4">
+      <div class="sec-head"><span class="num">04</span><h2>Byproduct-gas consumers</h2></div>
+      <p class="sec-intro">Every remaining byproduct gets a real consumer (decision #5 — no venting). Most are closed loops back into existing demand.</p>
+      <table class="tbl">
+        <thead><tr><th>Byproduct</th><th>Consumer / loop</th><th>Mechanism</th><th>Basis</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">co</td><td>recycle as reductant into <code>blast_furnace</code>/<code>smelter</code> (top-gas), or burn as fuel gas</td><td><span class="pill input">recipe-input add</span></td><td>CO is the BF reduction gas</td></tr>
+          <tr><td class="mono">refinery_gas</td><td>→ <code>plastic_precursor</code> (light olefins), or self-fuel the refinery</td><td><span class="pill refine">new refine recipe</span></td><td>light ends → petrochem/LPG</td></tr>
+          <tr><td class="mono">wood_tar</td><td>→ <code>tar</code> (consolidate into the tar→asphalt chain)</td><td><span class="pill refine">new refine recipe</span></td><td>creosote / pitch</td></tr>
+          <tr><td class="mono">water_vapor</td><td>condense → <code>fresh_water</code> (closes a water loop)</td><td><span class="pill refine">new refine recipe</span></td><td>steam recovery</td></tr>
+          <tr><td class="mono">cryo_coolant_vented</td><td>re-liquefy → <code>cryo_coolant</code> (boil-off recapture)</td><td><span class="pill refine">new refine recipe</span></td><td>cryogen reliquefaction</td></tr>
+          <tr><td class="mono">mill_scale</td><td>recycle → <code>iron_ore</code>/sinter feed, or → <code>cement</code></td><td><span class="pill refine">new refine recipe</span></td><td><a href="https://www.bricknbolt.com/blogs-and-articles/construction-guide/mill-scale" style="color:var(--clay)">mill scale → sinter/cement</a></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- §5 -->
+    <section id="s5">
+      <div class="sec-head"><span class="num">05</span><h2>SPEC.md + persistence (v24 → v25)</h2></div>
+      <div class="changes">
+        <div class="change">
+          <div class="file">SPEC.md §7.4 (+ §6 catalog)</div>
+          <div class="what"><span class="lead">CO₂ atmosphere model.</span> Rewrite: <code>co2</code> is a single global atmospheric counter, not an inventory resource; emission credits it, capture/feedstock debit it; an emission-side twin of <code>air</code>. Document the new feedstock recipes and byproduct-gas consumer loops.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/persistence.ts</div>
+          <div class="what"><span class="lead">Add <code>SerializedSnapshotV24</code> + <code>migrateV24toV25</code>.</span> Fold <code>atmosphericCo2Kg = Σ islandStates[*].co2Kg</code>; drop the per-island <code>co2Kg</code> field; drop any <code>inventory['co2']</code> entries (their mass is already represented in the summed scalar — do <strong>not</strong> double-add). Bump <code>SCHEMA_VERSION = 25</code>; add <code>25</code> to <code>SUPPORTED_LOAD_VERSIONS</code>.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/economy.ts</div>
+          <div class="what"><span class="lead">Integrator.</span> Remove the <code>co2</code> path from <code>applyRates</code> (it's no longer an inventory net); route emission/feedstock/capture through the world-level counter via the atmospheric-flow hook (§2.2). Retarget the capture drain.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/weather.ts</div>
+          <div class="what"><span class="lead"><code>sumIslandCo2</code> → global read.</span> Return <code>world.atmosphericCo2Kg</code>; keep the symbol as a thin alias to avoid touching call-sites.</div>
+        </div>
+      </div>
+      <div class="checklist" style="margin-top:16px">
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>persistence.test.ts</strong> — v24 fixture with per-island <code>co2Kg</code> + <code>inventory['co2']</code> migrates to a single <code>atmosphericCo2Kg</code> equal to Σ co2Kg (no double-count); v25 round-trips identity.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>economy.test.ts</strong> — a long-run / offline catch-up with a full former-CO₂ bin no longer throttles the emitter; capture lowers the global counter; a CO₂ feedstock recipe debits the global counter and consumes its inventory inputs.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Byproduct loops</strong> — each gas (co, refinery_gas, wood_tar, water_vapor, cryo_coolant_vented, mill_scale) has a consumer; mass-balance auditor green; <code>npm run build &amp;&amp; npx vitest run</code> stays green.</div></div>
+      </div>
+    </section>
+
+    <!-- ===================== PHASE 2 ===================== -->
+    <div class="part-divider" id="phase2">
+      <span class="part-badge">Phase 2</span>
+      <h2>Closures — ocean / alloy / chemistry / materials</h2>
+      <hr>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision (locked)</div>
+      <div class="d-head">Route each orphan into demand that already exists — one refine step, one recipe-input add, or one placement-cost edit. Mint a new building only where no existing one fits (decision #6).</div>
+      <div class="d-body">The engine is 1:1 recipe-per-building, so a new <em>recipe</em> generally needs a building or a <code>resolveRecipe</code> variant. Wherever an orphan refines into an existing feedstock, that refine recipe attaches to a new minimal extractor/processor or an existing under-used one; wherever it's a finished good, it joins an existing recipe's inputs or a placement basket.</div>
+    </div>
+
+    <!-- §6 -->
+    <section id="s6">
+      <div class="sec-head"><span class="num">06</span><h2>Ocean Task-9 refines</h2></div>
+      <p class="sec-intro">Each ocean-processor output is a concentrate that refines into something already in demand. One refine recipe each.</p>
+      <table class="tbl">
+        <thead><tr><th>Orphan</th><th>Refines to → existing sink</th><th>Mechanism</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">he3_dilute</td><td>→ <code>helium_3</code> (fusion fuel: <code>fusion_core</code>, <code>pyroforge</code>, <code>time_crystal</code>)</td><td><span class="pill refine">new refine recipe</span></td></tr>
+          <tr><td class="mono">tritium_seed</td><td>→ tritium / fusion fuel input (<code>fusion_core</code>) or <code>nuclear_fuel_rod</code></td><td><span class="pill refine">new refine recipe</span></td></tr>
+          <tr><td class="mono">lithium_brine</td><td>→ <code>lithium</code> (<code>battery_factory</code> already consumes it)</td><td><span class="pill refine">new refine recipe</span></td></tr>
+          <tr><td class="mono">rare_earth_concentrate</td><td>→ <code>rare_earth</code> (<code>mag_alloyer</code>, <code>fuel_cell_lab</code>)</td><td><span class="pill refine">new refine recipe</span></td></tr>
+          <tr><td class="mono">refined_cobalt</td><td>→ <code>battery</code> cathode / <code>magnetic_alloy</code></td><td><span class="pill input">recipe-input add</span></td></tr>
+          <tr><td class="mono">mn_nodule</td><td>→ <code>manganese_ingot</code> (have <code>nodule_concentrator</code> accept it)</td><td><span class="pill refine">new refine recipe</span></td></tr>
+          <tr><td class="mono">vent_sulfide</td><td>→ <code>sulfur</code> + base-metal ore (feeds <code>sulfuric_acid_plant</code>)</td><td><span class="pill refine">new refine recipe</span></td></tr>
+          <tr><td class="mono">methane_hydrate</td><td>→ <code>natural_gas</code> (pairs with §9 natural_gas→hydrogen)</td><td><span class="pill refine">new refine recipe</span></td></tr>
+        </tbody>
+      </table>
+      <p class="body" style="font-size:13px; color:var(--gray-500)">Grounding for the fusion fuels: <a href="https://www.helionenergy.com/blog/explaining-helions-fusion-fuel-choice-d-he-3" style="color:var(--clay)">D-³He</a> and <a href="https://www.energy.gov/science/doe-explainsdeuterium-tritium-fusion-fuel" style="color:var(--clay)">D-T</a> are the real target fuels.</p>
+    </section>
+
+    <!-- §7 -->
+    <section id="s7">
+      <div class="sec-head"><span class="num">07</span><h2>Alloy &amp; coating mills</h2></div>
+      <p class="sec-intro">Whole alloy/coating buildings feed a void. Route the finished alloys into construction and machining demand. (Their 1:1 alloying ratios are a separate balance fix — see <code>TODO.md</code>.)</p>
+      <table class="tbl">
+        <thead><tr><th>Orphan</th><th>Consumer</th><th>Mechanism</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">galvanized_steel</td><td>placement cost of ocean/coastal buildings (saltwater corrosion): docks, <code>sonar_buoy</code>, ocean extractors, <code>wind_turbine</code> towers</td><td><span class="pill place">placement-cost add</span></td></tr>
+          <tr><td class="mono">tool_steel</td><td>drill-bit/die input for extractors (<code>deep_mine</code>, <code>drilling_rig</code>, <code>*_mine</code>) &amp; machining (<code>metal_rolling_mill</code>, <code>bearing_assembler</code>)</td><td><span class="pill input">recipe-input add</span> / <span class="pill place">placement</span></td></tr>
+          <tr><td class="mono">bronze</td><td>bushings in <code>bearing_assembler</code>; marine fittings in ocean-building placement</td><td><span class="pill input">recipe-input add</span></td></tr>
+          <tr><td class="mono">brass</td><td>valves/fittings in <code>pump</code>/actuator assemblies; electrical terminals on <code>wire</code>/<code>heavy_cable</code>; <code>mass_driver</code> projectiles</td><td><span class="pill input">recipe-input add</span></td></tr>
+          <tr><td class="mono">slaked_lime</td><td>the real binder for <code>mortar</code> (rewire <code>mortar_mixer</code>); SO₂ scrubbing in <code>exhaust_scrubber</code></td><td><span class="pill input">recipe-input add</span></td></tr>
+          <tr><td class="mono">mortar</td><td>masonry binder alongside <code>brick</code> in placement baskets (resilience-line buildings)</td><td><span class="pill place">placement-cost add</span></td></tr>
+          <tr><td class="mono">charcoal</td><td>biogenic reductant/fuel in smelters; the missing carbon input for <code>silicon_crusher</code>/<code>carbon_forge</code></td><td><span class="pill input">recipe-input add</span></td></tr>
+          <tr><td class="mono">sheet_metal</td><td>enclosures for <code>circuit_board</code>/<code>computing_module</code>; HVAC (<code>cooling_tower</code>); foundation kits</td><td><span class="pill input">recipe-input add</span></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- §8 -->
+    <section id="s8">
+      <div class="sec-head"><span class="num">08</span><h2>Grounded chemistry &amp; mineral closures</h2></div>
+      <p class="sec-intro">Web-grounded real-industry consumers; several pair multiple orphans into one recipe.</p>
+      <table class="tbl">
+        <thead><tr><th>Orphan(s)</th><th>Consumer</th><th>Mechanism</th><th>Basis</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">mercury + gold_ore + silver_ore</td><td><strong>one amalgamation recipe</strong> → refined gold/silver; gold → <code>microchip</code>/<code>processor</code> contacts, silver → <code>solar_cell</code> paste</td><td><span class="pill refine">new refine recipe</span></td><td><a href="https://www.britannica.com/science/mercury-chemical-element" style="color:var(--clay)">Hg amalgamation</a></td></tr>
+          <tr><td class="mono">mercury + phosphor + glass</td><td>→ fluorescent-lamp / display component for <code>lighthouse_*</code> / <code>antenna_*</code></td><td><span class="pill refine">new refine recipe</span></td><td><a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC2992864/" style="color:var(--clay)">Hg + phosphor lamps</a></td></tr>
+          <tr><td class="mono">bromine</td><td>brominated flame-retardant in <code>pcb_etcher</code> (real FR-4); drilling fluid; + <code>silver_ore</code> → silver-bromide optics for <code>scanner_sat</code></td><td><span class="pill input">recipe-input add</span></td><td><a href="https://www.icl-group.com/blog/what-is-bromine-where-it-is-produced-and-used/" style="color:var(--clay)">bromine uses</a></td></tr>
+          <tr><td class="mono">hydrochloric_acid</td><td>steel pickling on <code>metal_rolling_mill</code>/<code>sheet_mill</code>/<code>pipe_mill</code>; <code>silicon</code> purification</td><td><span class="pill input">recipe-input add</span></td><td>pickling line</td></tr>
+          <tr><td class="mono">phosphor</td><td>display/lamp component (with mercury+glass, above); LED/screen parts feeding sensors</td><td><span class="pill input">recipe-input add</span></td><td>lamp/display phosphors</td></tr>
+          <tr><td class="mono">memory_module</td><td>input to <code>ai_core</code> / <code>computing_module</code> / <code>processor</code> — a computer needs RAM</td><td><span class="pill input">recipe-input add</span></td><td>closes <code>memory_lab</code>'s 5-input chain</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- §9 -->
+    <section id="s9">
+      <div class="sec-head"><span class="num">09</span><h2>Build-material &amp; petrochem tails</h2></div>
+      <table class="tbl">
+        <thead><tr><th>Orphan</th><th>Consumer</th><th>Mechanism</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">tar</td><td>→ <code>asphalt</code> (refine; merges with <code>wood_tar</code> loop from §4)</td><td><span class="pill refine">new refine recipe</span></td></tr>
+          <tr><td class="mono">asphalt</td><td>surfacing in <code>LAND_TILE_COST</code> / <code>platform_constructor</code> / <code>land_reclamation_hub</code> (pave reclaimed land)</td><td><span class="pill place">placement-cost add</span></td></tr>
+          <tr><td class="mono">synthetic_rubber</td><td>seals/gaskets in <code>pump</code>/<code>hydraulic_actuator</code>/<code>pneumatic_actuator</code>; insulation on <code>wire</code>/<code>heavy_cable</code></td><td><span class="pill input">recipe-input add</span></td></tr>
+          <tr><td class="mono">natural_gas</td><td>steam-methane reforming → <code>hydrogen</code> (alt to electrolysis-only); pairs with <code>methane_hydrate</code></td><td><span class="pill refine">new refine recipe</span></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ===================== PHASE 3 ===================== -->
+    <div class="part-divider" id="phase3">
+      <span class="part-badge">Phase 3</span>
+      <h2>Endgame components &amp; mechanics</h2>
+      <hr>
+    </div>
+
+    <!-- §10 -->
+    <section id="s10">
+      <div class="sec-head"><span class="num">10</span><h2>Phase-10 machines → placement baskets</h2></div>
+      <p class="sec-intro">Highest-leverage closure: these are <em>complete machines</em> that lead nowhere, while every power/fluid/automation building is hand-built from raw <code>steel_beam</code>. Make the buildings consume the machines — placement-cost edits only, no new buildings, no recipe-shape changes (so it can't break existing chains).</p>
+      <table class="tbl">
+        <thead><tr><th>Orphan</th><th>Placement-cost consumer (buildings)</th><th>Mechanism</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">generator</td><td><code>coal_gen</code>, <code>biomass_plant</code>, <code>nuclear_reactor</code>, <code>wind_turbine</code>, geothermal — a generator <em>is</em> what makes power</td><td><span class="pill place">placement-cost add</span></td></tr>
+          <tr><td class="mono">pump</td><td><code>coastal_pump</code>, <code>well</code>, <code>pump_jack</code>, <code>gas_extractor</code>, <code>electrolyzer</code>, refineries, <code>cooling_tower</code>, <code>wastewater_treatment</code></td><td><span class="pill place">placement-cost add</span></td></tr>
+          <tr><td class="mono">hydraulic_actuator</td><td>heavy presses/mills: <code>*_plastic_press</code>, <code>spring_press</code>, sheet/pipe/beam mills, <code>metal_rolling_mill</code>, <code>mass_driver</code>, <code>launch_tower</code>, <code>platform_constructor</code>, <code>deep_mine</code></td><td><span class="pill place">placement-cost add</span></td></tr>
+          <tr><td class="mono">pneumatic_actuator</td><td>assembly lines: <code>assembler</code>, <code>kit_assembler*</code>, <code>circuit_assembler</code>, <code>bearing_assembler</code></td><td><span class="pill place">placement-cost add</span></td></tr>
+          <tr><td class="mono">solar_cell</td><td><strong><code>solar</code> is built from raw <code>silicon</code>, bypassing <code>solar_cell_lab</code></strong> — switch <code>solar</code>/<code>sunspire</code>/<code>mirror_sat</code> to consume <code>solar_cell</code></td><td><span class="pill place">placement-cost add</span></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- §11 -->
+    <section id="s11">
+      <div class="sec-head"><span class="num">11</span><h2>Endgame components → eponymous buildings &amp; the tree apex</h2></div>
+      <table class="tbl">
+        <thead><tr><th>Orphan</th><th>Consumer</th><th>Mechanism</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">singularity_battery_unit</td><td>placement cost of the <code>singularity_battery</code> building (named for it)</td><td><span class="pill place">placement-cost add</span></td></tr>
+          <tr><td class="mono">particle_accelerator_core</td><td>placement cost of the <code>particle_accelerator</code> building (named for it)</td><td><span class="pill place">placement-cost add</span></td></tr>
+          <tr><td class="mono">singularity_sensor</td><td><code>scanner_sat</code> / <code>orbital_tracking_station</code> / discovery chain</td><td><span class="pill input">recipe-input add</span></td></tr>
+          <tr><td class="mono">cryo_containment_unit</td><td><code>cryogenic_compute_center</code>, <code>antimatter_refinery</code>, <code>plasma_containment_assembler</code></td><td><span class="pill input">recipe-input add</span></td></tr>
+          <tr><td class="mono">probability_calculator</td><td><code>probability_engine</code> (§13.3) / <code>causal_regulator</code></td><td><span class="pill input">recipe-input add</span></td></tr>
+          <tr><td class="mono">aether_beacon</td><td><code>lighthouse_t6</code> / <code>relay_sat_assembly</code> / comm chain</td><td><span class="pill input">recipe-input add</span></td></tr>
+          <tr><td class="mono">reality_engine</td><td><code>universe_editor</code> / <code>genesis_forge</code> / <code>lattice_node</code> ops</td><td><span class="pill input">recipe-input add</span></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- §12 -->
+    <section id="s12">
+      <div class="sec-head"><span class="num">12</span><h2>Fantasy T5 raws</h2></div>
+      <p class="sec-intro">Route as inputs into existing Phase-12/endgame component recipes (defaulted per decision #6 — add-as-input, no new chains).</p>
+      <table class="tbl">
+        <thead><tr><th>Orphan</th><th>Consumer</th><th>Mechanism</th></tr></thead>
+        <tbody>
+          <tr><td class="mono">quantum_foam</td><td><code>quantum_chip</code> / <code>probability_calculator</code> / <code>dimensional_fold</code> inputs</td><td><span class="pill input">recipe-input add</span></td></tr>
+          <tr><td class="mono">higgs_flux</td><td>mass-manipulation: <code>reality_anchor</code>, <code>mass_driver</code> charge, lattice ops</td><td><span class="pill input">recipe-input add</span></td></tr>
+          <tr><td class="mono">neutronium</td><td>ultimate structural/armour: orbital debris-shielding (<code>sweeper_sat</code>/<code>repair_drone</code>), plasma/reactor containment, <code>ascendant_core</code></td><td><span class="pill input">recipe-input add</span></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- §13 -->
+    <section id="s13">
+      <div class="sec-head"><span class="num">13</span><h2><code>self_replication_module</code> — free-floor tokens vs §4.9</h2></div>
+      <p class="sec-intro">The one orphan whose natural sink isn't another recipe. Decision #9: it becomes a relief valve for the §4.9 exponential upgrade-cost curve.</p>
+
+      <div class="subsec">
+        <h3>13.1 The curve it relieves</h3>
+        <pre class="formula"><span class="cm">SPEC §4.9 floor upgrade cost</span>
+  floors 2–10 : cost = ceil(0.8 · placementCost)
+  floors >10  : cost = ceil(0.8 · <b>1.15^(L−10)</b> · placementCost)     ← exponential, unbounded
+  benefit     : ×(1 + L)                                          ← linear</pre>
+        <p class="body">Past floor 10 you pay <code>1.15ⁿ</code> more materials for each <code>+1</code> of linear throughput. That gap is the soft cap that stops infinite floor-stacking.</p>
+      </div>
+
+      <div class="subsec">
+        <h3>13.2 Free-floor tokens</h3>
+        <p class="body">
+          Consuming one <code>self_replication_module</code> <strong>waives the entire material cost</strong> of one
+          floor upgrade. The module is a deep T4 chain
+          (<code>self_replication_lab</code>: <code>ai_core 1 + microchip 8 + electric_motor 4 + computing_module 2</code>),
+          so it's scarce by construction.
+        </p>
+        <div class="note"><strong>Why this preserves the soft cap (resolving the concern on this option):</strong> the token waives <em>materials</em> only. <strong>Construction time</strong> still applies — <code>base_ms × (level + 1)</code>, serialized through the island's limited running-build slots — so a free floor-50 upgrade still takes <code>~51× base</code>, one at a time. And module supply is <strong>ai_core-gated</strong> (the <code>cryogenic_compute_center</code> chain), bounding lifetime skips. Two of the three soft-cap dimensions — build-time and module scarcity — survive untouched; only the raw-material dimension is relieved. Relief valve, not bypass.</div>
+      </div>
+
+      <div class="subsec">
+        <h3>13.3 Mechanics</h3>
+        <ul class="blist">
+          <li><strong><code>applyUpgrade</code> (placement.ts):</strong> if the player opts to spend a token and holds ≥1 <code>self_replication_module</code>, debit one module and set the upgrade's material cost to 0; the build still enqueues / runs through the normal slot + timer path (§4.8 / the stacked-upgrade queue).</li>
+          <li><strong>Eligibility:</strong> any floor (players self-select the expensive ones; no <code>L&gt;10</code> restriction needed since modules are scarce). <em>Flagged for sign-off — see §15.</em></li>
+          <li><strong>Refund:</strong> cancelling a token-funded upgrade refunds the module (consistent with §4.8 100% cancel refund), not materials.</li>
+          <li><strong>SPEC §4.9</strong> gains a "free-floor token" clause; a new UI affordance on the inspector upgrade button toggles "spend module" when one is available.</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- ===================== CROSS-CUTTING ===================== -->
+    <div class="part-divider">
+      <span class="part-badge">Cross-cutting</span>
+      <h2>Discipline, sign-off, scope</h2>
+      <hr>
+    </div>
+
+    <!-- §14 -->
+    <section id="s14">
+      <div class="sec-head"><span class="num">14</span><h2>Mass-balance / auditor impact</h2></div>
+      <p class="body">
+        Decision #8 holds the strict line: every new recipe mass-balances; <code>exogenousFlow</code> tags are
+        reserved for genuine physics (combustion CO₂, atmosphere, evaporation). The recipe-shape changes in P2/P3
+        (new refine recipes, new inputs on existing recipes) <strong>will re-trip the mass-balance auditor</strong>
+        — that's expected, and each new recipe must pass it. Phase-1 byproduct loops are the first test of this:
+        a condense (<code>water_vapor → fresh_water</code>) and a reliquefy (<code>cryo_coolant_vented → cryo_coolant</code>)
+        must balance against the original vent ratios.
+      </p>
+      <div class="note"><strong>Pre-work check:</strong> before P1, confirm whether the auditor + economy tests would even catch a capped-exhaust stall today (they may not — the throttle is a long-run/offline emergent, not a single-tick failure). If not, add a regression test that runs an emitter to a full former-CO₂ bin. This is the gate that proves the bug existed and is fixed.</div>
+    </section>
+
+    <!-- §15 -->
+    <section id="s15">
+      <div class="sec-head"><span class="num">15</span><h2>Decisions needing sign-off</h2></div>
+      <p class="sec-intro">The judgment calls defaulted inline. Tick to approve, or annotate to change before implementation.</p>
+      <div class="checklist">
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Free-floor tokens usable on any floor</strong> (no <code>L&gt;10</code> restriction). Rationale: modules are scarce, players self-select; a restriction adds a rule for little gain. <em>Reject → restrict to the exponential band only.</em></div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Orphan consumer recipes inherit their producer's tier</strong> for XP weight. <em>Reject → bespoke per-recipe weights.</em></div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Fantasy T5 raws route as inputs into existing endgame recipes</strong> (§12) rather than anchoring new chains. <em>Reject → each raw gets a dedicated new component chain.</em></div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>CO₂ feedstock set</strong> = Sabatier (→ natural_gas/methanol) + concrete curing + agriculture boost (§3.2). <em>Annotate to add/drop members.</em></div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>New refine recipes attach to new minimal processor buildings</strong> where no existing building fits (ocean refines §6, condensers §4). Count of genuinely-new buildings to be enumerated in the implementation plan and held to a minimum. <em>Annotate the acceptable building-count ceiling.</em></div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Alloy 1:1-ratio fix is OUT of this doc</strong> — it lives in the <code>TODO.md</code> balance ranking. This doc only gives the alloys consumers, not corrected ratios. <em>Reject → fold the ratio fix into §7.</em></div></div>
+      </div>
+    </section>
+
+    <!-- §16 -->
+    <section id="s16">
+      <div class="sec-head"><span class="num">16</span><h2>Out of scope</h2></div>
+      <div class="deferred">
+        <div class="defer">
+          <div class="dt"><code>genesis_cell</code></div>
+          <div class="dd">The one legitimately-terminal resource (spec: no win state). Stays without a consumer by design.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">The balance-ranking fixes (coal_gen 5 MW, alloy ratios, lithography_lab, geothermal_vent, T6 satellite baskets)</div>
+          <div class="dd">Tracked separately in <code>TODO.md</code>. Tuning, not graph-closure — different change class.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Skill-crystal recipe template variety</div>
+          <div class="dd">The 60 crystals already have a sink (skill tree); their formulaic recipes are a separate design concern.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Trade/sell as a generic sink</div>
+          <div class="dd">A dump for value, not a real consumer — does not count toward closing the graph.</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <p>Design spec · 2026-06-13 · Robot Islands · Resource-graph closure (P1 CO₂ + byproduct gases; P2 ocean/alloy/chemistry/materials; P3 endgame components + self-replication tokens) · schema v24 → v25 · DRAFT for review</p>
+    </div>
+
+  </div>
+</body>
+</html>
