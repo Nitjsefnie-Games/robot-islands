@@ -3,6 +3,7 @@ dist/
 .vite/
 *.log
 *.tsbuildinfo
+scripts/__pycache__/
 .claude/scheduled_tasks.lock
 .worktrees/
 
