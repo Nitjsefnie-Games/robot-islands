@@ -147,7 +147,8 @@ BUILDINGS = {
                    "cycle_s": 214998.3, "in": {"coal": 10},
                    "out": {"coke": 7, "wood_tar": 0.4, "hydrogen": 0.5, "co2": 1,
                            "refinery_gas": 1.1}, "category": "smelting",
-                   "clusters": True, "tier": 2, "requiresHeat": True, "heat_demand_kw": 60},
+                   "clusters": True, "tier": 2, "requiresHeat": True, "heat_demand_kw": 60,
+                   "soft_gate": "exhaust_scrubber"},   # §8.7 soft gate (×0.5 if absent)
     "blast_furnace": {"cost": {"steel_beam": 30000, "clay": 25000, "stone": 2000},
                    "power": -100, "cycle_s": 6217.4,
                    "in": {"iron_ore": 35, "coke": 18, "limestone": 10},
@@ -214,6 +215,42 @@ BUILDINGS = {
     "exhaust_scrubber": {"cost": {"steel_beam": 80, "concrete": 1500, "gear": 30,
                             "pipe": 50, "clay": 500}, "power": -20, "cycle_s": None,
                    "in": {}, "out": {}, "category": "special", "clusters": False, "tier": 2},
+    "wastewater_treatment": {"cost": {"steel_beam": 200, "concrete": 8000, "gear": 100,
+                            "pipe": 150, "clay": 2000}, "power": -30, "cycle_s": None,
+                   "in": {}, "out": {}, "category": "special", "clusters": False, "tier": 2},
+    # --- oil + downstream chemistry chain (§8.x) ---
+    "pump_jack":  {"cost": {"concrete": 7000, "stone": 4000, "iron_ingot": 2000, "gear": 150,
+                            "copper_ingot": 200}, "power": -80, "cycle_s": 430,
+                   "in": {}, "out": {"crude_oil": 1},
+                   "category": "extraction", "clusters": False, "tier": 2},   # tile: oil_well
+    "sulfur_mine": {"cost": {"stone": 150, "wood": 80, "iron_ingot": 30}, "power": -25,
+                   "cycle_s": 20, "in": {}, "out": {"sulfur": 1},
+                   "category": "extraction", "clusters": False, "tier": 1},   # tile: sulfur_vein
+    "evaporator": {"cost": {"stone": 30, "wood": 20, "iron_ingot": 10}, "power": -25,
+                   "cycle_s": 19111, "in": {"saltwater": 1}, "out": {"salt": 1},
+                   "category": "manufacturing", "clusters": True, "tier": 1},
+    "crude_oil_cracker": {"cost": {"concrete": 25000, "stone": 15000, "iron_ingot": 10000,
+                            "gear": 500, "clay": 6000, "copper_ingot": 600}, "power": -250,
+                   "cycle_s": 81.9, "in": {"crude_oil": 3},
+                   "out": {"heavy_oil": 1, "tar": 1, "asphalt": 1},
+                   "category": "chemistry", "clusters": True, "tier": 2},
+    "chemical_reactor": {"cost": {"concrete": 8000, "stone": 5000, "iron_ingot": 2000,
+                            "gear": 150, "clay": 1500, "copper_ingot": 300}, "power": -160,
+                   "cycle_s": 2345.4, "in": {"sulfur": 1, "quicklime": 1, "heavy_oil": 1},
+                   "out": {"calcium_sulfonate": 3},
+                   "category": "chemistry", "clusters": True, "tier": 2},
+    "chlor_alkali_plant": {"cost": {"concrete": 10000, "stone": 6000, "iron_ingot": 3000,
+                            "gear": 200, "clay": 2000, "copper_ingot": 400}, "power": -150,
+                   "cycle_s": 877193, "in": {"salt": 117, "fresh_water": 36},
+                   "out": {"chlorine": 71, "sodium_hydroxide": 80, "hydrogen": 2},
+                   "category": "chemistry", "clusters": True, "tier": 2,
+                   "soft_gate": "wastewater_treatment"},   # §8.7 soft gate (×0.5 if absent)
+    "lubricant_refinery": {"cost": {"concrete": 12000, "stone": 7000, "iron_ingot": 4000,
+                            "gear": 250, "clay": 3000, "copper_ingot": 350}, "power": -120,
+                   "cycle_s": 614.3, "in": {"heavy_oil": 5, "chlorine": 5, "calcium_sulfonate": 1},
+                   "out": {"lubricant": 10},
+                   "category": "chemistry", "clusters": True, "tier": 2,
+                   "soft_gate": "exhaust_scrubber"},      # §8.7 soft gate (×0.5 if absent)
     "crate":      {"cost": {"wood": 80, "stone": 30}, "power": 0, "cycle_s": None,
                    "in": {}, "out": {}, "category": "storage", "clusters": False, "tier": 1},
 }
@@ -225,7 +262,9 @@ BUILDINGS = {
 TERRAIN_CAPS = {
     "logger": 4, "iron_mine": 1, "coal_mine": 1, "quarry": 1, "quartz_mine": 1,
     "clay_pit": 1, "limestone_quarry": 1, "copper_mine": 1, "sand_pit": 1,
-    "well": 4, "coastal_pump": 4,
+    "well": 4, "coastal_pump": 4, "pump_jack": 1, "sulfur_mine": 1,
+    "evaporator": 999, "crude_oil_cracker": 999, "chemical_reactor": 999,
+    "chlor_alkali_plant": 999, "lubricant_refinery": 999, "wastewater_treatment": 999,
     "windmill": 999, "smelter": 999, "copper_smelter": 999, "coke_oven": 999,
     "blast_furnace": 999, "steel_mill": 999, "steel_mill_scrap": 999,
     "brick_kiln": 999, "limekiln": 999, "cement_mill": 999, "concrete_plant": 999,
@@ -249,6 +288,10 @@ STORAGE_CAT = {
     "air": "liquid_gas", "nitrogen": "liquid_gas", "oxygen": "liquid_gas",
     "argon": "liquid_gas", "quicklime": "dry_goods", "cement": "dry_goods",
     "scrap": "dry_goods", "saltwater_cell": "components", "foundation_kit": "components",
+    "crude_oil": "liquid_gas", "heavy_oil": "liquid_gas", "tar": "dry_goods",
+    "asphalt": "liquid_gas", "salt": "dry_goods", "sulfur": "dry_goods",
+    "chlorine": "liquid_gas", "sodium_hydroxide": "liquid_gas",
+    "calcium_sulfonate": "dry_goods", "lubricant": "liquid_gas",
 }
 CAT_DEFAULT_CAP = {"dry_goods": 100, "liquid_gas": 100, "temp_sensitive": 50,
                    "components": 20, "rare": 1}
@@ -284,6 +327,9 @@ TARGET = {
     "concrete_plant": 1, "assembler": 1, "steel_mill_scrap": 3, "brick_kiln": 1,
     "beam_mill": 4, "pipe_mill": 1, "coke_oven": 1, "blast_furnace": 1,
     "air_separator": 1, "steel_mill": 1,
+    # §8.x oil + downstream chemistry chain
+    "pump_jack": 1, "crude_oil_cracker": 1, "evaporator": 1, "sulfur_mine": 1,
+    "chemical_reactor": 1, "chlor_alkali_plant": 1, "lubricant_refinery": 1,
 }
 
 NEEDED_RES = {r for b in BUILDINGS.values()
@@ -633,6 +679,19 @@ def needs_buffer(placed, crate_for):
     return None
 
 
+def needs_softgate_fix(placed):
+    """If a placed building is soft-gated (§8.7) and its required gate-provider
+    (exhaust_scrubber / wastewater_treatment) isn't present, return an action to
+    place that provider — lifting the ×0.5 throttle.  Else None."""
+    for name, floors in placed.items():
+        if not floors:
+            continue
+        sg = BUILDINGS[name].get("soft_gate")
+        if sg and not placed.get(sg):
+            return ("place", sg)
+    return None
+
+
 def power_state(placed):
     """Returns (supply, demand) at NOMINAL throughput (pf=1).  Generators get
     the §4.5 cluster bonus; consumers' draw scales by floorPowerDrawMul(1+0.5L).
@@ -669,12 +728,17 @@ def _flow_specs(placed, pf, heat_factor, Kc):
         cat = d["category"]
         kcat = Kc.get(cat) if _CLUSTERED.get(name) else None
         scale_pf = pf if consumes_power else 1.0
+        # §4.5/§8.7 soft gate: a gated building runs at ×0.5 unless its required
+        # building is present (no-geometry = best-case adjacency, so "present"
+        # ⇒ satisfied). Hard gates (heat) are handled separately above.
+        sg = d.get("soft_gate")
+        sg_factor = 0.5 if (sg and not placed.get(sg)) else 1.0
         for i, f in enumerate(floors):
             hf = heat_factor.get((name, i), 1.0) if d.get("requiresHeat") else 1.0
             if d.get("requiresHeat") and hf < MIN_HEAT_FACTOR:
                 continue  # full heat stall → contributes nothing
             mul = (1 + f) * (1 + CLUSTER_RATE * (kcat - (1 + f))) if kcat is not None else (1 + f)
-            base_rate = mul * hf / cyc            # cycles/sec for this instance
+            base_rate = mul * hf * sg_factor / cyc   # cycles/sec for this instance
             produces = {r: u * base_rate * scale_pf for r, u in d["out"].items() if u > 0}
             consumes = {r: u * base_rate * scale_pf for r, u in d["in"].items() if u > 0}
             # §4.6 force-run waste-byproduct producers so a dead-end byproduct
@@ -1101,6 +1165,11 @@ def plan_for(state, want):
         bf = needs_buffer(sim, cf)
         if bf is not None:
             plan.append(bf); mutate(sim, cf, bf); continue
+        # 2.6 §8.7 soft gates — place exhaust_scrubber / wastewater_treatment so
+        #     gated buildings run at full rate instead of ×0.5.
+        sg = needs_softgate_fix(sim)
+        if sg is not None:
+            plan.append(sg); mutate(sim, cf, sg); continue
         # 3. power — add windmills only up to the MIN_PF brownout floor (full
         #    power would front-load iron_ingot on windmills and starve the
         #    smelter bootstrap; partial power just runs producers slower).
