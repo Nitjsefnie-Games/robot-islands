@@ -251,6 +251,19 @@ BUILDINGS = {
                    "out": {"lubricant": 10},
                    "category": "chemistry", "clusters": True, "tier": 2,
                    "soft_gate": "exhaust_scrubber"},      # §8.7 soft gate (×0.5 if absent)
+    # --- biofuel + infrastructure (no-recipe placeables) ---
+    "biofuel_plant": {"cost": {"stone": 150, "wood": 60, "iron_ingot": 40, "clay": 30},
+                   "power": -60, "cycle_s": 358.3, "in": {"wood": 2}, "out": {"biofuel": 1},
+                   "category": "chemistry", "clusters": True, "tier": 1},
+    "antenna_t2": {"cost": {"concrete": 1500, "stone": 800, "iron_ingot": 400, "gear": 40,
+                            "copper_ingot": 100}, "power": -5, "cycle_s": None,
+                   "in": {}, "out": {}, "category": "special", "clusters": False, "tier": 2},
+    "dronepad":   {"cost": {"concrete": 2000, "stone": 1000, "iron_ingot": 500, "gear": 100},
+                   "power": 0, "cycle_s": None, "in": {}, "out": {},
+                   "category": "logistics", "clusters": False, "tier": 2},
+    "lighthouse_t1": {"cost": {"stone": 250, "wood": 100, "iron_ingot": 30, "glass": 10,
+                            "copper_ingot": 2}, "power": 0, "cycle_s": None, "in": {}, "out": {},
+                   "category": "special", "clusters": False, "tier": 1},
     "crate":      {"cost": {"wood": 80, "stone": 30}, "power": 0, "cycle_s": None,
                    "in": {}, "out": {}, "category": "storage", "clusters": False, "tier": 1},
 }
@@ -265,6 +278,7 @@ TERRAIN_CAPS = {
     "well": 4, "coastal_pump": 4, "pump_jack": 1, "sulfur_mine": 1,
     "evaporator": 999, "crude_oil_cracker": 999, "chemical_reactor": 999,
     "chlor_alkali_plant": 999, "lubricant_refinery": 999, "wastewater_treatment": 999,
+    "biofuel_plant": 999, "antenna_t2": 999, "dronepad": 999, "lighthouse_t1": 999,
     "windmill": 999, "smelter": 999, "copper_smelter": 999, "coke_oven": 999,
     "blast_furnace": 999, "steel_mill": 999, "steel_mill_scrap": 999,
     "brick_kiln": 999, "limekiln": 999, "cement_mill": 999, "concrete_plant": 999,
@@ -291,7 +305,7 @@ STORAGE_CAT = {
     "crude_oil": "liquid_gas", "heavy_oil": "liquid_gas", "tar": "dry_goods",
     "asphalt": "liquid_gas", "salt": "dry_goods", "sulfur": "dry_goods",
     "chlorine": "liquid_gas", "sodium_hydroxide": "liquid_gas",
-    "calcium_sulfonate": "dry_goods", "lubricant": "liquid_gas",
+    "calcium_sulfonate": "dry_goods", "lubricant": "liquid_gas", "biofuel": "liquid_gas",
 }
 CAT_DEFAULT_CAP = {"dry_goods": 100, "liquid_gas": 100, "temp_sensitive": 50,
                    "components": 20, "rare": 1}
@@ -330,6 +344,8 @@ TARGET = {
     # §8.x oil + downstream chemistry chain
     "pump_jack": 1, "crude_oil_cracker": 1, "evaporator": 1, "sulfur_mine": 1,
     "chemical_reactor": 1, "chlor_alkali_plant": 1, "lubricant_refinery": 1,
+    # biofuel + infrastructure
+    "biofuel_plant": 1, "antenna_t2": 1, "dronepad": 1, "lighthouse_t1": 1,
 }
 
 NEEDED_RES = {r for b in BUILDINGS.values()
