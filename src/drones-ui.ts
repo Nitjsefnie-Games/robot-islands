@@ -22,6 +22,7 @@ import {
   dispatchDrone,
   droneCurrentPosition,
   firePulse,
+  isTerminalDroneStatus,
   type Drone,
   type DroneTier,
 } from './drones.js';
@@ -992,7 +993,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   function repaintDroneLayer(nowMs: number): void {
     for (const c of droneLayer.removeChildren()) c.destroy(true);
     for (const d of deps.world.drones) {
-      if (d.status === 'lost' || d.status === 'returned') continue;
+      if (isTerminalDroneStatus(d.status)) continue;
       droneLayer.addChild(renderDroneDot(d, nowMs));
     }
     // Drop trail buffers for drones that no longer exist.
@@ -1004,7 +1005,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   function repaintLedger(nowMs: number): void {
     ledgerList.replaceChildren();
     const active = deps.world.drones.filter(
-      (d) => d.status !== 'lost' && d.status !== 'returned',
+      (d) => !isTerminalDroneStatus(d.status),
     );
     const originSpec = deps.getOriginSpec();
     const operationalPads = operationalDronepads(originSpec.buildings);
