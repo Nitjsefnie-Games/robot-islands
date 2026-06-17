@@ -276,6 +276,12 @@ BUILDINGS = {
                             "pipe": 50, "stone": 300}, "power": -250, "cycle_s": 2774.2,
                    "in": {"quartz": 1}, "out": {"silicon": 1},
                    "category": "smelting", "clusters": True, "tier": 3},
+    "lime_slaker": {"cost": {"stone": 150, "wood": 30, "iron_ingot": 20}, "power": -60,
+                   "cycle_s": 905.3, "in": {"quicklime": 1, "fresh_water": 1},
+                   "out": {"slaked_lime": 1}, "category": "chemistry", "clusters": True, "tier": 1},
+    "mortar_mixer": {"cost": {"stone": 150, "wood": 30, "iron_ingot": 20}, "power": -30,
+                   "cycle_s": 905.3, "in": {"sand": 1, "quicklime": 1},
+                   "out": {"mortar": 1}, "category": "chemistry", "clusters": True, "tier": 1},
     "crate":      {"cost": {"wood": 80, "stone": 30}, "power": 0, "cycle_s": None,
                    "in": {}, "out": {}, "category": "storage", "clusters": False, "tier": 1},
 }
@@ -292,6 +298,7 @@ TERRAIN_CAPS = {
     "chlor_alkali_plant": 999, "lubricant_refinery": 999, "wastewater_treatment": 999,
     "biofuel_plant": 999, "antenna_t2": 999, "dronepad": 999, "lighthouse_t1": 999,
     "kit_assembler": 999, "slag_reprocessor": 999, "silicon_crusher": 999,
+    "lime_slaker": 999, "mortar_mixer": 999,
     "windmill": 999, "smelter": 999, "copper_smelter": 999, "coke_oven": 999,
     "blast_furnace": 999, "steel_mill": 999, "steel_mill_scrap": 999,
     "brick_kiln": 999, "limekiln": 999, "cement_mill": 999, "concrete_plant": 999,
@@ -320,7 +327,7 @@ STORAGE_CAT = {
     "chlorine": "liquid_gas", "sodium_hydroxide": "liquid_gas",
     "calcium_sulfonate": "dry_goods", "lubricant": "liquid_gas", "biofuel": "liquid_gas",
     "gold_ore": "dry_goods", "silver_ore": "dry_goods", "rare_earth": "dry_goods",
-    "silicon": "components",
+    "silicon": "components", "slaked_lime": "dry_goods", "mortar": "dry_goods",
 }
 CAT_DEFAULT_CAP = {"dry_goods": 100, "liquid_gas": 100, "temp_sensitive": 50,
                    "components": 20, "rare": 1}
@@ -362,6 +369,7 @@ TARGET = {
     # biofuel + infrastructure
     "biofuel_plant": 1, "antenna_t2": 1, "dronepad": 1, "lighthouse_t1": 1,
     "kit_assembler": 1, "slag_reprocessor": 1, "silicon_crusher": 1,
+    "lime_slaker": 1, "mortar_mixer": 1,
 }
 
 NEEDED_RES = {r for b in BUILDINGS.values()
