@@ -18,8 +18,11 @@
 import { computeSignalRanges, pointInSignalRange, type SignalRange } from './antenna.js';
 import { hasOperationalBuilding, isOperationalBuilding } from './building-operational.js';
 import { corridorCells, islandIntersectsCells, markIslandDiscovered, parseCellKey } from './discovery.js';
+import { BUILDING_DEFS } from './building-defs.js';
 import type { IslandState } from './economy.js';
 import { inv } from './economy.js';
+import { activeFloors } from './floor-levels.js';
+import { shapeHeight, shapeWidth } from './shape-mask.js';
 import { fuelForTier, type ResourceId } from './recipes.js';
 
 import { effectiveSkillMultipliers, tierForLevel } from './skilltree.js';
@@ -368,8 +371,9 @@ function buildWeatherPath(
  *
  * Validation (in this order — test cases assert each rejection separately):
  *   1. Direction vector magnitude > 0 (post-normalisation length 1).
- *   2. Origin must not already have an in-flight drone (1-drone-per-pad cap
- *      per §11.7 dispatch capacity table).
+ *   2. The launching pad must have a free slot: its in-flight drone count must
+ *      be below its active-floor cap (§4.9 — displayed floor N ⇒ N concurrent
+ *      drones; a fresh floor-1 pad keeps the legacy 1-drone cap).
  *   3. Origin must hold ≥ `fuelLoaded` of the tier-matched fuel grade. The
  *      grade is resolved from the launching island's tier per §11.7 — a T1
  *      island burns biofuel, a T3 island burns aviation_kerosene, etc.
@@ -412,16 +416,39 @@ export function dispatchDrone(
   const ux = dirX / mag;
   const uy = dirY / mag;
 
-  // 2. per-pad cap — reject only when an active drone from the same pad
-  //    (matched by origin coords within epsilon) is already in flight.
-  const PAD_MATCH_EPS = 0.5; // pads are SHAPES.single at integer tiles → centres differ by ≥ 1.0
+  // 2. per-pad cap — a drone pad may have up to its ACTIVE-FLOOR count of drones
+  //    in flight at once (§4.9 floor scaling: displayed floor N ⇒ N concurrent
+  //    drones; a fresh floor-1 pad keeps the legacy 1-drone cap). The launch
+  //    origin is the pad's footprint CENTRE (§11.1), so resolve the pad whose
+  //    centre matches `(originX, originY)` — cx/cy from the island SPEC,
+  //    building list from the IslandState (the same list the launch UI reads).
+  //    Default cap 1 when no pad resolves (legacy / island-centre launches).
+  const PAD_MATCH_EPS = 0.5;
+  const originSpec = world.islands.find((i) => i.id === origin.id);
+  let padCap = 1;
+  if (originSpec) {
+    for (const b of origin.buildings) {
+      if (b.defId !== 'dronepad') continue;
+      const def = BUILDING_DEFS[b.defId];
+      const padCx = originSpec.cx + b.x + shapeWidth(def.footprint) / 2;
+      const padCy = originSpec.cy + b.y + shapeHeight(def.footprint) / 2;
+      if (Math.abs(padCx - originX) < PAD_MATCH_EPS && Math.abs(padCy - originY) < PAD_MATCH_EPS) {
+        padCap = Math.max(1, activeFloors(b));
+        break;
+      }
+    }
+  }
+  let inFlightFromPad = 0;
   for (const d of world.drones) {
     if (d.fromIslandId !== origin.id) continue;
     if (d.status !== 'active' && d.status !== undefined) continue;
     if (Math.abs(d.originX - originX) < PAD_MATCH_EPS &&
         Math.abs(d.originY - originY) < PAD_MATCH_EPS) {
-      return { ok: false, reason: 'already-in-flight' };
+      inFlightFromPad += 1;
     }
+  }
+  if (inFlightFromPad >= padCap) {
+    return { ok: false, reason: 'already-in-flight' };
   }
 
   const isPathDrawn = waypoints !== undefined && waypoints.length >= 2;

@@ -400,6 +400,42 @@ describe('dispatchDrone', () => {
     expect(home.inventory.biofuel).toBe(40);
   });
 
+  it('a higher-floor drone pad dispatches more concurrent drones (§4.9 floor scaling)', () => {
+    const world = freshWorld();
+    const spec = makeIslandSpec({ id: 'home', populated: true });
+    world.islands.push(spec);
+    const home = makeIslandState({ id: 'home' });
+    home.inventory.biofuel = 200;
+    // floorLevel 2 = displayed floor 3 ⇒ activeFloors 3 ⇒ up to 3 concurrent.
+    // Pad lives on the IslandState; launches originate at its footprint centre.
+    home.buildings = [{ id: 'pad', defId: 'dronepad', x: 0, y: 0, floorLevel: 2 }];
+    const c = dronePadCentre(spec, home)!;
+    expect(dispatchDrone(world, home, c.x, c.y, 1, 0, 10, 0).ok).toBe(true);
+    expect(dispatchDrone(world, home, c.x, c.y, 0, 1, 10, 0).ok).toBe(true);
+    expect(dispatchDrone(world, home, c.x, c.y, -1, 0, 10, 0).ok).toBe(true);
+    const r4 = dispatchDrone(world, home, c.x, c.y, 0, -1, 10, 0);
+    expect(r4.ok).toBe(false);
+    if (r4.ok) return;
+    expect(r4.reason).toBe('already-in-flight');
+    expect(world.drones).toHaveLength(3);
+  });
+
+  it('a fresh floor-1 drone pad still caps at 1 concurrent drone', () => {
+    const world = freshWorld();
+    const spec = makeIslandSpec({ id: 'home', populated: true });
+    world.islands.push(spec);
+    const home = makeIslandState({ id: 'home' });
+    home.inventory.biofuel = 200;
+    home.buildings = [{ id: 'pad', defId: 'dronepad', x: 0, y: 0 }]; // floorLevel undefined ⇒ 1
+    const c = dronePadCentre(spec, home)!;
+    expect(dispatchDrone(world, home, c.x, c.y, 1, 0, 10, 0).ok).toBe(true);
+    const r2 = dispatchDrone(world, home, c.x, c.y, 0, 1, 10, 0);
+    expect(r2.ok).toBe(false);
+    if (r2.ok) return;
+    expect(r2.reason).toBe('already-in-flight');
+    expect(world.drones).toHaveLength(1);
+  });
+
   it('§11.1 spawn = caller-supplied origin (engine no longer overrides)', () => {
     const world = freshWorld();
     const spec = makeIslandSpec({ id: 'home', cx: 100, cy: 200, populated: true });
