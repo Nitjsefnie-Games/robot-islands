@@ -448,14 +448,10 @@ export const INTENTS: Record<string, IntentHandler> = {
       const island = resolveIsland(game, islandId);
       if (!island) return { ok: false, error: 'unknown island' };
       // Trust-surface: the Drone Ops UI disables launch when the active island
-      // has no operational Drone Pad. Path-drawn mode additionally requires an
-      // operational Path Drone Foundry. Re-check both gates before dispatch.
+      // has no operational Drone Pad. Path-drawn mode no longer requires a Path
+      // Drone Foundry; the server accepts any validated tier+waypoints combo.
       if (!hasOperationalBuilding(island.state.buildings, 'dronepad')) {
         return { ok: false, error: 'no-operational-dronepad' };
-      }
-      const isPathDrawn = typedWaypoints !== undefined && typedWaypoints.length >= 2;
-      if (isPathDrawn && !hasOperationalBuilding(island.state.buildings, 'path_drone_foundry')) {
-        return { ok: false, error: 'no-operational-path-drone-foundry' };
       }
       const r = dispatchDrone(
         game.world, island.state,

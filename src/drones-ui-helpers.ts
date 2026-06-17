@@ -1,7 +1,7 @@
 // Pure helpers for the drone-launch UI (no DOM, no Pixi): numeric-tier
 // reachability gating and T5 path-mode range gating + fuel computation.
 
-import { DRONE_T5_EFFICIENCY, MAX_FUEL_PER_DRONE } from './drones.js';
+import { MAX_FUEL_PER_DRONE } from './drones.js';
 
 export interface Point {
   readonly x: number;
@@ -28,33 +28,41 @@ export function totalPathTiles(
   return total;
 }
 
-/** True if adding `next` to the path would exceed the T5 fuel cap.
- *  Cap rule: pathLength ≤ MAX_FUEL_PER_DRONE × DRONE_T5_EFFICIENCY × efficiencyMul.
- *  #117 path-drawn T5 drones are ONE-WAY (no return leg).
- *  `efficiencyMul` defaults to 1 (no skill bonus). Pass the origin island's
- *  `droneFuelEfficiency` skill multiplier to honour the Transport skill. */
+/** True if adding `next` to the path would exceed the one-way fuel cap.
+ *  Cap rule: pathLength ≤ MAX_FUEL_PER_DRONE × tierEfficiency × efficiencyMul.
+ *  #117 path-drawn drones are ONE-WAY (no return leg); the cap depends on the
+ *  selected tier's own efficiency.
+ *  `tierEfficiency` is the per-fuel one-way tile budget (e.g.
+ *  `DRONE_TIER_EFFICIENCY[selectedTier]`). `efficiencyMul` defaults to 1 (no
+ *  skill bonus). Pass the origin island's `droneFuelEfficiency` skill
+ *  multiplier to honour the Transport skill. */
 export function wouldExceedRange(
   origin: Point,
   waypoints: ReadonlyArray<Point>,
   next: Point,
+  tierEfficiency: number,
   efficiencyMul = 1,
 ): boolean {
   const lengthWithNext = totalPathTiles(origin, [...waypoints, next]);
-  const maxOneWay = MAX_FUEL_PER_DRONE * DRONE_T5_EFFICIENCY * efficiencyMul;
+  const maxOneWay = MAX_FUEL_PER_DRONE * tierEfficiency * efficiencyMul;
   return lengthWithNext > maxOneWay;
 }
 
 /** Fuel units required to fly the path one-way, rounded up.
- *  #117 path-drawn T5 drones are ONE-WAY (no return leg).
- *  `efficiencyMul` defaults to 1 (no skill bonus). Pass the origin island's
- *  `droneFuelEfficiency` skill multiplier to honour the Transport skill. */
+ *  #117 path-drawn drones are ONE-WAY (no return leg); fuel cost is computed
+ *  from the selected tier's own efficiency.
+ *  `tierEfficiency` is the per-fuel one-way tile budget (e.g.
+ *  `DRONE_TIER_EFFICIENCY[selectedTier]`). `efficiencyMul` defaults to 1 (no
+ *  skill bonus). Pass the origin island's `droneFuelEfficiency` skill
+ *  multiplier to honour the Transport skill. */
 export function fuelForPath(
   origin: Point,
   waypoints: ReadonlyArray<Point>,
+  tierEfficiency: number,
   efficiencyMul = 1,
 ): number {
   const length = totalPathTiles(origin, waypoints);
-  return Math.ceil(length / (DRONE_T5_EFFICIENCY * efficiencyMul));
+  return Math.ceil(length / (tierEfficiency * efficiencyMul));
 }
 
 /** If the last two waypoints share identical x/y, return a new array

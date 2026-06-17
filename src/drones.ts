@@ -114,8 +114,9 @@ export const DRONE_TIER_SCAN_RADIUS: Record<DroneTier, number> = {
 // Alias preserved so existing T5 tests' import stays green.
 export const DRONE_T5_SCAN_RADIUS_TILES = DRONE_TIER_SCAN_RADIUS[5];
 
-/** T5 path-drawn drone constants per §11.6. */
-export const DRONE_T5_EFFICIENCY = 8;
+/** Path-mode flight speed (tier-independent). Path-drawn drones fly faster
+ *  than straight-line drones because they do not reserve fuel/battery for a
+ *  return leg; the speed is the same regardless of which tier is selected. */
 export const DRONE_T5_SPEED_TILES_PER_SEC = 0.8;
 export const DRONE_T5_WEATHER_MULTIPLIER = 0.5;
 
@@ -383,12 +384,12 @@ export function dispatchDrone(
   fuelLoaded: number,
   nowMs: number,
   waypoints?: ReadonlyArray<{ x: number; y: number }>,
-  /** Player-selected drone tier. The Drone Ops UI now exposes a picker
-   *  capped at the island's current tier; the picker passes that selection
-   *  in here so a T5 island can fly a cheap T2 drone for short hops
-   *  instead of always burning plasma_charge. Defaults to the island tier
-   *  (legacy behavior) when undefined. The path-drawn branch forces T5
-   *  regardless of the selector since path-drawn IS the T5 mechanic. */
+  /** Player-selected drone tier. The Drone Ops UI exposes a picker capped at
+   *  the island's current tier; the picker passes that selection in here so a
+   *  high-tier island can fly a cheap lower-tier drone for short hops. Defaults
+   *  to the island tier when undefined. Path-drawn flights honor the selected
+   *  tier for fuel grade/efficiency/scan radius; mode (one-way vs round-trip)
+   *  is inferred from the presence of waypoints. */
   selectedTier?: DroneTier,
   /** §15.1 wall-clock anchor for weather sampling. The client passes
    *  `Date.now() - performance.now()` so perf-domain `nowMs` is shifted
@@ -438,19 +439,15 @@ export function dispatchDrone(
   }
 
   const isPathDrawn = waypoints !== undefined && waypoints.length >= 2;
-  // §11.5: drone tier resolution. Path-drawn always = T5 (it's the T5
-  // mechanic). Otherwise honor the player's selectedTier when it's ≤ the
-  // island's current tier; fall back to the island tier when omitted or
-  // out of range.
+  // §11.5: drone tier resolution. Honor the player's selectedTier when it's
+  // within the island's current tier; fall back to the island tier when
+  // omitted or out of range. Path-drawn flights use the same resolution —
+  // the mode (one-way) is inferred from waypoints, not from the tier.
   const islandTier = tierForLevel(origin.level);
-  let resolvedTier: DroneTier;
-  if (isPathDrawn) {
-    resolvedTier = 5;
-  } else if (selectedTier !== undefined && selectedTier >= 1 && selectedTier <= islandTier) {
-    resolvedTier = selectedTier;
-  } else {
-    resolvedTier = islandTier;
-  }
+  const resolvedTier: DroneTier =
+    selectedTier !== undefined && selectedTier >= 1 && selectedTier <= islandTier
+      ? selectedTier
+      : islandTier;
 
   // 3. fuel — §11.7 tier-matched grade only, NO fallback to lower grades.
   //    The player chose this drone tier explicitly via the picker, so the
@@ -468,7 +465,7 @@ export function dispatchDrone(
   // footprint so each drone reveals more of the unknown map per round-trip.
   const originSkill = effectiveSkillMultipliers(origin);
   const fuelEffMul = originSkill.droneFuelEfficiency;
-  const efficiency = (isPathDrawn ? DRONE_T5_EFFICIENCY : DRONE_TIER_EFFICIENCY[resolvedTier]) * fuelEffMul;
+  const efficiency = DRONE_TIER_EFFICIENCY[resolvedTier] * fuelEffMul;
   const speed = isPathDrawn ? DRONE_T5_SPEED_TILES_PER_SEC : DRONE_SPEED_TILES_PER_SEC;
   const baseRadius = DRONE_TIER_SCAN_RADIUS[resolvedTier];
   const scanRadius = baseRadius * originSkill.droneScanRadius;
@@ -604,7 +601,9 @@ export interface TickDronesResult {
  * corridor of a freshly-launched drone starts at its launching island.
  */
 function droneSpeed(d: Drone): number {
-  return d.tier === 5 ? DRONE_T5_SPEED_TILES_PER_SEC : DRONE_SPEED_TILES_PER_SEC;
+  // Speed is mode-based, not tier-based: path-drawn (one-way) flights use the
+  // faster path speed; straight-line round-trip flights use the simple speed.
+  return d.waypoints.length >= 2 ? DRONE_T5_SPEED_TILES_PER_SEC : DRONE_SPEED_TILES_PER_SEC;
 }
 
 /** Helper: find undiscovered islands whose footprint intersects a set of cell keys. */
@@ -938,12 +937,12 @@ export function droneCurrentPosition(d: Drone, nowMs: number): { x: number; y: n
   const travelled = elapsedSec * speed;
 
   if (d.waypoints.length >= 2) {
-    // T5 path-drawn: one-way along the drawn polyline.
+    // Path-drawn: one-way along the drawn polyline.
     const clamped = Math.min(travelled, d.outboundTiles);
     return positionAlongPolyline(d.waypoints, clamped);
   }
 
-  // Straight-line behavior (T1-T4): out then back.
+  // Straight-line behavior: out then back.
   const total = 2 * d.outboundTiles;
   const clamped = Math.min(travelled, total);
   const along = clamped <= d.outboundTiles ? clamped : total - clamped;
