@@ -1415,49 +1415,39 @@ def plan_for(state, want):
 # ====================================================================
 # COMMIT
 # ====================================================================
-def advance(state, cost):
-    """Advance time until `cost` is affordable, then deduct it.  Single-segment
-    with a [0, cap] clamp on both bounds.
+# §9.9 active bonus: recipe rate (intake+output) climbs +0.1%/min, 24/7, linearly
+# (active-bonus.ts: activeBonusMul = 1 + (active-min)·0.001).  It scales every
+# recipe rate UNIFORMLY, so it changes neither the flow gates nor the balance —
+# only how fast inventory accrues.  So instead of integrating it per-step, we run
+# the whole sim in BASE time τ (rates without the bonus, what state.t accumulates)
+# and convert to REAL elapsed time only at display: with k = 0.001/60 per second,
+#   τ(t) = ∫₀ᵗ(1+k·s)ds = t + k·t²/2   ⇒   t(τ) = (√(1 + 2kτ) − 1)/k.
+ACTIVE_BONUS_K = 0.001 / 60.0   # per-second slope of the linear recipe-rate bonus
 
-    §9.9 ACTIVE BONUS: recipe rate (intake AND output) climbs +0.1%/min, 24/7,
-    linearly — activeBonusMul(t) = 1 + t_sec/60000 (active-bonus.ts).  It scales
-    every recipe rate uniformly, so it doesn't change the flow gates or balance,
-    only how fast inventory accrues.  Because a single accumulation segment can
-    span years (during which the bonus grows a lot), we INTEGRATE the growing
-    bonus across the segment instead of holding it at the start value:
-        accrued = base_rate · ∫_t^{t+dt}(1 + t'/60000) dt'
-                = base_rate · dt·(1 + (t + dt/2)/60000)            [= base_rate·A]
-    and solve that quadratic for dt per cost resource (binding = max dt)."""
+
+def real_time(tau):
+    """Convert base (bonus-free) production time τ to real elapsed seconds under
+    the 24/7 active-bonus acceleration."""
+    return (((1 + 2 * ACTIVE_BONUS_K * tau) ** 0.5) - 1) / ACTIVE_BONUS_K
+
+
+def advance(state, cost):
+    """Advance BASE time until `cost` is affordable, integrating inventory at the
+    current (bonus-free) rates, then deduct it.  state.t accumulates base time τ;
+    the active-bonus speed-up is applied as a closed-form τ→real transform at
+    display (see real_time / the §9.9 note above).  Single-segment with a [0,cap]
+    clamp on both bounds.  Returns False if `cost` can never be afforded."""
     net = net_rates(state.placed, state.inv, state.crate_for)[0]
     gross = net_rates(state.placed, state.inv, state.crate_for, production_only=True)[0]
-    t = state.t
-
-    def eff_rate(r):
+    dt = time_to_afford(state.inv, cost, net, state.crate_for, gross)
+    if dt == float("inf"):
+        return False
+    for r in set(net) | set(cost):
         rate = net.get(r, 0.0)
         if rate <= 1e-12 and (cost.get(r, 0) - state.inv.get(r, 0.0)) > 0:
             rate = gross.get(r, 0.0)          # §4.9 gross fallback for stalled cost resources
-        return rate
-
-    dt = 0.0
-    for r, n in cost.items():
-        rem = n - state.inv.get(r, 0.0)
-        if rem <= 0:
-            continue
-        if rem > max(nominal_cap(r, state.crate_for), state.inv.get(r, 0.0)) + 1e-9:
-            return False                       # need exceeds reachable storage cap
-        rate = eff_rate(r)
-        if rate <= 1e-12:
-            return False
-        # solve rate · dt·(1 + (t + dt/2)/60000) = rem  for dt>0 (active-bonus accrual)
-        a = rate / 120000.0
-        b = rate * (1 + t / 60000.0)
-        dtr = (-b + (b * b + 4 * a * rem) ** 0.5) / (2 * a) if a > 0 else rem / rate
-        dt = max(dt, dtr)
-
-    A = dt * (1 + (t + dt / 2) / 60000.0)      # ∫ activeBonus over the segment
-    for r in set(net) | set(cost):
         before = state.inv.get(r, 0.0)
-        after = before + eff_rate(r) * A
+        after = before + rate * dt
         capr = max(nominal_cap(r, state.crate_for), before)
         state.inv[r] = min(capr, max(0.0, after))   # clamp [0, cap]
     state.t += dt
@@ -1514,7 +1504,7 @@ def assert_positive(state, label):
            if v < -1e-6 and state.inv.get(r, 0.0) <= STOCK_BOUNDARY_EPS}
     if bad:
         raise AssertionError(f"NEGATIVE rate at empty bin after {label} "
-                             f"@ {fmt_dur(state.t)}: {bad}")
+                             f"@ {fmt_dur(real_time(state.t))}: {bad}")
 
 
 def show_breakdown(state):
@@ -1675,14 +1665,14 @@ def main():
             assert_positive(state, f"place {name}")
             schedule.append((state.t, name, len(plan) - 1))
             placed_n = sum(1 for n in TARGET if len(state.placed[n]) >= TARGET[n])
-            print(f"   [{placed_n:>2}/{len(TARGET)}] {fmt_dur(state.t):>12}  place {name:<22} "
+            print(f"   [{placed_n:>2}/{len(TARGET)}] {fmt_dur(real_time(state.t)):>12}  place {name:<22} "
                   f"(+{len(plan) - 1} fixes)", flush=True)
             deferred.clear()
             progressed = True
             break
 
         if not progressed:
-            print(f"\n!! BLOCKED @ {fmt_dur(state.t)} — every ready target deferred. "
+            print(f"\n!! BLOCKED @ {fmt_dur(real_time(state.t))} — every ready target deferred. "
                   f"still needed: {need}\n")
             for name in [n for n in TARGET if n in need and ready(state.placed, n)]:
                 p = plan_for(state, ("place", name))
@@ -1706,8 +1696,8 @@ def main():
 
     print("Schedule (cumulative time -> target placed):")
     for ts, name, nfix in schedule:
-        print(f"   {fmt_dur(ts):>12}  place {name:<22} (+{nfix} balancing actions)")
-    print(f"\n>>> Full target build placed in: {fmt_dur(state.t)}  "
+        print(f"   {fmt_dur(real_time(ts)):>12}  place {name:<22} (+{nfix} balancing actions)")
+    print(f"\n>>> Full target build placed in: {fmt_dur(real_time(state.t))}  "
           f"({sum(len(v) for v in state.placed.values())} buildings, "
           f"{sum(len(v) for v in state.crate_for.values())} crates)\n")
     show_breakdown(state)
