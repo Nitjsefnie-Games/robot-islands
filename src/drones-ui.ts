@@ -478,6 +478,21 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
   });
   body.appendChild(armBtn);
 
+  // Control hint — only visible while launch mode is armed.
+  const hintEl = document.createElement('div');
+  styled(
+    hintEl,
+    [
+      `color: ${'var(--ri-fg-3)'}`,
+      'font-size: 9.5px',
+      'letter-spacing: 0.06em',
+      'line-height: 1.5',
+      'min-height: 14px',
+      'display: none',
+    ].join(';'),
+  );
+  body.appendChild(hintEl);
+
   // Fire Pulse button — T4 Launch Tower omnidirectional pulse (§11.5)
   const pulseBtn = document.createElement('button');
   styled(
@@ -1276,6 +1291,17 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     paintLaunchPreview();
     repaintScanPreview();
     repaintSelectedPadHighlight();
+
+    // Control hint — only while launch mode is armed.
+    if (launchMode) {
+      hintEl.style.display = 'block';
+      hintEl.textContent = pathMode
+        ? 'click: add point · double-click: launch · right-click: undo · Esc: cancel'
+        : 'click: launch';
+    } else {
+      hintEl.style.display = 'none';
+      hintEl.textContent = '';
+    }
   }
 
   function show(): void {
