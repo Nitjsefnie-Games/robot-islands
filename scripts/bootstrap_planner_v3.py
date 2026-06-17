@@ -1416,26 +1416,48 @@ def plan_for(state, want):
 # COMMIT
 # ====================================================================
 def advance(state, cost):
-    """Advance time until `cost` is affordable, integrating inventory at the
-    current rates, then deduct it.  Single-segment with a [0, cap] clamp on BOTH
-    bounds (the clamp is what keeps a draining resource from going negative —
-    e.g. quicklime to -1655 — without the cost of event-driven sub-segments,
-    which exploded into thousands of tiny steps on a near-zero oscillating
-    resource over a multi-hundred-day accumulation).  Intermediate resources may
-    be integrated slightly past a mid-segment pin, but that doesn't affect the
-    affordability of `cost` (time_to_afford only reads cost resources), which is
-    all the schedule depends on.  Returns False if `cost` can never be afforded."""
+    """Advance time until `cost` is affordable, then deduct it.  Single-segment
+    with a [0, cap] clamp on both bounds.
+
+    §9.9 ACTIVE BONUS: recipe rate (intake AND output) climbs +0.1%/min, 24/7,
+    linearly — activeBonusMul(t) = 1 + t_sec/60000 (active-bonus.ts).  It scales
+    every recipe rate uniformly, so it doesn't change the flow gates or balance,
+    only how fast inventory accrues.  Because a single accumulation segment can
+    span years (during which the bonus grows a lot), we INTEGRATE the growing
+    bonus across the segment instead of holding it at the start value:
+        accrued = base_rate · ∫_t^{t+dt}(1 + t'/60000) dt'
+                = base_rate · dt·(1 + (t + dt/2)/60000)            [= base_rate·A]
+    and solve that quadratic for dt per cost resource (binding = max dt)."""
     net = net_rates(state.placed, state.inv, state.crate_for)[0]
     gross = net_rates(state.placed, state.inv, state.crate_for, production_only=True)[0]
-    dt = time_to_afford(state.inv, cost, net, state.crate_for, gross)
-    if dt == float("inf"):
-        return False
-    for r in set(net) | set(cost):
+    t = state.t
+
+    def eff_rate(r):
         rate = net.get(r, 0.0)
         if rate <= 1e-12 and (cost.get(r, 0) - state.inv.get(r, 0.0)) > 0:
             rate = gross.get(r, 0.0)          # §4.9 gross fallback for stalled cost resources
+        return rate
+
+    dt = 0.0
+    for r, n in cost.items():
+        rem = n - state.inv.get(r, 0.0)
+        if rem <= 0:
+            continue
+        if rem > max(nominal_cap(r, state.crate_for), state.inv.get(r, 0.0)) + 1e-9:
+            return False                       # need exceeds reachable storage cap
+        rate = eff_rate(r)
+        if rate <= 1e-12:
+            return False
+        # solve rate · dt·(1 + (t + dt/2)/60000) = rem  for dt>0 (active-bonus accrual)
+        a = rate / 120000.0
+        b = rate * (1 + t / 60000.0)
+        dtr = (-b + (b * b + 4 * a * rem) ** 0.5) / (2 * a) if a > 0 else rem / rate
+        dt = max(dt, dtr)
+
+    A = dt * (1 + (t + dt / 2) / 60000.0)      # ∫ activeBonus over the segment
+    for r in set(net) | set(cost):
         before = state.inv.get(r, 0.0)
-        after = before + rate * dt
+        after = before + eff_rate(r) * A
         capr = max(nominal_cap(r, state.crate_for), before)
         state.inv[r] = min(capr, max(0.0, after))   # clamp [0, cap]
     state.t += dt
