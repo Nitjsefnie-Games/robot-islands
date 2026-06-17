@@ -539,15 +539,9 @@ export const INTENTS: Record<string, IntentHandler> = {
   // calling buyNode. This validates unspentSkillPoints covers the path cost and
   // the depth→tier gate, on server state.
   //
-  // KEYSTONE EXCLUSION: a keystone is identified by `keystonePrereqFor(nodeId)`
-  // returning a prereq spec (non-keystones return undefined). Keystones are
-  // purchased only via `buyKeystone` (AND-prereqs + flat SP cost) — NOT via
-  // `buyNode`, which has no keystone branch and would THROW 'unreachable' for
-  // one (keystone targets are excluded from pathing adjacency). Worse,
-  // `nodePurchaseStatus` reports a keystone with met prereqs + enough SP as
-  // 'purchasable', so the status check alone would forward it into buyNode's
-  // throw. We therefore reject keystone targets explicitly BEFORE the status
-  // check so no keystone ever reaches buyNode.
+  // Bridge-reachable keystones are accepted here: nodePurchaseStatus returns
+  // 'purchasable' for a keystone whose active bridge source is owned, so the
+  // same pre-check gates them without a special case.
   'unlock-skill-node': {
     apply(game: LiveGame, payload: unknown): IntentResult {
       if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
@@ -557,15 +551,9 @@ export const INTENTS: Record<string, IntentHandler> = {
       const island = resolveIsland(game, islandId);
       if (!island) return { ok: false, error: 'unknown island' };
       const { state } = island;
-      // Anti-cheat: keystones are not in this intent's surface — buyNode throws
-      // for them and the no-throw contract forbids leaning on the runner's
-      // try/catch. Reject before any buyNode path can be reached.
-      if (keystonePrereqFor(nodeId) !== undefined) {
-        return { ok: false, error: 'keystone not purchasable via this intent' };
-      }
       // Authoritative purchasability pre-check (anti-cheat): SP sufficiency +
-      // depth→tier gate + reachability, all recomputed from server state. Only
-      // a 'purchasable' status proceeds.
+      // depth→tier gate + reachability (including bridge-reachable keystones),
+      // all recomputed from server state. Only a 'purchasable' status proceeds.
       const graph = effectiveGraph(state);
       const status = nodePurchaseStatus(graph, state, nodeId);
       if (status !== 'purchasable') return { ok: false, error: status };
