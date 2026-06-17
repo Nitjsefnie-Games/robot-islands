@@ -1804,13 +1804,19 @@ export function nodePurchaseStatus(
 ): NodePurchaseStatus {
   if (state.unlockedNodes.has(target)) return 'owned';
   // §9.3 keystones: bought via `buyKeystone` (AND-prereqs + flat SP cost; the
-  // depth→tier gate does not apply per spec). Unmet prereqs render as locked.
+  // depth→tier gate does not apply per spec). Unmet prereqs render as locked,
+  // OR an active threshold-bridge can unlock the keystone without the AND path.
   const ks = keystonePrereqFor(target);
   if (ks) {
-    for (const req of ks.requires) {
-      if (!state.unlockedNodes.has(req as NodeId)) return 'unreachable';
+    // AND path: every required notable owned.
+    const andReady = ks.requires.every((req) => state.unlockedNodes.has(req as NodeId));
+    if (andReady) {
+      return state.unspentSkillPoints >= ks.cost ? 'purchasable' : 'insufficient-sp';
     }
-    return state.unspentSkillPoints >= ks.cost ? 'purchasable' : 'insufficient-sp';
+    // Bridge-OR path: reachable via an active bridge.
+    const result = costToUnlock(graph, state.unlockedNodes, state.unlockedEdges, state, target);
+    if (result === null) return 'unreachable';
+    return state.unspentSkillPoints >= result.totalCost ? 'purchasable' : 'insufficient-sp';
   }
   const node = graph.nodes.find((n) => n.id === target);
   if (!node) return 'unreachable';

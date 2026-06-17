@@ -1876,3 +1876,41 @@ describe('queue mirror nodes', () => {
     expect(ids.has('robotics.keystone.queueConstruction')).toBe(true);
   });
 });
+describe('keystone bridge-OR unlock', () => {
+  it('keystone is purchasable via an active bridge without its AND prereqs', () => {
+    const state = makeState({ level: 70, unspentSkillPoints: 1_000_000 });
+    // Own the bridge source and enough nodes to activate the threshold.
+    // The bridge robotics.keystone.parallelConstruction -> electronics.keystone.quantumYield
+    // requires extraction >= 18 and refinement >= 18 SP spent.
+    const source = 'robotics.keystone.parallelConstruction' as NodeId;
+    const target = 'electronics.keystone.quantumYield' as NodeId;
+
+    // Give the source keystone and fake spent SP by unlocking many nodes.
+    // Leave the target AND its AND-prereq notables locked so the bridge-OR path
+    // is the only way the keystone can be purchasable.
+    const andPrereqs = new Set<string>([
+      'electronics.notable.cleanRoom',
+      'electronics.notable.quantumEtching',
+    ]);
+    state.unlockedNodes.add(source);
+    for (const n of DEFAULT_GRAPH.nodes) {
+      if (n.id === target) continue;
+      if (andPrereqs.has(n.id)) continue;
+      if (n.subPath === 'mining' || n.subPath === 'forestry' || n.subPath === 'drilling' ||
+          n.subPath === 'smelting' || n.subPath === 'chemistry' || n.subPath === 'electronics') {
+        state.unlockedNodes.add(n.id as NodeId);
+      }
+    }
+
+    expect(nodePurchaseStatus(DEFAULT_GRAPH, state, target)).toBe('purchasable');
+
+    buyNode(DEFAULT_GRAPH, state, target);
+    expect(state.unlockedNodes.has(target)).toBe(true);
+  });
+
+  it('keystone stays unreachable when neither AND prereqs nor bridge path exist', () => {
+    const state = makeState({ level: 70, unspentSkillPoints: 1_000_000 });
+    const target = 'electronics.keystone.quantumYield' as NodeId;
+    expect(nodePurchaseStatus(DEFAULT_GRAPH, state, target)).toBe('unreachable');
+  });
+});
