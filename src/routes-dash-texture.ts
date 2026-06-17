@@ -21,7 +21,7 @@ const DASH_WIDTH = 8;
 export function colorForRouteType(t: RouteType): number {
   if (t === 'submarine_cable') return 0x4a6680;  // SUBMARINE_CABLE_TINT
   if (t === 'cable') return 0x9caab8;            // LAND_CABLE_TINT
-  return 0x7dd3e8;                                // VISION_BLUE — cargo / drone / etc.
+  return 0xf5a742;                                // amber — cargo / drone / etc.; contrasts with VISION_BLUE ocean
 }
 
 /** Build (lazy) / return the cached dash texture for `routeType`. The
