@@ -272,6 +272,10 @@ BUILDINGS = {
                             "gear": 300, "copper_ingot": 400}, "power": -100, "cycle_s": 8322.5,
                    "in": {"slag": 10}, "out": {"gold_ore": 1, "silver_ore": 1, "rare_earth": 1},
                    "category": "smelting", "clusters": True, "tier": 2},
+    "silicon_crusher": {"cost": {"steel_beam": 350, "concrete": 5000, "gear": 100,
+                            "pipe": 50, "stone": 300}, "power": -250, "cycle_s": 2774.2,
+                   "in": {"quartz": 1}, "out": {"silicon": 1},
+                   "category": "smelting", "clusters": True, "tier": 3},
     "crate":      {"cost": {"wood": 80, "stone": 30}, "power": 0, "cycle_s": None,
                    "in": {}, "out": {}, "category": "storage", "clusters": False, "tier": 1},
 }
@@ -287,7 +291,7 @@ TERRAIN_CAPS = {
     "evaporator": 999, "crude_oil_cracker": 999, "chemical_reactor": 999,
     "chlor_alkali_plant": 999, "lubricant_refinery": 999, "wastewater_treatment": 999,
     "biofuel_plant": 999, "antenna_t2": 999, "dronepad": 999, "lighthouse_t1": 999,
-    "kit_assembler": 999, "slag_reprocessor": 999,
+    "kit_assembler": 999, "slag_reprocessor": 999, "silicon_crusher": 999,
     "windmill": 999, "smelter": 999, "copper_smelter": 999, "coke_oven": 999,
     "blast_furnace": 999, "steel_mill": 999, "steel_mill_scrap": 999,
     "brick_kiln": 999, "limekiln": 999, "cement_mill": 999, "concrete_plant": 999,
@@ -316,6 +320,7 @@ STORAGE_CAT = {
     "chlorine": "liquid_gas", "sodium_hydroxide": "liquid_gas",
     "calcium_sulfonate": "dry_goods", "lubricant": "liquid_gas", "biofuel": "liquid_gas",
     "gold_ore": "dry_goods", "silver_ore": "dry_goods", "rare_earth": "dry_goods",
+    "silicon": "components",
 }
 CAT_DEFAULT_CAP = {"dry_goods": 100, "liquid_gas": 100, "temp_sensitive": 50,
                    "components": 20, "rare": 1}
@@ -356,7 +361,7 @@ TARGET = {
     "chemical_reactor": 1, "chlor_alkali_plant": 1, "lubricant_refinery": 1,
     # biofuel + infrastructure
     "biofuel_plant": 1, "antenna_t2": 1, "dronepad": 1, "lighthouse_t1": 1,
-    "kit_assembler": 1, "slag_reprocessor": 1,
+    "kit_assembler": 1, "slag_reprocessor": 1, "silicon_crusher": 1,
 }
 
 NEEDED_RES = {r for b in BUILDINGS.values()
@@ -1258,7 +1263,11 @@ def plan_for(state, want):
         #    combined cost stays affordable (this is the guard the old payback
         #    lacked: it scaled against transient stock and built hundreds of
         #    buildings whose combined cost then blew past storage caps).
-        if payback_used < PAYBACK_CAP:
+        # Don't run the time-optimizer boost until the iron_ingot faucet exists
+        # in the COMMITTED state: during the pre-smelter bootstrap the starter
+        # iron_ingot (60) is too tight for boost's quarry/extractor upgrades
+        # (24 iron_ingot/floor) — keep that phase lean so the smelter gets placed.
+        if has_producer(state.placed, "iron_ingot") and payback_used < PAYBACK_CAP:
             net_ss = net_rates(sim, {}, cf)[0]
             bott, bt = None, 0.0
             for rr, nn in want_cost.items():
@@ -1498,6 +1507,14 @@ def main():
             break
 
         def tier(name):
+            # The starter iron_ingot (60) is TIGHT: every building placed before
+            # the smelter spends some, and newly-needed tile-locked extractors
+            # (quartz_mine/sulfur_mine/… each 30) can drain it before the faucet
+            # exists → bootstrap deadlock. So place the smelter (iron_ingot
+            # producer; itself needs no iron_ingot) FIRST while iron_ingot has no
+            # producer.
+            if name == "smelter" and not has_producer(state.placed, "iron_ingot"):
+                return -1
             if len(state.placed[name]) == 0:
                 for r in BUILDINGS[name]["out"]:
                     if r in NEEDED_RES and not has_producer(state.placed, r):
