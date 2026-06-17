@@ -264,6 +264,10 @@ BUILDINGS = {
     "lighthouse_t1": {"cost": {"stone": 250, "wood": 100, "iron_ingot": 30, "glass": 10,
                             "copper_ingot": 2}, "power": 0, "cycle_s": None, "in": {}, "out": {},
                    "category": "special", "clusters": False, "tier": 1},
+    "kit_assembler": {"cost": {"stone": 150, "wood": 60, "iron_ingot": 40, "bolt": 200},
+                   "power": -70, "cycle_s": 28666.4,
+                   "in": {"iron_ingot": 5, "wood": 10, "bolt": 5}, "out": {"foundation_kit": 1},
+                   "category": "manufacturing", "clusters": True, "tier": 1},
     "crate":      {"cost": {"wood": 80, "stone": 30}, "power": 0, "cycle_s": None,
                    "in": {}, "out": {}, "category": "storage", "clusters": False, "tier": 1},
 }
@@ -279,6 +283,7 @@ TERRAIN_CAPS = {
     "evaporator": 999, "crude_oil_cracker": 999, "chemical_reactor": 999,
     "chlor_alkali_plant": 999, "lubricant_refinery": 999, "wastewater_treatment": 999,
     "biofuel_plant": 999, "antenna_t2": 999, "dronepad": 999, "lighthouse_t1": 999,
+    "kit_assembler": 999,
     "windmill": 999, "smelter": 999, "copper_smelter": 999, "coke_oven": 999,
     "blast_furnace": 999, "steel_mill": 999, "steel_mill_scrap": 999,
     "brick_kiln": 999, "limekiln": 999, "cement_mill": 999, "concrete_plant": 999,
@@ -346,6 +351,7 @@ TARGET = {
     "chemical_reactor": 1, "chlor_alkali_plant": 1, "lubricant_refinery": 1,
     # biofuel + infrastructure
     "biofuel_plant": 1, "antenna_t2": 1, "dronepad": 1, "lighthouse_t1": 1,
+    "kit_assembler": 1,
 }
 
 NEEDED_RES = {r for b in BUILDINGS.values()
