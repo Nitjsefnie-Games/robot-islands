@@ -75,7 +75,7 @@ export const STORAGE_KEY_DISPLAY = 'robot-islands:save';
 
 /** Current schema version. `loadWorld` rejects (returns null) any
  *  snapshot whose `v` is not strictly equal to this. */
-export const SCHEMA_VERSION = 25 as const;
+export const SCHEMA_VERSION = 26 as const;
 
 /** Versions that loadWorld accepts. The walker (loadWorld) chains
  *  migrateV<N>toV<N+1> functions from the lowest known version up to
@@ -83,7 +83,7 @@ export const SCHEMA_VERSION = 25 as const;
  *
  *  See AGENTS.md → "Persistence migrations" for the full "bump = migrate"
  *  policy from v7 onward. */
-export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25]);
+export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]);
 
 // ---------------------------------------------------------------------------
 // Serialized shapes
@@ -715,6 +715,18 @@ export function migrateV24toV25(s: SerializedSnapshotV24): SaveSnapshot {
   } as unknown as SaveSnapshot;
 }
 
+/** v25 top-level snapshot shape. Structurally identical to v26 (SaveSnapshot)
+ *  except the v literal. The v25 → v26 migration adds optional route
+ *  `waypoints` (§2.6 bend points); v25 routes have none, which is the same as
+ *  straight/empty, so the migration is a pure version bump. */
+export type SerializedSnapshotV25 = Omit<SaveSnapshot, 'v'> & { readonly v: 25 };
+
+/** v25 → v26: §2.6 route bending shipped. Route waypoints are optional and
+ *  default to absent/empty (straight route), so v25 routes load unchanged. */
+export function migrateV25toV26(s: SerializedSnapshotV25): SaveSnapshot {
+  return { ...s, v: 26 as const } as unknown as SaveSnapshot;
+}
+
 export function migrateV23toV24(s: SerializedSnapshotV23): SaveSnapshot {
   return {
     ...s,
@@ -807,22 +819,29 @@ export function serializeWorld(
         ...d,
         scanBuffer: [...d.scanBuffer].sort(),
       })),
-      routes: world.routes.map((r) => ({
-        ...r,
-        // Defensive copy of the mutable inFlight array so post-snapshot
-        // mutations to the live route don't leak into the serialized blob.
-        // Project each batch to its explicit persisted fields: the §2.6
-        // crossed-cell path is NOT stored (it is recomputed from the route's
-        // from/to geometry in deliverArrivals), so scrub any legacy `crossedCells`
-        // a pre-existing save left on an in-flight batch instead of re-writing it.
-        inFlight: r.inFlight.map((b) => ({
-          resourceId: b.resourceId,
-          amount: b.amount,
-          arrivalTime: b.arrivalTime,
-          dispatchTime: b.dispatchTime,
-          ...(b.id !== undefined ? { id: b.id } : {}),
-        })),
-      })),
+      routes: world.routes.map((r) => {
+        const { waypoints: _wp, ...rest } = r;
+        void _wp;
+        return {
+          ...rest,
+          // §2.6 bend points: persist only when present and non-empty so the
+          // save blob stays small for the common straight-route case.
+          ...(r.waypoints && r.waypoints.length ? { waypoints: r.waypoints.map((w) => ({ x: w.x, y: w.y })) } : {}),
+          // Defensive copy of the mutable inFlight array so post-snapshot
+          // mutations to the live route don't leak into the serialized blob.
+          // Project each batch to its explicit persisted fields: the §2.6
+          // crossed-cell path is NOT stored (it is recomputed from the route's
+          // from/to geometry in deliverArrivals), so scrub any legacy `crossedCells`
+          // a pre-existing save left on an in-flight batch instead of re-writing it.
+          inFlight: r.inFlight.map((b) => ({
+            resourceId: b.resourceId,
+            amount: b.amount,
+            arrivalTime: b.arrivalTime,
+            dispatchTime: b.dispatchTime,
+            ...(b.id !== undefined ? { id: b.id } : {}),
+          })),
+        };
+      }),
       // Vehicles are immutable records, no nested mutable state to deep-copy.
       vehicles: [...world.vehicles],
       // §11 telemetry: snapshot the revealed-cell set as a sorted array.
@@ -954,6 +973,9 @@ export function deserializeWorld(
   }
   if ((snapshot as unknown as { v: number }).v === 24) {
     snapshot = migrateV24toV25(snapshot as unknown as SerializedSnapshotV24);
+  }
+  if ((snapshot as unknown as { v: number }).v === 25) {
+    snapshot = migrateV25toV26(snapshot as unknown as SerializedSnapshotV25);
   }
 
   if (snapshot.v !== SCHEMA_VERSION) {
