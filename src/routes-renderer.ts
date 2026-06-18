@@ -282,11 +282,14 @@ export class RouteRenderer {
 
     // Draft preview line — only when the panel is open and selection valid.
     if (panelVisible && draftKey !== '') {
-      const sep = draftKey.indexOf('|');
-      const fromId = draftKey.slice(0, sep);
-      const toId = draftKey.slice(sep + 1);
+      // `from|to|buildingId` — the draft starts at the SELECTED source building
+      // (matching where the real route will be drawn / the §2.6 weather path),
+      // falling back to the island centre when no building is chosen yet.
+      const [fromId, toId, buildingId] = draftKey.split('|');
       if (fromId && toId && fromId !== toId) {
-        const p1 = this.resolveIslandPos(fromId);
+        const p1 = (buildingId
+          ? this.resolveRouteSourcePos?.({ from: fromId, sourceBuildingId: buildingId } as Route)
+          : null) ?? this.resolveIslandPos(fromId);
         const p2 = this.resolveIslandPos(toId);
         if (p1 && p2) {
           g.moveTo(p1.x, p1.y)

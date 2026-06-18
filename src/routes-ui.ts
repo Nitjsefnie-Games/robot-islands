@@ -20,13 +20,15 @@ import {
   createRouteFromBuilding,
   eligibleTransportBuildings,
   islandHasTeleporterPad,
+  isPowerLink,
   retargetRoute as retargetRoutePure,
   type Route,
 } from './routes.js';
+import { routeThrottleReason, throttleBadge } from './route-throttle.js';
 import { type IslandSpec, type WorldState } from './world.js';
 import { BUILDING_DEFS } from './building-defs.js';
 import { type MutationGateway } from './mutation-gateway.js';
-import { activeFloorLevel, floorEffectMul } from './buildings.js';
+import { activeFloorLevel, floorEffectMul, floorScaledCapacity } from './buildings.js';
 import type { RouteRenderer } from './routes-renderer.js';
 
 /** Exported pure helper for tests: signature of the FROM island's building
@@ -47,6 +49,17 @@ export function viaBuildingKeyForIsland(island: IslandSpec | undefined): string 
  *  other capacity readout in the panel). */
 export function fmtUPerSec(n: number): string {
   return `${n.toFixed(2)} u/s`;
+}
+
+/** Label for a source-building option in the new-route selector. Shows the
+ *  building's MAX throughput including §2.4 floor scaling (`floorScaledCapacity`
+ *  = base × (1 + activeFloorLevel)), not the tier base — so a floor-upgraded
+ *  dock advertises its real capacity. */
+export function buildingOptionLabel(
+  b: { readonly defId: keyof typeof BUILDING_DEFS; readonly floorLevel?: number; readonly disabledFloors?: number },
+  profile: { readonly type: string; readonly capacityPerSec: number },
+): string {
+  return `${BUILDING_DEFS[b.defId].displayName} · ${profile.type} · ${fmtUPerSec(floorScaledCapacity(b, profile.capacityPerSec))}`;
 }
 
 /** Everything about a route that, when changed, requires a DOM rebuild of its
@@ -544,8 +557,7 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
       const profile = routeProfileForBuilding(b.defId)!;
       const o = document.createElement('option');
       o.value = b.id;
-      o.textContent =
-        `${BUILDING_DEFS[b.defId].displayName} · ${profile.type} · ${profile.capacityPerSec} u/s`;
+      o.textContent = buildingOptionLabel(b, profile);
       buildingSel.appendChild(o);
     }
   }
@@ -863,10 +875,17 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     const fmul = routeFloorMultiplier(route, deps.world);
     left.textContent = `${(route.capacityPerSec * fmul).toFixed(2)} u/s · ${(route.transitTimeSec / fmul).toFixed(1)}s`;
     styled(left, `color: ${'var(--ri-fg-3)'}; font-size: 9.5px`);
+    // §2.4 live throttle badge — names what's limiting an active cargo route
+    // (flowing / source empty / dest full / draining). Power-link routes carry
+    // no cargo, so they get no badge. Updated per-frame in `update()`.
+    const throttleEl = document.createElement('span');
+    throttleEl.classList.add('ri-mono');
+    styled(throttleEl, 'font-size: 9.5px');
     const right = document.createElement('span');
     right.classList.add('ri-mono');
     styled(right, `color: ${'var(--ri-fg-4)'}; font-size: 9.5px`);
     meta.appendChild(left);
+    meta.appendChild(throttleEl);
     meta.appendChild(right);
 
     row.appendChild(top);
@@ -882,6 +901,16 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     function update(now: number): void {
       const route = deps.world.routes.find((r) => r.id === routeId);
       if (!route) return;
+      // Live throttle badge (cargo routes only).
+      if (isPowerLink(route.type)) {
+        throttleEl.textContent = '';
+      } else {
+        const badge = throttleBadge(routeThrottleReason(deps.world, deps.islandStates, route));
+        throttleEl.textContent = badge.text;
+        throttleEl.style.color = badge.tone === 'ok'
+          ? 'var(--ri-accent)'
+          : badge.tone === 'warn' ? 'var(--ri-warn)' : 'var(--ri-fg-4)';
+      }
       const inFlightCount = route.inFlight.length;
       const utilPct = Math.min(1, inFlightCount / 10);
       ruleFill.style.width = `${(utilPct * 100).toFixed(2)}%`;
@@ -1136,7 +1165,7 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
 
   function paintLayer(nowMs: number): void {
     const draftKey = visible && fromSel.value && toSel.value
-      ? `${fromSel.value}|${toSel.value}`
+      ? `${fromSel.value}|${toSel.value}|${buildingSel.value}`
       : '';
     deps.routeRenderer.update(deps.world.routes, nowMs, draftKey, visible);
   }
