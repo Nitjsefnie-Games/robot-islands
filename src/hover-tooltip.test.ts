@@ -351,7 +351,16 @@ describe('§6 tileInfoForHover — weather + vision gating', () => {
     } as unknown as PlacedBuilding;
     const home = makePopulatedHome({ buildings: [station], terrainAt: () => 'iron_ore' });
     const world = makeWorld({ islands: [home] });
-    const info = tileInfoForHover(world, 8, 8, NOW);
+    // Forecast surfaces only in the final WEATHER_FORECAST_LOOKAHEAD_MS (2 h) of
+    // the cell's current dwell. Which wall-clock instant falls in that window
+    // depends on the (seed, cell) dwell sequence, so scan forward in 1-min steps
+    // over one max dwell (4 h) — guaranteed to enter the window — and assert the
+    // forecast line renders there. (Pre-modulo this happened to land at NOW; the
+    // §2.6 period re-anchoring moved the boundary, not the behavior under test.)
+    let info = tileInfoForHover(world, 8, 8, NOW);
+    for (let off = 0; off <= 4 * 60 * 60 * 1000 && info.weather!.forecastText === null; off += 60 * 1000) {
+      info = tileInfoForHover(world, 8, 8, NOW + off);
+    }
     expect(info.weather).not.toBeNull();
     expect(info.weather!.forecastText).not.toBeNull();
     expect(info.weather!.forecastText).toContain('→');
