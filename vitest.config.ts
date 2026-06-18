@@ -6,7 +6,9 @@ export default defineConfig({
       {
         test: {
           name: 'client',
-          include: ['src/**/*.test.ts'],
+          // Characterization golden replays (#124) run in the client project so
+          // golden drift fails `npm test` instead of rotting in a manual script.
+          include: ['src/**/*.test.ts', 'characterization/**/*.test.ts'],
         },
       },
       {
