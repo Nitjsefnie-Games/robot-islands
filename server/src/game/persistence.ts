@@ -75,15 +75,32 @@ export async function saveSnapshot(db: Queryable, userId: string, snapshot: Save
      ON CONFLICT (user_id) DO UPDATE SET world = EXCLUDED.world`,
     [userId, JSON.stringify(snapshot.world)],
   );
+  // PERF: upsert all island rows in BATCHED multi-row INSERTs instead of one
+  // round-trip per island. saveSnapshot runs on every persisted intent (and
+  // twice per intent via loadAndCatchUp), and the per-island round-trips were
+  // ~all of its ~75ms wall time on a 65-island save. Identical writes (same
+  // rows, same ON CONFLICT upsert, same trailing DELETE); only the number of
+  // network round-trips changes. Chunked to stay well under Postgres' 65535
+  // bind-parameter ceiling (4 params/row → 16k rows/chunk; 1000 is plenty).
   const ids: string[] = [];
-  for (let ord = 0; ord < snapshot.islandStates.length; ord++) {
-    const entry = snapshot.islandStates[ord]!;
-    ids.push(entry.id);
+  const entries = snapshot.islandStates;
+  const CHUNK = 1000;
+  for (let start = 0; start < entries.length; start += CHUNK) {
+    const chunk = entries.slice(start, start + CHUNK);
+    const params: unknown[] = [];
+    const rows: string[] = [];
+    for (let i = 0; i < chunk.length; i++) {
+      const entry = chunk[i]!;
+      ids.push(entry.id);
+      const b = i * 4;
+      rows.push(`($${b + 1}, $${b + 2}, $${b + 3}, $${b + 4})`);
+      params.push(userId, entry.id, start + i, JSON.stringify(entry.state));
+    }
     await db.query(
-      `INSERT INTO save_islands (user_id, island_id, ord, state) VALUES ($1, $2, $3, $4)
+      `INSERT INTO save_islands (user_id, island_id, ord, state) VALUES ${rows.join(', ')}
        ON CONFLICT (user_id, island_id) DO UPDATE
          SET ord = EXCLUDED.ord, state = EXCLUDED.state`,
-      [userId, entry.id, ord, JSON.stringify(entry.state)],
+      params,
     );
   }
   // Drop island rows no longer present (e.g. merged-away islands). With no
