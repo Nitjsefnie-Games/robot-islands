@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "if": "Bash",
+            "command": "jq -r '.tool_input.command // empty' | grep -qiw sudo && printf '%s' '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"sudo is blocked in this repo: it is not installed and the session already runs as root. Re-run the command without the sudo prefix.\"}}' || true",
+            "statusMessage": "Checking for sudo…"
+          }
+        ]
+      }
+    ]
+  }
+}
