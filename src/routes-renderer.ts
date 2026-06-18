@@ -48,7 +48,15 @@ export class RouteRenderer {
   private _disposed = false;
   private readonly _scrollMatrix = new Matrix();
 
-  constructor(private readonly resolveIslandPos: IslandPosResolver) {
+  constructor(
+    private readonly resolveIslandPos: IslandPosResolver,
+    /** Optional: resolve a route's SOURCE-BUILDING world-px position (the point
+     *  it is drawn FROM). Returns null for legacy routes with no resolvable
+     *  source building, in which case the `from` endpoint falls back to the
+     *  island centre. Keeps the drawn start consistent with the §2.6 weather
+     *  path, which also anchors at the source building. */
+    private readonly resolveRouteSourcePos?: (route: Route) => { x: number; y: number } | null,
+  ) {
     this.staticLayer.label = 'routes-static';
     this.animatedLayer.label = 'routes-animated';
     this.overlayLayer.label = 'routes-overlay';
@@ -86,7 +94,7 @@ export class RouteRenderer {
       // Fix 7.4: include endpoint world coords in the per-route key so that an
       // island-centre move (merge §3.6 / land reclamation) invalidates the cache
       // and the drawn route is rebuilt to the new position.
-      const from = this.resolveIslandPos(r.from);
+      const from = this.resolveRouteSourcePos?.(r) ?? this.resolveIslandPos(r.from);
       const to = this.resolveIslandPos(r.to);
       const wpKey = r.waypoints?.map((w) => `${w.x},${w.y}`).join(';') ?? '';
       const perRouteKey = `${r.type}|${r.from}|${r.to}|${r.inFlight.length}|${from?.x}|${from?.y}|${to?.x}|${to?.y}|${wpKey}`;
