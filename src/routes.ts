@@ -337,6 +337,23 @@ export function routeFloorMultiplier(route: Route, world: WorldState): number {
   return floorEffectMul(Math.max(0, activeFloorLevel(b)));
 }
 
+/** Tile coords of a route's owning source building — the point the route is
+ *  drawn FROM — or null when the route has no `sourceBuildingId` (legacy) or the
+ *  island / building can't be resolved (demolished / merged). Render-only: the
+ *  route's gameplay geometry (capacity / transit / crossed cells) stays
+ *  island-centre-derived; callers fall back to the island centre on null. */
+export function routeSourceTile(
+  route: Route,
+  islandIndex: Map<string, IslandSpec>,
+): { x: number; y: number } | null {
+  if (route.sourceBuildingId === undefined) return null;
+  const island = islandIndex.get(route.from);
+  if (!island) return null;
+  const b = island.buildings.find((bb) => bb.id === route.sourceBuildingId);
+  if (!b) return null;
+  return { x: b.x, y: b.y };
+}
+
 /**
  * §5.3 local power helper — returns the per-island raw produced/consumed
  * wattage with no inter-island cable contribution. Mirrors `computeRates`

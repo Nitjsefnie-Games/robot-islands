@@ -29,6 +29,7 @@ import {
   routeBentLengthTiles,
   routeCrossedCells,
   routeFloorMultiplier,
+  routeSourceTile,
   routePolylinePoints,
   routeProfileForBuilding,
   setRouteWaypoints,
@@ -126,6 +127,35 @@ function makeIslandSpec(id: string, cx: number, cy: number): IslandSpec {
     modifiers: [],
   };
 }
+
+describe('routeSourceTile (source-anchored rendering)', () => {
+  function islandWithBuildings(bs: Array<{ id: string; defId: BuildingDefId; x: number; y: number }>): IslandSpec {
+    return { ...makeIslandSpec('home', 0, 0), buildings: bs as unknown as PlacedBuilding[] };
+  }
+  const idx = new Map<string, IslandSpec>([
+    ['home', islandWithBuildings([{ id: 'dock-1', defId: 'dock', x: 3, y: -2 }])],
+  ]);
+
+  it('returns the source building tile', () => {
+    const route = { from: 'home', sourceBuildingId: 'dock-1' } as unknown as Route;
+    expect(routeSourceTile(route, idx)).toEqual({ x: 3, y: -2 });
+  });
+
+  it('returns null for a legacy route with no sourceBuildingId', () => {
+    const route = { from: 'home' } as unknown as Route;
+    expect(routeSourceTile(route, idx)).toBeNull();
+  });
+
+  it('returns null when the source building was demolished', () => {
+    const route = { from: 'home', sourceBuildingId: 'gone' } as unknown as Route;
+    expect(routeSourceTile(route, idx)).toBeNull();
+  });
+
+  it('returns null when the from-island is unknown', () => {
+    const route = { from: 'nowhere', sourceBuildingId: 'dock-1' } as unknown as Route;
+    expect(routeSourceTile(route, idx)).toBeNull();
+  });
+});
 
 function findCellWithWeather(
   seed: string,
