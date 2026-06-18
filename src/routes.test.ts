@@ -142,16 +142,15 @@ describe('routeSourceTile (source-anchored rendering)', () => {
     ])],
   ]);
 
-  it('returns the FOOTPRINT CENTRE in world tiles (island centre + local offset + half-footprint)', () => {
+  it('returns the FOOTPRINT CENTRE in world tiles (tile coords are tile CENTRES → offset (W-1)/2)', () => {
     const route = { from: 'home', sourceBuildingId: 'dock-1' } as unknown as Route;
-    // 2×2 dock: centre = (100 + 3 + 1, 50 + -2 + 1)
-    expect(routeSourceTile(route, idx)).toEqual({ x: 104, y: 49 });
+    // 2×2 dock: NW tile centre is (100+3, 50-2); footprint centre is (2-1)/2 = 0.5 further.
+    expect(routeSourceTile(route, idx)).toEqual({ x: 103.5, y: 48.5 });
   });
 
-  it('centres on the whole footprint for a multi-tile building (4×4 mass driver)', () => {
+  it('centres on the whole footprint for a multi-tile building (4×4 mass driver → (4-1)/2 = 1.5)', () => {
     const route = { from: 'home', sourceBuildingId: 'md-1' } as unknown as Route;
-    // 4×4: centre = (100 + 10 + 2, 50 + 10 + 2)
-    expect(routeSourceTile(route, idx)).toEqual({ x: 112, y: 62 });
+    expect(routeSourceTile(route, idx)).toEqual({ x: 111.5, y: 61.5 });
   });
 
   it('returns null for a legacy route with no sourceBuildingId', () => {
@@ -185,8 +184,8 @@ describe('route path anchors at the source building (weather)', () => {
 
   it('polyline starts at the source building FOOTPRINT CENTRE in world tiles', () => {
     const pts = routePolylinePoints(route(), idxWith({ x: 5, y: 5 }))!;
-    // dock is 2×2 → centre adds half (1,1): (60+5+1, 20+5+1)
-    expect(pts[0]).toEqual({ x: HOME_CX + 5 + 1, y: HOME_CY + 5 + 1 });
+    // dock is 2×2 → footprint centre is (2-1)/2 = 0.5 past the NW tile centre.
+    expect(pts[0]).toEqual({ x: HOME_CX + 5 + 0.5, y: HOME_CY + 5 + 0.5 });
     expect(pts[pts.length - 1]).toEqual({ x: 140, y: 0 });
   });
 
