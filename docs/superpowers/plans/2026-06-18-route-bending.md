@@ -38,7 +38,7 @@
 
 ```ts
 // in src/weather.test.ts
-import { rasterizePolylineCells, rasterizeRouteCells, routeCapacityMultiplierForCells } from './weather.js';
+import { rasterizePolylineCells, rasterizeRouteCells, routeCapacityMultiplierForCells, routeCapacityMultiplierForWeather } from './weather.js';
 
 test('rasterizePolylineCells with no bend equals straight rasterizeRouteCells (cells)', () => {
   const cell = 8;
@@ -63,11 +63,17 @@ test('rasterizePolylineCells does not duplicate the shared vertex cell', () => {
   expect(new Set(keys).size).toBe(keys.length);
 });
 
-test('routeCapacityMultiplierForCells returns min over cells (clear weather = 1)', () => {
-  const cells = rasterizePolylineCells([{ x: 0, y: 0 }, { x: 40, y: 0 }], 8).map(c => ({ cx: c.cx, cy: c.cy }));
-  const mul = routeCapacityMultiplierForCells('seed-clearcells', cells, 0);
-  expect(mul).toBeGreaterThan(0);
-  expect(mul).toBeLessThanOrEqual(1);
+test('routeCapacityMultiplierForCells equals the straight-line multiplier for the same cells', () => {
+  // Seed-independent contract: the cells-based fn is the extracted core of the
+  // straight-line fn, so for a straight 2-point path they must return the SAME
+  // value whatever the (deterministic) weather happens to be at that seed/time.
+  const cell = 8;
+  const cells = rasterizeRouteCells(0, 0, 40, 0, cell).map(c => ({ cx: c.cx, cy: c.cy }));
+  const viaCells = routeCapacityMultiplierForCells('seed-x', cells, 1234);
+  const viaStraight = routeCapacityMultiplierForWeather('seed-x', 0, 0, 40, 0, 1234, cell);
+  expect(viaCells).toBe(viaStraight);
+  expect(viaCells).toBeGreaterThanOrEqual(0);
+  expect(viaCells).toBeLessThanOrEqual(1);
 });
 ```
 
