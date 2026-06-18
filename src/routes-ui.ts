@@ -662,6 +662,9 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
       route.mode,
       route.cargo.map((e) => `${e.resourceId}:${e.weight ?? 1}:${e.sourceFloorPct ?? ''}`).join(','),
       route.draining ? 'D' : '',
+      // §2.6: bend count drives whether the "Unbend all" button is rendered,
+      // so a row must rebuild when waypoints appear/disappear.
+      `b${route.waypoints?.length ?? 0}`,
     ].join('\u001f');
   }
 
@@ -783,6 +786,25 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
         refresh(performance.now());
       });
       right.appendChild(reSel);
+
+      // §2.6 "Unbend all" — clears every bend point in one action. Only shown
+      // when the route actually carries bends; map gestures handle per-point
+      // editing. Mirrors the delete/retarget gateway-call pattern above.
+      if (route.waypoints && route.waypoints.length > 0) {
+        const unbendBtn = document.createElement('button');
+        unbendBtn.textContent = 'Unbend all';
+        unbendBtn.title = 'clear all bend points — straightens the route';
+        styled(
+          unbendBtn,
+          ['font-size: 8.5px', 'padding: 1px 4px', 'background: transparent', `color: ${'var(--ri-accent)'}`].join(';'),
+        );
+        unbendBtn.addEventListener('click', async () => {
+          if (deps.gateway) await deps.gateway.setRouteWaypoints(route.id, []);
+          refresh(performance.now());
+        });
+        right.appendChild(unbendBtn);
+      }
+
       top.appendChild(right);
     }
 
