@@ -30,7 +30,7 @@ import { effectiveSkillMultipliers, type SkillMultipliers } from './skilltree.js
 import {
   biomeForCell,
   routeCapacityMultiplierForWeather,
-  rasterizeRouteCells,
+  rasterizePolylineCells,
   sumIslandCo2,
   weather,
   weatherClockMs,
@@ -106,6 +106,10 @@ export interface Route {
   /** PlacedBuilding id of the transport building that owns this route.
    *  Absent on legacy saved routes (grandfathered as plain cargo). */
   sourceBuildingId?: string;
+  /** §2.6 bend points (tile coords) turning the straight corridor into a
+   *  polyline of up to MAX_ROUTE_BENDS+1 segments. Absent/empty = straight
+   *  (back-compat). Only bendable, non-instant cargo routes carry these. */
+  waypoints?: ReadonlyArray<{ x: number; y: number }>;
 }
 
 // VISUAL-FIELD-MARKER: any new field on the Route interface above
@@ -119,6 +123,7 @@ export interface Route {
 //   - route.type           (selects dashed-stroke texture + colour)
 //   - route.from           (island id → world-coord endpoint)
 //   - route.to             (island id → world-coord endpoint)
+//   - route.waypoints      (tile coords → polyline world-px path; #118)
 //   - route.inFlight.length  (chevron count; items themselves NOT keyed)
 //   - from.x, from.y       (world-coord endpoints; Fix 7.4)
 //   - to.x,   to.y         (world-coord endpoints; Fix 7.4)
@@ -134,20 +139,62 @@ function buildIslandIndex(world: WorldState): Map<string, IslandSpec> {
 
 const NO_CROSSED_CELLS: ReadonlyArray<{ cx: number; cy: number; transitFraction: number }> = [];
 
+export const MAX_ROUTE_BENDS = 4;
+
+/** Route classes that traverse ocean cells and can be bent. Excludes instant
+ *  teleporters and power links (which transmit power, not cargo, skipping §2.6). */
+export function isBendableRouteType(t: RouteType): boolean {
+  return t === 'cargo' || t === 'drone' || t === 'airship' || t === 'mass_driver';
+}
+
+/** Polyline points (tile coords) for a route: [from, ...waypoints, to].
+ *  Null when either endpoint island is unknown. */
+export function routePolylinePoints(
+  route: Route, islandIndex: Map<string, IslandSpec>,
+): Array<{ x: number; y: number }> | null {
+  const fromSpec = islandIndex.get(route.from);
+  const toSpec = islandIndex.get(route.to);
+  if (!fromSpec || !toSpec) return null;
+  const pts: Array<{ x: number; y: number }> = [{ x: fromSpec.cx, y: fromSpec.cy }];
+  if (route.waypoints) for (const w of route.waypoints) pts.push({ x: w.x, y: w.y });
+  pts.push({ x: toSpec.cx, y: toSpec.cy });
+  return pts;
+}
+
+/** Total polyline length in tiles (straight-line distance when no bends). */
+export function routeBentLengthTiles(route: Route, islandIndex: Map<string, IslandSpec>): number {
+  const pts = routePolylinePoints(route, islandIndex);
+  if (!pts) return 0;
+  let len = 0;
+  for (let i = 0; i < pts.length - 1; i++) len += Math.hypot(pts[i + 1]!.x - pts[i]!.x, pts[i + 1]!.y - pts[i]!.y);
+  return len;
+}
+
+/** Effective transit time: base (straight) transitTimeSec scaled by
+ *  bentLength/straightLength. A straight route returns transitTimeSec unchanged. */
+export function effectiveTransitTimeSec(route: Route, islandIndex: Map<string, IslandSpec>): number {
+  const fromSpec = islandIndex.get(route.from);
+  const toSpec = islandIndex.get(route.to);
+  if (!fromSpec || !toSpec) return route.transitTimeSec;
+  const straight = Math.hypot(toSpec.cx - fromSpec.cx, toSpec.cy - fromSpec.cy);
+  if (straight <= 0) return route.transitTimeSec;
+  return route.transitTimeSec * (routeBentLengthTiles(route, islandIndex) / straight);
+}
+
 /** The stratification cells a route crosses, with per-cell transit fraction —
- *  a pure function of the route's (from, to) island geometry. Recomputed on
- *  demand (at dispatch for the §2.6 capacity throttle and at delivery for the
- *  §2.6 in-flight loss roll) rather than stored per in-flight batch, so saves
- *  never carry duplicated path data. Empty when either endpoint is unknown
- *  (matches the pre-existing "no specs ⇒ no weather" dispatch behaviour). */
+ *  a pure function of the route's polyline (from, waypoints, to) island
+ *  geometry. Recomputed on demand (at dispatch for the §2.6 capacity throttle
+ *  and at delivery for the §2.6 in-flight loss roll) rather than stored per
+ *  in-flight batch, so saves never carry duplicated path data. Empty when
+ *  either endpoint is unknown (matches the pre-existing "no specs ⇒ no weather"
+ *  dispatch behaviour). */
 export function routeCrossedCells(
   route: Route,
   islandIndex: Map<string, IslandSpec>,
 ): ReadonlyArray<{ cx: number; cy: number; transitFraction: number }> {
-  const fromSpec = islandIndex.get(route.from);
-  const toSpec = islandIndex.get(route.to);
-  if (!fromSpec || !toSpec) return NO_CROSSED_CELLS;
-  return rasterizeRouteCells(fromSpec.cx, fromSpec.cy, toSpec.cx, toSpec.cy, CELL_SIZE_TILES);
+  const pts = routePolylinePoints(route, islandIndex);
+  if (!pts) return NO_CROSSED_CELLS;
+  return rasterizePolylineCells(pts, CELL_SIZE_TILES);
 }
 
 // ---------------------------------------------------------------------------
