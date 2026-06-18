@@ -248,7 +248,7 @@ export interface InspectorDeps {
   getRatesContext?(islandId: string): RatesContext | undefined;
 }
 
-interface RateLine {
+export interface RateLine {
   readonly resource: ResourceId;
   readonly direction: 'in' | 'out';
   readonly rate: number;
@@ -256,15 +256,18 @@ interface RateLine {
 
 /** Recipe summary as a list of "+r/s wood" / "-r/s coal" lines. `rate` is
  *  pre-multiplied by the building's `effectiveRate` so paused/output-stalled
- *  buildings show zero rates rather than nominal-recipe rates. */
-function recipeToLines(recipe: Recipe, effectiveRate: number): RateLine[] {
+ *  buildings show zero rates rather than nominal-recipe rates. Input lines are
+ *  additionally divided by `recipeInputDiv` (the §9.3 material-input-efficiency
+ *  divisor, ≥1) so the displayed draw matches the engine's pass-4 drawdown and
+ *  the HUD; outputs are unaffected (the lever never changes outputs). */
+export function recipeToLines(recipe: Recipe, effectiveRate: number, recipeInputDiv = 1): RateLine[] {
   const lines: RateLine[] = [];
   for (const [r, n] of Object.entries(recipe.inputs)) {
     if ((n ?? 0) === 0) continue;
     lines.push({
       resource: r as ResourceId,
       direction: 'in',
-      rate: (n ?? 0) * effectiveRate,
+      rate: ((n ?? 0) * effectiveRate) / recipeInputDiv,
     });
   }
   for (const [r, n] of Object.entries(recipe.outputs)) {
@@ -276,6 +279,37 @@ function recipeToLines(recipe: Recipe, effectiveRate: number): RateLine[] {
     });
   }
   return lines;
+}
+
+/** Build the inspector "bonuses" readout string from the resolved multipliers,
+ *  or `null` when nothing is worth showing. The recipe-rate factors
+ *  (fledgling / category / yield / cluster / active) compose into a single
+ *  `= ×N` summary; the §9.3 material-input-efficiency lever is an input
+ *  DIVISOR (lower consumption, not a rate boost), so it is surfaced as a
+ *  separate `material-input ÷N` term and can appear even when no rate factor
+ *  is active. */
+export function bonusesText(m: {
+  fledgMul: number;
+  catMul: number;
+  catLabel: string;
+  mineLogBonus: number;
+  clusterMul: number;
+  activeMul: number;
+  recipeInput: number;
+}): string | null {
+  const compositeMul = m.catMul * m.mineLogBonus * m.fledgMul * m.clusterMul * m.activeMul;
+  const parts: string[] = [];
+  if (m.fledgMul > 1.0001) parts.push(`fledgling ×${m.fledgMul.toFixed(2)}`);
+  if (m.catMul > 1.0001) parts.push(`${m.catLabel} ×${m.catMul.toFixed(2)}`);
+  if (m.mineLogBonus > 1.0001) parts.push(`yield ×${m.mineLogBonus.toFixed(2)}`);
+  if (m.clusterMul > 1.0001) parts.push(`cluster ×${m.clusterMul.toFixed(2)}`);
+  if (m.activeMul > 1.0001) parts.push(`active ×${m.activeMul.toFixed(2)}`);
+  let text = compositeMul > 1.0001 ? parts.join(' · ') + ` = ×${compositeMul.toFixed(2)}` : '';
+  if (m.recipeInput > 1.0001) {
+    const term = `material-input ÷${m.recipeInput.toFixed(2)}`;
+    text = text ? `${text} · ${term}` : term;
+  }
+  return text === '' ? null : text;
 }
 
 /** Format a per-second rate to 2-3 significant digits with a sign prefix. */
@@ -1642,7 +1676,7 @@ export function mountInspectorUi(
       recipeStatus.style.color = 'var(--ri-fg-3)';
       recipeStatus.style.display = '';
 
-      const lines = recipeToLines(recipe, effective);
+      const lines = recipeToLines(recipe, effective, skillMul.recipeInput);
       ensureRecipeLineCount(lines.length);
       for (let i = 0; i < lines.length; i++) {
         const ln = lines[i];
@@ -1677,15 +1711,17 @@ export function mountInspectorUi(
       const fledgMul = fledglingRecipeMul(state.level);
       // §9.9 active-play bonus — world-level, applies to every recipe.
       const activeMul = activeBonusMul(deps.world);
-      const compositeMul = catMul * mineLogBonus * fledgMul * clusterMul * activeMul;
-      if (compositeMul > 1.0001) {
-        const parts: string[] = [];
-        if (fledgMul > 1.0001) parts.push(`fledgling ×${fledgMul.toFixed(2)}`);
-        if (catMul > 1.0001) parts.push(`${recipe.category} ×${catMul.toFixed(2)}`);
-        if (mineLogBonus > 1.0001) parts.push(`yield ×${mineLogBonus.toFixed(2)}`);
-        if (clusterMul > 1.0001) parts.push(`cluster ×${clusterMul.toFixed(2)}`);
-        if (activeMul > 1.0001) parts.push(`active ×${activeMul.toFixed(2)}`);
-        bonusesValue.textContent = parts.join(' · ') + ` = ×${compositeMul.toFixed(2)}`;
+      const bonuses = bonusesText({
+        fledgMul,
+        catMul,
+        catLabel: recipe.category,
+        mineLogBonus,
+        clusterMul,
+        activeMul,
+        recipeInput: skillMul.recipeInput,
+      });
+      if (bonuses !== null) {
+        bonusesValue.textContent = bonuses;
         bonusesRow.style.display = '';
       } else {
         bonusesRow.style.display = 'none';

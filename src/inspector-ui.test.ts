@@ -2,9 +2,10 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeRegistry } from './input.js';
-import { mountInspectorUi, type InspectorDeps } from './inspector-ui.js';
+import { mountInspectorUi, recipeToLines, bonusesText, type InspectorDeps } from './inspector-ui.js';
 import { makeInitialIslandState, type IslandSpec, type WorldState } from './world.js';
 import type { PlacedBuilding } from './buildings.js';
+import type { Recipe } from './recipes.js';
 
 function makeSpec(over: Partial<IslandSpec> = {}): IslandSpec {
   return {
@@ -26,6 +27,59 @@ function makeSpec(over: Partial<IslandSpec> = {}): IslandSpec {
 function makeBuilding(over: Partial<PlacedBuilding> & { id: string; defId: PlacedBuilding['defId'] }): PlacedBuilding {
   return { x: 0, y: 0, ...over };
 }
+
+describe('recipeToLines — material-input efficiency (#142)', () => {
+  const recipe: Recipe = {
+    cycleSec: 10,
+    inputs: { iron_ore: 2 } as Recipe['inputs'],
+    outputs: { iron_ingot: 1 } as Recipe['outputs'],
+    category: 'smelting',
+  };
+
+  it('divides input lines by recipeInputDiv but leaves outputs unchanged', () => {
+    const lines = recipeToLines(recipe, 0.5, 2);
+    const input = lines.find((l) => l.direction === 'in')!;
+    const output = lines.find((l) => l.direction === 'out')!;
+    // input: rawQty(2) × effectiveRate(0.5) / recipeInputDiv(2) = 0.5
+    expect(input.rate).toBeCloseTo(0.5, 6);
+    // output: rawQty(1) × effectiveRate(0.5) = 0.5 (divisor must NOT touch it)
+    expect(output.rate).toBeCloseTo(0.5, 6);
+  });
+
+  it('defaults the divisor to 1 (no division) when omitted', () => {
+    const lines = recipeToLines(recipe, 0.5);
+    const input = lines.find((l) => l.direction === 'in')!;
+    expect(input.rate).toBeCloseTo(1.0, 6); // 2 × 0.5 / 1
+  });
+});
+
+describe('bonusesText — material-input efficiency (#142)', () => {
+  const base = {
+    fledgMul: 1,
+    catMul: 1,
+    catLabel: 'refinement',
+    mineLogBonus: 1,
+    clusterMul: 1,
+    activeMul: 1,
+    recipeInput: 1,
+  };
+
+  it('names material-input efficiency as a divisor term when recipeInput > 1', () => {
+    const text = bonusesText({ ...base, recipeInput: 1.25 });
+    expect(text).toContain('material-input ÷1.25');
+  });
+
+  it('appends the material-input term after the rate composite', () => {
+    const text = bonusesText({ ...base, catMul: 1.15, recipeInput: 1.25 });
+    expect(text).toContain('refinement ×1.15');
+    expect(text).toContain('= ×1.15');
+    expect(text).toContain('material-input ÷1.25');
+  });
+
+  it('returns null when no bonus is active (recipeInput == 1)', () => {
+    expect(bonusesText(base)).toBeNull();
+  });
+});
 
 describe('mountInspectorUi', () => {
   let container: HTMLElement;
