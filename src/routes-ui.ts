@@ -895,6 +895,11 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     meta.appendChild(sum);
     row.appendChild(meta);
 
+    // Cargo + mode editor — members share an identical cargo list, so edits on
+    // this one editor fan out to EVERY member via the `targets` set.
+    const rep = members[0];
+    if (rep) renderCargoEditor(rep, row, () => refresh(performance.now()), () => live());
+
     function update(now: number): void {
       const ms = live();
       if (ms.length === 0) { sum.textContent = ''; return; }
@@ -1118,7 +1123,20 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     return { structKey, row, update };
   }
 
-  function renderCargoEditor(route: Route, container: HTMLElement, rerender: () => void): void {
+  function renderCargoEditor(
+    route: Route,
+    container: HTMLElement,
+    rerender: () => void,
+    /** Routes the edits apply to. A normal row edits just its route; a merged
+     *  row passes all live group members so cargo/mode changes fan to every
+     *  member (they share an identical cargo list, so the same index/list is
+     *  valid across all). `route` is only the display representative. */
+    targets: () => Route[] = () => [route],
+  ): void {
+    /** Apply a per-route mutation to every target, sequentially. */
+    async function applyAll(fn: (r: Route) => Promise<void> | void): Promise<void> {
+      for (const r of targets()) await fn(r);
+    }
     // --- mode selector ---
     const modeRow = document.createElement('div');
     modeRow.style.cssText = 'display:flex;gap:6px;align-items:center;margin:4px 0 0 16px;';
@@ -1138,11 +1156,10 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     modeSel.addEventListener('change', async (e) => {
       e.stopPropagation();
       const mode = modeSel.value as Route['mode'];
-      if (deps.gateway) {
-        await deps.gateway.setRouteMode(route.id, mode);
-      } else {
-        route.mode = mode;
-      }
+      await applyAll(async (r) => {
+        if (deps.gateway) await deps.gateway.setRouteMode(r.id, mode);
+        else r.mode = mode;
+      });
       rerender();
     });
     modeRow.appendChild(modeLbl);
@@ -1182,11 +1199,10 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
         w.addEventListener('change', async (e) => {
           e.stopPropagation();
           const v = Math.max(1, Math.floor(Number(w.value) || 1));
-          if (deps.gateway) {
-            await deps.gateway.setCargoWeight(route.id, index, v);
-          } else {
-            route.cargo[index] = { ...entry, weight: v };
-          }
+          await applyAll(async (r) => {
+            if (deps.gateway) await deps.gateway.setCargoWeight(r.id, index, v);
+            else if (r.cargo[index]) r.cargo[index] = { ...r.cargo[index]!, weight: v };
+          });
           rerender();
         });
         li.appendChild(w);
@@ -1204,14 +1220,15 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
         e.stopPropagation();
         const raw = floor.value.trim();
         const pct = raw === '' ? undefined : Math.min(100, Math.max(0, Number(raw) || 0));
-        if (deps.gateway) {
-          await deps.gateway.setCargoFloorPct(route.id, index, pct);
-        } else {
-          const next: typeof entry = { ...entry };
+        await applyAll(async (r) => {
+          if (deps.gateway) { await deps.gateway.setCargoFloorPct(r.id, index, pct); return; }
+          const cur = r.cargo[index];
+          if (!cur) return;
+          const next: CargoEntry = { ...cur };
           if (pct === undefined) delete (next as { sourceFloorPct?: number }).sourceFloorPct;
           else (next as { sourceFloorPct?: number }).sourceFloorPct = pct;
-          route.cargo[index] = next;
-        }
+          r.cargo[index] = next;
+        });
         rerender();
       });
       li.appendChild(floor);
@@ -1224,11 +1241,11 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
       del.addEventListener('mousedown', (e) => { e.stopPropagation(); });
       del.addEventListener('click', async (e) => {
         e.stopPropagation();
-        if (deps.gateway) {
-          await deps.gateway.setRouteCargo(route.id, route.cargo.filter((_, i) => i !== index));
-        } else {
-          route.cargo = route.cargo.filter((_, i) => i !== index);
-        }
+        await applyAll(async (r) => {
+          const nl = r.cargo.filter((_, i) => i !== index);
+          if (deps.gateway) await deps.gateway.setRouteCargo(r.id, nl);
+          else r.cargo = nl;
+        });
         rerender();
       });
       li.appendChild(del);
@@ -1237,7 +1254,7 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
         li.addEventListener('dragstart', (e) => handleDragStart(e));
         li.addEventListener('dragend', (e) => handleDragEnd(e));
         li.addEventListener('dragover', (e) => handleDragOver(e));
-        li.addEventListener('drop', (e) => handleCargoDrop(e, route, rerender));
+        li.addEventListener('drop', (e) => handleCargoDrop(e, targets, rerender));
         li.addEventListener('dragenter', (e) => { e.preventDefault(); li.style.borderColor = 'var(--ri-accent)'; });
         li.addEventListener('dragleave', () => { li.style.borderColor = 'var(--ri-accent-dim)'; });
       }
@@ -1283,11 +1300,11 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
       e.stopPropagation();
       const chosen = addSel.value as ResourceId | 'all';
       if (!chosen || (chosen !== 'all' && have.has(chosen))) return;
-      if (deps.gateway) {
-        await deps.gateway.setRouteCargo(route.id, [...route.cargo, { resourceId: chosen }]);
-      } else {
-        route.cargo = [...route.cargo, { resourceId: chosen }];
-      }
+      await applyAll(async (r) => {
+        const nl = [...r.cargo, { resourceId: chosen }];
+        if (deps.gateway) await deps.gateway.setRouteCargo(r.id, nl);
+        else r.cargo = nl;
+      });
       rerender();
     });
     addRow.appendChild(addSel);
@@ -1295,16 +1312,15 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     container.appendChild(addRow);
   }
 
-  async function handleCargoDrop(e: DragEvent, route: Route, rerender: () => void) {
+  async function handleCargoDrop(e: DragEvent, targets: () => Route[], rerender: () => void) {
     e.preventDefault();
     const src = Number(e.dataTransfer?.getData('text/plain'));
     const dstLi = e.currentTarget as HTMLElement;
     const dst = Number(dstLi.dataset.index);
     if (src === dst || Number.isNaN(src) || Number.isNaN(dst)) return;
-    if (deps.gateway) {
-      await deps.gateway.reorderRouteCargo(route.id, src, dst);
-    } else {
-      route.cargo = reorderPriorityList(route.cargo, src, dst) as CargoEntry[];
+    for (const r of targets()) {
+      if (deps.gateway) await deps.gateway.reorderRouteCargo(r.id, src, dst);
+      else r.cargo = reorderPriorityList(r.cargo, src, dst) as CargoEntry[];
     }
     rerender();
   }
