@@ -37,6 +37,7 @@ import {
   reorderPriorityList,
   retargetRoute as retargetRoutePure,
   routeProfileForBuilding,
+  setRouteWaypoints as setRouteWaypointsPure,
   type Route,
 } from './routes.js';
 import type { Rotation } from './shape-mask.js';
@@ -223,6 +224,8 @@ export interface MutationGateway {
   setCargoFloorPct(routeId: string, cargoIndex: number, sourceFloorPct?: number): GatewayReturn;
   reorderRouteCargo(routeId: string, srcIndex: number, dstIndex: number): GatewayReturn;
   setRouteCargo(routeId: string, cargo: CargoEntry[]): GatewayReturn;
+  /** §2.6 set or clear a route's bend points (tile coords). Empty array unbends. */
+  setRouteWaypoints(routeId: string, waypoints: ReadonlyArray<{ x: number; y: number }>): GatewayReturn;
 
   // §9.8 trade — accept/reject a live offer. REMOTE: server-authoritative
   // intents; LOCAL: applyOffer client-side (reject bookkeeping is inline in
@@ -813,6 +816,11 @@ export function makeLocalGateway(
       return ok();
     },
 
+    setRouteWaypoints(routeId, waypoints) {
+      const r = setRouteWaypointsPure(world, islandStates, routeId, waypoints);
+      return r.ok ? ok() : err(r.error);
+    },
+
     acceptTrade(offer) {
       const state = islandStates.get(offer.islandId);
       if (!state) return err('unknown island');
@@ -1029,6 +1037,9 @@ export function makeRemoteGateway(client: GameServerClient): MutationGateway {
     },
     setRouteCargo(routeId, cargo) {
       return send('set-route-cargo', { routeId, cargo });
+    },
+    setRouteWaypoints(routeId, waypoints) {
+      return send('set-route-waypoints', { routeId, waypoints });
     },
 
     acceptTrade(offer) {
