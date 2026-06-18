@@ -111,6 +111,12 @@ export interface Route {
    *  polyline of up to MAX_ROUTE_BENDS+1 segments. Absent/empty = straight
    *  (back-compat). Only bendable, non-instant cargo routes carry these. */
   waypoints?: ReadonlyArray<{ x: number; y: number }>;
+  /** §2.4 merged-route group: routes created together by a `from=all` / `to=all`
+   *  shortcut share one `groupId` and collapse to a single ledger row that
+   *  cancels / retargets all members together (each still ticks as its own
+   *  route). Absent = a standalone manual route. Not engine-significant — purely
+   *  a UI grouping handle, so absent on legacy saves needs no migration. */
+  groupId?: string;
 }
 
 // VISUAL-FIELD-MARKER: any new field on the Route interface above
@@ -1220,6 +1226,59 @@ export function eligibleTransportBuildings(
   return island.buildings.filter(
     (b) => routeProfileForBuilding(b.defId) !== null && !taken.has(b.id),
   );
+}
+
+/** Picker sentinel for a `from`/`to` value meaning "every eligible island". */
+export const ROUTE_ALL = 'all';
+
+/** §2.4 merged-route expansion. Turns a `from`/`to` selection (each an island id
+ *  or the `ROUTE_ALL` sentinel) into the concrete list of routes to create as
+ *  one merged group. Rules:
+ *   - Sources: `from='all'` ⇒ every populated island that has a free transport
+ *     building, else the single named island.
+ *   - Each source contributes its **best** free transport buildings (highest
+ *     route capacity first — "takes the best"), one per destination.
+ *   - Destinations: `to='all'` ⇒ every other populated island (nearest first),
+ *     else the single named island. A source is never its own destination.
+ *   - Because a building hosts ONE route, a source emits at most
+ *     `min(freeBuildings, destinations)` routes (best building → nearest dest).
+ *  Pure; per-pair legality (teleporter-needs-pad etc.) is enforced later at
+ *  creation, so invalid pairs are simply dropped there. Deterministic ordering
+ *  (id / distance tiebreaks) so LOCAL and REMOTE expand identically. */
+export function planMergedRoutes(
+  islands: ReadonlyArray<IslandSpec>,
+  existingRoutes: ReadonlyArray<Route>,
+  fromSel: string,
+  toSel: string,
+): Array<{ fromId: string; toId: string; buildingId: string }> {
+  const byId = (a: { id: string }, b: { id: string }): number =>
+    a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+  const populated = islands.filter((i) => i.populated);
+  const sources = fromSel === ROUTE_ALL
+    ? [...populated].sort(byId)
+    : populated.filter((i) => i.id === fromSel);
+  const out: Array<{ fromId: string; toId: string; buildingId: string }> = [];
+  for (const src of sources) {
+    const free = eligibleTransportBuildings(src, existingRoutes).sort((a, b) => {
+      const ca = routeProfileForBuilding(a.defId)?.capacityPerSec ?? 0;
+      const cb = routeProfileForBuilding(b.defId)?.capacityPerSec ?? 0;
+      return cb !== ca ? cb - ca : byId(a, b);
+    });
+    if (free.length === 0) continue;
+    const dests = (toSel === ROUTE_ALL
+      ? populated.filter((i) => i.id !== src.id)
+      : populated.filter((i) => i.id === toSel && i.id !== src.id)
+    ).sort((a, b) => {
+      const da = (a.cx - src.cx) ** 2 + (a.cy - src.cy) ** 2;
+      const db = (b.cx - src.cx) ** 2 + (b.cy - src.cy) ** 2;
+      return da !== db ? da - db : byId(a, b);
+    });
+    const n = Math.min(free.length, dests.length);
+    for (let i = 0; i < n; i++) {
+      out.push({ fromId: src.id, toId: dests[i]!.id, buildingId: free[i]!.id });
+    }
+  }
+  return out;
 }
 
 /** Whether `island` has a Teleporter Pad — the destination-side gate for a

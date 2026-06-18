@@ -126,6 +126,7 @@ describe('Route field whitelist', () => {
       sourceBuildingId: 'b1',
       draining: false,
       waypoints: [{ x: 1, y: 1 }],
+      groupId: 'g1',
     });
 
     // Fields currently encoded in `perRouteKey` inside RouteRenderer.diffRebuild()
@@ -139,6 +140,7 @@ describe('Route field whitelist', () => {
       'transitTimeSec',     // chevrons read inFlight items directly; route field unused at render
       'sourceBuildingId',   // metadata; used for buildBuildingOptions only
       'draining',           // soft-delete flag; not visually distinguished today
+      'groupId',            // §2.4 merged-route UI grouping handle; not rendered
     ]);
 
     const known = new Set([...perRouteKeyFields, ...notVisualWhitelist]);
