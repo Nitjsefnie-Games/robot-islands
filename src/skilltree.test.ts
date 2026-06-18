@@ -29,6 +29,7 @@ import {
   spentInBranch,
   t5Unlocked,
   t6Unlocked,
+  effectiveIslandTier,
   tierForLevel,
   type SkillNode,
   type NodeId,
@@ -193,6 +194,24 @@ describe('t6Unlocked (§14.1 T6 access gate)', () => {
   it('unlocked when Spaceport is one of several placed buildings', () => {
     const spec = { buildings: [{ defId: 'mine' }, { defId: 'spaceport' }, { defId: 'workshop' }] };
     expect(t6Unlocked({ ascendantCoreCrafted: true }, spec)).toBe(true);
+  });
+});
+
+describe('effectiveIslandTier (#134 UI T6 surfacing)', () => {
+  const withSpaceport = { buildings: [{ defId: 'spaceport' }] };
+  const noSpaceport = { buildings: [{ defId: 'mine' }] };
+
+  it('promotes to T6 when t6Unlocked (Ascendant Core + Spaceport)', () => {
+    expect(effectiveIslandTier({ level: 50, ascendantCoreCrafted: true }, withSpaceport)).toBe(6);
+  });
+
+  it('falls back to the level band when T6 is not unlocked', () => {
+    // ascendant core but no spaceport → still the level-band tier (5 at L50).
+    expect(effectiveIslandTier({ level: 50, ascendantCoreCrafted: true }, noSpaceport)).toBe(5);
+    // spaceport but no ascendant core → level band.
+    expect(effectiveIslandTier({ level: 50, ascendantCoreCrafted: false }, withSpaceport)).toBe(5);
+    // neither → level band at lower levels too.
+    expect(effectiveIslandTier({ level: 30, ascendantCoreCrafted: false }, withSpaceport)).toBe(4);
   });
 });
 

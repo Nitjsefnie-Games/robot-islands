@@ -343,6 +343,22 @@ export function t6Unlocked(
   return hasOperationalBuilding(spec.buildings, 'spaceport');
 }
 
+/**
+ * Effective UI island tier (#134): the level-band tier from `tierForLevel`,
+ * promoted to 6 when the island has T6 access (`t6Unlocked`). T6 has no level
+ * threshold, so `tierForLevel` never returns 6; the HUD subtitle and the drone
+ * tier picker must consult this composite to surface/enable T6 instead of
+ * capping at 5. `spec` is duck-typed (only `buildings[].defId` is read), so an
+ * `IslandState` carrying its own `buildings` can serve as both arguments.
+ */
+export function effectiveIslandTier(
+  state: { level: number; ascendantCoreCrafted: boolean },
+  spec: { buildings: ReadonlyArray<{ defId: string }> },
+): Tier {
+  if (t6Unlocked(state, spec)) return 6;
+  return tierForLevel(state.level);
+}
+
 /** Tier required to purchase a node at the given depth per §9.3. */
 export function tierRequiredForDepth(depth: number): Tier {
   if (depth >= 8) return 6;

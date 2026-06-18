@@ -329,6 +329,49 @@ describe('mountHud DOM persistence', () => {
   });
 });
 
+describe('mountHud subtitle tier (#134 T6 surfacing)', () => {
+  function makeMinimalWorld(): WorldState {
+    return {
+      islands: [], seed: 'test', drones: [], routes: [], vehicles: [],
+      revealedCells: new Set(), satellites: [], repairDrones: [], debrisFields: [],
+      endgameState: { achieved: new Set(), firstAchievedMs: null },
+      latticeActive: false, latticeNodeIslands: [], commPackets: [],
+      oceanCells: new Map(), depthRevealedCells: new Set(), totalCo2Kg: 0,
+      playerLat: 0, playerLon: 0, recentBuildAttempts: new Set(), recentBuildAttemptTs: new Map(),
+    } as unknown as WorldState;
+  }
+
+  function renderSub(islandId: string, spec: IslandSpec, state: IslandState): string {
+    const parent = document.createElement('div');
+    const hud = mountHud(parent, makeMinimalWorld(), () => {}, makeRegistry());
+    const net: Record<ResourceId, number> = {} as Record<ResourceId, number>;
+    for (const r of ALL_RESOURCES) net[r] = 0;
+    const power: PowerBalance = { produced: 10, consumed: 5, factor: 1, rawProduced: 10, rawConsumed: 5 };
+    const ncState: NetworkConsciousnessState = { tier3PlusCount: 0, milestone: 0, globalProductionBuff: 1 };
+    hud.update(state, net, power, spec, ncState, null, 0, islandId, new Map());
+    return (parent.querySelector('.ri-panel__sub')?.textContent ?? '');
+  }
+
+  function specFor(id: string, buildings: IslandSpec['buildings']): IslandSpec {
+    return {
+      id, name: id, biome: 'plains', cx: 0, cy: 0, majorRadius: 10, minorRadius: 10,
+      populated: true, discovered: true, buildings, modifiers: [],
+    };
+  }
+
+  it('shows T6 for a fully-T6 island (Ascendant Core + operational Spaceport)', () => {
+    const spec = specFor('hud-t6', [{ id: 'sp1', defId: 'spaceport', x: 0, y: 0 }]);
+    const state = { ...makeState(), id: 'hud-t6', level: 50, ascendantCoreCrafted: true };
+    expect(renderSub('hud-t6', spec, state)).toContain('T6');
+  });
+
+  it('shows T5 for a level-50 island without T6 access', () => {
+    const spec = specFor('hud-t5', []);
+    const state = { ...makeState(), id: 'hud-t5', level: 50, ascendantCoreCrafted: false };
+    expect(renderSub('hud-t5', spec, state)).toContain('T5');
+  });
+});
+
 // NOTE: sparkHistory and rateBuffers are module-global Maps keyed by island id.
 // They are never reset between tests — every test MUST use a unique island id
 // to avoid cross-test pollution.
