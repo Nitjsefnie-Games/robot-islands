@@ -157,6 +157,41 @@ describe('routeSourceTile (source-anchored rendering)', () => {
   });
 });
 
+describe('route path anchors at the source building (weather)', () => {
+  function idxWith(buildingTile: { x: number; y: number }): Map<string, IslandSpec> {
+    const home = { ...makeIslandSpec('home', 0, 0),
+      buildings: [{ id: 'dock-1', defId: 'dock', x: buildingTile.x, y: buildingTile.y }] as unknown as PlacedBuilding[] };
+    return new Map<string, IslandSpec>([['home', home], ['colony', makeIslandSpec('colony', 40, 0)]]);
+  }
+  const route = (over: Partial<Route> = {}): Route =>
+    ({ id: 'r', from: 'home', to: 'colony', type: 'cargo', capacityPerSec: 0.5, transitTimeSec: 40,
+       mode: 'split', cargo: [], inFlight: [], sourceBuildingId: 'dock-1', ...over } as unknown as Route);
+
+  it('polyline starts at the source building tile, not the island centre', () => {
+    const idx = idxWith({ x: 5, y: 5 });
+    const pts = routePolylinePoints(route(), idx)!;
+    expect(pts[0]).toEqual({ x: 5, y: 5 });
+    expect(pts[pts.length - 1]).toEqual({ x: 40, y: 0 });
+  });
+
+  it('legacy route with no sourceBuildingId still starts at the island centre', () => {
+    const idx = idxWith({ x: 5, y: 5 });
+    const pts = routePolylinePoints(route({ sourceBuildingId: undefined }), idx)!;
+    expect(pts[0]).toEqual({ x: 0, y: 0 });
+  });
+
+  it('crossed cells shift when the building is offset from centre', () => {
+    const offset = routeCrossedCells(route(), idxWith({ x: 5, y: 30 }));
+    const centre = routeCrossedCells(route({ sourceBuildingId: undefined }), idxWith({ x: 5, y: 30 }));
+    expect(JSON.stringify(offset)).not.toEqual(JSON.stringify(centre));
+  });
+
+  it('an unbent route keeps its stored transit time (straight baseline is building-anchored)', () => {
+    const idx = idxWith({ x: 5, y: 5 });
+    expect(effectiveTransitTimeSec(route(), idx)).toBeCloseTo(40);
+  });
+});
+
 function findCellWithWeather(
   seed: string,
   nowMs: number,

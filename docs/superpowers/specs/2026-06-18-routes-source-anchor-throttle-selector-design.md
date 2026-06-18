@@ -16,13 +16,19 @@ Three independent route-system improvements:
 
 All three are additive; none change persisted save shape.
 
-## 1. Source-anchored route rendering (visual only)
+## 1. Source-anchored route path (weather + rendering)
 
-**Scope decision:** this is a *render-only* change. A route's gameplay geometry —
-`capacityPerSec`, `transitTimeSec`, crossed cells, bent length — stays derived from
-island-centre geometry (baked at creation, §2.4). Only where the line is *drawn*
-changes. Recomputing transit/distance from the building would rebalance the game and
-is explicitly out of scope.
+**Scope decision (revised per user):** the source anchor is NOT cosmetic. The reason
+to start a route at its building is **weather**: a different start point crosses
+different §2.6 stratification cells, so the building a route launches from changes the
+storms it flies through. Therefore the route's PATH geometry — `routePolylinePoints`,
+which feeds `routeCrossedCells` (the §2.6 dispatch capacity throttle + in-flight loss),
+`routeBentLengthTiles`, the bend overlay/hit-testing, and the renderer — anchors its
+START at the source-building tile (`routeSourceTile`), falling back to the island
+centre for legacy routes. The destination stays the island centre. The stored
+`capacityPerSec`/`transitTimeSec` base values are unchanged; `effectiveTransitTimeSec`'s
+straight baseline anchors at the same building start so an UNBENT route keeps its stored
+transit (no drift) and only bends add time.
 
 - New pure resolver in `routes.ts`:
   `routeSourceTile(route, islandIndex): { x, y } | null` — returns the tile coords of

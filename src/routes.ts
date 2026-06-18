@@ -147,15 +147,20 @@ export function isBendableRouteType(t: RouteType): boolean {
   return t === 'cargo' || t === 'drone' || t === 'airship' || t === 'mass_driver';
 }
 
-/** Polyline points (tile coords) for a route: [from, ...waypoints, to].
- *  Null when either endpoint island is unknown. */
+/** Polyline points (tile coords) for a route: [start, ...waypoints, to].
+ *  The START anchors at the route's SOURCE BUILDING (`routeSourceTile`), not the
+ *  island centre — a different start point crosses different §2.6 weather cells,
+ *  so the building a route launches from actually changes the weather it flies
+ *  through. Legacy routes with no resolvable source building fall back to the
+ *  from-island centre. Null when either endpoint island is unknown. */
 export function routePolylinePoints(
   route: Route, islandIndex: Map<string, IslandSpec>,
 ): Array<{ x: number; y: number }> | null {
   const fromSpec = islandIndex.get(route.from);
   const toSpec = islandIndex.get(route.to);
   if (!fromSpec || !toSpec) return null;
-  const pts: Array<{ x: number; y: number }> = [{ x: fromSpec.cx, y: fromSpec.cy }];
+  const start = routeSourceTile(route, islandIndex) ?? { x: fromSpec.cx, y: fromSpec.cy };
+  const pts: Array<{ x: number; y: number }> = [{ x: start.x, y: start.y }];
   if (route.waypoints) for (const w of route.waypoints) pts.push({ x: w.x, y: w.y });
   pts.push({ x: toSpec.cx, y: toSpec.cy });
   return pts;
@@ -176,7 +181,12 @@ export function effectiveTransitTimeSec(route: Route, islandIndex: Map<string, I
   const fromSpec = islandIndex.get(route.from);
   const toSpec = islandIndex.get(route.to);
   if (!fromSpec || !toSpec) return route.transitTimeSec;
-  const straight = Math.hypot(toSpec.cx - fromSpec.cx, toSpec.cy - fromSpec.cy);
+  // Straight baseline anchors at the same source-building start as the polyline
+  // (routeSourceTile ?? centre), so an UNBENT route's bentLength == straight and
+  // its stored transitTimeSec is preserved — only bends add time, relative to
+  // the building-anchored straight line.
+  const start = routeSourceTile(route, islandIndex) ?? { x: fromSpec.cx, y: fromSpec.cy };
+  const straight = Math.hypot(toSpec.cx - start.x, toSpec.cy - start.y);
   if (straight <= 0) return route.transitTimeSec;
   return route.transitTimeSec * (routeBentLengthTiles(route, islandIndex) / straight);
 }
