@@ -30,6 +30,7 @@ import { effectiveSkillMultipliers, tierForLevel, type SkillMultipliers } from '
 import {
   biomeForCell,
   routeCapacityMultiplierForCells,
+  routeCapacityMulWithExpiry,
   rasterizePolylineCells,
   sumIslandCo2,
   weather,
@@ -1031,6 +1032,16 @@ export function tickRoutes(
    *  profile showed that was ~14% of offline-catch-up CPU). Omitted ⇒ each call
    *  recomputes via effectiveSkillMultipliers, exactly as before. */
   precomputedSkillMul?: ReadonlyMap<string, SkillMultipliers>,
+  /** PERF: per-route weather-capacity-multiplier cache, scoped to ONE caller's
+   *  advance (a Map owned by advanceWorldSystems). A route's crossed-cell
+   *  weather multiplier is constant until the earliest crossed cell's dwell
+   *  ends (30 min – 4 h), so across 1 s catch-up steps it almost never changes;
+   *  caching it skips the per-step crossed-cell rasterize + weather sampling on
+   *  the dispatch side. The owner clears it on a merge (the only thing that
+   *  moves a route's geometry mid-advance); co2 is constant across an advance
+   *  (economy ran before), so it isn't part of the validity key. Omit ⇒ no
+   *  caching (client per-frame path), recomputed every call. */
+  weatherMulCache?: Map<string, { mul: number; validUntil: number }>,
 ): {
   dispatches: Array<{ routeId: string; resourceId: ResourceId; amount: number }>;
   arrivals: Array<{ destIslandId: string; resourceId: ResourceId; amount: number }>;
@@ -1044,7 +1055,7 @@ export function tickRoutes(
     const r = world.routes[i];
     if (r && r.draining && r.inFlight.length === 0) world.routes.splice(i, 1);
   }
-  const dispatches = dispatchPhase(world, states, nowMs, elapsedSec, wallOffsetMs, precomputedSkillMul);
+  const dispatches = dispatchPhase(world, states, nowMs, elapsedSec, wallOffsetMs, precomputedSkillMul, weatherMulCache);
   return { dispatches, arrivals };
 }
 
@@ -1061,6 +1072,8 @@ function dispatchPhase(
    *  catch-up. A miss (e.g. an island settled mid-loop) falls back to a live
    *  compute, so correctness never depends on the map being complete. */
   precomputedSkillMul?: ReadonlyMap<string, SkillMultipliers>,
+  /** See tickRoutes — per-route weatherMul cache scoped to one advance. */
+  weatherMulCache?: Map<string, { mul: number; validUntil: number }>,
 ): Array<{ routeId: string; resourceId: ResourceId; amount: number }> {
   if (elapsedSec <= 0) return [];
 
@@ -1100,10 +1113,24 @@ function dispatchPhase(
     // in-flight loss (which can't apply — instant routes keep no in-flight
     // buffer) touches them.
     const instant = route.transitTimeSec <= 0;
-    const crossed = !instant ? routeCrossedCells(route, islandIndex) : NO_CROSSED_CELLS;
-    const weatherMul =
-      !instant && crossed.length > 0
-        ? routeCapacityMultiplierForCells(
+    // §2.6 weather capacity multiplier. PERF: reuse the cached value while the
+    // dwell window it was sampled in is still open (weatherMulCache). On a miss
+    // (or no cache) recompute via routeCapacityMulWithExpiry, which also yields
+    // the window end so the next steps within the same dwell are free. Byte-
+    // identical: the cached mul is the value routeCapacityMultiplierForCells
+    // would return for any nowMs in the window (all crossed cells unchanged).
+    let weatherMul: number;
+    if (instant) {
+      weatherMul = 1;
+    } else {
+      const wallNow = weatherClockMs(nowMs, wallOffsetMs);
+      const cached = weatherMulCache?.get(route.id);
+      if (cached && wallNow < cached.validUntil) {
+        weatherMul = cached.mul;
+      } else {
+        const crossed = routeCrossedCells(route, islandIndex);
+        if (crossed.length > 0) {
+          const r = routeCapacityMulWithExpiry(
             world.seed,
             crossed.map((c) => ({ cx: c.cx, cy: c.cy })),
             nowMs,
@@ -1112,8 +1139,15 @@ function dispatchPhase(
             // storm the arrival-loss / destruction consumers see.
             (cx, cy) => biomeForCell(world, cx, cy),
             sumIslandCo2(world),
-          )
-        : 1;
+          );
+          weatherMul = r.mul;
+          weatherMulCache?.set(route.id, { mul: r.mul, validUntil: r.validUntilMs });
+        } else {
+          weatherMul = 1;
+          weatherMulCache?.set(route.id, { mul: 1, validUntil: Infinity });
+        }
+      }
+    }
 
     // Airship-specific Transport bonus stacks only on airship routes.
     const airshipMul = route.type === 'airship'

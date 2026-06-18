@@ -120,6 +120,15 @@ export function advanceWorldSystems(
   const skillMulByIsland = new Map<string, SkillMultipliers>();
   for (const [id, st] of states) skillMulByIsland.set(id, effectiveSkillMultipliers(st));
 
+  // PERF: per-route §2.6 weather-capacity-multiplier cache, owned here and
+  // threaded into tickRoutes. A route's multiplier holds until the earliest
+  // crossed cell's dwell ends (30 min – 4 h) — far longer than the 1 s step —
+  // so dispatch resamples weather only when the window expires instead of every
+  // step. co2 is constant across this advance (economy already ran), so it's
+  // not part of validity; a merge is the only thing that moves a route's
+  // geometry mid-advance, so we clear the cache there (below).
+  const weatherMulCache = new Map<string, { mul: number; validUntil: number }>();
+
   let prev = fromMs;
   while (prev < toMs) {
     const cur = Math.min(prev + stepMs, toMs);
@@ -133,6 +142,10 @@ export function advanceWorldSystems(
       // Islands/buildings changed → this step's tickDrones must see fresh ranges
       // (the merge ran before it, exactly as in the per-step-recompute version).
       signalRanges = recomputeRanges();
+      // A merge moves island centres → route geometry / crossed cells change, so
+      // the cached weather multipliers are stale. Drop them; they re-derive next
+      // dispatch. (Merges are rare, so this rarely costs anything.)
+      weatherMulCache.clear();
     }
 
     const dr: TickDronesResult = tickDrones(world, cur, prev, wallOffsetMs, signalRanges);
@@ -141,7 +154,7 @@ export function advanceWorldSystems(
     result.newlyDiscoveredIslandIds.push(...dr.newlyDiscoveredIslandIds);
     result.revealedCellsAdded += dr.revealedCellsAdded;
 
-    const rr = tickRoutes(world, states, cur, delta / 1000, wallOffsetMs, skillMulByIsland);
+    const rr = tickRoutes(world, states, cur, delta / 1000, wallOffsetMs, skillMulByIsland, weatherMulCache);
     result.routeArrivals.push(...rr.arrivals);
     result.routeDispatches.push(...rr.dispatches);
 
