@@ -11,14 +11,24 @@
 // per-island inventory) that the client never read — dead weight on the wire.
 //
 // No-partial-persist invariant (design §10): a rejected OR throwing handler must
-// leave the stored `saves` row byte-identical. We achieve this by never calling
-// `saveSnapshot` on any path except a clean {ok:true}: the in-memory `game`
-// (already advanced + re-persisted by `loadAndCatchUp`) is simply discarded on
-// rejection.
+// not persist its would-be mutation. We achieve this by catching up IN MEMORY
+// (no write) and calling `saveSnapshot` on EXACTLY ONE path — a clean {ok:true}
+// or a {persist:true} failure. A rejection/throw simply returns without saving,
+// so the tx commits with no write and the stored row is left byte-identical.
+//
+// PERF: the intent path used to call `loadAndCatchUp`, which persists the
+// caught-up snapshot, and THEN `saveSnapshot` again after the mutation — so an
+// accepted intent serialized + wrote the full ~1.3 MB save TWICE per request
+// (~62 ms each on the real save), the gap-independent floor under every intent
+// (create, cancel, place, …). Catching up in memory and writing once halves it.
+// Dropping the catch-up write on rejection costs nothing semantically: catch-up
+// is deterministic in `now` (see runtime.catchUp), so the offline gap is simply
+// re-integrated from the same savedAt on the next read/intent — identical state,
+// just not pre-persisted.
 
 import { type Pool, withAccountTx } from '../db.js';
-import { loadAndCatchUp } from './runtime.js';
-import { saveSnapshot } from './persistence.js';
+import { catchUp } from './runtime.js';
+import { loadSnapshot, saveSnapshot } from './persistence.js';
 import { serializeWorld } from '../../../src/persistence.js';
 import { INTENTS, type IntentResult } from './intents.js';
 
@@ -53,7 +63,9 @@ export async function applyIntent(
   // clobbering each other. The lock covers loadAndCatchUp's read AND the
   // post-apply persist for the SAME intent; it releases on commit/rollback.
   return withAccountTx(pool, userId, async (client): Promise<Ack> => {
-    const game = await loadAndCatchUp(client, userId, now);
+    // Catch up IN MEMORY (no write) — unlike loadAndCatchUp, which persisted
+    // here and forced a second full save below for every accepted intent.
+    const game = catchUp(await loadSnapshot(client, userId), now);
     if (game === null) return { seq, ok: false, error: 'no game' };
 
     let result: IntentResult;
@@ -61,22 +73,21 @@ export async function applyIntent(
       result = handler.apply(game, payload, now);
     } catch (err) {
       // Backstop: a handler should pre-check and return {ok:false}, never throw
-      // for an illegal request. An unexpected throw must not persist a partial
-      // mutation. We RETURN a failure ack (not re-throw) so the tx COMMITS the
-      // catch-up write loadAndCatchUp already made (advancing the offline gap)
-      // while dropping the would-be mutation — preserving the original
-      // no-partial-persist semantics (the mutation never reaches saveSnapshot).
+      // for an illegal request. On an unexpected throw we RETURN a failure ack
+      // (not re-throw) and persist NOTHING — the tx commits with no write, so
+      // the stored save is byte-identical (no partial mutation) and the gap is
+      // re-integrated deterministically on the next op.
       const error = err instanceof Error ? err.message : 'intent failed';
       return { seq, ok: false, error };
     }
 
     if (!result.ok && !result.persist) {
-      // Persist NOTHING beyond catch-up. The in-memory `game` carries the
-      // would-be mutation but we never call saveSnapshot for it; the tx commits
-      // only the catch-up snapshot loadAndCatchUp already wrote.
+      // Reject: persist NOTHING. The in-memory `game` carries the would-be
+      // mutation but we never save it; the tx commits with no write.
       return { seq, ok: false, error: result.error };
     }
 
+    // Accepted (or §14.7 persisted-failure): the ONLY save per intent now.
     await saveSnapshot(client, userId, serializeWorld(game.world, game.islandStates, now, now));
     if (result.ok) {
       return { seq, ok: true };
