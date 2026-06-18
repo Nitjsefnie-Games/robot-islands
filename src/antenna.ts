@@ -54,8 +54,8 @@ export function computeSignalRanges(
       if (radius === undefined) continue;
       const def = BUILDING_DEFS[b.defId as BuildingDefId];
       out.push({
-        cx: spec.cx + b.x + shapeWidth(def.footprint) / 2,
-        cy: spec.cy + b.y + shapeHeight(def.footprint) / 2,
+        cx: spec.cx + b.x + (shapeWidth(def.footprint) - 1) / 2,
+        cy: spec.cy + b.y + (shapeHeight(def.footprint) - 1) / 2,
         radius,
       });
     }

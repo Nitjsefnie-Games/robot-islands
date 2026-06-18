@@ -253,8 +253,8 @@ export function launchSatellite(
   // a 4×4 (`SHAPES.square4`) so the centre lands 2 tiles inset from the
   // anchor on each axis.
   const spDef = BUILDING_DEFS[spaceport.defId as BuildingDefId];
-  const spawnX = spec.cx + spaceport.x + shapeWidth(spDef.footprint) / 2;
-  const spawnY = spec.cy + spaceport.y + shapeHeight(spDef.footprint) / 2;
+  const spawnX = spec.cx + spaceport.x + (shapeWidth(spDef.footprint) - 1) / 2;
+  const spawnY = spec.cy + spaceport.y + (shapeHeight(spDef.footprint) - 1) / 2;
 
   // Skill bundle for the launching island. Used here (sat fuel reserve, buffer
   // cap, range/coverage scaling) and below (pad-explosion mitigation).

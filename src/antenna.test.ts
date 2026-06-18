@@ -52,9 +52,11 @@ describe('computeSignalRanges', () => {
     });
     const ranges = computeSignalRanges([spec]);
     expect(ranges).toHaveLength(1);
-    // 1×1 footprint at (0,0) on a (10,20) island → center at (10.5, 20.5).
-    expect(ranges[0]!.cx).toBeCloseTo(10.5);
-    expect(ranges[0]!.cy).toBeCloseTo(20.5);
+    // 1×1 footprint at (0,0) on a (10,20) island → tile centre is (10, 20):
+    // tileToWorldPx maps a tile coord to that tile's CENTRE, so the footprint
+    // centre offset is (W-1)/2 = 0 for a 1×1.
+    expect(ranges[0]!.cx).toBeCloseTo(10);
+    expect(ranges[0]!.cy).toBeCloseTo(20);
     expect(ranges[0]!.radius).toBe(80);
   });
 
@@ -101,7 +103,7 @@ describe('computeSignalRanges', () => {
     expect(ranges).toHaveLength(2);
   });
 
-  it('places 2x2 antenna center at offset+1.0 from corner', () => {
+  it('places a 2x2 antenna center at the footprint centre (offset +0.5 from the NW tile)', () => {
     const spec = makeIslandSpec({
       cx: 0,
       cy: 0,
@@ -111,8 +113,9 @@ describe('computeSignalRanges', () => {
     });
     const ranges = computeSignalRanges([spec]);
     expect(ranges).toHaveLength(1);
-    expect(ranges[0]!.cx).toBeCloseTo(1);
-    expect(ranges[0]!.cy).toBeCloseTo(1);
+    // 2×2 → centre offset (W-1)/2 = 0.5 from the NW tile's centre.
+    expect(ranges[0]!.cx).toBeCloseTo(0.5);
+    expect(ranges[0]!.cy).toBeCloseTo(0.5);
   });
 });
 

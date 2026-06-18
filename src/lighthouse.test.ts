@@ -95,9 +95,10 @@ describe('computeVisionSources', () => {
     const circle = sources[1];
     expect(circle?.kind).toBe('circle');
     if (circle?.kind === 'circle') {
-      // Lighthouse footprint is 1×1, building at (0, 0) → centre at (0.5, 0.5).
-      expect(circle.cx).toBe(0.5);
-      expect(circle.cy).toBe(0.5);
+      // Lighthouse footprint is 1×1; tile coords are tile CENTRES so the
+      // footprint-centre offset is (W-1)/2 = 0: building at (0,0) → centre (0,0).
+      expect(circle.cx).toBe(0);
+      expect(circle.cy).toBe(0);
       expect(circle.radius).toBe(80);
     }
   });
@@ -143,9 +144,9 @@ describe('computeVisionSources', () => {
     expect(circle?.kind).toBe('circle');
     if (circle?.kind === 'circle') {
       // Building at (0, 0) on an island at (40, -10) → footprint centre at
-      // (40 + 0 + 0.5, -10 + 0 + 0.5) = (40.5, -9.5).
-      expect(circle.cx).toBe(40.5);
-      expect(circle.cy).toBe(-9.5);
+      // (40 + 0, -10 + 0) = (40, -10) (1×1 offset (W-1)/2 = 0).
+      expect(circle.cx).toBe(40);
+      expect(circle.cy).toBe(-10);
       expect(circle.radius).toBe(50);
     }
   });
@@ -206,9 +207,9 @@ describe('computeVisionSources', () => {
     const circle = sources.find((s) => s.kind === 'circle');
     expect(circle?.kind).toBe('circle');
     if (circle?.kind === 'circle') {
-      // (spec.cx + b.x + width/2, spec.cy + b.y + height/2) = (20.5, 0.5).
-      expect(circle.cx).toBe(20.5);
-      expect(circle.cy).toBe(0.5);
+      // (spec.cx + b.x + (W-1)/2, spec.cy + b.y + (H-1)/2) = (20, 0) for a 1×1.
+      expect(circle.cx).toBe(20);
+      expect(circle.cy).toBe(0);
     }
   });
 });
@@ -278,11 +279,11 @@ describe('pointInVision', () => {
         { id: 'lh-1', defId: 'lighthouse_t1', x: -1, y: -1 },
       ],
     });
-    // Lighthouse centre is at (-1 + 0.5, -1 + 0.5) = (-0.5, -0.5). Radius 50.
-    // A point at (-0.5, 49.5) is exactly on the boundary (Δy = 50, Δx = 0).
+    // Lighthouse centre is at (-1 + 0, -1 + 0) = (-1, -1) (1×1 → offset 0).
+    // Radius 50. A point at (-1, 49) is exactly on the boundary (Δy = 50, Δx = 0).
     const sources = computeVisionSources([home]);
-    expect(pointInVision(sources, -0.5, 49.5)).toBe(true);
-    expect(pointInVision(sources, -0.5, 49.6)).toBe(false);
+    expect(pointInVision(sources, -1, 49)).toBe(true);
+    expect(pointInVision(sources, -1, 49.1)).toBe(false);
   });
 
   it('returns false when there are no sources', () => {

@@ -617,8 +617,8 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     if (!b) return null;
     const def = BUILDING_DEFS[defId as BuildingDefId];
     return {
-      x: spec.cx + b.x + shapeWidth(def.footprint) / 2,
-      y: spec.cy + b.y + shapeHeight(def.footprint) / 2,
+      x: spec.cx + b.x + (shapeWidth(def.footprint) - 1) / 2,
+      y: spec.cy + b.y + (shapeHeight(def.footprint) - 1) / 2,
     };
   }
 

@@ -145,8 +145,8 @@ function spaceportSpawn(
   if (!sp) return null;
   const def = BUILDING_DEFS[sp.defId as BuildingDefId];
   return {
-    x: spec.cx + sp.x + shapeWidth(def.footprint) / 2,
-    y: spec.cy + sp.y + shapeHeight(def.footprint) / 2,
+    x: spec.cx + sp.x + (shapeWidth(def.footprint) - 1) / 2,
+    y: spec.cy + sp.y + (shapeHeight(def.footprint) - 1) / 2,
   };
 }
 
