@@ -8,7 +8,8 @@
 // This module is logic-only: no PixiJS imports.
 
 import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
-import { displayedFloorLevel } from './floor-levels.js';
+import { activeFloors, displayedFloorLevel } from './floor-levels.js';
+import { hasOperationalBuilding } from './building-operational.js';
 import type { PlacedBuilding } from './buildings.js';
 import { setGenesisTarget, spendTimeLock, type IslandState } from './economy.js';
 import { dispatchDrone, firePulse, type DroneTier } from './drones.js';
@@ -33,6 +34,7 @@ import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import { CARGO_WILDCARD, type CargoEntry, type CargoMode } from './route-cargo.js';
 import {
   createRouteFromBuilding,
+  drainRoutesForBuilding,
   islandHasTeleporterPad,
   reorderPriorityList,
   retargetRoute as retargetRoutePure,
@@ -403,7 +405,15 @@ export function makeLocalGateway(
       const b = island.spec.buildings.find((bb) => bb.id === buildingId);
       if (!b) return err('not-found');
       if (disabledFloors > displayedFloorLevel(b)) return err('disabledFloors out of range');
-      return fromOutcome(setBuildingActiveFloors(island.spec, island.state, buildingId, disabledFloors));
+      // Parity (#138): mirror the server `set-active-floors` intent — when a
+      // building's active floors drop from >0 to 0 it stops participating in
+      // transport, so its routes must be drained.
+      const before = activeFloors(b);
+      const outcome = setBuildingActiveFloors(island.spec, island.state, buildingId, disabledFloors);
+      if (outcome.ok && before > 0 && activeFloors(b) === 0) {
+        drainRoutesForBuilding(world, buildingId);
+      }
+      return fromOutcome(outcome);
     },
 
     setForceRun(islandId, buildingId, value) {
@@ -434,6 +444,11 @@ export function makeLocalGateway(
     convertToServitor(islandId, buildingId) {
       const island = resolveIsland(islandId);
       if (!island) return err('unknown island');
+      // Parity (#138): the server `convert-to-servitor` intent gates on an
+      // operational Reality Forge; the pure fn doesn't, so LOCAL must enforce it.
+      if (!hasOperationalBuilding(island.state.buildings, 'reality_forge')) {
+        return err('requires an operational Reality Forge');
+      }
       const result = pureConvertToServitor(island.state, buildingId, BUILDING_DEFS);
       if (!result.ok) return err(result.reason, result.reason);
       return ok();
@@ -554,6 +569,12 @@ export function makeLocalGateway(
         if (typeof selectedTier !== 'number' || !Number.isInteger(selectedTier) || selectedTier < 1 || selectedTier > 6) {
           return err('selectedTier must be an integer 1..6');
         }
+      }
+      // Parity (#135): the server `dispatch-drone` intent gates on an
+      // operational Drone Pad; the pure fn only checks fuel + per-pad
+      // concurrency, so LOCAL must enforce the pad gate itself.
+      if (!hasOperationalBuilding(island.state.buildings, 'dronepad')) {
+        return err('no-operational-dronepad');
       }
       return fromOutcome(
         dispatchDrone(
@@ -824,6 +845,10 @@ export function makeLocalGateway(
     acceptTrade(offer) {
       const state = islandStates.get(offer.islandId);
       if (!state) return err('unknown island');
+      // Parity (#138): the server `accept-trade` intent rejects a lapsed offer
+      // (`offer.expiresAt <= now`); the pure `applyOffer` has no expiry check, so
+      // LOCAL must reject expired offers itself.
+      if (offer.expiresAt <= Date.now()) return err('offer expired');
       const amounts = applyOffer(state, offer);
       return ok(amounts);
     },
