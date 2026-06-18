@@ -42,6 +42,33 @@ export function viaBuildingKeyForIsland(island: IslandSpec | undefined): string 
   return k;
 }
 
+/** Format a per-second capacity with the canonical `u/s` unit (#136.2 — the
+ *  CAP/S aggregate previously rendered a bare `u`, disagreeing with every
+ *  other capacity readout in the panel). */
+export function fmtUPerSec(n: number): string {
+  return `${n.toFixed(2)} u/s`;
+}
+
+/** Everything about a route that, when changed, requires a DOM rebuild of its
+ *  row (vs. a cheap per-frame text update). `floorMul` is the source building's
+ *  route-floor multiplier (§2.4): the per-row cap/transit text bakes it in at
+ *  build time, so it MUST be part of the key or a floor change leaves the row
+ *  stale (#136.3). */
+export function routeStructKey(route: Route, label: (id: string) => string, floorMul: number): string {
+  return [
+    route.id,
+    label(route.from),
+    label(route.to),
+    route.mode,
+    route.cargo.map((e) => `${e.resourceId}:${e.weight ?? 1}:${e.sourceFloorPct ?? ''}`).join(','),
+    route.draining ? 'D' : '',
+    // §2.6: bend count drives whether the "Unbend all" button is rendered, so a
+    // row must rebuild when waypoints appear/disappear.
+    `b${route.waypoints?.length ?? 0}`,
+    `f${floorMul}`,
+  ].join('');
+}
+
 function styled(el: HTMLElement, css: string): void {
   el.style.cssText = css;
 }
@@ -652,20 +679,11 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     return deps.islandSpecs.get(id)?.name ?? id;
   }
 
-  /** Everything about a route that, when changed, requires a DOM rebuild of
-   *  its row (vs. a cheap per-frame text update). */
-  function routeStructKey(route: Route): string {
-    return [
-      route.id,
-      islandLabel(route.from),
-      islandLabel(route.to),
-      route.mode,
-      route.cargo.map((e) => `${e.resourceId}:${e.weight ?? 1}:${e.sourceFloorPct ?? ''}`).join(','),
-      route.draining ? 'D' : '',
-      // §2.6: bend count drives whether the "Unbend all" button is rendered,
-      // so a row must rebuild when waypoints appear/disappear.
-      `b${route.waypoints?.length ?? 0}`,
-    ].join('\u001f');
+  /** Per-route DOM-rebuild key — binds this panel's island labels and the
+   *  source building's live route-floor multiplier (#136.3) to the pure
+   *  `routeStructKey` so a floor change rebuilds the row (no stale cap/transit). */
+  function routeRowStructKey(route: Route): string {
+    return routeStructKey(route, islandLabel, routeFloorMultiplier(route, deps.world));
   }
 
   function repaintLedger(nowMs: number): void {
@@ -679,13 +697,13 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     // Only touch the DOM tree when the route SET or any row's structure
     // changes. Steady-state (just ETA/in-flight ticking) skips straight to
     // the in-place `update` pass below.
-    const sig = filterId + '\u001e' + routes.map(routeStructKey).join('\u001e');
+    const sig = filterId + '\u001e' + routes.map(routeRowStructKey).join('\u001e');
     if (sig !== lastLedgerSig) {
       lastLedgerSig = sig;
       const seen = new Set<string>();
       const children: HTMLElement[] = [];
       for (const route of routes) {
-        const structKey = routeStructKey(route);
+        const structKey = routeRowStructKey(route);
         let entry = rowCache.get(route.id);
         if (!entry || entry.structKey !== structKey) {
           entry = renderLedgerRow(route, structKey, nowMs);
@@ -1105,7 +1123,7 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
       totalCap += r.capacityPerSec * routeFloorMultiplier(r, deps.world);
       totalFlight += r.inFlight.length;
     }
-    capStat.valueEl.textContent = `${totalCap.toFixed(2)} u`;
+    capStat.valueEl.textContent = fmtUPerSec(totalCap);
     flightStat.valueEl.textContent = `${totalFlight}`;
     // Funnel: sum funnelPending across all island states (XP-units).
     let totalFunnel = 0;

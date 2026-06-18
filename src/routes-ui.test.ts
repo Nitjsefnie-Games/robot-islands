@@ -7,11 +7,12 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { mountRoutesUi, viaBuildingKeyForIsland } from './routes-ui.js';
+import { mountRoutesUi, viaBuildingKeyForIsland, fmtUPerSec, routeStructKey } from './routes-ui.js';
 import { createNewGame } from './new-game.js';
 import type { RouteRenderer } from './routes-renderer.js';
 import type { PlacedBuilding } from './buildings.js';
 import type { IslandSpec } from './world.js';
+import type { Route } from './routes.js';
 
 function makeIsland(buildings: PlacedBuilding[]): IslandSpec {
   return {
@@ -38,6 +39,36 @@ function b(id: string, defId: string): PlacedBuilding {
     rotation: 0,
   } as PlacedBuilding;
 }
+
+describe('fmtUPerSec / routeStructKey (#136 ledger display)', () => {
+  it('formats a per-second capacity with the u/s unit', () => {
+    expect(fmtUPerSec(1.5)).toBe('1.50 u/s');
+    expect(fmtUPerSec(0)).toBe('0.00 u/s');
+  });
+
+  function makeRoute(over: Partial<Route> = {}): Route {
+    return {
+      id: 'r1', from: 'home', to: 'colony', mode: 'balanced',
+      cargo: [{ resourceId: 'wood' }], draining: false, waypoints: [],
+      ...over,
+    } as unknown as Route;
+  }
+
+  it('struct key changes when the source-building floor multiplier changes (#136.3)', () => {
+    const route = makeRoute();
+    const label = (id: string) => (id === 'home' ? 'Home' : id);
+    // Same route, different floor multiplier ⇒ different key ⇒ row rebuilds and
+    // the baked-in per-row cap/transit refreshes instead of going stale.
+    expect(routeStructKey(route, label, 1)).not.toBe(routeStructKey(route, label, 2));
+  });
+
+  it('struct key resolves island ids through the label fn', () => {
+    const route = makeRoute();
+    const label = (id: string) => (id === 'home' ? 'Home' : 'Colony');
+    expect(routeStructKey(route, label, 1)).toContain('Home');
+    expect(routeStructKey(route, label, 1)).toContain('Colony');
+  });
+});
 
 describe('viaBuildingKeyForIsland (#108 route dropdown key)', () => {
   it('includes every building id and defId on the FROM island', () => {

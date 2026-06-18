@@ -16,7 +16,7 @@ import {
   DRONE_SPEED_TILES_PER_SEC,
   DRONE_T5_SPEED_TILES_PER_SEC,
   DRONE_TIER_EFFICIENCY,
-  DRONE_TIER_SCAN_RADIUS,
+  effectiveDroneScanRadius,
   MAX_FUEL_PER_DRONE,
   T4_PULSE_FUEL_COST,
   dispatchDrone,
@@ -78,6 +78,20 @@ export function dronePadCentre(
 
 function styled(el: HTMLElement, css: string): void {
   el.style.cssText = css;
+}
+
+/** Ledger countdown label for a drone (#136.4). A straight-line round-trip
+ *  drone returns to origin, so a bare `T-Xs` reads correctly; a path-drawn
+ *  one-way drone (waypoints.length >= 2) goes `stranded` at its terminus —
+ *  `expectedReturnTime` is the ARRIVAL time, not a return — so it is labelled
+ *  `arrive T-Xs` to avoid implying the drone comes back. */
+export function droneEtaLabel(
+  d: { readonly waypoints?: ReadonlyArray<unknown>; readonly expectedReturnTime: number },
+  nowMs: number,
+): string {
+  const remainSec = Math.max(0, (d.expectedReturnTime - nowMs) / 1000);
+  const oneWay = (d.waypoints?.length ?? 0) >= 2;
+  return `${oneWay ? 'arrive T-' : 'T-'}${remainSec.toFixed(1)}s`;
 }
 
 export interface DroneUiHandle {
@@ -846,7 +860,11 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     const spec = deps.getOriginSpec();
     const padCentre = selectedPadCentre(spec, deps.getOrigin(), selectedPadId);
     const originTile = { x: padCentre?.x ?? spec.cx, y: padCentre?.y ?? spec.cy };
-    const scanRadius = DRONE_TIER_SCAN_RADIUS[selectedTier];
+    // §11.5: match dispatch — the corridor half-width is the per-tier base
+    // scaled by the origin island's Robotics droneScanRadius skill, so the
+    // green preview reflects what the drone will actually reveal (not the
+    // unskilled base). effectiveDroneScanRadius is the shared source of truth.
+    const scanRadius = effectiveDroneScanRadius(deps.getOrigin(), selectedTier);
     const cells = scanPreviewCells(originTile, waypointBuffer, cursorTile, scanRadius);
     for (const key of cells) {
       const { cellX, cellY } = parseCellKey(key);
@@ -1042,8 +1060,7 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     styled(idEl, `color: ${'var(--ri-accent)'}; font-size: 10px; letter-spacing: 0.08em; font-weight: 600`);
     const etaEl = document.createElement('span');
     etaEl.classList.add('ri-mono');
-    const remainSec = Math.max(0, (d.expectedReturnTime - nowMs) / 1000);
-    etaEl.textContent = `T-${remainSec.toFixed(1)}s`;
+    etaEl.textContent = droneEtaLabel(d, nowMs);
     styled(etaEl, `color: ${'var(--ri-warn)'}; font-size: 10px; font-weight: 600`);
     top.appendChild(idEl);
     top.appendChild(etaEl);

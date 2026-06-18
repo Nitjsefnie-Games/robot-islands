@@ -45,6 +45,18 @@ function styled(el: HTMLElement, css: string): void {
   el.style.cssText = css;
 }
 
+/** Settlement-ledger endpoint label (#136.1) — resolves a vehicle's `from` /
+ *  `target` island ids to player-facing names (falling back to the raw id when
+ *  an island is unknown), matching how `renderVehicleDot` already resolves
+ *  names. The raw ids (`island_3`) were leaking into the ledger row. */
+export function vehicleEndpointLabel(
+  v: { readonly from: string; readonly target: string },
+  islands: ReadonlyArray<{ readonly id: string; readonly name: string }>,
+): string {
+  const name = (id: string): string => islands.find((s) => s.id === id)?.name ?? id;
+  return `${name(v.from)} → ${name(v.target)}`;
+}
+
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
@@ -1014,7 +1026,7 @@ export function mountSettlementUi(parentEl: HTMLElement, deps: SettlementUiDeps)
     const meta = document.createElement('div');
     styled(meta, 'display: flex; justify-content: space-between');
     const metaL = document.createElement('span');
-    metaL.textContent = `${v.from} → ${v.target}`;
+    metaL.textContent = vehicleEndpointLabel(v, deps.world.islands);
     styled(metaL, `color: ${'var(--ri-fg-3)'}; font-size: 9.5px`);
     const metaR = document.createElement('span');
     metaR.textContent = `${v.fuelLoaded} fuel · ${v.foundationKitCount} kit${
