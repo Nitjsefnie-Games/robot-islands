@@ -129,16 +129,19 @@ function makeIslandSpec(id: string, cx: number, cy: number): IslandSpec {
 }
 
 describe('routeSourceTile (source-anchored rendering)', () => {
-  function islandWithBuildings(bs: Array<{ id: string; defId: BuildingDefId; x: number; y: number }>): IslandSpec {
-    return { ...makeIslandSpec('home', 0, 0), buildings: bs as unknown as PlacedBuilding[] };
+  // Island deliberately NOT at the origin: building x/y are island-LOCAL
+  // offsets, so the world tile must add the island centre (cx + b.x). A route
+  // on a distant island must start ON that island, not near (0,0).
+  function islandWithBuildings(cx: number, cy: number, bs: Array<{ id: string; defId: BuildingDefId; x: number; y: number }>): IslandSpec {
+    return { ...makeIslandSpec('home', cx, cy), buildings: bs as unknown as PlacedBuilding[] };
   }
   const idx = new Map<string, IslandSpec>([
-    ['home', islandWithBuildings([{ id: 'dock-1', defId: 'dock', x: 3, y: -2 }])],
+    ['home', islandWithBuildings(100, 50, [{ id: 'dock-1', defId: 'dock', x: 3, y: -2 }])],
   ]);
 
-  it('returns the source building tile', () => {
+  it('returns the source building world tile (island centre + local offset)', () => {
     const route = { from: 'home', sourceBuildingId: 'dock-1' } as unknown as Route;
-    expect(routeSourceTile(route, idx)).toEqual({ x: 3, y: -2 });
+    expect(routeSourceTile(route, idx)).toEqual({ x: 103, y: 48 });
   });
 
   it('returns null for a legacy route with no sourceBuildingId', () => {
@@ -158,26 +161,27 @@ describe('routeSourceTile (source-anchored rendering)', () => {
 });
 
 describe('route path anchors at the source building (weather)', () => {
-  function idxWith(buildingTile: { x: number; y: number }): Map<string, IslandSpec> {
-    const home = { ...makeIslandSpec('home', 0, 0),
-      buildings: [{ id: 'dock-1', defId: 'dock', x: buildingTile.x, y: buildingTile.y }] as unknown as PlacedBuilding[] };
-    return new Map<string, IslandSpec>([['home', home], ['colony', makeIslandSpec('colony', 40, 0)]]);
+  // Home at a NON-origin centre (60,20) so the island-local→world offset is
+  // actually exercised: the building's world tile is cx+b.x, cy+b.y.
+  const HOME_CX = 60, HOME_CY = 20;
+  function idxWith(buildingLocal: { x: number; y: number }): Map<string, IslandSpec> {
+    const home = { ...makeIslandSpec('home', HOME_CX, HOME_CY),
+      buildings: [{ id: 'dock-1', defId: 'dock', x: buildingLocal.x, y: buildingLocal.y }] as unknown as PlacedBuilding[] };
+    return new Map<string, IslandSpec>([['home', home], ['colony', makeIslandSpec('colony', 140, 0)]]);
   }
   const route = (over: Partial<Route> = {}): Route =>
     ({ id: 'r', from: 'home', to: 'colony', type: 'cargo', capacityPerSec: 0.5, transitTimeSec: 40,
        mode: 'split', cargo: [], inFlight: [], sourceBuildingId: 'dock-1', ...over } as unknown as Route);
 
-  it('polyline starts at the source building tile, not the island centre', () => {
-    const idx = idxWith({ x: 5, y: 5 });
-    const pts = routePolylinePoints(route(), idx)!;
-    expect(pts[0]).toEqual({ x: 5, y: 5 });
-    expect(pts[pts.length - 1]).toEqual({ x: 40, y: 0 });
+  it('polyline starts at the source building WORLD tile, not the island centre', () => {
+    const pts = routePolylinePoints(route(), idxWith({ x: 5, y: 5 }))!;
+    expect(pts[0]).toEqual({ x: HOME_CX + 5, y: HOME_CY + 5 }); // 65, 25 — on the island
+    expect(pts[pts.length - 1]).toEqual({ x: 140, y: 0 });
   });
 
   it('legacy route with no sourceBuildingId still starts at the island centre', () => {
-    const idx = idxWith({ x: 5, y: 5 });
-    const pts = routePolylinePoints(route({ sourceBuildingId: undefined }), idx)!;
-    expect(pts[0]).toEqual({ x: 0, y: 0 });
+    const pts = routePolylinePoints(route({ sourceBuildingId: undefined }), idxWith({ x: 5, y: 5 }))!;
+    expect(pts[0]).toEqual({ x: HOME_CX, y: HOME_CY });
   });
 
   it('crossed cells shift when the building is offset from centre', () => {
