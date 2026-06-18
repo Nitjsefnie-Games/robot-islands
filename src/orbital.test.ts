@@ -250,7 +250,7 @@ describe('satellite launch target validation', () => {
     // Spaceport at building-local (0,0) on home (cx=0, cy=0), 4×4 footprint
     // → spawn = (0 + 0 + 2, 0 + 0 + 2) = (2, 2). Targeting (2, 2) is the
     // zero-distance launch the validator rejects.
-    const result = launchSatellite(world, 'home', 'scanner', 2, 2, 1);
+    const result = launchSatellite(world, 'home', 'scanner', 1.5, 1.5, 1);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toBe('target-at-source');
@@ -291,13 +291,13 @@ describe('satellite launch target validation', () => {
     const result = launchSatellite(world, 'home', 'scanner', 50, 50, nowMs);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.sat.x).toBe(2);
-    expect(result.sat.y).toBe(2);
+    expect(result.sat.x).toBe(1.5);
+    expect(result.sat.y).toBe(1.5);
     expect(result.sat.locked).toBe(false);
     expect(result.sat.movingTo).toBeDefined();
     expect(result.sat.movingTo!.x).toBe(50);
     expect(result.sat.movingTo!.y).toBe(50);
-    const dist = Math.hypot(50 - 2, 50 - 2);
+    const dist = Math.hypot(50 - 1.5, 50 - 1.5); // spawn = footprint centre (1.5, 1.5)
     const expectedArrival = nowMs + (dist / SAT_MOVE_SPEED_TILES_PER_SEC) * 1000;
     expect(result.sat.movingTo!.arrivalMs).toBeCloseTo(expectedArrival, 6);
     // Onboard fuel reduced by trip cost — same model as requestSatMove so
@@ -356,7 +356,7 @@ describe('satellite launch failure modes', () => {
       addSpaceport(state, 3);
       stockLaunchResources(state, 'scanner');
       world.islandStates = new Map([['home', state]]);
-      const result = launchSatellite(world, 'home', 'scanner', 2, 2, 1);
+      const result = launchSatellite(world, 'home', 'scanner', 1.5, 1.5, 1);
       expect(result.ok).toBe(false);
       if (!result.ok) expect(result.reason).toBe('target-at-source');
       expect(state.inventory.scanner_sat).toBe(1);

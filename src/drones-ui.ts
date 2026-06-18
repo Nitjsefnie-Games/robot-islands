@@ -64,8 +64,8 @@ export function selectedPadCentre(
   const pad = ops.find((b) => b.id === padId) ?? ops[0]!;
   const def = BUILDING_DEFS[pad.defId as BuildingDefId];
   return {
-    x: spec.cx + pad.x + shapeWidth(def.footprint) / 2,
-    y: spec.cy + pad.y + shapeHeight(def.footprint) / 2,
+    x: spec.cx + pad.x + (shapeWidth(def.footprint) - 1) / 2,
+    y: spec.cy + pad.y + (shapeHeight(def.footprint) - 1) / 2,
   };
 }
 
@@ -1253,8 +1253,8 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
       const busyPadIds = new Set<string>();
       for (const p of operationalPads) {
         const def = BUILDING_DEFS[p.defId as BuildingDefId];
-        const px = originSpec.cx + p.x + shapeWidth(def.footprint) / 2;
-        const py = originSpec.cy + p.y + shapeHeight(def.footprint) / 2;
+        const px = originSpec.cx + p.x + (shapeWidth(def.footprint) - 1) / 2;
+        const py = originSpec.cy + p.y + (shapeHeight(def.footprint) - 1) / 2;
         // §4.9: a pad sustains up to its active-floor count of concurrent
         // drones, so it's only "busy" once its in-flight count reaches that cap.
         const inFlight = active.filter((d) => Math.abs(d.originX - px) < 0.5

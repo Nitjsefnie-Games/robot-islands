@@ -77,8 +77,8 @@ export function computeVisionSources(
       const def = BUILDING_DEFS[b.defId];
       out.push({
         kind: 'circle',
-        cx: spec.cx + b.x + shapeWidth(def.footprint) / 2,
-        cy: spec.cy + b.y + shapeHeight(def.footprint) / 2,
+        cx: spec.cx + b.x + (shapeWidth(def.footprint) - 1) / 2,
+        cy: spec.cy + b.y + (shapeHeight(def.footprint) - 1) / 2,
         radius,
       });
     }

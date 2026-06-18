@@ -432,8 +432,8 @@ export function dispatchDrone(
     for (const b of origin.buildings) {
       if (b.defId !== 'dronepad') continue;
       const def = BUILDING_DEFS[b.defId];
-      const padCx = originSpec.cx + b.x + shapeWidth(def.footprint) / 2;
-      const padCy = originSpec.cy + b.y + shapeHeight(def.footprint) / 2;
+      const padCx = originSpec.cx + b.x + (shapeWidth(def.footprint) - 1) / 2;
+      const padCy = originSpec.cy + b.y + (shapeHeight(def.footprint) - 1) / 2;
       if (Math.abs(padCx - originX) < PAD_MATCH_EPS && Math.abs(padCy - originY) < PAD_MATCH_EPS) {
         padCap = Math.max(1, activeFloors(b));
         break;

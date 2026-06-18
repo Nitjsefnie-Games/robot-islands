@@ -608,15 +608,15 @@ describe('per-pad concurrency cap (§11 multi-pad selection)', () => {
 
 describe('dronePadCentre — §11.1 UI / dispatch origin alignment', () => {
   it('returns the pad footprint centre for an off-centre Drone Pad', () => {
-    // Drone Pad is SHAPES.single (1×1) so the half-footprint offset is 0.5.
-    // Pad at island-local (10, 5) on an island centred at (100, 100) →
-    // pad centre = (100 + 10 + 0.5, 100 + 5 + 0.5) = (110.5, 105.5).
+    // Drone Pad is SHAPES.single (1×1). Tile coords are tile CENTRES, so the
+    // footprint-centre offset is (W-1)/2 = 0 for a 1×1: pad centre =
+    // (100 + 10, 100 + 5) = (110, 105).
     const spec = makeIslandSpec({ id: 'home', cx: 100, cy: 100 });
     const state = makeIslandState({
       id: 'home',
       buildings: [{ id: 'dp-1', defId: 'dronepad', x: 10, y: 5 }],
     });
-    expect(dronePadCentre(spec, state)).toEqual({ x: 110.5, y: 105.5 });
+    expect(dronePadCentre(spec, state)).toEqual({ x: 110, y: 105 });
   });
 
   it('returns null when no Drone Pad is placed', () => {
