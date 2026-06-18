@@ -430,8 +430,8 @@ body.ri-dragging * {
 
 .ri-island-pop {
   position: absolute; top: calc(100% + 7px); left: 0;
-  min-width: 100%;
-  display: flex; flex-direction: column; gap: 1px;
+  min-width: 220px;
+  display: flex; flex-direction: column; gap: 4px;
   padding: 4px;
   background: var(--ri-panel-solid);
   border: 1px solid var(--ri-border-strong);
@@ -439,6 +439,32 @@ body.ri-dragging * {
   box-shadow: var(--ri-shadow-pop);
   z-index: 90;
   animation: ri-island-pop-in 110ms ease;
+}
+
+/* Type-to-filter box — pinned above the scrolling list. */
+.ri-island-filter {
+  flex: 0 0 auto;
+  padding: 5px 8px;
+  border: 1px solid var(--ri-border);
+  border-radius: 6px;
+  background: var(--ri-pressed);
+  color: var(--ri-fg-1);
+  font: 11px/1.4 var(--ri-font-sans);
+  letter-spacing: 0.02em;
+}
+.ri-island-filter::placeholder { color: var(--ri-fg-3); }
+.ri-island-filter:focus {
+  outline: none;
+  border-color: var(--ri-border-accent);
+}
+
+/* Scrollable option list — caps the popup height so dozens of islands never
+   overflow the viewport. */
+.ri-island-list {
+  display: flex; flex-direction: column; gap: 1px;
+  max-height: 360px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 /* `display: flex` above overrides the UA `[hidden] { display: none }`;
    restore it so toggling the `hidden` attribute actually hides the popup. */
@@ -457,6 +483,10 @@ body.ri-dragging * {
   transition: background 90ms, color 90ms;
 }
 .ri-island-opt:hover { background: var(--ri-hover); color: var(--ri-fg-1); }
+.ri-island-opt[data-kbd="true"] {
+  background: var(--ri-hover); color: var(--ri-fg-1);
+  outline: 1px solid var(--ri-border-accent); outline-offset: -1px;
+}
 .ri-island-opt[data-active="true"] {
   color: var(--ri-accent); background: var(--ri-pressed);
 }

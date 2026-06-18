@@ -583,3 +583,87 @@ describe('§15.3 mountIslandBar rename repaint', () => {
     expect(nameEl!.textContent).toBe('New Name');
   });
 });
+
+describe('island selector — level sort + filter (scales to many populated islands)', () => {
+  function mkSpec(id: string, name: string): IslandSpec {
+    return {
+      id, name, biome: 'plains', cx: 0, cy: 0, majorRadius: 10, minorRadius: 10,
+      populated: true, discovered: true, buildings: [], modifiers: [],
+    };
+  }
+  function mkWorld(rows: ReadonlyArray<{ id: string; name: string; level: number }>): WorldState {
+    const islands = rows.map((r) => mkSpec(r.id, r.name));
+    const islandStates = new Map<string, IslandState>(
+      rows.map((r) => [r.id, { ...makeState(), id: r.id, level: r.level }]),
+    );
+    return { islands, islandStates } as unknown as WorldState;
+  }
+  // No DOM teardown between tests, so scope to the popup of the bar just mounted.
+  function freshPop(): HTMLElement {
+    const pops = document.querySelectorAll('.ri-island-pop');
+    return pops[pops.length - 1] as HTMLElement;
+  }
+  function optionNames(pop: HTMLElement): (string | null)[] {
+    return [...pop.querySelectorAll('.ri-island-opt')].map(
+      (o) => o.querySelector('.ri-island-opt__name')!.textContent,
+    );
+  }
+  const power = new Map<string, PowerBalance>();
+
+  it('orders options by DESCENDING island level (highest first)', () => {
+    const world = mkWorld([
+      { id: 'a', name: 'Alpha', level: 5 },
+      { id: 'b', name: 'Bravo', level: 42 },
+      { id: 'c', name: 'Cleo', level: 17 },
+    ]);
+    const bar = mountIslandBar(world, () => {});
+    bar.update('a', power, null);
+    expect(optionNames(freshPop())).toEqual(['Bravo', 'Cleo', 'Alpha']); // 42,17,5
+  });
+
+  it('ties on level break alphabetically by name', () => {
+    const world = mkWorld([
+      { id: 'z', name: 'Zeta', level: 10 },
+      { id: 'd', name: 'Delta', level: 10 },
+    ]);
+    const bar = mountIslandBar(world, () => {});
+    bar.update('z', power, null);
+    expect(optionNames(freshPop())).toEqual(['Delta', 'Zeta']);
+  });
+
+  it('typing in the filter hides options whose name does not match (case-insensitive)', () => {
+    const world = mkWorld([
+      { id: 'a', name: 'Alpha', level: 5 },
+      { id: 'b', name: 'Bravo', level: 42 },
+      { id: 'c', name: 'Cleo', level: 17 },
+    ]);
+    const bar = mountIslandBar(world, () => {});
+    bar.update('a', power, null);
+    const pop = freshPop();
+    const input = pop.querySelector('.ri-island-filter') as HTMLInputElement | null;
+    expect(input).not.toBeNull();
+    input!.value = 'BR';
+    input!.dispatchEvent(new Event('input', { bubbles: true }));
+    const visible = [...pop.querySelectorAll('.ri-island-opt')]
+      .filter((o) => !(o as HTMLElement).hidden)
+      .map((o) => o.querySelector('.ri-island-opt__name')!.textContent);
+    expect(visible).toEqual(['Bravo']);
+  });
+
+  it('Enter in the filter selects the first visible (filtered) island', () => {
+    const picked: string[] = [];
+    const world = mkWorld([
+      { id: 'a', name: 'Alpha', level: 5 },
+      { id: 'b', name: 'Bravo', level: 42 },
+      { id: 'c', name: 'Cleo', level: 17 },
+    ]);
+    const bar = mountIslandBar(world, (id) => picked.push(id));
+    bar.update('a', power, null);
+    const pop = freshPop();
+    const input = pop.querySelector('.ri-island-filter') as HTMLInputElement;
+    input.value = 'cle';
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    expect(picked).toEqual(['c']);
+  });
+});
