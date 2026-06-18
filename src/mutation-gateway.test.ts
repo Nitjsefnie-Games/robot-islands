@@ -383,6 +383,61 @@ describe('makeLocalGateway — validation parity with server intents', () => {
     route.draining = true;
     expect(gateway.setCargoFloorPct(route.id, 0, 50)).toEqual({ ok: false, error: 'route is draining' });
   });
+
+  it('#135 dispatchDrone rejects when the island has no operational Drone Pad', () => {
+    const now = Date.now();
+    const { world, islandStates } = createNewGame(now);
+    // Home starts building-less (§3.7); give it fuel so the ONLY failure is the
+    // missing Drone Pad gate the server enforces (intents.ts: dispatch-drone).
+    islandStates.get('home')!.inventory.biofuel = 50;
+    const gateway = makeLocalGateway(world, islandStates);
+    const result = gateway.dispatchDrone('home', 0, 0, 1, 0, 10, now);
+    expect(result).toEqual({ ok: false, error: 'no-operational-dronepad' });
+  });
+
+  it('#138 convertToServitor rejects when the island has no operational Reality Forge', () => {
+    const now = Date.now();
+    const { world, islandStates } = createNewGame(now);
+    const home = world.islands.find((s) => s.id === 'home')!;
+    home.buildings.push({
+      id: 'ws-1', defId: 'workshop', x: 0, y: 0,
+      constructionRemainingMs: 0, placedAt: now,
+    });
+    islandStates.get('home')!.buildings = home.buildings;
+    const gateway = makeLocalGateway(world, islandStates);
+    const result = gateway.convertToServitor('home', 'ws-1');
+    expect(result).toEqual({ ok: false, error: 'requires an operational Reality Forge' });
+  });
+
+  it('#138 acceptTrade rejects an expired offer', () => {
+    const now = Date.now();
+    const { world, islandStates } = createNewGame(now);
+    const gateway = makeLocalGateway(world, islandStates);
+    const offer = {
+      id: 'offer-1', islandId: 'home',
+      give: { res: 'wood' as const, qty: 1 },
+      get: { res: 'stone' as const, qty: 1 },
+      spawnedAt: now - 10_000,
+      expiresAt: now - 1,
+    };
+    const result = gateway.acceptTrade(offer);
+    expect(result).toEqual({ ok: false, error: 'offer expired' });
+  });
+
+  it('#138 setBuildingActiveFloors drains routes owned by a building dropped to 0 active floors', () => {
+    const { world, islandStates, colony } = makeTwoPopulatedIslands();
+    const gateway = makeLocalGateway(world, islandStates);
+    const create = unwrapGatewayResult(gateway.createRoute('home', colony.id, 'dock-1', 'wood'));
+    expect(create.ok).toBe(true);
+    const route = world.routes[0]!;
+    expect(route.sourceBuildingId).toBe('dock-1');
+    expect(route.draining).not.toBe(true);
+    // dock-1 has floorLevel 0 → 1 displayed floor → activeFloors 1; disabling
+    // that one floor drops active floors to 0, which must drain its routes
+    // (server intents.ts: set-active-floors).
+    expect(gateway.setBuildingActiveFloors('home', 'dock-1', 1)).toEqual({ ok: true });
+    expect(route.draining).toBe(true);
+  });
 });
 
 describe('makeRemoteGateway — rename / edit-biome / construct-island forwarding', () => {
