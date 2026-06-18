@@ -285,13 +285,91 @@ export function mountIslandBar(
   pop.classList.add('ri-island-pop');
   pop.hidden = true;
 
+  // Type-to-filter box + scrollable option list. The selector has to stay usable
+  // with dozens of populated islands: a flat, uncapped column overflowed the
+  // viewport and offered no way to find a specific island. Options live in the
+  // scrolling `list`; the filter input sits above it and survives list rebuilds.
+  const filter = document.createElement('input');
+  filter.type = 'text';
+  filter.classList.add('ri-island-filter');
+  filter.placeholder = 'Filter islands…';
+  filter.setAttribute('aria-label', 'Filter islands');
+  const list = document.createElement('div');
+  list.classList.add('ri-island-list');
+  pop.append(filter, list);
+
   selectWrap.append(trigger, pop);
+
+  // Keyboard navigation index over the CURRENTLY VISIBLE (post-filter) options.
+  let kbdIndex = -1;
+
+  function visibleOpts(): HTMLElement[] {
+    return [...list.children].filter((o) => !(o as HTMLElement).hidden) as HTMLElement[];
+  }
+  function optName(opt: HTMLElement): string {
+    return opt.querySelector('.ri-island-opt__name')?.textContent ?? '';
+  }
+  function optLevel(opt: HTMLElement): number {
+    return world.islandStates?.get(opt.dataset.islandId ?? '')?.level ?? 0;
+  }
+  function updateKbdHighlight(): void {
+    const vis = visibleOpts();
+    vis.forEach((o, i) => { o.dataset.kbd = i === kbdIndex ? 'true' : 'false'; });
+    const cur = kbdIndex >= 0 ? vis[kbdIndex] : undefined;
+    cur?.scrollIntoView({ block: 'nearest' });
+  }
+  // Primary sort: island level DESCENDING (per request). Tiebreak: name A→Z, so
+  // the order is stable. Re-runs on each open so it tracks islands that levelled
+  // up, without reordering rows under the cursor while the popup is open.
+  function sortList(): void {
+    const opts = [...list.children] as HTMLElement[];
+    opts.sort((a, b) => optLevel(b) - optLevel(a) || optName(a).localeCompare(optName(b)));
+    for (const o of opts) list.appendChild(o);
+  }
+  function applyFilter(): void {
+    const q = filter.value.trim().toLowerCase();
+    for (const opt of list.children) {
+      const el = opt as HTMLElement;
+      el.hidden = q !== '' && !optName(el).toLowerCase().includes(q);
+    }
+    kbdIndex = -1;
+    updateKbdHighlight();
+  }
 
   function setPopOpen(open: boolean): void {
     popOpen = open;
     pop.hidden = !open;
     trigger.dataset.open = open ? 'true' : 'false';
+    if (open) {
+      filter.value = '';
+      sortList();
+      applyFilter();
+      filter.focus();
+    }
   }
+
+  filter.addEventListener('click', (ev) => ev.stopPropagation());
+  filter.addEventListener('input', applyFilter);
+  filter.addEventListener('keydown', (ev) => {
+    if (ev.key === 'ArrowDown') {
+      ev.preventDefault();
+      kbdIndex = Math.min(visibleOpts().length - 1, kbdIndex + 1);
+      updateKbdHighlight();
+    } else if (ev.key === 'ArrowUp') {
+      ev.preventDefault();
+      kbdIndex = Math.max(0, kbdIndex - 1);
+      updateKbdHighlight();
+    } else if (ev.key === 'Enter') {
+      ev.preventDefault();
+      const vis = visibleOpts();
+      const target = kbdIndex >= 0 ? vis[kbdIndex] : vis[0];
+      const id = target?.dataset.islandId;
+      if (id) {
+        onSelect(id);
+        setPopOpen(false);
+      }
+    }
+  });
   trigger.addEventListener('click', (ev) => {
     ev.stopPropagation();
     setPopOpen(!popOpen);
@@ -331,6 +409,7 @@ export function mountIslandBar(
     pickableDot.className = 'ri-dot ri-dot--pickable';
     opt.append(dot, name, level, pickableDot);
     opt.dataset.pickable = 'false';
+    opt.dataset.islandId = spec.id;
     opt.addEventListener('click', (ev) => {
       ev.stopPropagation();
       onSelect(spec.id);
@@ -348,15 +427,17 @@ export function mountIslandBar(
     const sig = populated.map((i) => i.id).join(',');
     if (sig !== lastIslandSig) {
       lastIslandSig = sig;
-      while (pop.firstChild) pop.removeChild(pop.firstChild);
+      while (list.firstChild) list.removeChild(list.firstChild);
       optMap.clear();
       for (const spec of populated) {
         const state = world.islandStates?.get(spec.id);
         if (!state) continue;
         const opt = buildOption(spec, state);
         optMap.set(spec.id, opt);
-        pop.appendChild(opt);
+        list.appendChild(opt);
       }
+      sortList();
+      applyFilter();
     }
 
     // Update each option's tone / level / active flag / pickable flag / name.
