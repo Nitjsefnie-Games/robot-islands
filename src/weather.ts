@@ -864,13 +864,35 @@ export function routeCapacityMultiplierForCells(
   biomeFor?: (cx: number, cy: number) => Biome | undefined,
   totalCo2Kg = 0,
 ): number {
+  return routeCapacityMulWithExpiry(seed, cells, nowMs, wallOffsetMs, biomeFor, totalCo2Kg).mul;
+}
+
+/** Same min-capacity multiplier as routeCapacityMultiplierForCells, but ALSO
+ *  returns `validUntilMs` — the earliest dwell-end (wall clock) among the
+ *  sampled cells. The multiplier is provably CONSTANT for every wall time in
+ *  `[weatherClockMs(nowMs,wallOffsetMs), validUntilMs)`: until the first cell
+ *  transitions, every cell stays in its current dwell, so every per-cell state
+ *  (hence the min) is unchanged. The route dispatch loop caches `{mul,
+ *  validUntilMs}` per route across catch-up steps and only resamples once the
+ *  window expires — a cell dwells 30 min – 4 h, but catch-up steps are 1 s, so
+ *  this skips ~all per-step weather sampling on the dispatch side. */
+export function routeCapacityMulWithExpiry(
+  seed: string,
+  cells: ReadonlyArray<{ cx: number; cy: number }>,
+  nowMs: number,
+  wallOffsetMs = 0,
+  biomeFor?: (cx: number, cy: number) => Biome | undefined,
+  totalCo2Kg = 0,
+): { mul: number; validUntilMs: number } {
   let minMul = 1;
+  let validUntilMs = Infinity;
   for (const { cx, cy } of cells) {
     const w = weather(seed, cx, cy, weatherClockMs(nowMs, wallOffsetMs), biomeFor?.(cx, cy), totalCo2Kg);
     const mul = WEATHER_ROUTE_CAPACITY_MULTIPLIER[w.state];
     if (mul !== undefined) minMul = Math.min(minMul, mul);
+    if (w.untilMs < validUntilMs) validUntilMs = w.untilMs;
   }
-  return minMul;
+  return { mul: minMul, validUntilMs };
 }
 
 /** Returns capacity multiplier [0,1] for a route crossing given cells at nowMs. */
