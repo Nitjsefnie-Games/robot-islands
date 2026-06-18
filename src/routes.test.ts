@@ -136,12 +136,22 @@ describe('routeSourceTile (source-anchored rendering)', () => {
     return { ...makeIslandSpec('home', cx, cy), buildings: bs as unknown as PlacedBuilding[] };
   }
   const idx = new Map<string, IslandSpec>([
-    ['home', islandWithBuildings(100, 50, [{ id: 'dock-1', defId: 'dock', x: 3, y: -2 }])],
+    ['home', islandWithBuildings(100, 50, [
+      { id: 'dock-1', defId: 'dock', x: 3, y: -2 },        // square2 → half 1
+      { id: 'md-1', defId: 'mass_driver', x: 10, y: 10 },  // square4 → half 2
+    ])],
   ]);
 
-  it('returns the source building world tile (island centre + local offset)', () => {
+  it('returns the FOOTPRINT CENTRE in world tiles (island centre + local offset + half-footprint)', () => {
     const route = { from: 'home', sourceBuildingId: 'dock-1' } as unknown as Route;
-    expect(routeSourceTile(route, idx)).toEqual({ x: 103, y: 48 });
+    // 2×2 dock: centre = (100 + 3 + 1, 50 + -2 + 1)
+    expect(routeSourceTile(route, idx)).toEqual({ x: 104, y: 49 });
+  });
+
+  it('centres on the whole footprint for a multi-tile building (4×4 mass driver)', () => {
+    const route = { from: 'home', sourceBuildingId: 'md-1' } as unknown as Route;
+    // 4×4: centre = (100 + 10 + 2, 50 + 10 + 2)
+    expect(routeSourceTile(route, idx)).toEqual({ x: 112, y: 62 });
   });
 
   it('returns null for a legacy route with no sourceBuildingId', () => {
@@ -173,9 +183,10 @@ describe('route path anchors at the source building (weather)', () => {
     ({ id: 'r', from: 'home', to: 'colony', type: 'cargo', capacityPerSec: 0.5, transitTimeSec: 40,
        mode: 'split', cargo: [], inFlight: [], sourceBuildingId: 'dock-1', ...over } as unknown as Route);
 
-  it('polyline starts at the source building WORLD tile, not the island centre', () => {
+  it('polyline starts at the source building FOOTPRINT CENTRE in world tiles', () => {
     const pts = routePolylinePoints(route(), idxWith({ x: 5, y: 5 }))!;
-    expect(pts[0]).toEqual({ x: HOME_CX + 5, y: HOME_CY + 5 }); // 65, 25 — on the island
+    // dock is 2×2 → centre adds half (1,1): (60+5+1, 20+5+1)
+    expect(pts[0]).toEqual({ x: HOME_CX + 5 + 1, y: HOME_CY + 5 + 1 });
     expect(pts[pts.length - 1]).toEqual({ x: 140, y: 0 });
   });
 

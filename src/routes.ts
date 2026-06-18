@@ -37,7 +37,8 @@ import {
   WEATHER_ROUTE_LOSS_RATE,
 } from './weather.js';
 import { CELL_SIZE_TILES, type IslandSpec, type WorldState } from './world.js';
-import type { BuildingDefId } from './building-defs.js';
+import { BUILDING_DEFS, type BuildingDefId } from './building-defs.js';
+import { shapeWidth, shapeHeight } from './shape-mask.js';
 import { activeFloorLevel, floorEffectMul, hasOperationalBuilding, type PlacedBuilding } from './buildings.js';
 import { planCargo, type ViableEntry } from './route-cargo.js';
 import type { CargoMode, CargoEntry } from './route-cargo.js';
@@ -361,10 +362,15 @@ export function routeSourceTile(
   if (!island) return null;
   const b = island.buildings.find((bb) => bb.id === route.sourceBuildingId);
   if (!b) return null;
-  // Building x/y are island-LOCAL offsets; the world tile adds the island
-  // centre (same convention as antenna.ts / drones.ts pad placement). Returning
-  // the raw offset put distant islands' routes near the world origin.
-  return { x: island.cx + b.x, y: island.cy + b.y };
+  // Building x/y are island-LOCAL offsets to the footprint's NW corner; the
+  // world tile adds the island centre (cx + b.x) PLUS half the footprint so the
+  // route launches from the building's CENTRE, not its corner — same convention
+  // as antenna.ts / drones.ts pad placement. A multi-tile building (e.g. a 4×4
+  // Mass Driver) therefore starts its route at its middle, not tile [0,0].
+  const def = BUILDING_DEFS[b.defId as BuildingDefId];
+  const halfW = def ? shapeWidth(def.footprint) / 2 : 0.5;
+  const halfH = def ? shapeHeight(def.footprint) / 2 : 0.5;
+  return { x: island.cx + b.x + halfW, y: island.cy + b.y + halfH };
 }
 
 /**
