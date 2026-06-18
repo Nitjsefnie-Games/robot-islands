@@ -46,6 +46,7 @@ import {
   routeProfileForBuilding,
   islandHasTeleporterPad,
   reorderPriorityList,
+  setRouteWaypoints,
 } from '../../../src/routes.js';
 import {
   buyNode,
@@ -875,6 +876,28 @@ export const INTENTS: Record<string, IntentHandler> = {
       if (typeof routeId !== 'string') return { ok: false, error: 'routeId must be a string' };
       if (typeof toIslandId !== 'string') return { ok: false, error: 'toIslandId must be a string' };
       const r = retargetRoute(game.world, routeId, toIslandId);
+      return r.ok ? { ok: true } : { ok: false, error: r.error };
+    },
+  },
+
+  // set-route-waypoints — §2.6 bend/unbend a placed route. Player supplies
+  // { routeId, waypoints }. Validates waypoints is an array of finite {x,y}
+  // points and delegates to the shared pure setRouteWaypoints gate.
+  'set-route-waypoints': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { routeId, waypoints } = payload;
+      if (typeof routeId !== 'string') return { ok: false, error: 'routeId must be a string' };
+      if (!Array.isArray(waypoints)) return { ok: false, error: 'waypoints must be an array' };
+      const pts: Array<{ x: number; y: number }> = [];
+      for (const w of waypoints) {
+        if (!isRecord(w) || typeof w.x !== 'number' || typeof w.y !== 'number'
+          || !Number.isFinite(w.x) || !Number.isFinite(w.y)) {
+          return { ok: false, error: 'each waypoint must be { x:number, y:number }' };
+        }
+        pts.push({ x: w.x, y: w.y });
+      }
+      const r = setRouteWaypoints(game.world, game.islandStates, routeId, pts);
       return r.ok ? { ok: true } : { ok: false, error: r.error };
     },
   },

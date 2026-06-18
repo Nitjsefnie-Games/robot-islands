@@ -1602,6 +1602,86 @@ describe('route management', () => {
       now,
     );
   });
+
+  async function makeT5Route(now: number): Promise<{ uid: string; routeId: string }> {
+    const uid = await aUserWithTwoPopulatedIslands(now);
+    const snap = await loadSnapshot(pool, uid);
+    const homeState = snap!.islandStates.find((s: any) => s.id === 'home')!;
+    homeState.state.level = 50; // tier 5
+    await saveSnapshot(pool, uid, snap!);
+    const routeId = await makeRoute(uid, now);
+    return { uid, routeId };
+  }
+
+  it('set-route-waypoints: sets waypoints on a T5 cargo route', async () => {
+    const now = Date.now();
+    const { uid, routeId } = await makeT5Route(now);
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'set-route-waypoints', payload: { routeId, waypoints: [{ x: 10, y: 20 }] }, seq: 3 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 3 });
+
+    const route = (await worldSnap(uid)).routes[0];
+    expect(route.waypoints).toEqual([{ x: 10, y: 20 }]);
+  });
+
+  it('set-route-waypoints: empty array unbends the route', async () => {
+    const now = Date.now();
+    const { uid, routeId } = await makeT5Route(now);
+
+    await applyIntent(
+      pool, uid,
+      { type: 'set-route-waypoints', payload: { routeId, waypoints: [{ x: 10, y: 20 }] }, seq: 3 },
+      now,
+    );
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'set-route-waypoints', payload: { routeId, waypoints: [] }, seq: 4 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 4 });
+
+    const route = (await worldSnap(uid)).routes[0];
+    expect(route.waypoints).toBeUndefined();
+  });
+
+  it('set-route-waypoints: >4 waypoints are rejected, save unchanged', async () => {
+    const now = Date.now();
+    const { uid, routeId } = await makeT5Route(now);
+    await expectRejectNoChange(
+      uid,
+      {
+        type: 'set-route-waypoints',
+        payload: { routeId, waypoints: [{ x: 1, y: 1 }, { x: 2, y: 2 }, { x: 3, y: 3 }, { x: 4, y: 4 }, { x: 5, y: 5 }] },
+        seq: 9,
+      },
+      now,
+    );
+  });
+
+  it('set-route-waypoints: malformed waypoint is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const { uid, routeId } = await makeT5Route(now);
+    await expectRejectNoChange(
+      uid,
+      { type: 'set-route-waypoints', payload: { routeId, waypoints: [{ x: 1 }] }, seq: 9 },
+      now,
+    );
+  });
+
+  it('set-route-waypoints: non-T5 source island is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithTwoPopulatedIslands(now);
+    const routeId = await makeRoute(uid, now);
+    await expectRejectNoChange(
+      uid,
+      { type: 'set-route-waypoints', payload: { routeId, waypoints: [{ x: 10, y: 20 }] }, seq: 9 },
+      now,
+    );
+  });
 });
 
 
