@@ -29,6 +29,7 @@ import {
   routeBentLengthTiles,
   routeCrossedCells,
   routeFloorMultiplier,
+  routeEffectiveCapacity,
   routeSourceTile,
   routePolylinePoints,
   routeProfileForBuilding,
@@ -166,6 +167,39 @@ describe('routeSourceTile (source-anchored rendering)', () => {
   it('returns null when the from-island is unknown', () => {
     const route = { from: 'nowhere', sourceBuildingId: 'dock-1' } as unknown as Route;
     expect(routeSourceTile(route, idx)).toBeNull();
+  });
+});
+
+describe('routeEffectiveCapacity', () => {
+  it('base = capacity × floorMul; instant routes are weather-exempt so throttled == base', () => {
+    const a = makeIslandSpec('a', 0, 0);
+    a.buildings = [{ id: 'dock-1', defId: 'dock', x: 0, y: 0, floorLevel: 1 } as unknown as PlacedBuilding];
+    const b = makeIslandSpec('b', 30, 0);
+    const route = {
+      id: 'r', from: 'a', to: 'b', type: 'cargo', capacityPerSec: 0.5,
+      transitTimeSec: 0, mode: 'split', cargo: [], inFlight: [], sourceBuildingId: 'dock-1',
+    } as unknown as Route;
+    const world = makeWorld([route], [a, b]);
+    const states = new Map<string, IslandState>([['a', makeState('a')], ['b', makeState('b')]]);
+    const eff = routeEffectiveCapacity(world, states, route, 0, 0);
+    expect(eff.floorMul).toBe(2);        // floor-2 dock → ×(1+1)
+    expect(eff.base).toBeCloseTo(1.0);   // 0.5 × 2
+    expect(eff.weatherMul).toBe(1);      // transitTimeSec 0 ⇒ weather-exempt
+    expect(eff.throttled).toBeCloseTo(1.0);
+  });
+
+  it('a legacy route with no source building scales at floorMul 1', () => {
+    const a = makeIslandSpec('a', 0, 0);
+    const b = makeIslandSpec('b', 30, 0);
+    const route = {
+      id: 'r', from: 'a', to: 'b', type: 'cargo', capacityPerSec: 0.5,
+      transitTimeSec: 0, mode: 'split', cargo: [], inFlight: [],
+    } as unknown as Route;
+    const world = makeWorld([route], [a, b]);
+    const states = new Map<string, IslandState>([['a', makeState('a')], ['b', makeState('b')]]);
+    const eff = routeEffectiveCapacity(world, states, route, 0, 0);
+    expect(eff.floorMul).toBe(1);
+    expect(eff.base).toBeCloseTo(0.5);
   });
 });
 
