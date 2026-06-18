@@ -1699,8 +1699,28 @@ export function costToUnlock(
     }
   }
 
-  const total = distance.get(target);
-  if (total === undefined) return null;
+  const dijkstraTotal = distance.get(target);
+
+  // Forward-root direct-buy. A node with no incoming STANDARD edge (isRootNode,
+  // which ignores bridges) is a sub-path ENTRY, purchasable directly at its own
+  // node cost with no path. The graph can still REACH it — chain edges are
+  // bidirectional and active bridges are traversable — so Dijkstra may return
+  // an expensive path that crosses a bridge into the chain and walks back down
+  // through a notable to the head. That was the live bug: `smelting.recipeRate.1`
+  // priced as a full bridge+notable path instead of its 1-SP entry cost. Offer
+  // the direct node cost and take whichever is cheaper. The tier rule mirrors the
+  // edge-destination filter above: a tier-locked root has no direct option and so
+  // stays unreachable, matching buyNode's target precheck.
+  const directCost = nodeCostById.get(target);
+  if (directCost !== undefined && isRootNode(graph, target)) {
+    const targetDepth = nodeDepth.get(target);
+    const tierOk = targetDepth === undefined || depthTierEligible(state.level, targetDepth, t6);
+    if (tierOk && (dijkstraTotal === undefined || directCost <= dijkstraTotal)) {
+      return { path: [], totalCost: directCost };
+    }
+  }
+
+  if (dijkstraTotal === undefined) return null;
 
   // Walk back to reconstruct the path.
   const path: Edge[] = [];
@@ -1712,7 +1732,7 @@ export function costToUnlock(
     cur = e.from as NodeId;
   }
 
-  return { path, totalCost: total };
+  return { path, totalCost: dijkstraTotal };
 }
 
 /** True if `nodeId` has zero incoming edges in `graph`. Root nodes can be
@@ -1799,6 +1819,11 @@ export function buyNode(graph: Graph, state: IslandState, target: NodeId): void 
     state.unlockedNodes.add(e.to as NodeId);
     state.unlockedEdges.add(e.id as EdgeId);
   }
+  // Forward-root entry nodes return an EMPTY path from costToUnlock (bought
+  // directly at node cost — no edge leads to them), so the loop above never
+  // adds the target. Add it explicitly; for normal paths the target is the last
+  // edge's `to` and this is a harmless no-op (unlockedNodes is a Set).
+  state.unlockedNodes.add(target);
   state.auraAmpVersion++;
 }
 

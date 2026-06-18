@@ -33,11 +33,12 @@ import {
   tierForLevel,
   type SkillNode,
   type NodeId,
+  type SubPathId,
   unbindCrystal,
 } from './skilltree.js';
 import { KEYSTONE_PREREQS } from './skilltree-catalog.js';
 import { CRYSTAL_CATALOG } from './skilltree-crystals.js';
-import type { EdgeId, Graph, KeystonePrereq } from './skilltree-graph.js';
+import type { Edge, EdgeId, BridgeEdge, Graph, KeystonePrereq, NodeId as GNodeId } from './skilltree-graph.js';
 import { DEFAULT_GRAPH } from './skilltree.js';
 import { executeTierReset } from './tier-reset.js';
 
@@ -771,6 +772,62 @@ describe('costToUnlock', () => {
     buyNode(DEFAULT_GRAPH, state, shallower);
     expect(state.unlockedNodes.has(shallower)).toBe(true);
     expect(state.unspentSkillPoints).toBe(99);
+  });
+});
+
+describe('costToUnlock — forward-root entry nodes buy at node cost (§9.3 entry bug)', () => {
+  // A filler-chain HEAD has only OUTGOING chain edges (head → .2 → .3 …), so it
+  // is a forward-root: a sub-path ENTRY meant to be bought directly at its 1-SP
+  // node cost. But chain edges are bidirectional and active bridges are
+  // traversable, so Dijkstra can REACH the head by crossing a bridge into the
+  // chain and walking back down through a notable — and used to return that
+  // expensive path instead of the cheap entry cost. This is the live bug where
+  // `smelting.recipeRate.1` priced as a full bridge+notable path.
+  function node(id: string, depth: number, cost: number, subPath: SubPathId): SkillNode {
+    return {
+      id: id as NodeId, subPath, depth, cost, magnitude: 0,
+      effect: { kind: 'recipeRateMul', category: 'extraction' }, description: id,
+    };
+  }
+  function bridgedGraph(): Graph {
+    const nodes: SkillNode[] = [
+      node('far', 1, 1, 'mining'),    // owned frontier, a different sub-path
+      node('head', 1, 1, 'smelting'), // chain HEAD — forward-root entry node
+      node('head2', 1, 2, 'smelting'),
+      node('note', 1, 4, 'smelting'), // notable anchored on the chain
+    ];
+    const edges: Edge[] = [
+      { id: 'e_head_head2' as EdgeId, from: 'head' as GNodeId, to: 'head2' as GNodeId, cost: 2 },
+      { id: 'e_head2_note' as EdgeId, from: 'head2' as GNodeId, to: 'note' as GNodeId, cost: 4 },
+    ];
+    // minSpent 0 → always active, regardless of branch SP.
+    const bridges: BridgeEdge[] = [
+      {
+        id: 'br_far_note' as EdgeId, from: 'far' as GNodeId, to: 'note' as GNodeId,
+        cost: 9, mode: 'or', threshold: [{ branch: 'extraction', minSpent: 0 }],
+      },
+    ];
+    return { nodes, edges, bridges, graftSockets: [] } as Graph;
+  }
+
+  it('returns the entry node cost (1), not the bridge+notable path (9+2+1=12)', () => {
+    const g = bridgedGraph();
+    const owned = new Set(['far']);
+    const result = costToUnlock(g, owned, new Set(), { unlockedNodes: owned, level: 15 } as any, 'head');
+    expect(result).not.toBeNull();
+    expect(result!.totalCost).toBe(1);
+    expect(result!.path).toHaveLength(0); // bought directly — no path traversed
+  });
+
+  it('buyNode charges the entry cost and owns ONLY the head (no bridge intermediates)', () => {
+    const g = bridgedGraph();
+    const state = makeState({ level: 15, unspentSkillPoints: 10 });
+    state.unlockedNodes.add('far');
+    buyNode(g, state, 'head');
+    expect(state.unlockedNodes.has('head')).toBe(true);
+    expect(state.unspentSkillPoints).toBe(9); // 10 - 1, NOT 10 - 12
+    expect(state.unlockedNodes.has('note')).toBe(false);
+    expect(state.unlockedNodes.has('head2')).toBe(false);
   });
 });
 
@@ -1763,9 +1820,21 @@ describe('spentInBranch — root purchases count toward bridge thresholds (§9.3
       mode: 'or' as const,
       threshold: [{ branch: 'extraction' as const, minSpent: 7 }],
     };
+    // T must have an incoming STANDARD edge (G→T) so it is NOT a forward-root.
+    // Real bridge endpoints are always notables/keystones, which are anchored
+    // (have incoming edges) — never entry roots. Without this, the forward-root
+    // direct-buy rule would make T buyable at its node cost regardless of the
+    // bridge, defeating the bridge-gating this test exercises. G itself is an
+    // unowned root, so it provides no alternate path into T below the threshold.
+    const gToT = {
+      id: 'e.test.G-T' as EdgeId,
+      from: 'G' as import('./skilltree-graph.js').NodeId,
+      to: 'T' as import('./skilltree-graph.js').NodeId,
+      cost: 1,
+    };
     return {
-      nodes: [mkNode('R', 'mining', 7), mkNode('T', 'smelting', 1)],
-      edges: [],
+      nodes: [mkNode('R', 'mining', 7), mkNode('G', 'smelting', 1), mkNode('T', 'smelting', 1)],
+      edges: [gToT],
       bridges: [bridge],
       graftSockets: [],
     } as Graph;
