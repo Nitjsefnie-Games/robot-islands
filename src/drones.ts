@@ -638,24 +638,26 @@ function isRareIsland(isl: import('./world.js').IslandSpec): boolean {
   return isl.modifiers.length >= 2 || isl.modifiers.includes('aetheric_anomaly');
 }
 
-/** Discover rare islands that fall inside an expanded cell set (probability-bias
- *  corridor). Mutates `isl.discovered`, reveals the full footprint, and appends
- *  to `outIds`. */
-function discoverRareIslands(
+/** Detect (do NOT reveal) rare islands that fall inside an expanded cell set
+ *  (the §13.3 probability-bias corridor). Returns dark-mode discovery records
+ *  for the matching undiscovered, unpopulated rare islands. The §13.3
+ *  Probability Engine only *widens the detection corridor*; per §11 the reveal
+ *  is buffered and committed later by `flushDroneBuffers` (and forfeited on
+ *  loss / out-of-range stranding) exactly like every other discovery. */
+function rareIslandsInCells(
   islands: ReadonlyArray<import('./world.js').IslandSpec>,
   expandedCells: ReadonlySet<string>,
-  revealedCells: Set<string>,
-  outIds: string[],
-): void {
+): Array<{ readonly islandId: string }> {
+  const out: Array<{ readonly islandId: string }> = [];
   for (const isl of islands) {
     if (isl.populated) continue;
     if (isl.discovered) continue;
     if (!isRareIsland(isl)) continue;
     if (islandIntersectsCells(isl, expandedCells)) {
-      markIslandDiscovered(isl, revealedCells);
-      outIds.push(isl.id);
+      out.push({ islandId: isl.id });
     }
   }
+  return out;
 }
 
 /** Drain a drone's scanBuffer + darkModeDiscoveries into world state.
@@ -794,7 +796,7 @@ export function tickDrones(
       // §2.1 lazy generation: any cell the drone's corridor touches must
       // have its procedural islands minted before the antenna / rare-island
       // reads below — a newly-generated rare island in `expandedCorridor`
-      // must be eligible for `discoverRareIslands` on the very same tick.
+      // must be eligible for `rareIslandsInCells` on the very same tick.
       // Cells outside antenna range still need this hook: the drone is
       // physically crossing them, and a later visit (or another sensor)
       // must see the same deterministic island set.
@@ -809,18 +811,20 @@ export function tickDrones(
         d.scanBuffer.add(k);
       }
 
-      // §13.3 Probability-bias rare-island discovery: STILL run on the expanded
-      // corridor regardless of buffer flush. Rare-island reveals are not gated
-      // by antenna range in the existing code; preserve that behaviour.
-      discoverRareIslands(world.islands, expandedCorridor, world.revealedCells, newlyDiscoveredIslandIds);
+      // §13.3 Probability-bias rare-island DETECTION runs on the expanded
+      // corridor, but the reveal is now buffered like every other discovery
+      // (§11 dark-mode telemetry): it joins darkModeDiscoveries and is committed
+      // only by flushDroneBuffers when the drone is in antenna range / recovers,
+      // and is forfeited on loss or out-of-range stranding. The Probability
+      // Engine widens the detection corridor only — it grants no exemption from
+      // the antenna-range gate.
+      const rareDiscoveries = rareIslandsInCells(world.islands, expandedCorridor);
 
-      // Island discoveries in this tick's corridor join darkModeDiscoveries
-      // (the flush helper drains them along with cells). Use plain corridor
-      // for ordinary discovery — SPEC §13.3 grants rare-island bias only;
-      // the expanded corridor is for rare islands only (discoverRareIslands above).
+      // Ordinary discoveries use the plain corridor — SPEC §13.3 grants the
+      // rare-island bias (the expanded corridor) only.
       const tickIslandDiscoveries = islandsInCells(world.islands, corridor);
       const seenIslands = new Set<string>(d.darkModeDiscoveries.map((x) => x.islandId));
-      for (const disc of tickIslandDiscoveries) {
+      for (const disc of [...rareDiscoveries, ...tickIslandDiscoveries]) {
         if (!seenIslands.has(disc.islandId)) {
           seenIslands.add(disc.islandId);
           d.darkModeDiscoveries.push(disc);
