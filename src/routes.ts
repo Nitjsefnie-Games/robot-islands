@@ -29,7 +29,7 @@ import { XP_WEIGHT, type ResourceId } from './recipes.js';
 import { effectiveSkillMultipliers, type SkillMultipliers } from './skilltree.js';
 import {
   biomeForCell,
-  routeCapacityMultiplierForWeather,
+  routeCapacityMultiplierForCells,
   rasterizePolylineCells,
   sumIslandCo2,
   weather,
@@ -934,25 +934,20 @@ function dispatchPhase(
     const srcMul = precomputedSkillMul?.get(route.from) ?? effectiveSkillMultipliers(srcState);
     const skillCapMul = srcMul.routeCapacity;
 
-    // §2.6 weather capacity modulation
-    const fromSpec = islandIndex.get(route.from);
-    const toSpec = islandIndex.get(route.to);
+    // §2.6 weather capacity modulation — sampled along the bent polyline.
     // Instant-transit routes (teleporter — and any future zero-latency cargo
     // type) are EXEMPT from weather: teleportation doesn't traverse the ocean
     // cells the storm sits in, so neither this capacity throttle nor the
     // in-flight loss (which can't apply — instant routes keep no in-flight
     // buffer) touches them.
     const instant = route.transitTimeSec <= 0;
+    const crossed = !instant ? routeCrossedCells(route, islandIndex) : NO_CROSSED_CELLS;
     const weatherMul =
-      !instant && fromSpec && toSpec
-        ? routeCapacityMultiplierForWeather(
+      !instant && crossed.length > 0
+        ? routeCapacityMultiplierForCells(
             world.seed,
-            fromSpec.cx,
-            fromSpec.cy,
-            toSpec.cx,
-            toSpec.cy,
+            crossed.map((c) => ({ cx: c.cx, cy: c.cy })),
             nowMs,
-            CELL_SIZE_TILES,
             wallOffsetMs,
             // §7.3 coherent field: biome + CO₂ so capacity sees the SAME
             // storm the arrival-loss / destruction consumers see.
@@ -1082,12 +1077,15 @@ function dispatchPhase(
       // perf clocks started at different epochs but dispatch at the same
       // wall instant produce the same batch id ⇒ the same loss rolls.
       const batchId = `${d.route.id}_${weatherClockMs(nowMs, wallOffsetMs)}_${d.route.inFlight.length}`;
+      // §2.6 effective transit along the bent polyline; computed once per
+      // dispatched route (islandIndex is already built at the top of this phase).
+      const effTransit = effectiveTransitTimeSec(d.route, islandIndex);
       d.route.inFlight.push({
         resourceId: d.resourceId,
         amount,
         // §2.4 route-floor scaling: speed ×floorMul ⇒ transit time ÷floorMul
         // (floorMul ≥ 1 always, so this never divides by zero).
-        arrivalTime: nowMs + (d.route.transitTimeSec / d.floorMul) * 1000,
+        arrivalTime: nowMs + (effTransit / d.floorMul) * 1000,
         dispatchTime: nowMs,
         id: batchId,
       });

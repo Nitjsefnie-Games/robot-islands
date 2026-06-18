@@ -2315,3 +2315,48 @@ describe('§2.6 route waypoints + bent path helpers', () => {
     expect(bentKeys.some(k => !straightKeys.has(k))).toBe(true);
   });
 });
+
+
+describe('§2.6 bent route dispatch uses polyline weather + transit', () => {
+  it('bent route in-flight batch arrives later than the straight equivalent (#118)', () => {
+    // Anchor the route inside a deterministic clear cell so the dispatch is
+    // unaffected by weather and a nonzero in-flight batch is guaranteed.
+    const cell = findCellWithWeather('test-seed', 0, 'clear');
+    expect(cell).not.toBeNull();
+    if (!cell) return;
+
+    const baseX = cell.cx * CELL_SIZE_TILES;
+    const baseY = cell.cy * CELL_SIZE_TILES;
+
+    function run(waypoints?: ReadonlyArray<{ x: number; y: number }>): { route: Route; arrivalTime: number } {
+      _resetRouteIdCounter();
+      const src = makeState('a', { inventory: { ...blankInventory(), iron_ore: 100 } });
+      const dst = makeState('b');
+      const world = makeWorld([], [
+        makeIslandSpec('a', baseX + 1, baseY + 1),
+        makeIslandSpec('b', baseX + 7, baseY + 1),
+      ]);
+      const states = new Map([['a', src], ['b', dst]]);
+      const route = cargoRoute('a', 'b', 'iron_ore', [], 1, 60);
+      if (waypoints) route.waypoints = waypoints;
+      world.routes.push(route);
+      const out = dispatchAttempt(world, states, 0, 1);
+      expect(out.length).toBe(1);
+      expect(route.inFlight.length).toBe(1);
+      return { route, arrivalTime: route.inFlight[0]!.arrivalTime };
+    }
+
+    const straight = run();
+    const bent = run([{ x: baseX + 4, y: baseY + 4 }]);
+
+    expect(straight.arrivalTime).toBeCloseTo(60_000, 5);
+    expect(bent.arrivalTime).toBeGreaterThan(straight.arrivalTime);
+
+    const islandIndex = new Map([
+      ['a', makeIslandSpec('a', baseX + 1, baseY + 1)],
+      ['b', makeIslandSpec('b', baseX + 7, baseY + 1)],
+    ]);
+    const ratio = routeBentLengthTiles(bent.route, islandIndex) / 6;
+    expect(bent.arrivalTime).toBeCloseTo(straight.arrivalTime * ratio, 5);
+  });
+});
