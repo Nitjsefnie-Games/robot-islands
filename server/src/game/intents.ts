@@ -488,10 +488,11 @@ export const INTENTS: Record<string, IntentHandler> = {
   'create-route': {
     apply(game: LiveGame, payload: unknown): IntentResult {
       if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
-      const { fromIslandId, toIslandId, buildingId, filterResource } = payload;
+      const { fromIslandId, toIslandId, buildingId, filterResource, groupId } = payload;
       if (typeof fromIslandId !== 'string') return { ok: false, error: 'fromIslandId must be a string' };
       if (typeof toIslandId !== 'string') return { ok: false, error: 'toIslandId must be a string' };
       if (typeof buildingId !== 'string') return { ok: false, error: 'buildingId must be a string' };
+      if (groupId !== undefined && typeof groupId !== 'string') return { ok: false, error: 'groupId must be a string when present' };
       if (filterResource !== undefined && filterResource !== null && typeof filterResource !== 'string') {
         return { ok: false, error: 'filterResource must be a string when present' };
       }
@@ -520,6 +521,7 @@ export const INTENTS: Record<string, IntentHandler> = {
       const filter = (filterResource === undefined || filterResource === null) ? null : (filterResource as ResourceId);
       const route = createRouteFromBuilding(building, fromIslandId, toIslandId, filter, dist);
       if (route === null) return { ok: false, error: 'route could not be created' };
+      if (typeof groupId === 'string') route.groupId = groupId;
       game.world.routes.push(route);
       return { ok: true };
     },

@@ -365,6 +365,20 @@ export function _resetRouteIdCounter(): void {
   routeIdCounter = 0;
 }
 
+// §2.4 merged-route group ids — a separate monotonic counter (group ids are a
+// UI grouping handle, never persisted-deterministic-critical; LOCAL and REMOTE
+// each generate their own and the snapshot carries the live value).
+let groupIdCounter = 0;
+export function nextGroupId(): string {
+  groupIdCounter += 1;
+  return `grp-${groupIdCounter}`;
+}
+
+/** Test-only — reset the group-id counter. */
+export function _resetGroupIdCounter(): void {
+  groupIdCounter = 0;
+}
+
 /** Seed the route-id counter so the next id is `route-${value + 1}`. Called
  *  by the persistence loader after restoring `world.routes` so a freshly-
  *  loaded session doesn't allocate route ids that collide with saved ones.

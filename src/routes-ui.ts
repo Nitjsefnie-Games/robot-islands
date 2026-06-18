@@ -22,6 +22,9 @@ import {
   islandHasTeleporterPad,
   isPowerLink,
   routeEffectiveCapacity,
+  planMergedRoutes,
+  nextGroupId,
+  ROUTE_ALL,
   retargetRoute as retargetRoutePure,
   type Route,
 } from './routes.js';
@@ -506,6 +509,16 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     const prevCargo = cargoSel.value;
     fromSel.replaceChildren();
     toSel.replaceChildren();
+    // §2.4 merged-route shortcut: "All islands" on either side fans the route
+    // out across every eligible island (best free building each) as one group.
+    const fromAll = document.createElement('option');
+    fromAll.value = ROUTE_ALL;
+    fromAll.textContent = 'All islands (best building)';
+    fromSel.appendChild(fromAll);
+    const toAll = document.createElement('option');
+    toAll.value = ROUTE_ALL;
+    toAll.textContent = 'All islands';
+    toSel.appendChild(toAll);
     for (const isl of islands) {
       const o1 = document.createElement('option');
       o1.value = isl.id;
@@ -543,8 +556,18 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
   /** Rebuild the VIA BUILDING select for the currently-selected FROM
    *  island — transport buildings that don't already own a route. */
   function buildBuildingOptions(): void {
-    const island = deps.islandSpecs.get(fromSel.value);
     buildingSel.replaceChildren();
+    // From="all" picks each island's best free building automatically — there's
+    // no single building to choose, so the Via picker is inert.
+    if (fromSel.value === ROUTE_ALL) {
+      const o = document.createElement('option');
+      o.value = '';
+      o.textContent = '(best free building per island)';
+      buildingSel.appendChild(o);
+      buildingSel.disabled = true;
+      return;
+    }
+    const island = deps.islandSpecs.get(fromSel.value);
     const eligible = island
       ? eligibleTransportBuildings(island, deps.world.routes)
       : [];
@@ -618,6 +641,18 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
       commitBtn.style.opacity = '0.5';
       commitBtn.style.cursor = 'not-allowed';
     };
+    const accept = (msg: string): void => {
+      formReadout.textContent = msg;
+      commitBtn.disabled = false;
+      commitBtn.style.opacity = '1';
+      commitBtn.style.cursor = 'pointer';
+    };
+    // §2.4 merged-route preview: "all" on either side spawns a group of routes.
+    if (fromId === ROUTE_ALL || toId === ROUTE_ALL) {
+      const plan = planMergedRoutes(deps.world.islands, deps.world.routes, fromId, toId);
+      if (plan.length === 0) return reject('no eligible routes');
+      return accept(`merged · ${plan.length} route${plan.length === 1 ? '' : 's'}`);
+    }
     if (!spec1 || !spec2) return reject('');
     if (fromId === toId) return reject('pick distinct endpoints');
     if (!building || !profile) return reject('no transport building available');
@@ -643,6 +678,27 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     const fromId = fromSel.value;
     const toId = toSel.value;
     const cargoChoice = cargoSel.value;
+    const filter = cargoChoice === '__any__' ? null : (cargoChoice as ResourceId);
+    // §2.4 merged-route shortcut: expand "all" into one grouped batch of routes.
+    if (fromId === ROUTE_ALL || toId === ROUTE_ALL) {
+      const plan = planMergedRoutes(deps.world.islands, deps.world.routes, fromId, toId);
+      if (plan.length === 0) return;
+      const gid = nextGroupId();
+      for (const p of plan) {
+        if (deps.gateway) {
+          await deps.gateway.createRoute(p.fromId, p.toId, p.buildingId, filter, gid);
+        } else {
+          const fs = deps.islandSpecs.get(p.fromId);
+          const ts = deps.islandSpecs.get(p.toId);
+          const b = fs?.buildings.find((bb) => bb.id === p.buildingId);
+          if (!fs || !ts || !b) continue;
+          const route = createRouteFromBuilding(b, p.fromId, p.toId, filter, Math.hypot(fs.cx - ts.cx, fs.cy - ts.cy));
+          if (route) { route.groupId = gid; deps.world.routes.push(route); }
+        }
+      }
+      refresh(performance.now());
+      return;
+    }
     const spec1 = deps.islandSpecs.get(fromId);
     const spec2 = deps.islandSpecs.get(toId);
     if (!spec1 || !spec2 || fromId === toId) return;
@@ -710,22 +766,49 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
       : deps.world.routes.filter((r) => r.from === filterId);
     ledgerR.textContent = `${routes.length}`;
 
-    // Only touch the DOM tree when the route SET or any row's structure
-    // changes. Steady-state (just ETA/in-flight ticking) skips straight to
-    // the in-place `update` pass below.
-    const sig = filterId + '\u001e' + routes.map(routeRowStructKey).join('\u001e');
+    // §2.4 merged groups collapse to ONE ledger unit: each grouped route folds
+    // into a `g:<groupId>` unit (first occurrence fixes order), ungrouped routes
+    // are their own `<routeId>` unit.
+    type LedgerUnit = { key: string; structKey: string; build: () => LedgerRowEntry };
+    const units: LedgerUnit[] = [];
+    const groupMembers = new Map<string, Route[]>();
+    for (const route of routes) {
+      const gid = route.groupId;
+      if (gid !== undefined) {
+        let members = groupMembers.get(gid);
+        if (members === undefined) {
+          members = [];
+          groupMembers.set(gid, members);
+          const m = members;
+          units.push({ key: `g:${gid}`, structKey: '', build: () => renderMergedRow(gid, m, nowMs) });
+        }
+        members.push(route);
+      } else {
+        units.push({ key: route.id, structKey: routeRowStructKey(route), build: () => renderLedgerRow(route, routeRowStructKey(route), nowMs) });
+      }
+    }
+    // Group structKeys depend on full membership — fill in after the fold.
+    for (const u of units) {
+      if (u.key.startsWith('g:')) {
+        const m = groupMembers.get(u.key.slice(2)) ?? [];
+        u.structKey = `g:${m.length}:` + m.map(routeRowStructKey).join(',');
+      }
+    }
+
+    // Only touch the DOM tree when the unit SET or any unit's structure changes.
+    const sig = filterId + '' + units.map((u) => u.key + '=' + u.structKey).join('');
     if (sig !== lastLedgerSig) {
       lastLedgerSig = sig;
       const seen = new Set<string>();
       const children: HTMLElement[] = [];
-      for (const route of routes) {
-        const structKey = routeRowStructKey(route);
-        let entry = rowCache.get(route.id);
-        if (!entry || entry.structKey !== structKey) {
-          entry = renderLedgerRow(route, structKey, nowMs);
-          rowCache.set(route.id, entry);
+      for (const u of units) {
+        let entry = rowCache.get(u.key);
+        if (entry === undefined || entry.structKey !== u.structKey) {
+          entry = u.build();
+          entry.structKey = u.structKey;
+          rowCache.set(u.key, entry);
         }
-        seen.add(route.id);
+        seen.add(u.key);
         children.push(entry.row);
       }
       for (const id of [...rowCache.keys()]) {
@@ -734,9 +817,100 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
       ledgerList.replaceChildren(...(children.length === 0 ? [ledgerEmpty] : children));
     }
 
-    for (const route of routes) {
-      rowCache.get(route.id)?.update(nowMs);
+    for (const u of units) {
+      rowCache.get(u.key)?.update(nowMs);
     }
+  }
+
+  /** §2.4 merged-route row: a single collapsed entry for all routes sharing
+   *  `groupId`. Cancel and retarget act on EVERY member together; each member
+   *  still ticks as its own route. Members are re-resolved live by groupId. */
+  function renderMergedRow(groupId: string, members: Route[], nowMs: number): LedgerRowEntry {
+    const live = (): Route[] => deps.world.routes.filter((r) => r.groupId === groupId);
+    const row = document.createElement('div');
+    styled(row, [
+      'display: flex', 'flex-direction: column', 'gap: 2px', 'padding: 4px 6px',
+      `border-left: 2px solid ${'var(--ri-accent)'}`, 'background: rgba(125, 211, 232, 0.07)',
+    ].join(';'));
+
+    const top = document.createElement('div');
+    styled(top, 'display: flex; justify-content: space-between; align-items: baseline; gap: 6px');
+    const idEl = document.createElement('span');
+    idEl.textContent = `⛓ MERGED · ${members.length}`;
+    styled(idEl, `color: ${'var(--ri-accent)'}; font-size: 10px; letter-spacing: 0.08em; font-weight: 600`);
+    top.appendChild(idEl);
+
+    const right = document.createElement('div');
+    styled(right, 'display: flex; align-items: baseline; gap: 6px');
+    const delBtn = document.createElement('button');
+    delBtn.textContent = '✕';
+    delBtn.title = 'cancel ALL routes in this merged group (finishes in-flight cargo, then removes)';
+    delBtn.classList.add('ri-delbtn');
+    styled(delBtn, ['width: 16px', 'height: 16px', 'line-height: 0', 'font-size: 10px'].join(';'));
+    delBtn.addEventListener('click', async () => {
+      for (const r of live()) {
+        if (deps.gateway) await deps.gateway.deleteRoute(r.id);
+        else if (r.inFlight.length === 0) {
+          const idx = deps.world.routes.indexOf(r);
+          if (idx >= 0) deps.world.routes.splice(idx, 1);
+        } else r.draining = true;
+      }
+      refresh(performance.now());
+    });
+    right.appendChild(delBtn);
+
+    const reSel = document.createElement('select');
+    reSel.title = 'retarget the whole group — drains each member to its current target, then re-routes all to one island';
+    styled(reSel, ['font-size: 9px', 'max-width: 96px', 'background: transparent', `color: ${'var(--ri-accent)'}`].join(';'));
+    const ph = document.createElement('option');
+    ph.value = '';
+    ph.textContent = '↪ retarget all…';
+    reSel.appendChild(ph);
+    for (const isl of deps.world.islands) {
+      if (!isl.populated) continue;
+      const opt = document.createElement('option');
+      opt.value = isl.id;
+      opt.textContent = islandLabel(isl.id);
+      reSel.appendChild(opt);
+    }
+    reSel.addEventListener('change', async () => {
+      const target = reSel.value;
+      if (!target) return;
+      for (const r of live()) {
+        if (r.from === target || r.to === target) continue; // skip no-op / self
+        if (deps.gateway) await deps.gateway.retargetRoute(r.id, target);
+        else retargetRoutePure(deps.world, r.id, target);
+      }
+      refresh(performance.now());
+    });
+    right.appendChild(reSel);
+    top.appendChild(right);
+    row.appendChild(top);
+
+    const meta = document.createElement('div');
+    styled(meta, 'display: flex; justify-content: space-between');
+    const sum = document.createElement('span');
+    sum.classList.add('ri-mono');
+    styled(sum, `color: ${'var(--ri-fg-3)'}; font-size: 9.5px`);
+    meta.appendChild(sum);
+    row.appendChild(meta);
+
+    function update(now: number): void {
+      const ms = live();
+      if (ms.length === 0) { sum.textContent = ''; return; }
+      let cap = 0;
+      let pkg = 0;
+      let draining = 0;
+      for (const r of ms) {
+        cap += routeEffectiveCapacity(deps.world, deps.islandStates, r, now, deps.weatherWallOffsetMs ?? 0).throttled;
+        pkg += r.inFlight.length;
+        if (r.draining) draining += 1;
+      }
+      sum.textContent = `${ms.length} route${ms.length === 1 ? '' : 's'} · ΣCAP ${cap.toFixed(2)} u/s · ${pkg} pkg`
+        + (draining > 0 ? ` · ${draining} draining` : '');
+    }
+    update(nowMs);
+    return { structKey: '', row, update };
   }
 
   function renderLedgerRow(route: Route, structKey: string, nowMs: number): LedgerRowEntry {

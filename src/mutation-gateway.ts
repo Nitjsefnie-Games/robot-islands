@@ -217,6 +217,9 @@ export interface MutationGateway {
     toIslandId: string,
     buildingId: string,
     filterResource?: ResourceId | null,
+    /** §2.4 merged-route group handle — stamped on the created route so the
+     *  ledger can collapse same-group members into one row. */
+    groupId?: string,
   ): GatewayReturn;
   deleteRoute(routeId: string): GatewayReturn;
   /** §2.4 retarget: drain `routeId` and re-create it to `toIslandId`. */
@@ -711,7 +714,7 @@ export function makeLocalGateway(
       return ok();
     },
 
-    createRoute(fromIslandId, toIslandId, buildingId, filterResource) {
+    createRoute(fromIslandId, toIslandId, buildingId, filterResource, groupId) {
       const fromSpec = world.islands.find((s) => s.id === fromIslandId);
       const toSpec = world.islands.find((s) => s.id === toIslandId);
       if (!fromSpec) return err('unknown from island');
@@ -740,6 +743,7 @@ export function makeLocalGateway(
         dist,
       );
       if (!route) return err('route could not be created');
+      if (groupId !== undefined) route.groupId = groupId;
       world.routes.push(route);
       return ok();
     },
@@ -1039,8 +1043,8 @@ export function makeRemoteGateway(client: GameServerClient): MutationGateway {
       return send('tier-reset', { islandId, nowMs });
     },
 
-    createRoute(fromIslandId, toIslandId, buildingId, filterResource) {
-      return send('create-route', { fromIslandId, toIslandId, buildingId, filterResource });
+    createRoute(fromIslandId, toIslandId, buildingId, filterResource, groupId) {
+      return send('create-route', { fromIslandId, toIslandId, buildingId, filterResource, groupId });
     },
     deleteRoute(routeId) {
       return send('delete-route', { routeId });
