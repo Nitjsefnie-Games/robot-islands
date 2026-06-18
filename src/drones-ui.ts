@@ -38,7 +38,7 @@ import { CELL_SIZE_TILES, parseCellKey } from './discovery.js';
 import { fuelForTier } from './recipes.js';
 import { activeFloors } from './floor-levels.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
-import { effectiveSkillMultipliers, tierForLevel } from './skilltree.js';
+import { effectiveIslandTier, effectiveSkillMultipliers, tierForLevel } from './skilltree.js';
 import { tileToWorldPx, VISION_BLUE, type IslandSpec, type WorldState } from './world.js';
 import { type MutationGateway } from './mutation-gateway.js';
 
@@ -1155,7 +1155,10 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     // island that downgrades (tier reset) doesn't keep launching invalid
     // tiers. Default to the island's tier on first arming if selectedTier
     // was never explicitly chosen via the picker.
-    const islandTier = tierForLevel(origin.level);
+    // #134: T6 has no level threshold — it's gated by Ascendant Core +
+    // Spaceport. Use the composite tier so a fully-T6 island enables the T6
+    // option instead of capping at T5.
+    const islandTier = effectiveIslandTier(origin, originSpec);
     if (selectedTier > islandTier) {
       selectedTier = islandTier as DroneTier;
     }

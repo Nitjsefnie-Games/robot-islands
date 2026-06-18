@@ -22,7 +22,7 @@ import {
   type RateSample,
 } from './rate-history.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
-import { hasPickableSkill, tierForLevel, type Tier } from './skilltree.js';
+import { effectiveIslandTier, hasPickableSkill, type Tier } from './skilltree.js';
 import { islandHasSignalExchange } from './trade.js';
 import { canTierReset } from './tier-reset.js';
 import { toDisplayName } from './ui-tokens.js';
@@ -803,7 +803,11 @@ export function mountHud(
     _islandPower: Map<string, PowerBalance>,
   ): void {
     setTitle(spec.name);
-    const tier = tierForLevel(state.level);
+    // #134: surface the composite tier so a fully-T6 island (Ascendant Core +
+    // Spaceport) reads "T6 · Biome" instead of capping at T5. T6 has no level
+    // threshold, so the XP block's tier>=5 "MAX ISLAND TIER" branch correctly
+    // covers both the top level-band (T5) and T6.
+    const tier = effectiveIslandTier(state, spec);
     const biomeName = BIOME_DEFS[spec.biome].displayName;
     setSub(`T${tier} · ${biomeName}`);
 
