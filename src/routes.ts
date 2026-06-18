@@ -1379,6 +1379,9 @@ export function retargetRoute(
   // Carry the player's cargo config + split mode onto the retargeted route.
   next.cargo = old.cargo.map((c) => ({ ...c }));
   next.mode = old.mode;
+  // Preserve §2.4 merged-group membership so retargeting a member (per-route or
+  // via the group op) keeps it in the merged ledger row instead of orphaning it.
+  if (old.groupId !== undefined) next.groupId = old.groupId;
   world.routes.push(next);
   // Drain the old route (or drop it outright if nothing is in flight).
   if (old.inFlight.length === 0) {

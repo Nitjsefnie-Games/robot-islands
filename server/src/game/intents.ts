@@ -42,6 +42,8 @@ import { dispatchDrone, firePulse, type DroneTier } from '../../../src/drones.js
 import {
   createRouteFromBuilding,
   drainRoutesForBuilding,
+  nextGroupId,
+  planMergedRoutes,
   retargetRoute,
   routeProfileForBuilding,
   islandHasTeleporterPad,
@@ -523,6 +525,50 @@ export const INTENTS: Record<string, IntentHandler> = {
       if (route === null) return { ok: false, error: 'route could not be created' };
       if (typeof groupId === 'string') route.groupId = groupId;
       game.world.routes.push(route);
+      return { ok: true };
+    },
+  },
+
+  // create-route-group — §2.4 merged-route shortcut. Player supplies
+  // { fromSel, toSel, filterResource } where fromSel/toSel are island ids or
+  // 'all'. The server expands authoritatively (`planMergedRoutes`) and creates
+  // every member under one fresh shared groupId in this single intent — so a
+  // 20-island fan-out is one request, not 20. Each member is still validated
+  // exactly like `create-route`.
+  'create-route-group': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { fromSel, toSel, filterResource } = payload;
+      if (typeof fromSel !== 'string') return { ok: false, error: 'fromSel must be a string' };
+      if (typeof toSel !== 'string') return { ok: false, error: 'toSel must be a string' };
+      if (filterResource !== undefined && filterResource !== null && typeof filterResource !== 'string') {
+        return { ok: false, error: 'filterResource must be a string when present' };
+      }
+      if (typeof filterResource === 'string' && !isValidResourceId(filterResource)) {
+        return { ok: false, error: 'unknown filterResource' };
+      }
+      const filter = (filterResource === undefined || filterResource === null) ? null : (filterResource as ResourceId);
+      const plan = planMergedRoutes(game.world.islands, game.world.routes, fromSel, toSel);
+      if (plan.length === 0) return { ok: false, error: 'no eligible routes' };
+      const groupId = nextGroupId();
+      let created = 0;
+      for (const p of plan) {
+        const fromSpec = game.world.islands.find((s) => s.id === p.fromId);
+        const toSpec = game.world.islands.find((s) => s.id === p.toId);
+        if (!fromSpec || !toSpec || !fromSpec.populated || !toSpec.populated) continue;
+        const building = fromSpec.buildings.find((b) => b.id === p.buildingId);
+        if (!building) continue;
+        const profile = routeProfileForBuilding(building.defId);
+        if (profile === null) continue;
+        if (profile.type === 'teleporter' && !islandHasTeleporterPad(toSpec)) continue;
+        const dist = Math.hypot(fromSpec.cx - toSpec.cx, fromSpec.cy - toSpec.cy);
+        const route = createRouteFromBuilding(building, p.fromId, p.toId, filter, dist);
+        if (route === null) continue;
+        route.groupId = groupId;
+        game.world.routes.push(route);
+        created += 1;
+      }
+      if (created === 0) return { ok: false, error: 'no routes created' };
       return { ok: true };
     },
   },
