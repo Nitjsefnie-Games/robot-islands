@@ -362,15 +362,15 @@ export function routeSourceTile(
   if (!island) return null;
   const b = island.buildings.find((bb) => bb.id === route.sourceBuildingId);
   if (!b) return null;
-  // Building x/y are island-LOCAL offsets to the footprint's NW corner; the
-  // world tile adds the island centre (cx + b.x) PLUS half the footprint so the
-  // route launches from the building's CENTRE, not its corner — same convention
-  // as antenna.ts / drones.ts pad placement. A multi-tile building (e.g. a 4×4
-  // Mass Driver) therefore starts its route at its middle, not tile [0,0].
+  // Building x/y are island-LOCAL offsets to the footprint's NW tile. Tile
+  // coordinates address tile CENTRES (tileToWorldPx maps an integer tile coord
+  // to that tile's centre), so the NW tile's centre is (cx + b.x, cy + b.y) and
+  // the footprint CENTRE is a further (W-1)/2 tiles in (0 for a 1×1, 0.5 for a
+  // 2×2, 1.5 for a 4×4). Using W/2 here overshot by half a tile.
   const def = BUILDING_DEFS[b.defId as BuildingDefId];
-  const halfW = def ? shapeWidth(def.footprint) / 2 : 0.5;
-  const halfH = def ? shapeHeight(def.footprint) / 2 : 0.5;
-  return { x: island.cx + b.x + halfW, y: island.cy + b.y + halfH };
+  const offX = def ? (shapeWidth(def.footprint) - 1) / 2 : 0;
+  const offY = def ? (shapeHeight(def.footprint) - 1) / 2 : 0;
+  return { x: island.cx + b.x + offX, y: island.cy + b.y + offY };
 }
 
 /**
