@@ -626,8 +626,9 @@ function totalInboundInFlight(
 
 /** Headroom for receiving more `r` at the destination right now: capacity
  *  minus current inventory minus any in-flight units already addressed here.
- *  Clamped to 0 (can't be negative). */
-function destinationHeadroom(
+ *  Clamped to 0 (can't be negative). Exported for the route-throttle diagnosis
+ *  (`route-throttle.ts`) so the ledger badge reuses the exact dispatch gate. */
+export function destinationHeadroom(
   world: WorldState,
   states: Map<string, IslandState>,
   destIslandId: string,
