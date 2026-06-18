@@ -400,3 +400,64 @@ describe('makeRemoteGateway — rename / edit-biome / construct-island forwardin
     expect(captured).toEqual({ type: 'rename-island', payload: { islandId: 'home', name: 'x' } });
   });
 });
+
+function makeT5CargoRoute() {
+  const { world, islandStates, home, colony } = makeTwoPopulatedIslands();
+  islandStates.get('home')!.level = 50; // tier 5
+  const gateway = makeLocalGateway(world, islandStates);
+  const create = unwrapGatewayResult(gateway.createRoute('home', colony.id, 'dock-1', 'wood'));
+  expect(create.ok).toBe(true);
+  const route = world.routes[0]!;
+  return { world, islandStates, gateway, route, home, colony };
+}
+
+describe('makeLocalGateway — setRouteWaypoints', () => {
+  it('sets waypoints on a T5 cargo route', () => {
+    const { gateway, route } = makeT5CargoRoute();
+    const result = gateway.setRouteWaypoints(route.id, [{ x: 10, y: 20 }]);
+    expect(result).toEqual({ ok: true });
+    expect(route.waypoints).toEqual([{ x: 10, y: 20 }]);
+  });
+
+  it('unbends a route with an empty waypoint list', () => {
+    const { gateway, route } = makeT5CargoRoute();
+    unwrapGatewayResult(gateway.setRouteWaypoints(route.id, [{ x: 10, y: 20 }]));
+    const result = gateway.setRouteWaypoints(route.id, []);
+    expect(result).toEqual({ ok: true });
+    expect(route.waypoints).toBeUndefined();
+  });
+
+  it('rejects a non-T5 source island', () => {
+    const { world, islandStates, colony } = makeTwoPopulatedIslands();
+    const gateway = makeLocalGateway(world, islandStates);
+    const create = unwrapGatewayResult(gateway.createRoute('home', colony.id, 'dock-1', 'wood'));
+    expect(create.ok).toBe(true);
+    const route = world.routes[0]!;
+    const result = gateway.setRouteWaypoints(route.id, [{ x: 10, y: 20 }]);
+    expect(result).toEqual({ ok: false, error: 'source island not T5' });
+  });
+
+  it('rejects >4 waypoints', () => {
+    const { gateway, route } = makeT5CargoRoute();
+    const result = gateway.setRouteWaypoints(route.id, [
+      { x: 1, y: 1 }, { x: 2, y: 2 }, { x: 3, y: 3 }, { x: 4, y: 4 }, { x: 5, y: 5 },
+    ]);
+    expect(result).toEqual({ ok: false, error: 'at most 4 bend points' });
+  });
+});
+
+describe('makeRemoteGateway — setRouteWaypoints forwarding', () => {
+  it('forwards set-route-waypoints', async () => {
+    let captured: { type: string; payload: unknown } | null = null;
+    const client: GameServerClient = {
+      sendIntent(type: string, payload: unknown) {
+        captured = { type, payload };
+        return Promise.resolve({ seq: 1, ok: true });
+      },
+      close() {},
+    };
+    const gateway = makeRemoteGateway(client);
+    await gateway.setRouteWaypoints('r1', [{ x: 10, y: 20 }]);
+    expect(captured).toEqual({ type: 'set-route-waypoints', payload: { routeId: 'r1', waypoints: [{ x: 10, y: 20 }] } });
+  });
+});
