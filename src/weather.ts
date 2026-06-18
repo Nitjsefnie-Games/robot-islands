@@ -1,7 +1,7 @@
 import { BUILDING_DEFS } from './building-defs.js';
 import { isOperationalBuilding } from './building-operational.js';
 import { CELL_SIZE_TILES } from './constants.js';
-import { dayPhaseName } from './daynight.js';
+import { dayPhaseName, DAY_DURATION_MS } from './daynight.js';
 import { LIGHTHOUSE_VISION_RADII } from './lighthouse.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
 import { makeSeededRng } from './rng.js';
@@ -211,6 +211,31 @@ const MAX_ITERATIONS = 1_000_000;
 const SEGMENT_RING_SIZE = 4;
 const MAX_CACHE_ENTRIES = 4096;
 
+// §2.6: the dwell timeline REPEATS every WEATHER_PERIOD_MS instead of running
+// from the unix epoch. Walking from t=0 to a wall-clock-epoch `now` (~1.78e12
+// ms) at 30 min – 4 h dwells is ~220k iterations PER cell — on a cold page load
+// (empty `weatherCache`) the weather overlay's first refresh cold-walks every
+// visible cell, which froze the main thread for ~50 s on a large save. Anchoring
+// modulo a fixed period bounds the cold walk to PERIOD / MIN_DWELL (≈ 4.3k worst
+// case, ~975 typical) — a ~225× cut. The period is an integer number of DAYS so
+// the day/night phase (`dayPhaseName`, period = DAY_DURATION_MS) stays continuous
+// across the wrap; only the single random dwell straddling the period boundary is
+// truncated (a once-per-90-days, sub-cell discontinuity). Trade-off: weather now
+// repeats with this period instead of being unique forever (spec §2.6).
+export const WEATHER_PERIOD_MS = 90 * DAY_DURATION_MS; // ~3 months
+
+/** Non-negative modulo (JS `%` keeps the sign of the dividend). */
+function modPeriod(t: number): number {
+  return ((t % WEATHER_PERIOD_MS) + WEATHER_PERIOD_MS) % WEATHER_PERIOD_MS;
+}
+
+/** Translate a walker-domain (modular, [0, PERIOD)) cell back into the caller's
+ *  wall-clock domain by re-adding the period base, so the public WeatherCell
+ *  API stays in wall time (consumers compute `untilMs - nowMs` etc.). */
+function toWallCell(cell: WeatherCell, periodBase: number): WeatherCell {
+  return { state: cell.state, sinceMs: cell.sinceMs + periodBase, untilMs: cell.untilMs + periodBase };
+}
+
 interface DwellSegment {
   state: WeatherState;
   sinceMs: number;
@@ -312,6 +337,10 @@ export function weather(
   totalCo2Kg: number = 0,
 ): WeatherCell {
   const co2Mul = co2WeatherMultiplier(totalCo2Kg);
+  // §2.6: collapse `nowMs` onto the repeating dwell timeline. `tMod` is the
+  // walk position; `periodBase` lifts results back to wall time on return.
+  const tMod = modPeriod(nowMs);
+  const periodBase = nowMs - tMod;
   const key = `${seed}|${cx}|${cy}`;
   let walker = weatherCache.get(key);
   if (walker && (walker.co2Mul !== co2Mul || walker.biome !== biome)) {
@@ -322,28 +351,35 @@ export function weather(
   }
   if (walker) {
     const earliest = walker.segments[0];
-    if (earliest && nowMs < earliest.sinceMs) {
-      // Backward query (before the retained window) — cold walk, exactly
-      // the original code path, WITHOUT touching the cached walker.
-      return advanceWalker(makeWalker(seed, cx, cy, biome, co2Mul), nowMs);
+    if (earliest && tMod < earliest.sinceMs) {
+      // Query before the retained window — almost always a PERIOD WRAP (tMod
+      // jumped back to ~0 as wall time crossed a period boundary). Rebuild and
+      // RE-CACHE: the modular timeline repeats identically each period, so a
+      // fresh walk to tMod is the correct answer, and recaching keeps the rest
+      // of this period on the cheap forward-resume path instead of cold-walking
+      // every frame. (A genuine backward in-period query is rare and also gets
+      // the correct deterministic cold answer.)
+      const rebuilt = makeWalker(seed, cx, cy, biome, co2Mul);
+      weatherCache.set(key, rebuilt);
+      return toWallCell(advanceWalker(rebuilt, tMod), periodBase);
     }
-    // Retained segments are contiguous and end at walker.t, so any nowMs in
+    // Retained segments are contiguous and end at walker.t, so any tMod in
     // [earliest.sinceMs, walker.t) is inside one of them.
     for (const seg of walker.segments) {
-      if (nowMs >= seg.sinceMs && nowMs < seg.untilMs) {
-        return { state: seg.state, sinceMs: seg.sinceMs, untilMs: seg.untilMs };
+      if (tMod >= seg.sinceMs && tMod < seg.untilMs) {
+        return toWallCell(seg, periodBase);
       }
     }
-    // nowMs >= walker.t — resume the walk with the SAME rng instance; the
+    // tMod >= walker.t — resume the walk with the SAME rng instance; the
     // sequence continues deterministically, bit-identical to a cold walk.
-    return advanceWalker(walker, nowMs);
+    return toWallCell(advanceWalker(walker, tMod), periodBase);
   }
   if (weatherCache.size >= MAX_CACHE_ENTRIES) {
     weatherCache.clear(); // cells in play are a few hundred; wholesale reset is fine
   }
   const fresh = makeWalker(seed, cx, cy, biome, co2Mul);
   weatherCache.set(key, fresh);
-  return advanceWalker(fresh, nowMs);
+  return toWallCell(advanceWalker(fresh, tMod), periodBase);
 }
 
 /** Baseline weather visibility radius around any populated island, in tile
