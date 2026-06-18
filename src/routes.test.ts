@@ -8,6 +8,7 @@ import {
 } from './drones.js';
 import {
   _resetRouteIdCounter,
+  canBendRoute,
   computeCableNetworkBalance,
   createRouteFromBuilding,
   deliverArrivals,
@@ -30,6 +31,7 @@ import {
   routeFloorMultiplier,
   routePolylinePoints,
   routeProfileForBuilding,
+  setRouteWaypoints,
   reorderPriorityList,
   tickRoutes,
   type Route,
@@ -210,6 +212,15 @@ describe('retargetRoute — §2.4 change destination', () => {
     expect(res.route.mode).toBe('split');
     expect(res.route.cargo.map((c) => c.resourceId)).toEqual(['iron_ore', 'coal']);
     expect(world.routes).toContain(res.route);
+  });
+
+  it('retargeted route has no waypoints (fresh createRouteFromBuilding)', () => {
+    const { world, route } = setup();
+    route.waypoints = [{ x: 5, y: 5 }];
+    const res = retargetRoute(world, route.id, 'c');
+    expect(res.ok).toBe(true);
+    if (!res.ok) return;
+    expect(res.route.waypoints).toBeUndefined();
   });
 
   it('removes the old route immediately when nothing is in flight', () => {
@@ -2358,5 +2369,114 @@ describe('§2.6 bent route dispatch uses polyline weather + transit', () => {
     ]);
     const ratio = routeBentLengthTiles(bent.route, islandIndex) / 6;
     expect(bent.arrivalTime).toBeCloseTo(straight.arrivalTime * ratio, 5);
+  });
+});
+
+
+describe('setRouteWaypoints — §2.6 bend gating', () => {
+  function setup(sourceLevel: number) {
+    const src = makeState('a', { level: sourceLevel });
+    const dst = makeState('b');
+    const world = makeWorld([], [
+      makeIslandSpec('a', 0, 0),
+      makeIslandSpec('b', 40, 0),
+    ]);
+    const route = cargoRoute('a', 'b', 'iron_ore');
+    world.routes.push(route);
+    const states = new Map<string, IslandState>([['a', src], ['b', dst]]);
+    return { world, route, states };
+  }
+
+  it('rejects when source island below T5', () => {
+    const { world, route, states } = setup(1);
+    const r = setRouteWaypoints(world, states, route.id, [{ x: 10, y: 10 }]);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toBe('source island not T5');
+  });
+
+  it('rejects non-bendable route type (teleporter)', () => {
+    const { world, states } = setup(50);
+    const route: Route = { ...cargoRoute('a', 'b', 'iron_ore'), type: 'teleporter' };
+    world.routes[0] = route;
+    const r = setRouteWaypoints(world, states, route.id, [{ x: 10, y: 10 }]);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toBe('route type cannot be bent');
+  });
+
+  it('rejects more than MAX_ROUTE_BENDS waypoints', () => {
+    const { world, route, states } = setup(50);
+    const pts = Array.from({ length: 5 }, (_, i) => ({ x: i * 2, y: i * 2 }));
+    const r = setRouteWaypoints(world, states, route.id, pts);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toBe('at most 4 bend points');
+  });
+
+  it('rejects non-finite waypoint coordinates', () => {
+    const { world, route, states } = setup(50);
+    const r = setRouteWaypoints(world, states, route.id, [{ x: NaN, y: 0 }]);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toBe('waypoint coords must be finite numbers');
+  });
+
+  it('rejects a draining route', () => {
+    const { world, route, states } = setup(50);
+    route.draining = true;
+    const r = setRouteWaypoints(world, states, route.id, [{ x: 10, y: 10 }]);
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.error).toBe('route is draining');
+  });
+
+  it('sets waypoints on a T5 cargo route and returns ok', () => {
+    const { world, route, states } = setup(50);
+    const pts = [{ x: 10, y: 10 }, { x: 20, y: 5 }];
+    const r = setRouteWaypoints(world, states, route.id, pts);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.route).toBe(route);
+    expect(route.waypoints).toEqual(pts);
+  });
+
+  it('sets waypoints on a T5 drone route and returns ok', () => {
+    const { world, states } = setup(50);
+    const route: Route = { ...cargoRoute('a', 'b', 'iron_ore'), type: 'drone' };
+    world.routes[0] = route;
+    const pts = [{ x: 8, y: 8 }];
+    const r = setRouteWaypoints(world, states, route.id, pts);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(route.waypoints).toEqual(pts);
+  });
+
+  it('clears waypoints when called with an empty array (unbend)', () => {
+    const { world, route, states } = setup(50);
+    route.waypoints = [{ x: 10, y: 10 }];
+    const r = setRouteWaypoints(world, states, route.id, []);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(route.waypoints).toBeUndefined();
+  });
+
+  it('canBendRoute is true for T5 cargo and false for T4 cargo', () => {
+    const t5 = setup(50);
+    expect(canBendRoute(t5.route, t5.world, t5.states)).toBe(true);
+
+    const t4 = setup(30);
+    expect(canBendRoute(t4.route, t4.world, t4.states)).toBe(false);
+  });
+
+  it('canBendRoute is false for non-bendable types and draining routes', () => {
+    const { world, route: cargo, states } = setup(50);
+    const teleporterRoute: Route = { ...cargoRoute('a', 'b', 'iron_ore'), type: 'teleporter' };
+    world.routes[0] = teleporterRoute;
+    expect(canBendRoute(teleporterRoute, world, states)).toBe(false);
+
+    world.routes[0] = cargo;
+    cargo.draining = true;
+    expect(canBendRoute(cargo, world, states)).toBe(false);
   });
 });

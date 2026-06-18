@@ -26,7 +26,7 @@ import {
 import { makeSeededRng } from './rng.js';
 import { solveBrownoutFactor } from './flow-power-fixpoint.js';
 import { XP_WEIGHT, type ResourceId } from './recipes.js';
-import { effectiveSkillMultipliers, type SkillMultipliers } from './skilltree.js';
+import { effectiveSkillMultipliers, tierForLevel, type SkillMultipliers } from './skilltree.js';
 import {
   biomeForCell,
   routeCapacityMultiplierForCells,
@@ -1226,6 +1226,46 @@ export function retargetRoute(
     old.draining = true;
   }
   return { ok: true, route: next };
+}
+
+export function canBendRoute(
+  route: Route, _world: WorldState, states: ReadonlyMap<string, IslandState>,
+): boolean {
+  if (!isBendableRouteType(route.type)) return false;
+  if (route.draining) return false;
+  const srcState = states.get(route.from);
+  if (!srcState) return false;
+  return tierForLevel(srcState.level) >= 5;
+}
+
+export type SetWaypointsResult =
+  | { readonly ok: true; readonly route: Route }
+  | { readonly ok: false; readonly error: string };
+
+/** §2.6 set (or clear, with []) a route's bend points. Validates the route is
+ *  bendable (type), source island is T5, ≤ MAX_ROUTE_BENDS finite points, and
+ *  not draining. Mutates route.waypoints in place. Empty array clears (unbend). */
+export function setRouteWaypoints(
+  world: WorldState,
+  states: ReadonlyMap<string, IslandState>,
+  routeId: string,
+  waypoints: ReadonlyArray<{ x: number; y: number }>,
+): SetWaypointsResult {
+  const route = world.routes.find((r) => r.id === routeId);
+  if (!route) return { ok: false, error: 'route not found' };
+  if (route.draining) return { ok: false, error: 'route is draining' };
+  if (!isBendableRouteType(route.type)) return { ok: false, error: 'route type cannot be bent' };
+  const srcState = states.get(route.from);
+  if (!srcState) return { ok: false, error: 'source island state missing' };
+  if (tierForLevel(srcState.level) < 5) return { ok: false, error: 'source island not T5' };
+  if (waypoints.length > MAX_ROUTE_BENDS) return { ok: false, error: `at most ${MAX_ROUTE_BENDS} bend points` };
+  for (const w of waypoints) {
+    if (typeof w.x !== 'number' || typeof w.y !== 'number' || !Number.isFinite(w.x) || !Number.isFinite(w.y)) {
+      return { ok: false, error: 'waypoint coords must be finite numbers' };
+    }
+  }
+  route.waypoints = waypoints.length > 0 ? waypoints.map((w) => ({ x: w.x, y: w.y })) : undefined;
+  return { ok: true, route };
 }
 
 /** Soft-delete every route owned by `buildingId` (set on demolish). The
