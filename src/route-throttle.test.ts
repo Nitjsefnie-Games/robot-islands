@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { routeThrottleReason } from './route-throttle.js';
+import { routeThrottleReason, throttleBadge } from './route-throttle.js';
 import type { Route } from './routes.js';
 import { type IslandState } from './economy.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
@@ -80,6 +80,14 @@ describe('routeThrottleReason', () => {
     const { world, states, route } = setup(50, 0, 100);
     route.cargo = [];
     expect(routeThrottleReason(world, states, route)).toBe('idle');
+  });
+
+  it('badges map each reason to text + tone', () => {
+    expect(throttleBadge('flowing')).toEqual({ text: '▶ flowing', tone: 'ok' });
+    expect(throttleBadge('source-empty')).toEqual({ text: '⏸ source empty', tone: 'muted' });
+    expect(throttleBadge('dest-full')).toEqual({ text: '⛔ dest full', tone: 'warn' });
+    expect(throttleBadge('draining')).toEqual({ text: 'draining', tone: 'muted' });
+    expect(throttleBadge('idle')).toEqual({ text: 'idle', tone: 'muted' });
   });
 
   it('dest-full when one resource has stock-but-no-room even if another is empty', () => {

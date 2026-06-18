@@ -15,6 +15,19 @@ import type { WorldState } from './world.js';
 export type ThrottleReason =
   | 'draining' | 'idle' | 'flowing' | 'dest-full' | 'source-empty';
 
+/** Presentation for a throttle reason: a short ledger label and a tone the UI
+ *  maps to a colour (`ok` → accent, `warn` → warn, `muted` → dim). Pure so the
+ *  render layer is a thin consumer. */
+export function throttleBadge(reason: ThrottleReason): { text: string; tone: 'ok' | 'warn' | 'muted' } {
+  switch (reason) {
+    case 'flowing': return { text: '▶ flowing', tone: 'ok' };
+    case 'source-empty': return { text: '⏸ source empty', tone: 'muted' };
+    case 'dest-full': return { text: '⛔ dest full', tone: 'warn' };
+    case 'draining': return { text: 'draining', tone: 'muted' };
+    case 'idle': return { text: 'idle', tone: 'muted' };
+  }
+}
+
 /** Resources this route actually tries to carry: explicit cargo entries, plus
  *  every other resource when a wildcard ('all') entry is present. */
 function targetedResources(route: Route): ResourceId[] {
