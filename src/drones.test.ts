@@ -10,6 +10,7 @@ import {
   DRONE_T5_SPEED_TILES_PER_SEC,
   DRONE_TIER_EFFICIENCY,
   DRONE_TIER_SCAN_RADIUS,
+  effectiveDroneScanRadius,
   T4_PULSE_FUEL_COST,
   _resetDroneIdCounter,
   dispatchDrone,
@@ -28,6 +29,7 @@ import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import { type IslandSpec, type WorldState } from './world.js';
 import { computeSignalRanges } from './antenna.js';
 import { displayedFloorLevel } from './buildings.js';
+import { effectiveSkillMultipliers } from './skilltree.js';
 
 function emptyInv(): Record<ResourceId, number> {
   const inv = {} as Record<ResourceId, number>;
@@ -355,6 +357,25 @@ describe('dispatchDrone', () => {
     // Travel time = 60 / 0.5 = 120s → return at 1000 + 120_000. (rebalanced step #19)
     expect(d.expectedReturnTime).toBe(1000 + 120_000);
     expect(d.scanRadius).toBe(DRONE_TIER_SCAN_RADIUS[1]);
+  });
+
+  it('§11.5: bakes the Robotics droneScanRadius skill into the scan corridor', () => {
+    const world = freshWorld();
+    const home = makeIslandState({
+      unlockedNodes: new Set(['robotics.notable.droneOptics']),
+    });
+    home.inventory.biofuel = 50;
+    const mult = effectiveSkillMultipliers(home).droneScanRadius;
+    // The skill must actually widen the corridor, else this proves nothing.
+    expect(mult).toBeGreaterThan(1);
+    const result = dispatchDrone(world, home, 0, 0, 1, 0, 20, 0, undefined, 1);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    // Dispatch and the shared helper agree; both apply the skill multiplier on
+    // top of the per-tier base. The path-mode green preview overlay calls the
+    // same helper, so the preview can't undercount a skilled island's reveal.
+    expect(result.drone.scanRadius).toBeCloseTo(DRONE_TIER_SCAN_RADIUS[1] * mult);
+    expect(effectiveDroneScanRadius(home, 1)).toBeCloseTo(result.drone.scanRadius);
   });
 
   it('normalises a non-unit direction vector', () => {

@@ -120,6 +120,15 @@ export const DRONE_TIER_SCAN_RADIUS: Record<DroneTier, number> = {
 // Alias preserved so existing T5 tests' import stays green.
 export const DRONE_T5_SCAN_RADIUS_TILES = DRONE_TIER_SCAN_RADIUS[5];
 
+/** §11.5 effective drone scan-corridor half-width (tiles) for a launch from
+ *  `state` at `tier`: the per-tier base radius scaled by the island's Robotics
+ *  `droneScanRadius` skill multiplier. Single source of truth shared by
+ *  `dispatchDrone` and the path-mode preview overlay so the green corridor a
+ *  player sees can't drift from the area the drone actually reveals. */
+export function effectiveDroneScanRadius(state: IslandState, tier: DroneTier): number {
+  return DRONE_TIER_SCAN_RADIUS[tier] * effectiveSkillMultipliers(state).droneScanRadius;
+}
+
 /** Path-mode flight speed (tier-independent). Path-drawn drones fly faster
  *  than straight-line drones because they do not reserve fuel/battery for a
  *  return leg; the speed is the same regardless of which tier is selected. */
@@ -473,8 +482,7 @@ export function dispatchDrone(
   const fuelEffMul = originSkill.droneFuelEfficiency;
   const efficiency = DRONE_TIER_EFFICIENCY[resolvedTier] * fuelEffMul;
   const speed = isPathDrawn ? DRONE_T5_SPEED_TILES_PER_SEC : DRONE_SPEED_TILES_PER_SEC;
-  const baseRadius = DRONE_TIER_SCAN_RADIUS[resolvedTier];
-  const scanRadius = baseRadius * originSkill.droneScanRadius;
+  const scanRadius = effectiveDroneScanRadius(origin, resolvedTier);
   const tier: DroneTier = resolvedTier;
 
   let outboundTiles: number;
