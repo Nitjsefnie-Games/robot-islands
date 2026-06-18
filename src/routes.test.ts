@@ -13,19 +13,24 @@ import {
   deliverArrivals,
   dispatchAttempt,
   drainRoutesForBuilding,
+  effectiveTransitTimeSec,
   eligibleTransportBuildings,
   FUNNELING_BONUS_PERCENT,
   FUNNELING_TIER_CAP,
   islandHasTeleporterPad,
+  isBendableRouteType,
   isPowerLink,
+  MAX_ROUTE_BENDS,
   MASS_DRIVER_CAPACITY_UNITS_PER_SEC,
   MASS_DRIVER_DIESEL_PER_UNIT,
   nextRouteId,
   retargetRoute,
+  routeBentLengthTiles,
+  routeCrossedCells,
   routeFloorMultiplier,
+  routePolylinePoints,
   routeProfileForBuilding,
   reorderPriorityList,
-  routeCrossedCells,
   tickRoutes,
   type Route,
 } from './routes.js';
@@ -2259,5 +2264,54 @@ describe('§2.6 in-flight loss recomputed at delivery (no stored crossedCells)',
 
     deliverArrivals(world, states, 100);
     expect(dst.inventory.iron_ore).toBeCloseTo(100, 9);
+  });
+});
+
+
+describe('§2.6 route waypoints + bent path helpers', () => {
+  function specAt(id: string, cx: number, cy: number): IslandSpec {
+    return { id, cx, cy, buildings: [] } as unknown as IslandSpec;
+  }
+  function idx(...specs: IslandSpec[]) { return new Map(specs.map(s => [s.id, s])); }
+  function baseRoute(over: Partial<Route> = {}): Route {
+    return { id: 'r1', from: 'a', to: 'b', type: 'cargo', capacityPerSec: 1, mode: 'priority',
+      cargo: [], transitTimeSec: 40, inFlight: [], ...over } as Route;
+  }
+
+  it('MAX_ROUTE_BENDS is 4 and bendable types exclude teleporter/power links', () => {
+    expect(MAX_ROUTE_BENDS).toBe(4);
+    expect(isBendableRouteType('cargo')).toBe(true);
+    expect(isBendableRouteType('mass_driver')).toBe(true);
+    expect(isBendableRouteType('teleporter')).toBe(false);
+    expect(isBendableRouteType('cable')).toBe(false);
+    expect(isBendableRouteType('spacetime')).toBe(false);
+  });
+
+  it('routePolylinePoints inserts waypoints between island centres', () => {
+    const i = idx(specAt('a', 0, 0), specAt('b', 40, 0));
+    const r = baseRoute({ waypoints: [{ x: 20, y: 20 }] });
+    expect(routePolylinePoints(r, i)).toEqual([{ x: 0, y: 0 }, { x: 20, y: 20 }, { x: 40, y: 0 }]);
+  });
+
+  it('routeBentLengthTiles grows when bent', () => {
+    const i = idx(specAt('a', 0, 0), specAt('b', 40, 0));
+    expect(routeBentLengthTiles(baseRoute(), i)).toBeCloseTo(40, 5);
+    const bent = routeBentLengthTiles(baseRoute({ waypoints: [{ x: 20, y: 20 }] }), i);
+    expect(bent).toBeGreaterThan(40);
+  });
+
+  it('effectiveTransitTimeSec scales base transit by bent/straight', () => {
+    const i = idx(specAt('a', 0, 0), specAt('b', 40, 0));
+    expect(effectiveTransitTimeSec(baseRoute(), i)).toBeCloseTo(40, 5);
+    const bent = baseRoute({ waypoints: [{ x: 20, y: 20 }] });
+    const ratio = routeBentLengthTiles(bent, i) / 40;
+    expect(effectiveTransitTimeSec(bent, i)).toBeCloseTo(40 * ratio, 5);
+  });
+
+  it('routeCrossedCells follows the bend (visits a cell off the straight line)', () => {
+    const i = idx(specAt('a', 0, 0), specAt('b', 80, 0));
+    const straightKeys = new Set(routeCrossedCells(baseRoute(), i).map(c => `${c.cx},${c.cy}`));
+    const bentKeys = routeCrossedCells(baseRoute({ waypoints: [{ x: 40, y: 80 }] }), i).map(c => `${c.cx},${c.cy}`);
+    expect(bentKeys.some(k => !straightKeys.has(k))).toBe(true);
   });
 });
