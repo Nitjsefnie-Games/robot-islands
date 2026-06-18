@@ -19,6 +19,8 @@ import {
   FUNNELING_BONUS_PERCENT,
   FUNNELING_TIER_CAP,
   islandHasTeleporterPad,
+  planMergedRoutes,
+  ROUTE_ALL,
   isBendableRouteType,
   isPowerLink,
   MAX_ROUTE_BENDS,
@@ -167,6 +169,41 @@ describe('routeSourceTile (source-anchored rendering)', () => {
   it('returns null when the from-island is unknown', () => {
     const route = { from: 'nowhere', sourceBuildingId: 'dock-1' } as unknown as Route;
     expect(routeSourceTile(route, idx)).toBeNull();
+  });
+});
+
+describe('planMergedRoutes (#2.4 merged-route expansion)', () => {
+  function isl(id: string, cx: number, cy: number, bs: Array<{ id: string; defId: BuildingDefId }>): IslandSpec {
+    return { ...makeIslandSpec(id, cx, cy), buildings: bs.map((b) => ({ ...b, x: 0, y: 0 })) as unknown as PlacedBuilding[] };
+  }
+
+  it('from=all → one hub: one best-building route per source island', () => {
+    const home = isl('home', 0, 0, [{ id: 'h-dock', defId: 'dock' }]);
+    const a = isl('a', 30, 0, [{ id: 'a-dock', defId: 'dock' }, { id: 'a-md', defId: 'mass_driver' }]);
+    const b = isl('b', 0, 40, [{ id: 'b-dock', defId: 'dock' }]);
+    const plan = planMergedRoutes([home, a, b], [], ROUTE_ALL, 'home');
+    expect(plan).toContainEqual({ fromId: 'a', toId: 'home', buildingId: 'a-md' }); // mass driver beats dock
+    expect(plan).toContainEqual({ fromId: 'b', toId: 'home', buildingId: 'b-dock' });
+    expect(plan.some((p) => p.fromId === 'home')).toBe(false); // home→home excluded
+    expect(plan).toHaveLength(2);
+  });
+
+  it('from=one → all: fans out best-first to nearest dests, limited by free buildings', () => {
+    const home = isl('home', 0, 0, [{ id: 'h-md', defId: 'mass_driver' }, { id: 'h-dock', defId: 'dock' }]);
+    const near = isl('near', 10, 0, []);
+    const far = isl('far', 100, 0, []);
+    const plan = planMergedRoutes([home, near, far], [], 'home', ROUTE_ALL);
+    expect(plan).toEqual([
+      { fromId: 'home', toId: 'near', buildingId: 'h-md' },   // best building → nearest dest
+      { fromId: 'home', toId: 'far', buildingId: 'h-dock' },
+    ]);
+  });
+
+  it('skips islands whose transport buildings are already taken', () => {
+    const home = isl('home', 0, 0, [{ id: 'h-dock', defId: 'dock' }]);
+    const a = isl('a', 30, 0, [{ id: 'a-dock', defId: 'dock' }]);
+    const existing = [{ sourceBuildingId: 'a-dock' } as unknown as Route];
+    expect(planMergedRoutes([home, a], existing, ROUTE_ALL, 'home')).toEqual([]);
   });
 });
 
