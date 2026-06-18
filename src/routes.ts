@@ -361,7 +361,10 @@ export function routeSourceTile(
   if (!island) return null;
   const b = island.buildings.find((bb) => bb.id === route.sourceBuildingId);
   if (!b) return null;
-  return { x: b.x, y: b.y };
+  // Building x/y are island-LOCAL offsets; the world tile adds the island
+  // centre (same convention as antenna.ts / drones.ts pad placement). Returning
+  // the raw offset put distant islands' routes near the world origin.
+  return { x: island.cx + b.x, y: island.cy + b.y };
 }
 
 /**
