@@ -208,6 +208,32 @@ export function routeCrossedCells(
   return rasterizePolylineCells(pts, CELL_SIZE_TILES);
 }
 
+/** A route's effective capacity (units/sec) broken into its persistent ceiling
+ *  and the live weather-throttled rate, mirroring the dispatch product
+ *  `capacityPerSec × floorMul × skillCapMul × airshipMul × weatherMul`:
+ *  - `base`      = tier base × floor × Transport-skill `routeCapacity` × airship
+ *                  bonus — the rate the route runs at in CLEAR weather.
+ *  - `throttled` = `base × weatherMul` — the ACTUAL rate right now (a storm on
+ *                  the path cuts it below `base`).
+ *  `floorMul` is returned too so callers can scale transit time consistently.
+ *  Pure; the caller supplies the wall clock (`nowMs` + `wallOffsetMs`). */
+export function routeEffectiveCapacity(
+  world: WorldState,
+  states: Map<string, IslandState>,
+  route: Route,
+  nowMs: number,
+  wallOffsetMs = 0,
+): { base: number; throttled: number; weatherMul: number; floorMul: number } {
+  const src = states.get(route.from);
+  const srcMul = src ? effectiveSkillMultipliers(src) : undefined;
+  const skillCapMul = srcMul?.routeCapacity ?? 1;
+  const airshipMul = route.type === 'airship' ? (srcMul?.airshipRange ?? 1) : 1;
+  const floorMul = routeFloorMultiplier(route, world);
+  const base = route.capacityPerSec * floorMul * skillCapMul * airshipMul;
+  const weatherMul = routeWeatherCapacityMul(world, route, nowMs, wallOffsetMs);
+  return { base, throttled: base * weatherMul, weatherMul, floorMul };
+}
+
 /** Live §2.6 weather capacity multiplier for a route (1 = clear, < 1 = a storm
  *  on its building-anchored path is cutting throughput). Mirrors the dispatch
  *  computation exactly so a UI readout matches the engine: instant routes

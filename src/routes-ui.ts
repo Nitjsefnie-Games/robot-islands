@@ -21,7 +21,7 @@ import {
   eligibleTransportBuildings,
   islandHasTeleporterPad,
   isPowerLink,
-  routeWeatherCapacityMul,
+  routeEffectiveCapacity,
   retargetRoute as retargetRoutePure,
   type Route,
 } from './routes.js';
@@ -874,10 +874,8 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     styled(meta, 'display: flex; justify-content: space-between');
     const left = document.createElement('span');
     left.classList.add('ri-mono');
-    // §2.4 route-floor scaling: show the EFFECTIVE cap/transit the route runs
-    // at given its source building's active floors, not the stored tier base.
-    const fmul = routeFloorMultiplier(route, deps.world);
-    left.textContent = `${(route.capacityPerSec * fmul).toFixed(2)} u/s · ${(route.transitTimeSec / fmul).toFixed(1)}s`;
+    // §2.4/§2.6 effective cap + transit — set per-frame in `update()` because the
+    // weather-throttled rate changes live.
     styled(left, `color: ${'var(--ri-fg-3)'}; font-size: 9.5px`);
     // §2.4 live throttle badge — names what's limiting an active cargo route
     // (flowing / source empty / dest full / draining). Power-link routes carry
@@ -905,14 +903,20 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     function update(now: number): void {
       const route = deps.world.routes.find((r) => r.id === routeId);
       if (!route) return;
-      // Live throttle badge (cargo routes only).
+      // §2.4/§2.6 effective rate: the ACTUAL throughput after floor + skill +
+      // airship + the live weather throttle (`now` is the perf clock;
+      // weatherWallOffsetMs converts to wall time). When a storm is cutting the
+      // rate, show `actual/max u/s` so the player sees both.
+      const eff = routeEffectiveCapacity(deps.world, deps.islandStates, route, now, deps.weatherWallOffsetMs ?? 0);
+      const transit = (route.transitTimeSec / eff.floorMul).toFixed(1);
+      left.textContent = eff.weatherMul < 0.999
+        ? `${eff.throttled.toFixed(2)}/${eff.base.toFixed(2)} u/s · ${transit}s`
+        : `${eff.base.toFixed(2)} u/s · ${transit}s`;
+      // Live throttle badge (cargo routes only), reusing the same weatherMul.
       if (isPowerLink(route.type)) {
         throttleEl.textContent = '';
       } else {
-        // §2.6 live weather capacity multiplier on this route's path (`now` is
-        // the perf clock; weatherWallOffsetMs converts to wall time).
-        const weatherMul = routeWeatherCapacityMul(deps.world, route, now, deps.weatherWallOffsetMs ?? 0);
-        const badge = throttleBadge(routeThrottleReason(deps.world, deps.islandStates, route, weatherMul));
+        const badge = throttleBadge(routeThrottleReason(deps.world, deps.islandStates, route, eff.weatherMul));
         throttleEl.textContent = badge.text;
         throttleEl.style.color = badge.tone === 'ok'
           ? 'var(--ri-accent)'
