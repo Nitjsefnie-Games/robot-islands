@@ -699,14 +699,42 @@ function inFlightSumFor(route: Route, r: ResourceId): number {
   return s;
 }
 
+/** Precompute `${destIslandId}|${resourceId}` → summed in-flight amount across
+ *  ALL routes, in ONE pass over every in-flight batch. `dispatchPhase` builds
+ *  this once per step and threads it into every `destinationHeadroom` call, so
+ *  the per-(route × cargo-resource) rescan of every route's entire `inFlight`
+ *  array — O(routes × cargo × totalInFlight) per step, the dominant offline-
+ *  catch-up cost once a save holds thousands of in-flight batches (profiled:
+ *  `planRouteCargo` was ~33% of catch-up CPU) — collapses to an O(1) lookup.
+ *  The accumulation order (routes in world order, batches in inFlight order)
+ *  matches the old nested scan exactly, so the floating-point sum is byte-
+ *  identical to the live scan below. Power-link / draining routes contribute
+ *  the same as before (the former hold no in-flight batches; the latter still
+ *  carry theirs until drained). */
+export function buildInboundInflightMap(world: WorldState): Map<string, number> {
+  const m = new Map<string, number>();
+  for (const route of world.routes) {
+    for (const b of route.inFlight) {
+      const k = `${route.to}|${b.resourceId}`;
+      m.set(k, (m.get(k) ?? 0) + b.amount);
+    }
+  }
+  return m;
+}
+
 /** Sum in-flight cargo of `r` arriving at `destIslandId` across ALL routes.
  *  Used to ensure dispatch doesn't over-fill destinations that have batches
- *  already en route. */
+ *  already en route. When `inbound` (a per-step precompute from
+ *  `buildInboundInflightMap`) is supplied this is an O(1) lookup; otherwise it
+ *  falls back to the live scan (used by the route-throttle diagnosis, which
+ *  makes a single call and doesn't need the precompute). */
 function totalInboundInFlight(
   world: WorldState,
   destIslandId: string,
   r: ResourceId,
+  inbound?: ReadonlyMap<string, number>,
 ): number {
+  if (inbound) return inbound.get(`${destIslandId}|${r}`) ?? 0;
   let s = 0;
   for (const route of world.routes) {
     if (route.to !== destIslandId) continue;
@@ -730,10 +758,13 @@ export function destinationHeadroom(
    *  of offline-catch-up CPU. Passing the value cap() would itself fold is
    *  byte-identical. */
   mult?: SkillMultipliers,
+  /** Per-step precomputed inbound-in-flight sums (see buildInboundInflightMap).
+   *  Omitted ⇒ live scan, byte-identical result. */
+  inbound?: ReadonlyMap<string, number>,
 ): number {
   const destState = states.get(destIslandId);
   if (!destState) return 0;
-  const room = cap(destState, r, undefined, { ignoreGrace: true }, mult) - inv(destState, r) - totalInboundInFlight(world, destIslandId, r);
+  const room = cap(destState, r, undefined, { ignoreGrace: true }, mult) - inv(destState, r) - totalInboundInFlight(world, destIslandId, r, inbound);
   return Math.max(0, room);
 }
 
@@ -760,6 +791,9 @@ function planRouteCargo(
   /** See destinationHeadroom — precomputed per-island skill mults so the per-
    *  resource cap() folds in this route's cargo planning are skipped. */
   precomputedSkillMul?: ReadonlyMap<string, SkillMultipliers>,
+  /** Per-step precomputed inbound-in-flight sums (see buildInboundInflightMap),
+   *  threaded into the per-resource destinationHeadroom gate below. */
+  inbound?: ReadonlyMap<string, number>,
 ): PlannedDemand[] {
   const srcState = states.get(route.from);
   const destState = states.get(route.to);
@@ -781,7 +815,7 @@ function planRouteCargo(
   function tryPush(entry: CargoEntry, r: ResourceId): void {
     const sourceAvail = inv(srcState!, r);
     if (sourceAvail <= 0) return;
-    const headroom = destinationHeadroom(world, states, route.to, r, destMul);
+    const headroom = destinationHeadroom(world, states, route.to, r, destMul, inbound);
     if (headroom <= 0) return;
     if (entry.sourceFloorPct !== undefined) {
       const srcCap = cap(srcState!, r, undefined, undefined, srcMul);
@@ -1030,6 +1064,12 @@ function dispatchPhase(
   // source side, so dest-cap clamping has to happen per-route.
   const demands: RouteDemand[] = [];
   const islandIndex = buildIslandIndex(world);
+  // PERF: one pass over all in-flight batches → (dest|resource) inbound sums,
+  // reused by every route's destinationHeadroom gate this step instead of each
+  // gate rescanning every route's inFlight. Built here (Phase 1 reads inbound;
+  // Phase 3 mutates inFlight only afterwards, and deliverArrivals already ran
+  // this tick) so the snapshot is exact for every Phase-1 read.
+  const inbound = buildInboundInflightMap(world);
   for (const route of world.routes) {
     if (isPowerLink(route.type)) continue; // §5.3 / §4: power-link routes transmit power, not items.
     if (route.draining) continue; // soft-deleted: stop new dispatch, let in-flight finish.
@@ -1073,7 +1113,7 @@ function dispatchPhase(
     // scale this route's effective capacity ×(1+L) (and transit speed below).
     const floorMul = routeFloorMultiplier(route, world);
     const capDemand = route.capacityPerSec * floorMul * skillCapMul * airshipMul * weatherMul * elapsedSec;
-    const planned = planRouteCargo(world, states, route, capDemand, precomputedSkillMul);
+    const planned = planRouteCargo(world, states, route, capDemand, precomputedSkillMul, inbound);
     for (const d of planned) {
       // §15.4 fix 7.2: use unclampedDesired so Phase-2 proportional distribution
       // sees capacity-share, not the sourceAvail-clamped amount (waterfall fix).
