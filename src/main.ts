@@ -111,7 +111,9 @@ import {
 import { findNextMerge, performMerge } from './island-merge.js';
 import { mountRoutesUi } from './routes-ui.js';
 import { RouteRenderer } from './routes-renderer.js';
-import { computeCableNetworkBalance, drainRoutesForBuilding, tickRoutes } from './routes.js';
+import { computeCableNetworkBalance, drainRoutesForBuilding, tickRoutes, MAX_ROUTE_BENDS, type Route } from './routes.js';
+import { insertBendOnSegment, pickRouteAt, pickWaypointAt } from './route-bend.js';
+import { RouteBendOverlay } from './route-bend-overlay.js';
 import { crossIslandNeighbors, latticeInventory, latticeStorageCaps } from './lattice.js';
 import { mountSettlementUi } from './settlement-ui.js';
 import { mountOrbitalUi } from './orbital-ui.js';
@@ -743,6 +745,94 @@ async function main(): Promise<void> {
   let lastX = 0;
   let lastY = 0;
   let accumDrag = 0;
+
+  // -----------------------------------------------------------------------
+  // §2.6 route-bend gestures (placed routes only — NOT during placement)
+  // -----------------------------------------------------------------------
+  //
+  // Click a bendable route → select it (handles + faint highlight appear,
+  // weather overlay auto-shows). Drag the line → insert a bend and drag it.
+  // Drag a handle → move that bend. Click a handle (no drag) → remove it.
+  // Click empty ocean → deselect. All geometry/decisions live in the pure
+  // `route-bend.ts` hit-testers; this glue only routes events → pure calls →
+  // `gateway.setRouteWaypoints`. Mutual-exclusion with placement / launch
+  // modes mirrors the existing pattern (the launch callbacks below clear the
+  // selection on arm; the mousedown branch no-ops while a mode is armed).
+  //
+  // The overlay instance is constructed later (alongside the route renderer)
+  // and assigned to this binding; the gesture helpers below reference it via
+  // closure and only run after bootstrap completes, so the forward use is safe.
+  let routeBendOverlay: RouteBendOverlay;
+  let selectedBendRouteId: string | null = null;
+  // Live drag state. `kind` distinguishes moving an existing handle from
+  // inserting+dragging a new bend on a clicked segment. `index` is the
+  // waypoint index being moved/inserted. `preview` is the full working
+  // waypoints array (tile coords) the overlay renders mid-drag, committed on
+  // mouseup. `null` = no bend drag in progress (camera pan owns the gesture).
+  let bendDrag: {
+    kind: 'waypoint' | 'segment';
+    index: number;
+    preview: Array<{ x: number; y: number }>;
+  } | null = null;
+  // Prior weather-overlay layer visibility, captured when a route is selected
+  // so deselect restores it (the overlay has no toggle action — its layer is
+  // simply forced visible while editing and restored after).
+  let bendPrevWeatherVisible: boolean | null = null;
+
+  /** Hit-test tolerance in TILE coords for a fixed screen-pixel budget — so
+   *  handles/lines stay grabbable at any zoom (pure hit-testers work in tiles,
+   *  the cursor budget is in screen px). */
+  function bendTolTiles(): number {
+    const HIT_PX = 10;
+    return HIT_PX / Math.max(1e-6, cam.zoom * TILE_PX);
+  }
+
+  /** Live route currently selected for bending (re-resolved each use because
+   *  applyRemoteSnapshot re-mints world.routes). */
+  function selectedBendRoute(): Route | null {
+    if (selectedBendRouteId === null) return null;
+    return worldState.routes.find((r) => r.id === selectedBendRouteId) ?? null;
+  }
+
+  /** Push the current selection (and any live drag preview) into the overlay.
+   *  Called on selection change and every drag mousemove. */
+  function refreshBendOverlay(): void {
+    const route = selectedBendRoute();
+    if (route && bendDrag) {
+      // Render the in-progress preview without committing: hand the overlay a
+      // shallow clone of the route carrying the preview waypoints.
+      routeBendOverlay.setSelected(
+        { ...route, waypoints: bendDrag.preview } as Route,
+        islandSpecsById,
+      );
+    } else {
+      routeBendOverlay.setSelected(route, islandSpecsById);
+    }
+  }
+
+  /** Force the weather overlay visible while a route is selected; restore the
+   *  prior visibility when nothing is selected. */
+  function syncBendWeatherOverlay(): void {
+    if (selectedBendRouteId !== null) {
+      if (bendPrevWeatherVisible === null) {
+        bendPrevWeatherVisible = weatherOverlay.layer.visible;
+      }
+      weatherOverlay.layer.visible = true;
+    } else if (bendPrevWeatherVisible !== null) {
+      weatherOverlay.layer.visible = bendPrevWeatherVisible;
+      bendPrevWeatherVisible = null;
+    }
+  }
+
+  /** Clear the bend selection + drag and restore the weather overlay. Called
+   *  on deselect and when another mode arms (mutual exclusion). */
+  function clearBendSelection(): void {
+    selectedBendRouteId = null;
+    bendDrag = null;
+    syncBendWeatherOverlay();
+    refreshBendOverlay();
+  }
+
   app.canvas.addEventListener('mousedown', (e) => {
     // Right-click while in placement mode cancels — same exit as Escape.
     // Right-click in launch mode is intentionally not cancelled here (the
@@ -764,6 +854,60 @@ async function main(): Promise<void> {
     lastX = e.clientX;
     lastY = e.clientY;
     accumDrag = 0;
+    bendDrag = null;
+    // §2.6 bend grab. Only when no placement / launch mode owns the cursor.
+    // We START a bend drag (or change selection) here; the camera pan in the
+    // mousemove handler is suppressed whenever `bendDrag` is active. A click
+    // that grabs nothing falls through to normal pan / building-select.
+    if (!anyModeArmed()) {
+      const rect = app.canvas.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      if (sx >= 0 && sx <= rect.width && sy >= 0 && sy <= rect.height) {
+        const wt = screenToWorldTile(sx, sy);
+        const tol = bendTolTiles();
+        const selRoute = selectedBendRoute();
+        if (selRoute) {
+          // Already selected: grabbing a handle moves it; grabbing the line
+          // (this same route) inserts a new bend and drags it.
+          const wpIdx = pickWaypointAt(selRoute, wt.x, wt.y, tol);
+          if (wpIdx !== null) {
+            const preview = (selRoute.waypoints ?? []).map((w) => ({ x: w.x, y: w.y }));
+            bendDrag = { kind: 'waypoint', index: wpIdx, preview };
+            refreshBendOverlay();
+          } else if (pickRouteAt(worldState.routes, islandSpecsById, wt.x, wt.y, tol) === selRoute) {
+            const existing = selRoute.waypoints ?? [];
+            if (existing.length < MAX_ROUTE_BENDS) {
+              const preview = insertBendOnSegment(selRoute, islandSpecsById, wt.x, wt.y);
+              // The new bend's index is where `preview` first diverges from
+              // `existing` (a single point was spliced in); fall back to the
+              // tail if the splice landed at the end.
+              let idx = preview.length - 1;
+              for (let i = 0; i < existing.length; i++) {
+                const a = existing[i]!;
+                const b = preview[i];
+                if (!b || b.x !== a.x || b.y !== a.y) { idx = i; break; }
+              }
+              bendDrag = { kind: 'segment', index: idx, preview };
+              refreshBendOverlay();
+            }
+          }
+        }
+        if (!bendDrag) {
+          // No grab on the current selection — (re)pick a route under the
+          // cursor. Hit → select it + auto-show the weather overlay. A miss
+          // does NOT deselect here: a pan that starts over empty ocean keeps
+          // the current selection; deselection on an empty-ocean CLICK happens
+          // in the mouseup handler.
+          const hit = pickRouteAt(worldState.routes, islandSpecsById, wt.x, wt.y, tol);
+          if (hit && hit.id !== selectedBendRouteId) {
+            selectedBendRouteId = hit.id;
+            syncBendWeatherOverlay();
+            refreshBendOverlay();
+          }
+        }
+      }
+    }
   });
   // Right-click on the canvas: cancels placement OR pops the last
   // path-mode waypoint (popWaypoint is a no-op outside path mode).
@@ -784,6 +928,45 @@ async function main(): Promise<void> {
   window.addEventListener('mouseup', (e) => {
     if (!dragging) return;
     dragging = false;
+    // §2.6 bend gesture commit — runs FIRST (before the launch/placement/
+    // building-select branches) and consumes the gesture when a bend was
+    // grabbed or a selected route was clicked.
+    {
+      const wasClick = accumDrag < CLICK_DRAG_PX_MAX;
+      if (bendDrag) {
+        const drag = bendDrag;
+        bendDrag = null;
+        if (wasClick && drag.kind === 'waypoint') {
+          // Click (no drag) on an existing handle → remove that bend.
+          const final = drag.preview.filter((_, i) => i !== drag.index);
+          if (selectedBendRouteId !== null) {
+            void gateway.setRouteWaypoints(selectedBendRouteId, final);
+          }
+        } else if (selectedBendRouteId !== null) {
+          // Drag (move handle / insert+drag a bend) — commit the preview. A
+          // segment-click with no drag still commits the inserted bend at the
+          // click point.
+          void gateway.setRouteWaypoints(selectedBendRouteId, drag.preview);
+        }
+        refreshBendOverlay();
+        return;
+      }
+      if (wasClick && selectedBendRouteId !== null && !anyModeArmed()) {
+        // Click that grabbed nothing while a route was selected: deselect iff
+        // it landed on empty ocean (no bendable route under the cursor).
+        const rect = app.canvas.getBoundingClientRect();
+        const sx = e.clientX - rect.left;
+        const sy = e.clientY - rect.top;
+        if (sx >= 0 && sx <= rect.width && sy >= 0 && sy <= rect.height) {
+          const wt = screenToWorldTile(sx, sy);
+          const hit = pickRouteAt(worldState.routes, islandSpecsById, wt.x, wt.y, bendTolTiles());
+          if (!hit) {
+            clearBendSelection();
+            return;
+          }
+        }
+      }
+    }
     // Launch-click commit: only fire if the gesture was a click (total drag
     // distance < threshold, NOT just net displacement — a circular gesture
     // returning to start is still a drag) AND launch mode is armed AND the
@@ -938,6 +1121,16 @@ async function main(): Promise<void> {
     lastX = e.clientX;
     lastY = e.clientY;
     accumDrag += Math.abs(dx) + Math.abs(dy);
+    // §2.6 bend drag owns the cursor — move the grabbed/inserted bend point to
+    // the cursor (live preview) instead of panning the camera.
+    if (bendDrag) {
+      const rect = app.canvas.getBoundingClientRect();
+      const wt = screenToWorldTile(e.clientX - rect.left, e.clientY - rect.top);
+      const p = bendDrag.preview[bendDrag.index];
+      if (p) { p.x = wt.x; p.y = wt.y; }
+      refreshBendOverlay();
+      return;
+    }
     panCam(cam, dx, dy);
   });
 
@@ -1253,6 +1446,7 @@ async function main(): Promise<void> {
         // their respective onLaunchModeChanged callbacks.
         dronesUi.setLaunchMode(false);
         disarmSettlementLaunch();
+        clearBendSelection();
         placementUi.begin(defId);
       },
     },
@@ -1789,6 +1983,7 @@ async function main(): Promise<void> {
     onLaunchModeChanged: (armed) => {
       if (armed) {
         placementUi.cancel();
+        clearBendSelection();
         // Sister panel disarms — both panels are constructed by the time the
         // player can click "Arm Launch" in the modal; the forward-declared
         // setters above are wired once those panels mount.
@@ -1857,6 +2052,7 @@ async function main(): Promise<void> {
     onLaunchModeChanged: (armed) => {
       if (armed) {
         placementUi.cancel();
+        clearBendSelection();
         disarmSettlementLaunch();
         orbitalUi.setLaunchMode(false);
         // Clear hover affordance when entering an armed mode — the mode's
@@ -1911,6 +2107,15 @@ async function main(): Promise<void> {
   world.addChildAt(routeRenderer.animatedLayer, 5);
   world.addChildAt(routeRenderer.overlayLayer, 6);
 
+  // §2.6 route-bend overlay — draws bend handles + a faint polyline highlight
+  // for the route currently selected for bending. Lives in WORLD space (like
+  // the route geometry) so handle positions read correctly at any zoom; sits
+  // above the route overlay layer. Hidden until a route is selected. TILE_PX
+  // is passed so handle geometry uses the real tile-size constant (not the
+  // overlay's hardcoded default).
+  routeBendOverlay = new RouteBendOverlay(TILE_PX);
+  world.addChild(routeBendOverlay.layer);
+
   const routesUi = mountRoutesUi(document.body, {
     world: worldState,
     islandStates,
@@ -1940,6 +2145,7 @@ async function main(): Promise<void> {
         dronesUi.setLaunchMode(false);
         orbitalUi.setLaunchMode(false);
         placementUi.cancel();
+        clearBendSelection();
       }
     },
     onInstantSettled: () => { rebuildWorldLayers(); },
@@ -2867,6 +3073,18 @@ async function main(): Promise<void> {
     inventoryUi.refresh();
     dronesUi.refresh(now);
     routesUi.refresh(now);
+    // §2.6 bend overlay — re-sync from the live selected route each frame so a
+    // committed bend / unbend (LOCAL or via a REMOTE snapshot that re-mints
+    // world.routes) is reflected, then advance any per-frame draw. A no-op when
+    // nothing is selected. During a drag `refreshBendOverlay` keeps showing the
+    // preview (bendDrag is set), so this doesn't clobber an in-progress edit.
+    if (selectedBendRouteId !== null && selectedBendRoute() === null) {
+      // The selected route vanished (deleted / drained / snapshot dropped it).
+      clearBendSelection();
+    } else {
+      refreshBendOverlay();
+    }
+    routeBendOverlay.update();
     settlementUi.refresh(now);
     orbitalUi.refresh();
     weatherOverlay.refresh(
