@@ -919,10 +919,20 @@ export function deliverArrivals(
     // storing an identical copy on every in-flight batch (the old design wrote
     // megabytes of redundant path data into every save).
     let crossedCells: ReadonlyArray<{ cx: number; cy: number; transitFraction: number }> | null = null;
-    const kept: InFlightBatch[] = [];
-    for (const b of route.inFlight) {
+    // PERF: compact survivors IN PLACE instead of allocating a fresh array each
+    // step. deliverArrivals runs every step over every route's full inFlight
+    // (thousands of batches on a busy save); building a new `kept` array per
+    // step was the top catch-up cost here and a major GC driver. `w` is the
+    // write cursor — not-yet-arrived batches are packed toward the front
+    // preserving order, then the array is truncated to `w`. Byte-identical:
+    // same survivors, same order, same deliveries as the old filter-into-kept.
+    const arr = route.inFlight;
+    let w = 0;
+    for (let i = 0; i < arr.length; i++) {
+      const b = arr[i]!;
       if (b.arrivalTime > nowMs) {
-        kept.push(b);
+        if (w !== i) arr[w] = b;
+        w++;
         continue;
       }
       // §2.6 in-flight weather losses
@@ -969,7 +979,7 @@ export function deliverArrivals(
         });
       }
     }
-    route.inFlight = kept;
+    if (w !== arr.length) arr.length = w;
   }
 
   return delivered;
