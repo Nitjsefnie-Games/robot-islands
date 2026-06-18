@@ -12,6 +12,7 @@
 import { Container, Graphics, Matrix } from 'pixi.js';
 import type { Route } from './routes.js';
 import { VISION_BLUE } from './world.js';
+import { TILE_PX } from './island.js';
 import { colorForRouteType, getDashedStrokeTexture } from './routes-dash-texture.js';
 
 export interface RouteRenderState {
@@ -23,6 +24,8 @@ export interface RouteRenderState {
   fromY: number;
   toX: number;
   toY: number;
+  /** Resolved polyline in world pixels: [from, ...waypoints*TILE_PX, to]. */
+  points: Array<{ x: number; y: number }>;
 }
 
 /** Resolve an island id to its centre in world-pixel coords, or null if
@@ -85,7 +88,8 @@ export class RouteRenderer {
       // and the drawn route is rebuilt to the new position.
       const from = this.resolveIslandPos(r.from);
       const to = this.resolveIslandPos(r.to);
-      const perRouteKey = `${r.type}|${r.from}|${r.to}|${r.inFlight.length}|${from?.x}|${from?.y}|${to?.x}|${to?.y}`;
+      const wpKey = r.waypoints?.map((w) => `${w.x},${w.y}`).join(';') ?? '';
+      const perRouteKey = `${r.type}|${r.from}|${r.to}|${r.inFlight.length}|${from?.x}|${from?.y}|${to?.x}|${to?.y}|${wpKey}`;
       const existing = this.entries.get(r.id);
       if (existing && existing.cacheKey === perRouteKey) continue;
       if (!from || !to) {
@@ -98,6 +102,14 @@ export class RouteRenderer {
         continue;
       }
 
+      const points: Array<{ x: number; y: number }> = [{ x: from.x, y: from.y }];
+      if (r.waypoints) {
+        for (const w of r.waypoints) {
+          points.push({ x: w.x * TILE_PX, y: w.y * TILE_PX });
+        }
+      }
+      points.push({ x: to.x, y: to.y });
+
       if (existing) {
         existing.staticGraphics.clear();
         existing.animatedGraphics.clear();
@@ -105,6 +117,7 @@ export class RouteRenderer {
         existing.routeType = r.type;
         existing.fromX = from.x; existing.fromY = from.y;
         existing.toX = to.x;     existing.toY = to.y;
+        existing.points = points;
         this.buildRouteGeometry(r, existing);
       } else {
         const sg = new Graphics();
@@ -118,6 +131,7 @@ export class RouteRenderer {
           routeType: r.type,
           fromX: from.x, fromY: from.y,
           toX: to.x,     toY: to.y,
+          points,
         };
         this.entries.set(r.id, entry);
         this.buildRouteGeometry(r, entry);
@@ -151,40 +165,50 @@ export class RouteRenderer {
     if (BUILD_STATIC_FALLBACK) {
       const DASH_LEN_WORLD_PX = 8;
       const GAP_LEN_WORLD_PX = 4;
-      const dx = entry.toX - entry.fromX;
-      const dy = entry.toY - entry.fromY;
-      const totalLen = Math.sqrt(dx * dx + dy * dy);
-      if (totalLen > 0) {
-        const ux = dx / totalLen;
-        const uy = dy / totalLen;
-        const period = DASH_LEN_WORLD_PX + GAP_LEN_WORLD_PX;
+      const period = DASH_LEN_WORLD_PX + GAP_LEN_WORLD_PX;
+      const pts = entry.points;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const p1 = pts[i]!;
+        const p2 = pts[i + 1]!;
+        const dx = p2.x - p1.x;
+        const dy = p2.y - p1.y;
+        const segLen = Math.hypot(dx, dy);
+        if (segLen <= 0) continue;
+        const ux = dx / segLen;
+        const uy = dy / segLen;
         let drawn = 0;
-        while (drawn < totalLen) {
+        while (drawn < segLen) {
           const startT = drawn;
-          const endT = Math.min(totalLen, drawn + DASH_LEN_WORLD_PX);
+          const endT = Math.min(segLen, drawn + DASH_LEN_WORLD_PX);
           if (endT > startT) {
-            const sx = entry.fromX + ux * startT;
-            const sy = entry.fromY + uy * startT;
-            const ex = entry.fromX + ux * endT;
-            const ey = entry.fromY + uy * endT;
+            const sx = p1.x + ux * startT;
+            const sy = p1.y + uy * startT;
+            const ex = p1.x + ux * endT;
+            const ey = p1.y + uy * endT;
             entry.staticGraphics.moveTo(sx, sy).lineTo(ex, ey);
           }
           drawn += period;
         }
-        entry.staticGraphics.stroke({ width: 1.5, color, alpha });
       }
+      entry.staticGraphics.stroke({ width: 1.5, color, alpha });
     }
 
-    // Phase 3: texture-stroked animated line.
+    // Phase 3: texture-stroked animated line, segment-by-segment so each
+    // straight span gets its own dash-scroll rotation.
     const tex = getDashedStrokeTexture(r.type);
-    const lineDx = entry.toX - entry.fromX;
-    const lineDy = entry.toY - entry.fromY;
-    const angle = Math.atan2(lineDy, lineDx);
-    this._scrollMatrix.set(1, 0, 0, 1, 0, 0).rotate(angle);
-    entry.animatedGraphics
-      .moveTo(entry.fromX, entry.fromY)
-      .lineTo(entry.toX, entry.toY)
-      .stroke({ texture: tex, matrix: this._scrollMatrix, width: 2.0, alpha: 0.85 });
+    const pts = entry.points;
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p1 = pts[i]!;
+      const p2 = pts[i + 1]!;
+      const dx = p2.x - p1.x;
+      const dy = p2.y - p1.y;
+      const angle = Math.atan2(dy, dx);
+      this._scrollMatrix.set(1, 0, 0, 1, 0, 0).rotate(angle);
+      entry.animatedGraphics
+        .moveTo(p1.x, p1.y)
+        .lineTo(p2.x, p2.y)
+        .stroke({ texture: tex, matrix: this._scrollMatrix, width: 2.0, alpha: 0.85 });
+    }
 
     // Static layer is the dashed fallback — kept hidden; see
     // `BUILD_STATIC_FALLBACK` above for flip-on instructions.
@@ -209,22 +233,30 @@ export class RouteRenderer {
   private updateAnimationOnly(nowMs: number): void {
     const offsetPx = nowMs * SCROLL_SPEED_PX_PER_MS;
     for (const entry of this.entries.values()) {
-      const dx = entry.toX - entry.fromX;
-      const dy = entry.toY - entry.fromY;
-      const angle = Math.atan2(dy, dx);
-
-      // Fix 7.1: translate BEFORE rotate so the phase advances uniformly
-      // along the line at every angle.  See §perf-2026-05-28 API note above.
-      // The correct composition: identity → translate → rotate yields
-      // M⁻¹.tx = offsetPx (uniform) instead of offsetPx·cos(angle) (old).
-      this._scrollMatrix.set(1, 0, 0, 1, 0, 0).translate(-offsetPx, 0).rotate(angle);
-
       const tex = getDashedStrokeTexture(entry.routeType);
       entry.animatedGraphics.clear();
-      entry.animatedGraphics
-        .moveTo(entry.fromX, entry.fromY)
-        .lineTo(entry.toX, entry.toY)
-        .stroke({ texture: tex, matrix: this._scrollMatrix, width: 2.0, alpha: 0.85 });
+
+      // Stroke segment-by-segment so each straight span of a bent route
+      // scrolls its dash pattern along its own angle.
+      const pts = entry.points;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const p1 = pts[i]!;
+        const p2 = pts[i + 1]!;
+        const dx = p2.x - p1.x;
+        const dy = p2.y - p1.y;
+        const angle = Math.atan2(dy, dx);
+
+        // Fix 7.1: translate BEFORE rotate so the phase advances uniformly
+        // along the line at every angle.  See §perf-2026-05-28 API note above.
+        // The correct composition: identity → translate → rotate yields
+        // M⁻¹.tx = offsetPx (uniform) instead of offsetPx·cos(angle) (old).
+        this._scrollMatrix.set(1, 0, 0, 1, 0, 0).translate(-offsetPx, 0).rotate(angle);
+
+        entry.animatedGraphics
+          .moveTo(p1.x, p1.y)
+          .lineTo(p2.x, p2.y)
+          .stroke({ texture: tex, matrix: this._scrollMatrix, width: 2.0, alpha: 0.85 });
+      }
     }
   }
 
@@ -274,19 +306,44 @@ export class RouteRenderer {
          .stroke({ width: 1.5, color: 0xf5a742, alpha: 0.4 + 0.4 * pulse });
       }
 
-      // In-flight chevrons interpolated along the line.
-      const dx = entry.toX - entry.fromX;
-      const dy = entry.toY - entry.fromY;
-      const len = Math.sqrt(dx * dx + dy * dy);
-      if (len <= 0) continue;
-      const ux = dx / len;
-      const uy = dy / len;
+      // In-flight chevrons interpolated along the polyline.
+      const pts = entry.points;
+      if (pts.length < 2) continue;
+
+      // Segment lengths and cumulative distances.
+      const segLens: number[] = [];
+      let totalLen = 0;
+      for (let i = 0; i < pts.length - 1; i++) {
+        const p1 = pts[i]!;
+        const p2 = pts[i + 1]!;
+        const len = Math.hypot(p2.x - p1.x, p2.y - p1.y);
+        segLens.push(len);
+        totalLen += len;
+      }
+      if (totalLen <= 0) continue;
+
       for (const b of r.inFlight) {
         const total = b.arrivalTime - b.dispatchTime;
         if (total <= 0) continue;
         const t = Math.max(0, Math.min(1, (nowMs - b.dispatchTime) / total));
-        const cx = entry.fromX + dx * t;
-        const cy = entry.fromY + dy * t;
+        const targetDist = t * totalLen;
+
+        let distSoFar = 0;
+        let segIdx = 0;
+        for (; segIdx < segLens.length; segIdx++) {
+          if (distSoFar + segLens[segIdx]! >= targetDist) break;
+          distSoFar += segLens[segIdx]!;
+        }
+        segIdx = Math.min(segIdx, segLens.length - 1);
+
+        const p1 = pts[segIdx]!;
+        const p2 = pts[segIdx + 1]!;
+        const segLen = segLens[segIdx]!;
+        const segT = segLen > 0 ? (targetDist - distSoFar) / segLen : 0;
+        const cx = p1.x + (p2.x - p1.x) * segT;
+        const cy = p1.y + (p2.y - p1.y) * segT;
+        const ux = segLen > 0 ? (p2.x - p1.x) / segLen : 0;
+        const uy = segLen > 0 ? (p2.y - p1.y) / segLen : 0;
         this.drawChevron(g, cx, cy, ux, uy);
       }
     }

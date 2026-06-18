@@ -130,7 +130,7 @@ describe('Route field whitelist', () => {
     // Fields currently encoded in `perRouteKey` inside RouteRenderer.diffRebuild()
     // (routes-renderer.ts). Adding a new Route field that affects rendered output?
     // Add it there AND to this set. See VISUAL-FIELD-MARKER in routes.ts.
-    const perRouteKeyFields = new Set(['id', 'type', 'from', 'to', 'inFlight']);
+    const perRouteKeyFields = new Set(['id', 'type', 'from', 'to', 'inFlight', 'waypoints']);
     const notVisualWhitelist = new Set([
       'capacityPerSec',     // not rendered (stat panel only)
       'mode',               // priority / weighted; not rendered
@@ -151,7 +151,7 @@ describe('Route field whitelist', () => {
 });
 
 
-describe('RouteRenderer — Fix 7.4: cacheKey includes endpoint world coords', () => {
+describe('RouteRenderer — Fix 7.4: cacheKey includes endpoint world coords + waypoints', () => {
   // When an island's centre changes (merge §3.6 / land reclamation), the per-route
   // cacheKey must change so the rendered route geometry is rebuilt.  Before the fix,
   // the key was only `${type}|${from}|${to}|${inFlightLen}` — endpoint positions were
@@ -190,6 +190,20 @@ describe('RouteRenderer — Fix 7.4: cacheKey includes endpoint world coords', (
     const keyAfter = renderer._entriesForTest().get('r1')!.cacheKey;
 
     expect(keyBefore).toBe(keyAfter);
+  });
+
+  it('changing waypoints invalidates the per-route cacheKey (rebuild) (#118)', () => {
+    const renderer = new RouteRenderer(makeResolver());
+    const routes = [makeRoute('r1')];
+
+    renderer.update(routes, 0, '', false);
+    const keyBefore = renderer._entriesForTest().get('r1')!.cacheKey;
+
+    routes[0] = makeRoute('r1', { waypoints: [{ x: 5, y: 3 }] });
+    renderer.update(routes, 16, '', false);
+    const keyAfter = renderer._entriesForTest().get('r1')!.cacheKey;
+
+    expect(keyBefore).not.toBe(keyAfter);
   });
 });
 
