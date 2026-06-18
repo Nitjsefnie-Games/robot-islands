@@ -208,6 +208,32 @@ export function routeCrossedCells(
   return rasterizePolylineCells(pts, CELL_SIZE_TILES);
 }
 
+/** Live §2.6 weather capacity multiplier for a route (1 = clear, < 1 = a storm
+ *  on its building-anchored path is cutting throughput). Mirrors the dispatch
+ *  computation exactly so a UI readout matches the engine: instant routes
+ *  (teleporter) are weather-exempt, and the storm is sampled over the SAME
+ *  crossed cells (`routeCrossedCells`) the §2.6 capacity throttle uses. Pure;
+ *  the caller supplies the wall clock (`nowMs` + `wallOffsetMs`). */
+export function routeWeatherCapacityMul(
+  world: WorldState,
+  route: Route,
+  nowMs: number,
+  wallOffsetMs = 0,
+): number {
+  if (route.transitTimeSec <= 0) return 1; // instant routes are weather-exempt
+  const islandIndex = new Map(world.islands.map((i) => [i.id, i]));
+  const crossed = routeCrossedCells(route, islandIndex);
+  if (crossed.length === 0) return 1;
+  return routeCapacityMultiplierForCells(
+    world.seed,
+    crossed.map((c) => ({ cx: c.cx, cy: c.cy })),
+    nowMs,
+    wallOffsetMs,
+    (cx, cy) => biomeForCell(world, cx, cy),
+    sumIslandCo2(world),
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Step-7 tuning constants
 // ---------------------------------------------------------------------------

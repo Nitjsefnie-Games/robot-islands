@@ -21,6 +21,7 @@ import {
   eligibleTransportBuildings,
   islandHasTeleporterPad,
   isPowerLink,
+  routeWeatherCapacityMul,
   retargetRoute as retargetRoutePure,
   type Route,
 } from './routes.js';
@@ -110,6 +111,9 @@ export interface RouteUiDeps {
    *  they already have. When present, all route mutations route through the
    *  gateway; otherwise the pure helpers are called directly. */
   gateway?: MutationGateway;
+  /** Perf→wall clock offset (`Date.now() - performance.now()`) for §2.6 weather
+   *  sampling in the live throttle readout. Omitted (tests) ⇒ 0. */
+  weatherWallOffsetMs?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -905,7 +909,10 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
       if (isPowerLink(route.type)) {
         throttleEl.textContent = '';
       } else {
-        const badge = throttleBadge(routeThrottleReason(deps.world, deps.islandStates, route));
+        // §2.6 live weather capacity multiplier on this route's path (`now` is
+        // the perf clock; weatherWallOffsetMs converts to wall time).
+        const weatherMul = routeWeatherCapacityMul(deps.world, route, now, deps.weatherWallOffsetMs ?? 0);
+        const badge = throttleBadge(routeThrottleReason(deps.world, deps.islandStates, route, weatherMul));
         throttleEl.textContent = badge.text;
         throttleEl.style.color = badge.tone === 'ok'
           ? 'var(--ri-accent)'
