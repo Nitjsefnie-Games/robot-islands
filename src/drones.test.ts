@@ -1005,6 +1005,71 @@ describe('discovery reveals whole island footprint', () => {
     tickDrones(w, r.drone.expectedReturnTime + 1000, 0);
     assertFootprintRevealed(w, 'rare-ring');
   });
+
+  // -------------------------------------------------------------------------
+  // #141 — rare-island reveals must respect the §11 dark-mode antenna gate.
+  // Same detection geometry as the #99 test above (T5 path drone, scanRadius 12
+  // + one probability_engine → effective radius 15, rare island at cx=30,cy=24
+  // reachable only via the expanded ring). The ONLY thing that varies is
+  // antenna presence / drone fate, which is exactly the buffer gate under test.
+  // -------------------------------------------------------------------------
+  function rareRingWorld(withAntenna: boolean) {
+    const w = makeTinyWorld();
+    const homeSpec = w.islands.find((i) => i.id === 'home')!;
+    homeSpec.buildings.push({ id: 'pe1', defId: 'probability_engine', x: 0, y: 0 });
+    if (withAntenna) homeSpec.buildings.push({ id: 'a1', defId: 'antenna_t1', x: 0, y: 0 });
+    const target: IslandSpec = {
+      id: 'rare-ring', name: 'rare-ring', biome: 'plains',
+      cx: 30, cy: 24, majorRadius: 3, minorRadius: 3,
+      populated: false, discovered: false, buildings: [],
+      modifiers: ['aetheric_anomaly'],
+    };
+    w.islands.push(target);
+    const homeBuildings: Array<{ id: string; defId: string; x: number; y: number }> = [
+      { id: 'pe1', defId: 'probability_engine', x: 0, y: 0 },
+    ];
+    if (withAntenna) homeBuildings.push({ id: 'a1', defId: 'antenna_t1', x: 0, y: 0 });
+    const home = makeIslandState({ id: 'home', level: 50, buildings: homeBuildings as never });
+    home.inventory.plasma_charge = 50;
+    const r = dispatchDrone(w, home, 0, 2, 1, 0, 15, 0, [{ x: 0, y: 2 }, { x: 60, y: 2 }]);
+    if (!r.ok) throw new Error('dispatch failed');
+    return { w, target, drone: r.drone };
+  }
+
+  function assertFootprintNotRevealed(w: WorldState, islandId: string): void {
+    const isl = w.islands.find((i) => i.id === islandId)!;
+    expect(isl.discovered).toBe(false);
+    for (const k of islandCells(isl)) expect(w.revealedCells.has(k)).toBe(false);
+  }
+
+  it('#141 rare island is buffered, NOT revealed, while the drone is out of antenna range', () => {
+    const { w, drone } = rareRingWorld(false);
+    // Tick to just before the terminus: the corridor has swept past the rare
+    // island (x=30) but with no antenna anywhere nothing flushes.
+    tickDrones(w, drone.expectedReturnTime - 1, 0);
+    const d = w.drones[0]!;
+    expect(d.status).toBe('active');
+    // Detected into the dark-mode buffer, but not committed to the map.
+    expect(d.darkModeDiscoveries.some((x) => x.islandId === 'rare-ring')).toBe(true);
+    assertFootprintNotRevealed(w, 'rare-ring');
+  });
+
+  it('#141 rare island is forfeited when a path drone strands out of antenna range', () => {
+    const { w, drone } = rareRingWorld(false);
+    tickDrones(w, drone.expectedReturnTime + 1000, 0);
+    expect(w.drones[0]!.status).toBe('stranded');
+    assertFootprintNotRevealed(w, 'rare-ring');
+  });
+
+  it('#141 rare island is forfeited when the drone is lost in a storm', () => {
+    const { w, drone } = rareRingWorld(false);
+    // Doom the drone mid-flight, after it has swept past the rare island at
+    // x=30 (0.9 of the 60-tile path = 54 tiles).
+    (w.drones[0] as { doomedAtMs?: number }).doomedAtMs = Math.floor(drone.expectedReturnTime * 0.9);
+    tickDrones(w, drone.expectedReturnTime + 1000, 0);
+    expect(w.drones[0]!.status).toBe('lost');
+    assertFootprintNotRevealed(w, 'rare-ring');
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -2174,7 +2239,7 @@ describe('Fix 6.3: destruction fate decided at dispatch', () => {
 
 describe('Fix 6.4: rare-bias ring discovers rare islands only', () => {
   // The Probability Engine expands the corridor ONLY for RARE islands
-  // (discoverRareIslands). Ordinary islands must use the plain `corridor`.
+  // (rareIslandsInCells). Ordinary islands must use the plain `corridor`.
   //
   // Ring geometry: T5 drone (scanRadius 12) with one operational
   // probability_engine (bias 0.25 → expanded radius 15) flying east along
