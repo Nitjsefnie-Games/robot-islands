@@ -154,7 +154,6 @@ function mkDrone(over: Partial<Drone>): Drone {
     fuelResource: 'biofuel' as any,
     status: 'active',
     waypoints: [],
-    darkMode: false,
     darkModeDiscoveries: [],
     scanBuffer: new Set<string>(),
     probabilityBias: 0,
@@ -319,7 +318,6 @@ function serializeDispatch(res: any) {
       fuel_kind: d.fuelResource,
       status: d.status,
       waypoints: d.waypoints,
-      dark: d.darkMode,
       rare_bias: d.probabilityBias,
     },
   };
@@ -480,7 +478,6 @@ function runTickInput(inp: TickInput) {
       returned: r.returned.length,
       lost: r.lost.length,
       drone_status: live?.status,
-      drone_dark: live?.darkMode,
       buffer_size: live?.scanBuffer.size,
       revealed_cells_total: w.revealedCells.size,
     });
@@ -529,14 +526,15 @@ tickCase('dark_mode_buffers_then_flush_on_return', {
   ],
 }, 'no antenna: mid tick buffers (dark, 0 revealed); return tick flushes. This path lies entirely in CLEAR weather (destruction chance 0), so the drone survives DETERMINISTICALLY regardless of RNG — the whole golden (incl. returned=1, status=returned, 6 revealed on the return step) is EXACT and replayable. The INVARIANT weather roll only matters where the path crosses storm/severe/catastrophic cells (§9).');
 
-// Rare-island bias bypasses the antenna gate AND the (1+bias) widening reaches
-// an island the base corridor misses. Drone has NO antenna (pure dark), scan
-// half-width 40, rare_bias 0.6 -> expanded 64. A rare island (>=2 modifiers)
+// Rare-island bias only WIDENS the detection corridor; per §11/§13.3 (#141) it
+// grants NO exemption from the antenna gate. Drone has NO antenna (pure dark),
+// scan half-width 40, rare_bias 0.6 -> expanded 64. A rare island (>=2 modifiers)
 // sits in a cell only the EXPANDED corridor covers; an ordinary island sits in
-// the same expanded-only band. Mid-flight, still dark: the rare island flips
-// discovered (bias bypasses the antenna gate AND needs the widening), while the
-// ordinary one does NOT (no bias widening for non-rare; no reveal in dark).
-tickCase('rare_bias_widening_bypasses_antenna_gate', {
+// the same expanded-only band. Mid-flight, still dark: the rare island is
+// DETECTED into the dark-mode buffer (buffer_size grows) but NOT revealed — it
+// stays undiscovered until the drone reaches antenna range. The ordinary island
+// is not even detected (no bias widening for non-rare).
+tickCase('rare_bias_widening_is_antenna_gated', {
   islands: [
     { id: 'home', cx: 0, cy: 0, populated: true, discovered: true },
     // cell (3,-4) center ~ (56,-56): only-in-expanded for the line y=0.5, base 40 vs expanded 64.
@@ -549,7 +547,7 @@ tickCase('rare_bias_widening_bypasses_antenna_gate', {
   },
   pre_generate_cells_radius: 400,
   steps: [{ label: 'mid_flight_dark', prev_ms: 0, now_ms: 200000 }],
-}, 'rare island in the expanded-only band flips discovered mid-flight in dark mode (bias bypasses antenna gate; widening reaches it); ordinary island in the same band stays undiscovered.');
+}, 'rare island in the expanded-only band is detected into the dark-mode buffer mid-flight but stays undiscovered (the §11 antenna gate applies; #141); ordinary island in the same band is not detected at all.');
 
 // ---------- weather roll INVARIANT property ----------
 // Pin the documented property: roll uses seed `${worldSeed}_vehicle_${vehicleId}`,

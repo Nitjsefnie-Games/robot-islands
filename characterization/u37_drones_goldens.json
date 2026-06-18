@@ -320,7 +320,7 @@
       "at_ms": 31250,
       "pos": {
         "x": 10,
-        "y": 5
+        "y": 10
       }
     },
     {
@@ -345,8 +345,8 @@
       "speed": 0.8,
       "at_ms": 50000,
       "pos": {
-        "x": 0,
-        "y": 0
+        "x": 10,
+        "y": 10
       }
     }
   ],
@@ -522,7 +522,6 @@
             "fuel_kind": "biofuel",
             "status": "active",
             "waypoints": [],
-            "dark": false,
             "rare_bias": 0
           }
         },
@@ -573,7 +572,6 @@
             "fuel_kind": "diesel",
             "status": "active",
             "waypoints": [],
-            "dark": false,
             "rare_bias": 0
           }
         },
@@ -625,7 +623,6 @@
             "fuel_kind": "biofuel",
             "status": "active",
             "waypoints": [],
-            "dark": false,
             "rare_bias": 0
           }
         },
@@ -677,7 +674,6 @@
             "fuel_kind": "plasma_charge",
             "status": "active",
             "waypoints": [],
-            "dark": false,
             "rare_bias": 0
           }
         },
@@ -975,7 +971,8 @@
           "ok": true,
           "discoveredIslandIds": [
             "isl_in",
-            "isl_edge"
+            "isl_edge",
+            "isl_out"
           ]
         },
         "fuel_after": 90,
@@ -983,7 +980,7 @@
           "home": true,
           "isl_in": true,
           "isl_edge": true,
-          "isl_out": false,
+          "isl_out": true,
           "isl_already": true
         }
       },
@@ -1034,7 +1031,6 @@
             "returned": 1,
             "lost": 0,
             "drone_status": "returned",
-            "drone_dark": false,
             "buffer_size": 0,
             "revealed_cells_total": 6
           }
@@ -1092,7 +1088,6 @@
             "returned": 0,
             "lost": 0,
             "drone_status": "active",
-            "drone_dark": true,
             "buffer_size": 6,
             "revealed_cells_total": 0
           },
@@ -1103,7 +1098,6 @@
             "returned": 1,
             "lost": 0,
             "drone_status": "returned",
-            "drone_dark": true,
             "buffer_size": 0,
             "revealed_cells_total": 6
           }
@@ -1115,7 +1109,7 @@
       "note": "no antenna: mid tick buffers (dark, 0 revealed); return tick flushes. This path lies entirely in CLEAR weather (destruction chance 0), so the drone survives DETERMINISTICALLY regardless of RNG — the whole golden (incl. returned=1, status=returned, 6 revealed on the return step) is EXACT and replayable. The INVARIANT weather roll only matters where the path crosses storm/severe/catastrophic cells (§9)."
     },
     {
-      "name": "rare_bias_widening_bypasses_antenna_gate",
+      "name": "rare_bias_widening_is_antenna_gated",
       "input": {
         "islands": [
           {
@@ -1169,24 +1163,21 @@
           {
             "label": "mid_flight_dark",
             "revealed_cells_added": 0,
-            "newly_discovered": [
-              "rare_one"
-            ],
+            "newly_discovered": [],
             "returned": 0,
             "lost": 0,
             "drone_status": "active",
-            "drone_dark": true,
             "buffer_size": 68,
             "revealed_cells_total": 0
           }
         ],
         "discovered_after": {
           "home": true,
-          "rare_one": true,
+          "rare_one": false,
           "plain_one": false
         }
       },
-      "note": "rare island in the expanded-only band flips discovered mid-flight in dark mode (bias bypasses antenna gate; widening reaches it); ordinary island in the same band stays undiscovered."
+      "note": "rare island in the expanded-only band is detected into the dark-mode buffer mid-flight but stays undiscovered (the §11 antenna gate applies; #141); ordinary island in the same band is not detected at all."
     }
   ],
   "weather_roll_invariant": [
