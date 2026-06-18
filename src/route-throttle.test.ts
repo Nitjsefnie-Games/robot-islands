@@ -70,6 +70,19 @@ describe('routeThrottleReason', () => {
     expect(routeThrottleReason(world, states, route)).toBe('dest-full');
   });
 
+  it('weather when an otherwise-flowing route is throttled by §2.6 weather', () => {
+    const { world, states, route } = setup(50, 0, 100);
+    // weatherMul < 1 ⇒ the route would flow but bad weather is cutting capacity.
+    expect(routeThrottleReason(world, states, route, 0.5)).toBe('weather');
+    // Clear weather (mul 1) ⇒ plain flowing.
+    expect(routeThrottleReason(world, states, route, 1)).toBe('flowing');
+  });
+
+  it('weather is irrelevant when nothing can flow (dest full takes precedence)', () => {
+    const { world, states, route } = setup(50, 100, 100);
+    expect(routeThrottleReason(world, states, route, 0.3)).toBe('dest-full');
+  });
+
   it('draining overrides everything', () => {
     const { world, states, route } = setup(50, 0, 100);
     route.draining = true;
@@ -84,6 +97,7 @@ describe('routeThrottleReason', () => {
 
   it('badges map each reason to text + tone', () => {
     expect(throttleBadge('flowing')).toEqual({ text: '▶ flowing', tone: 'ok' });
+    expect(throttleBadge('weather')).toEqual({ text: '⛈ weather', tone: 'warn' });
     expect(throttleBadge('source-empty')).toEqual({ text: '⏸ source empty', tone: 'muted' });
     expect(throttleBadge('dest-full')).toEqual({ text: '⛔ dest full', tone: 'warn' });
     expect(throttleBadge('draining')).toEqual({ text: 'draining', tone: 'muted' });

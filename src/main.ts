@@ -2126,6 +2126,7 @@ async function main(): Promise<void> {
     islandSpecs: islandSpecsById,
     routeRenderer,
     gateway,
+    weatherWallOffsetMs,
   });
   defineAction(reg, 'toggle-routes', () => {
     routesUi.toggle();

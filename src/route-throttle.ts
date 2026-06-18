@@ -13,7 +13,7 @@ import { destinationHeadroom, routeFloorMultiplier, type Route } from './routes.
 import type { WorldState } from './world.js';
 
 export type ThrottleReason =
-  | 'draining' | 'idle' | 'flowing' | 'dest-full' | 'source-empty';
+  | 'draining' | 'idle' | 'flowing' | 'weather' | 'dest-full' | 'source-empty';
 
 /** Presentation for a throttle reason: a short ledger label and a tone the UI
  *  maps to a colour (`ok` → accent, `warn` → warn, `muted` → dim). Pure so the
@@ -21,6 +21,7 @@ export type ThrottleReason =
 export function throttleBadge(reason: ThrottleReason): { text: string; tone: 'ok' | 'warn' | 'muted' } {
   switch (reason) {
     case 'flowing': return { text: '▶ flowing', tone: 'ok' };
+    case 'weather': return { text: '⛈ weather', tone: 'warn' };
     case 'source-empty': return { text: '⏸ source empty', tone: 'muted' };
     case 'dest-full': return { text: '⛔ dest full', tone: 'warn' };
     case 'draining': return { text: 'draining', tone: 'muted' };
@@ -42,12 +43,18 @@ function targetedResources(route: Route): ResourceId[] {
 }
 
 /** Diagnose why a route is or isn't moving cargo right now. Precedence:
- *  draining → idle (no cargo) → flowing (something viable) → dest-full (stock
- *  exists but nowhere to put it) → source-empty (nothing to send). */
+ *  draining → idle (no cargo) → [would-flow] weather (§2.6 capacity throttle) /
+ *  flowing → dest-full (stock exists but nowhere to put it) → source-empty
+ *  (nothing to send). `weatherMul` is the route's live §2.6 weather capacity
+ *  multiplier (1 = clear; < 1 = a storm on its path is cutting throughput);
+ *  callers compute it with `routeWeatherCapacityMul` and pass it in. It only
+ *  changes a route that would OTHERWISE flow — weather can't un-empty a source
+ *  or un-fill a destination. */
 export function routeThrottleReason(
   world: WorldState,
   states: Map<string, IslandState>,
   route: Route,
+  weatherMul = 1,
 ): ThrottleReason {
   if (route.draining === true) return 'draining';
   const src = states.get(route.from);
@@ -61,6 +68,7 @@ export function routeThrottleReason(
   const srcMul = effectiveSkillMultipliers(src);
   const destMul = effectiveSkillMultipliers(dest);
   let anyStockNoRoom = false;
+  let flows = false;
   for (const r of targets) {
     const stock = inv(src, r);
     if (stock <= 0) continue;
@@ -71,8 +79,9 @@ export function routeThrottleReason(
       if (srcCap <= 0 || stock / srcCap < entry.sourceFloorPct / 100) continue;
     }
     const headroom = destinationHeadroom(world, states, route.to, r, destMul);
-    if (headroom > 0) return 'flowing';
+    if (headroom > 0) { flows = true; break; }
     anyStockNoRoom = true;
   }
+  if (flows) return weatherMul < 0.999 ? 'weather' : 'flowing';
   return anyStockNoRoom ? 'dest-full' : 'source-empty';
 }
