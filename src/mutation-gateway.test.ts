@@ -384,6 +384,28 @@ describe('makeLocalGateway — validation parity with server intents', () => {
     expect(gateway.setCargoFloorPct(route.id, 0, 50)).toEqual({ ok: false, error: 'route is draining' });
   });
 
+  it('createRouteGroup creates a grouped batch from a from=all selection in one call', () => {
+    const { world, islandStates, colony } = makeTwoPopulatedIslands();
+    const gateway = makeLocalGateway(world, islandStates);
+    const result = gateway.createRouteGroup('all', colony.id, null);
+    expect(result).toEqual({ ok: true });
+    // home has the only free transport building (dock-1) → one route to colony.
+    expect(world.routes).toHaveLength(1);
+    const r = world.routes[0]!;
+    expect(r.from).toBe('home');
+    expect(r.to).toBe(colony.id);
+    expect(r.sourceBuildingId).toBe('dock-1');
+    expect(typeof r.groupId).toBe('string'); // tagged with a shared group id
+  });
+
+  it('createRouteGroup rejects when nothing is eligible', () => {
+    const now = Date.now();
+    const { world, islandStates } = createNewGame(now);
+    const gateway = makeLocalGateway(world, islandStates);
+    // No populated island has a free transport building → empty plan.
+    expect(gateway.createRouteGroup('all', 'all', null)).toEqual({ ok: false, error: 'no eligible routes' });
+  });
+
   it('#135 dispatchDrone rejects when the island has no operational Drone Pad', () => {
     const now = Date.now();
     const { world, islandStates } = createNewGame(now);

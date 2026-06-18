@@ -36,6 +36,8 @@ import {
   createRouteFromBuilding,
   drainRoutesForBuilding,
   islandHasTeleporterPad,
+  nextGroupId,
+  planMergedRoutes,
   reorderPriorityList,
   retargetRoute as retargetRoutePure,
   routeProfileForBuilding,
@@ -220,6 +222,14 @@ export interface MutationGateway {
     /** §2.4 merged-route group handle — stamped on the created route so the
      *  ledger can collapse same-group members into one row. */
     groupId?: string,
+  ): GatewayReturn;
+  /** §2.4 merged-route shortcut — `fromSel`/`toSel` are island ids or the
+   *  `ROUTE_ALL` sentinel. Expands + creates the whole group server-side in ONE
+   *  request (vs. one create per member), under a fresh shared groupId. */
+  createRouteGroup(
+    fromSel: string,
+    toSel: string,
+    filterResource?: ResourceId | null,
   ): GatewayReturn;
   deleteRoute(routeId: string): GatewayReturn;
   /** §2.4 retarget: drain `routeId` and re-create it to `toIslandId`. */
@@ -748,6 +758,30 @@ export function makeLocalGateway(
       return ok();
     },
 
+    createRouteGroup(fromSel, toSel, filterResource) {
+      const plan = planMergedRoutes(world.islands, world.routes, fromSel, toSel);
+      if (plan.length === 0) return err('no eligible routes');
+      const gid = nextGroupId();
+      let created = 0;
+      for (const p of plan) {
+        const fromSpec = world.islands.find((s) => s.id === p.fromId);
+        const toSpec = world.islands.find((s) => s.id === p.toId);
+        if (!fromSpec || !toSpec || !fromSpec.populated || !toSpec.populated) continue;
+        const building = fromSpec.buildings.find((b) => b.id === p.buildingId);
+        if (!building) continue;
+        const profile = routeProfileForBuilding(building.defId);
+        if (profile === null) continue;
+        if (profile.type === 'teleporter' && !islandHasTeleporterPad(toSpec)) continue;
+        const dist = Math.hypot(fromSpec.cx - toSpec.cx, fromSpec.cy - toSpec.cy);
+        const route = createRouteFromBuilding(building, p.fromId, p.toId, filterResource ?? null, dist);
+        if (!route) continue;
+        route.groupId = gid;
+        world.routes.push(route);
+        created += 1;
+      }
+      return created > 0 ? ok() : err('no routes created');
+    },
+
     deleteRoute(routeId) {
       const route = findRoute(routeId);
       if (!route) return err('route not found');
@@ -1045,6 +1079,9 @@ export function makeRemoteGateway(client: GameServerClient): MutationGateway {
 
     createRoute(fromIslandId, toIslandId, buildingId, filterResource, groupId) {
       return send('create-route', { fromIslandId, toIslandId, buildingId, filterResource, groupId });
+    },
+    createRouteGroup(fromSel, toSel, filterResource) {
+      return send('create-route-group', { fromSel, toSel, filterResource });
     },
     deleteRoute(routeId) {
       return send('delete-route', { routeId });

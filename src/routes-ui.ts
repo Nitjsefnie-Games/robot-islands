@@ -681,13 +681,16 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     const filter = cargoChoice === '__any__' ? null : (cargoChoice as ResourceId);
     // §2.4 merged-route shortcut: expand "all" into one grouped batch of routes.
     if (fromId === ROUTE_ALL || toId === ROUTE_ALL) {
-      const plan = planMergedRoutes(deps.world.islands, deps.world.routes, fromId, toId);
-      if (plan.length === 0) return;
-      const gid = nextGroupId();
-      for (const p of plan) {
-        if (deps.gateway) {
-          await deps.gateway.createRoute(p.fromId, p.toId, p.buildingId, filter, gid);
-        } else {
+      if (deps.gateway) {
+        // ONE request: the server (or LOCAL gateway) expands + creates the whole
+        // group under a shared groupId — no per-member round-trips.
+        await deps.gateway.createRouteGroup(fromId, toId, filter);
+      } else {
+        // Test / no-gateway fallback: expand + create directly.
+        const plan = planMergedRoutes(deps.world.islands, deps.world.routes, fromId, toId);
+        if (plan.length === 0) return;
+        const gid = nextGroupId();
+        for (const p of plan) {
           const fs = deps.islandSpecs.get(p.fromId);
           const ts = deps.islandSpecs.get(p.toId);
           const b = fs?.buildings.find((bb) => bb.id === p.buildingId);
