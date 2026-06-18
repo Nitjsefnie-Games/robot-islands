@@ -111,7 +111,7 @@ import {
 import { findNextMerge, performMerge } from './island-merge.js';
 import { mountRoutesUi } from './routes-ui.js';
 import { RouteRenderer } from './routes-renderer.js';
-import { computeCableNetworkBalance, drainRoutesForBuilding, tickRoutes, MAX_ROUTE_BENDS, type Route } from './routes.js';
+import { computeCableNetworkBalance, drainRoutesForBuilding, routeSourceTile, tickRoutes, MAX_ROUTE_BENDS, type Route } from './routes.js';
 import { insertBendOnSegment, pickRouteAt, pickWaypointAt } from './route-bend.js';
 import { RouteBendOverlay } from './route-bend-overlay.js';
 import { crossIslandNeighbors, latticeInventory, latticeStorageCaps } from './lattice.js';
@@ -2102,6 +2102,10 @@ async function main(): Promise<void> {
     const spec = islandSpecsById.get(islandId);
     if (!spec) return null;
     return tileToWorldPx(spec.cx, spec.cy);
+  }, (route) => {
+    // Draw the route FROM its source building (matches the §2.6 weather path).
+    const tile = routeSourceTile(route, islandSpecsById);
+    return tile ? tileToWorldPx(tile.x, tile.y) : null;
   });
   world.addChildAt(routeRenderer.staticLayer, 4);
   world.addChildAt(routeRenderer.animatedLayer, 5);
