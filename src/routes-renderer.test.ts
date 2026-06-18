@@ -125,6 +125,7 @@ describe('Route field whitelist', () => {
     const r = makeRoute('r1', {
       sourceBuildingId: 'b1',
       draining: false,
+      waypoints: [{ x: 1, y: 1 }],
     });
 
     // Fields currently encoded in `perRouteKey` inside RouteRenderer.diffRebuild()
