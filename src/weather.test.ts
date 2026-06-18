@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, test } from 'vitest';
 import { DAY_DURATION_MS } from './daynight.js';
 import {
   weather,
@@ -20,6 +20,8 @@ import {
   rollHeatwave,
   weatherClockMs,
   routeCapacityMultiplierForWeather,
+  routeCapacityMultiplierForCells,
+  rasterizePolylineCells,
   clearWeatherCacheForTests,
 } from './weather.js';
 import type { IslandSpec, WorldState } from './world.js';
@@ -38,6 +40,42 @@ describe('weather determinism', () => {
     const b = weather('seed', 10, 21, 3_600_000);
     expect(a.state !== b.state || a.sinceMs !== b.sinceMs || a.untilMs !== b.untilMs).toBe(true);
   });
+});
+
+test('rasterizePolylineCells with no bend equals straight rasterizeRouteCells (cells)', () => {
+  const cell = 8;
+  const poly = rasterizePolylineCells([{ x: 2, y: 2 }, { x: 40, y: 5 }], cell);
+  const straight = rasterizeRouteCells(2, 2, 40, 5, cell);
+  expect(poly.map(c => `${c.cx},${c.cy}`)).toEqual(straight.map(c => `${c.cx},${c.cy}`));
+});
+
+test('rasterizePolylineCells transitFraction is monotonic non-decreasing in [0,1]', () => {
+  const cells = rasterizePolylineCells([{ x: 0, y: 0 }, { x: 30, y: 0 }, { x: 30, y: 30 }], 8);
+  expect(cells[0]!.transitFraction).toBe(0);
+  expect(cells[cells.length - 1]!.transitFraction).toBeLessThanOrEqual(1);
+  for (let i = 1; i < cells.length; i++) {
+    expect(cells[i]!.transitFraction).toBeGreaterThanOrEqual(cells[i - 1]!.transitFraction);
+  }
+});
+
+test('rasterizePolylineCells does not duplicate the shared vertex cell', () => {
+  // L-shaped path; the corner cell must appear once.
+  const cells = rasterizePolylineCells([{ x: 0, y: 0 }, { x: 24, y: 0 }, { x: 24, y: 24 }], 8);
+  const keys = cells.map(c => `${c.cx},${c.cy}`);
+  expect(new Set(keys).size).toBe(keys.length);
+});
+
+test('routeCapacityMultiplierForCells equals the straight-line multiplier for the same cells', () => {
+  // Seed-independent contract: the cells-based fn is the extracted core of the
+  // straight-line fn, so for a straight 2-point path they must return the SAME
+  // value whatever the (deterministic) weather happens to be at that seed/time.
+  const cell = 8;
+  const cells = rasterizeRouteCells(0, 0, 40, 0, cell).map(c => ({ cx: c.cx, cy: c.cy }));
+  const viaCells = routeCapacityMultiplierForCells('seed-x', cells, 1234);
+  const viaStraight = routeCapacityMultiplierForWeather('seed-x', 0, 0, 40, 0, 1234, cell);
+  expect(viaCells).toBe(viaStraight);
+  expect(viaCells).toBeGreaterThanOrEqual(0);
+  expect(viaCells).toBeLessThanOrEqual(1);
 });
 
 describe('biomeWeatherWeights', () => {

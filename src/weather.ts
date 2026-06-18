@@ -769,6 +769,74 @@ export function rasterizeRouteCells(
   return lineSegmentCells(fromX, fromY, toX, toY, cellSizeTiles);
 }
 
+/** Rasterize a polyline [p0, p1, …, pn] (tile coords) into stratification
+ *  cells with a MONOTONIC global transitFraction in [0,1]. Each segment is
+ *  rasterized via lineSegmentCells; its local fraction [0,1] is remapped to
+ *  (cumLenBefore + local*segLen)/totalLen. The shared vertex cell between
+ *  consecutive segments is emitted once (skip a segment's first cell if it
+ *  repeats the previous segment's last cell). A single point (or zero length)
+ *  yields one cell at fraction 0. */
+export function rasterizePolylineCells(
+  points: ReadonlyArray<{ x: number; y: number }>,
+  cellSizeTiles: number,
+): Array<{ cx: number; cy: number; transitFraction: number }> {
+  if (points.length === 0) return [];
+  if (points.length === 1) {
+    const p = points[0]!;
+    return [{ cx: Math.floor(p.x / cellSizeTiles), cy: Math.floor(p.y / cellSizeTiles), transitFraction: 0 }];
+  }
+  const segLens: number[] = [];
+  let totalLen = 0;
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i]!, b = points[i + 1]!;
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    segLens.push(len);
+    totalLen += len;
+  }
+  const out: Array<{ cx: number; cy: number; transitFraction: number }> = [];
+  if (totalLen === 0) {
+    const p = points[0]!;
+    return [{ cx: Math.floor(p.x / cellSizeTiles), cy: Math.floor(p.y / cellSizeTiles), transitFraction: 0 }];
+  }
+  let cumBefore = 0;
+  for (let i = 0; i < points.length - 1; i++) {
+    const a = points[i]!, b = points[i + 1]!;
+    const segLen = segLens[i]!;
+    const cells = lineSegmentCells(a.x, a.y, b.x, b.y, cellSizeTiles);
+    for (let j = 0; j < cells.length; j++) {
+      const c = cells[j]!;
+      // Drop the leading cell of a non-first segment if it repeats the prior cell.
+      if (j === 0 && i > 0) {
+        const prev = out[out.length - 1];
+        if (prev && prev.cx === c.cx && prev.cy === c.cy) continue;
+      }
+      const global = segLen > 0 ? (cumBefore + c.transitFraction * segLen) / totalLen : cumBefore / totalLen;
+      out.push({ cx: c.cx, cy: c.cy, transitFraction: global });
+    }
+    cumBefore += segLen;
+  }
+  return out;
+}
+
+/** §2.6 capacity multiplier (min over already-rasterized cells). Extracted so
+ *  callers that already have the (possibly bent) cell list don't re-rasterize. */
+export function routeCapacityMultiplierForCells(
+  seed: string,
+  cells: ReadonlyArray<{ cx: number; cy: number }>,
+  nowMs: number,
+  wallOffsetMs = 0,
+  biomeFor?: (cx: number, cy: number) => Biome | undefined,
+  totalCo2Kg = 0,
+): number {
+  let minMul = 1;
+  for (const { cx, cy } of cells) {
+    const w = weather(seed, cx, cy, weatherClockMs(nowMs, wallOffsetMs), biomeFor?.(cx, cy), totalCo2Kg);
+    const mul = WEATHER_ROUTE_CAPACITY_MULTIPLIER[w.state];
+    if (mul !== undefined) minMul = Math.min(minMul, mul);
+  }
+  return minMul;
+}
+
 /** Returns capacity multiplier [0,1] for a route crossing given cells at nowMs. */
 export function routeCapacityMultiplierForWeather(
   seed: string,
@@ -786,11 +854,5 @@ export function routeCapacityMultiplierForWeather(
   totalCo2Kg: number = 0,
 ): number {
   const cells = rasterizeLineSegment(fromX, fromY, toX, toY, cellSizeTiles);
-  let minMul = 1;
-  for (const { cx, cy } of cells) {
-    const w = weather(seed, cx, cy, weatherClockMs(nowMs, wallOffsetMs), biomeFor?.(cx, cy), totalCo2Kg);
-    const mul = WEATHER_ROUTE_CAPACITY_MULTIPLIER[w.state];
-    if (mul !== undefined) minMul = Math.min(minMul, mul);
-  }
-  return minMul;
+  return routeCapacityMultiplierForCells(seed, cells, nowMs, wallOffsetMs, biomeFor, totalCo2Kg);
 }
