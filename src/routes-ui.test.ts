@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { mountRoutesUi, viaBuildingKeyForIsland, fmtUPerSec, routeStructKey } from './routes-ui.js';
+import { mountRoutesUi, viaBuildingKeyForIsland, fmtUPerSec, routeStructKey, buildingOptionLabel } from './routes-ui.js';
 import { createNewGame } from './new-game.js';
 import type { RouteRenderer } from './routes-renderer.js';
 import type { PlacedBuilding } from './buildings.js';
@@ -39,6 +39,23 @@ function b(id: string, defId: string): PlacedBuilding {
     rotation: 0,
   } as PlacedBuilding;
 }
+
+describe('buildingOptionLabel — floor-scaled max in the route selector', () => {
+  const cargoProfile = { type: 'cargo', capacityPerSec: 0.5 };
+
+  it('shows the tier base for a fresh (floor-1) building', () => {
+    // floorLevel 0 → activeFloorLevel 0 → ×(1+0) = 0.5 u/s
+    expect(buildingOptionLabel({ defId: 'dock', floorLevel: 0 }, cargoProfile)).toContain('0.50 u/s');
+    expect(buildingOptionLabel({ defId: 'dock', floorLevel: 0 }, cargoProfile)).toContain('cargo');
+  });
+
+  it('scales the advertised max with floor level', () => {
+    // floorLevel 1 → activeFloorLevel 1 → ×(1+1) = 1.0 u/s
+    expect(buildingOptionLabel({ defId: 'dock', floorLevel: 1 }, cargoProfile)).toContain('1.00 u/s');
+    // floorLevel 3 → activeFloorLevel 3 → ×4 = 2.0 u/s
+    expect(buildingOptionLabel({ defId: 'dock', floorLevel: 3 }, cargoProfile)).toContain('2.00 u/s');
+  });
+});
 
 describe('fmtUPerSec / routeStructKey (#136 ledger display)', () => {
   it('formats a per-second capacity with the u/s unit', () => {
