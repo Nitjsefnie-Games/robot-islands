@@ -184,6 +184,21 @@ describe('produced resources have terminal classification (rev-16 §3.5.4)', () 
       expect(RECIPES[recipeId as RecipeId], `${recipeId} not in RECIPES`).toBeDefined();
     }
   });
+
+  // Resource-graph-closure plan P1 — tag hygiene. These resources already have
+  // a real sink and were mis-tagged `expansion-hook`, inflating the orphan
+  // count. Fuel-ladder fuels and atmospheric air are non-recipe sinks
+  // (gameplay-sink); aviation_kerosene_crude is produced AND consumed by a
+  // recipe (a closed intermediate → consumed).
+  it('fuel-ladder fuels + atmospheric air are gameplay-sinks, not orphans', () => {
+    for (const r of ['biofuel', 'aviation_kerosene', 'air'] as ResourceId[]) {
+      expect(RESOURCE_META[r].terminal, r).toBe('gameplay-sink');
+    }
+  });
+
+  it('aviation_kerosene_crude is a closed intermediate (consumed), not an orphan', () => {
+    expect(RESOURCE_META.aviation_kerosene_crude.terminal).toBe('consumed');
+  });
 });
 
 describe('step-18 producer coverage (§7 chain closures)', () => {

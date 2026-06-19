@@ -1138,7 +1138,7 @@ export const RESOURCE_META: Readonly<Record<ResourceId, ResourceMeta>> = {
   oxygen: { massPerUnitKg: 1, terminal: 'consumed' },
   argon: { massPerUnitKg: 1, terminal: 'consumed' },
   slag: { massPerUnitKg: 1, terminal: 'consumed' },
-  biofuel: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
+  biofuel: { massPerUnitKg: 1, terminal: 'gameplay-sink' }, // fuelForTier(1) — drone/vehicle fuel ladder
   iron_ingot: { massPerUnitKg: 1, terminal: 'consumed' },
   coke: { massPerUnitKg: 1, terminal: 'consumed' },
   pig_iron: { massPerUnitKg: 1, terminal: 'consumed' },
@@ -1186,7 +1186,7 @@ export const RESOURCE_META: Readonly<Record<ResourceId, ResourceMeta>> = {
   memory_module: { massPerUnitKg: 0.05, terminal: 'expansion-hook:Phase 2 supplies consumer' },
   nitrogen: { massPerUnitKg: 1, terminal: 'consumed' },
   cryo_coolant: { massPerUnitKg: 1, volumePerUnitL: 1, terminal: 'consumed' },
-  aviation_kerosene: { massPerUnitKg: 1, volumePerUnitL: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
+  aviation_kerosene: { massPerUnitKg: 1, volumePerUnitL: 1, terminal: 'gameplay-sink' }, // fuelForTier(3) — fuel ladder
   microchip: { massPerUnitKg: 0.1, terminal: 'consumed' },
   gold_ore: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
   silver_ore: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
@@ -1341,10 +1341,10 @@ export const RESOURCE_META: Readonly<Record<ResourceId, ResourceMeta>> = {
   refinery_gas: { massPerUnitKg: 1, terminal: 'expansion-hook:residential heating / petrochem feedstock' },
   wood_tar: { massPerUnitKg: 1, terminal: 'expansion-hook:creosote / wood-preservative chain' },
   water_vapor: { massPerUnitKg: 1, terminal: 'expansion-hook:condensing-loop / humidity / fresh-water reclamation' },
-  aviation_kerosene_crude: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
+  aviation_kerosene_crude: { massPerUnitKg: 1, terminal: 'consumed' }, // → aviation_kerosene (hydrotreater recipe)
   mill_scale: { massPerUnitKg: 1, terminal: 'expansion-hook:scrap remelt / cement kiln aggregate / brick pigment' },
   calcium_sulfonate: { massPerUnitKg: 1, terminal: 'consumed' },
-  air: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
+  air: { massPerUnitKg: 1, terminal: 'gameplay-sink' }, // atmospheric intake (exogenousFlow 'atmosphere'), not stored
   cryo_coolant_vented: { massPerUnitKg: 1, terminal: 'expansion-hook:re-liquefaction loop / closed-cycle recovery' },
 };
 
