@@ -153,14 +153,13 @@ export function rollHeatwave(seed: string, day: number, totalCo2Kg: number): 'he
   return (rng() < 0.05) ? 'heatwave' : null;
 }
 
-export function sumIslandCo2(world: { islandStates?: Map<string, { co2Kg?: number }> }): number {
-  let sum = 0;
-  if (world.islandStates) {
-    for (const [, state] of world.islandStates) {
-      sum += state.co2Kg ?? 0;
-    }
-  }
-  return sum;
+export function sumIslandCo2(world: { totalCo2Kg?: number }): number {
+  // §7.4 single global atmosphere. The world maintains one `totalCo2Kg` scalar;
+  // emissions add to it and sinks drain it (floored at 0) across all islands.
+  // This is the stable read API for every climate consumer (weather, drones,
+  // routes, settlement, HUD, overlays, tutorial). The legacy per-island `co2Kg`
+  // is retained for the standalone `advanceIsland` fallback but is inert here.
+  return world.totalCo2Kg ?? 0;
 }
 
 /** §15.1 / §2.6 — convert a `performance.now()`-domain timestamp to the
