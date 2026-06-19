@@ -1503,7 +1503,7 @@ This makes long-range path drones high-risk, high-reward. The player commits fue
 
 * `returned` — straight-line drones that completed their round-trip and reported their data.
 * `stranded` — path-drawn drones that survived to the terminus. Telemetry is recovered if the terminus was in antenna range, otherwise forfeited.
-* `lost` — destroyed by weather or fuel exhaustion; data lost.
+* `lost` — destroyed by weather or fuel exhaustion; data lost. **Loss visibility (dark-aware):** the fleet list and map dot reflect what the player can *observe*, not ground truth. A drone destroyed while inside antenna signal range is witnessed and removed from the fleet at once. A drone destroyed in **dark mode** (outside all antenna ranges) keeps showing as if still flying — its dot continues to advance along the would-be trajectory — and is removed only the moment that trajectory would re-enter antenna coverage (its absence then makes the loss obvious: "missing in coverage = destroyed"). Concretely the `active → lost` flip happens at `min(expectedReturnTime, first tick at/after the deterministic death time whose interpolated position lies in any antenna SignalRange)`; `expectedReturnTime` is the fallback when coverage never returns (e.g. no antenna exists). Old saves without a stored death time fall back to removal at `expectedReturnTime`. This makes weather losses in dark mode unknowable for hours of real time (per §11.6), exactly like the data they carried.
 
 **Use cases:**
 
