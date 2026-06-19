@@ -9,11 +9,11 @@
 //   overlayLayer   — per-frame chevrons + pulses + draft preview (cheap
 //                    primitives, rebuilt every update; not cached).
 
-import { Container, Graphics, Matrix } from 'pixi.js';
+import { Container, Graphics } from 'pixi.js';
 import type { Route } from './routes.js';
 import { VISION_BLUE } from './world.js';
 import { TILE_PX } from './island.js';
-import { colorForRouteType, getDashedStrokeTexture } from './routes-dash-texture.js';
+import { colorForRouteType } from './routes-dash-texture.js';
 
 export interface RouteRenderState {
   staticGraphics: Graphics;
@@ -42,7 +42,6 @@ export class RouteRenderer {
 
   private readonly entries = new Map<string, RouteRenderState>();
   private _disposed = false;
-  private readonly _scrollMatrix = new Matrix();
 
   constructor(
     private readonly resolveIslandPos: IslandPosResolver,
@@ -151,71 +150,25 @@ export class RouteRenderer {
     }
   }
 
-  /** Build the dashed-line geometry for a single route.
-   *  Phase 3: the animated layer uses a texture-stroked line; the static
-   *  layer carries a per-segment dashed-line fallback that's only executed
-   *  if `BUILD_STATIC_FALLBACK` is flipped on — see the const below. */
+  /** Build the route line geometry — a plain SOLID stroke along the polyline.
+   *  Previously a scrolling texture-stroked dash. Pixi 8 bakes stroke-texture
+   *  UVs into vertex geometry, which caused two artifacts: (a) scrolling the
+   *  dashes required a full clear()+re-tessellate EVERY frame, which flickered
+   *  the lines (~30 Hz), and (b) the dashed texture faded at the line ends where
+   *  the segment length didn't land on a dash-period boundary. A solid stroke
+   *  has neither problem and is built ONCE per cacheKey change (no per-frame
+   *  work). Flow / direction is conveyed by the chevrons (see paintOverlay). */
   private buildRouteGeometry(r: Route, entry: RouteRenderState): void {
     const color = colorForRouteType(r.type);
-    const alpha = 0.55;
-
-    // Phase-2-style per-segment dashed fallback. Gated OFF by default:
-    // every cacheKey-change otherwise wastes O(totalLen / period) Graphics
-    // ops building geometry that's never painted (the static layer is
-    // hidden below). Flip `BUILD_STATIC_FALLBACK` to `true` and remove the
-    // `entry.staticGraphics.visible = false` line if the Phase-3 texture-
-    // stroke pipeline breaks in a future Pixi upgrade.
-    const BUILD_STATIC_FALLBACK = false;
-    if (BUILD_STATIC_FALLBACK) {
-      const DASH_LEN_WORLD_PX = 8;
-      const GAP_LEN_WORLD_PX = 4;
-      const period = DASH_LEN_WORLD_PX + GAP_LEN_WORLD_PX;
-      const pts = entry.points;
-      for (let i = 0; i < pts.length - 1; i++) {
-        const p1 = pts[i]!;
-        const p2 = pts[i + 1]!;
-        const dx = p2.x - p1.x;
-        const dy = p2.y - p1.y;
-        const segLen = Math.hypot(dx, dy);
-        if (segLen <= 0) continue;
-        const ux = dx / segLen;
-        const uy = dy / segLen;
-        let drawn = 0;
-        while (drawn < segLen) {
-          const startT = drawn;
-          const endT = Math.min(segLen, drawn + DASH_LEN_WORLD_PX);
-          if (endT > startT) {
-            const sx = p1.x + ux * startT;
-            const sy = p1.y + uy * startT;
-            const ex = p1.x + ux * endT;
-            const ey = p1.y + uy * endT;
-            entry.staticGraphics.moveTo(sx, sy).lineTo(ex, ey);
-          }
-          drawn += period;
-        }
-      }
-      entry.staticGraphics.stroke({ width: 1.5, color, alpha });
-    }
-
-    // Phase 3: texture-stroked animated line, segment-by-segment so each
-    // straight span gets its own dash-scroll rotation.
-    const tex = getDashedStrokeTexture(r.type);
     const pts = entry.points;
-    for (let i = 0; i < pts.length - 1; i++) {
-      const p1 = pts[i]!;
-      const p2 = pts[i + 1]!;
-      const dx = p2.x - p1.x;
-      const dy = p2.y - p1.y;
-      const angle = Math.atan2(dy, dx);
-      this._scrollMatrix.set(1, 0, 0, 1, 0, 0).rotate(angle);
-      entry.animatedGraphics
-        .moveTo(p1.x, p1.y)
-        .lineTo(p2.x, p2.y)
-        .stroke({ texture: tex, matrix: this._scrollMatrix, width: 2.0, alpha: 0.85 });
+    if (pts.length >= 2) {
+      const g = entry.animatedGraphics;
+      g.moveTo(pts[0]!.x, pts[0]!.y);
+      for (let i = 1; i < pts.length; i++) g.lineTo(pts[i]!.x, pts[i]!.y);
+      g.stroke({ color, width: 2, alpha: 0.85 });
     }
-
-    // Static layer is the dashed fallback — kept hidden; see
-    // `BUILD_STATIC_FALLBACK` above for flip-on instructions.
+    // Static layer is unused now (the solid line lives on the animated layer,
+    // built once); keep it hidden.
     entry.staticGraphics.visible = false;
   }
 
