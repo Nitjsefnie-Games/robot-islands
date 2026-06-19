@@ -847,6 +847,30 @@ export function tickDrones(
       }
     }
 
+    // 1.5) §11.4 dark-aware loss visibility. A doomed drone's fate is known
+    //    deterministically at dispatch (`doomedAtMs`). The fleet list / map dot
+    //    should reflect what the PLAYER can observe, not ground truth: a drone
+    //    destroyed inside antenna coverage is witnessed and removed at once,
+    //    while one lost in dark mode keeps showing as "flying" until its
+    //    trajectory would re-enter coverage — at which point its absence makes
+    //    the loss obvious. Flip to `lost` the first tick at/after `doomedAtMs`
+    //    whose phantom position (interpolated along the would-be trajectory)
+    //    lies in any antenna range. The `expectedReturnTime` branch below is
+    //    the fallback cap when coverage never returns (no antenna at all), and
+    //    old saves (no `doomedAtMs`) skip this and fall through to that roll.
+    if (d.doomedAtMs !== undefined && nowMs >= d.doomedAtMs && nowMs < d.expectedReturnTime) {
+      const phantom = droneCurrentPosition(d, nowMs);
+      if (pointInSignalRange(ranges, phantom.x, phantom.y)) {
+        d.status = 'lost';
+        lost.push(d);
+        // §11.6 data lost on failure: forfeit any buffered dark-mode telemetry.
+        d.darkModeDiscoveries = [];
+        d.scanBuffer.clear();
+        remaining.push(d);
+        continue;
+      }
+    }
+
     // 2) Weather destruction on return. The return decision is decoupled
     //    from reveals — a returned drone has already had its full flight
     //    scanned above (the segStartMs..segEndMs clamp covers the entire

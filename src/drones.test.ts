@@ -2255,6 +2255,93 @@ describe('Fix 6.3: destruction fate decided at dispatch', () => {
 });
 
 // ---------------------------------------------------------------------------
+// §11.4 dark-aware loss visibility — a weather-destroyed drone stays in the
+// fleet list (shown as still flying) only while its trajectory is OUTSIDE
+// antenna coverage; it disappears the moment its (phantom) position re-enters
+// signal range at/after its death — capped at expectedReturnTime as a fallback
+// when coverage never returns. "missing in coverage = obviously destroyed."
+// ---------------------------------------------------------------------------
+
+describe('§11.4 dark-aware drone loss visibility', () => {
+  function worldWithSeed(seed: string, buildings: Array<{ id: string; defId: string; x: number; y: number }> = []): WorldState {
+    return {
+      islands: [{
+        id: 'home', name: 'home', biome: 'plains',
+        cx: 0, cy: 0, majorRadius: 5, minorRadius: 5,
+        populated: true, discovered: true,
+        buildings: buildings as never,
+        modifiers: [],
+      }],
+      drones: [], routes: [], vehicles: [],
+      revealedCells: new Set(), satellites: [], repairDrones: [], debrisFields: [],
+      endgameState: { achieved: new Set(), firstAchievedMs: null },
+      latticeActive: false, latticeNodeIslands: [], commPackets: [],
+      totalCo2Kg: 0, playerLat: null, playerLon: null,
+      oceanCells: new Map(), depthRevealedCells: new Set(),
+      seed, recentBuildAttempts: new Set(), recentBuildAttemptTs: new Map(),
+    };
+  }
+
+  /** Straight-line T2 drone east from (0,0), speed 0.5 t/s. With `outboundTiles`
+   *  O the apex is at O/0.5·1000 ms and the round-trip return at 2·O/0.5·1000 ms. */
+  function manualDrone(over: Partial<Drone> & Pick<Drone, 'id' | 'outboundTiles' | 'expectedReturnTime'>): Drone {
+    return {
+      fromIslandId: 'home', originX: 0, originY: 0, dirX: 1, dirY: 0,
+      scanRadius: 4, launchTime: 0, tier: 2, fuelLoaded: 10, fuelResource: 'diesel',
+      status: 'active', waypoints: [], darkModeDiscoveries: [],
+      scanBuffer: new Set<string>(), probabilityBias: 0,
+      ...over,
+    };
+  }
+
+  // T1 antenna at home origin → footprint centre (0.5, 0.5), radius 80 tiles.
+  const ANTENNA = [{ id: 'a1', defId: 'antenna_t1', x: 0, y: 0 }];
+
+  it('drone killed INSIDE antenna range disappears before expectedReturnTime', () => {
+    // outbound 30 (apex x=30, all in range), doomed at t=30s (x=15, in range).
+    const w = worldWithSeed('any', ANTENNA);
+    const d = manualDrone({ id: 'in-range', outboundTiles: 30, expectedReturnTime: 120_000, doomedAtMs: 30_000 });
+    w.drones.push(d);
+    const r = tickDrones(w, 31_000, 0);
+    expect(d.status).toBe('lost');           // gone well before T+120s
+    expect(r.lost).toContain(d);
+  });
+
+  it('drone killed in the DARK stays shown until its return path re-enters coverage', () => {
+    // outbound 200 (apex x=200, far outside the 80-tile range), doomed at the
+    // apex (t=400s). expectedReturnTime = 2·200/0.5·1000 = 800s.
+    const w = worldWithSeed('any', ANTENNA);
+    const d = manualDrone({ id: 'dark', outboundTiles: 200, expectedReturnTime: 800_000, doomedAtMs: 400_000 });
+    w.drones.push(d);
+
+    // After death but still far out (phantom x≈195): still shown as flying.
+    tickDrones(w, 410_000, 0);
+    expect(d.status).toBe('active');
+
+    // Return leg has carried the phantom back to x≈50 (inside the 80-tile
+    // range) by t=700s — re-entry triggers removal, before expectedReturnTime.
+    const r = tickDrones(w, 700_000, 410_000);
+    expect(d.status).toBe('lost');
+    expect(r.lost).toContain(d);
+  });
+
+  it('drone killed in the dark with NO coverage anywhere is removed at expectedReturnTime (fallback)', () => {
+    const w = worldWithSeed('any'); // no antenna
+    const d = manualDrone({ id: 'no-cov', outboundTiles: 200, expectedReturnTime: 800_000, doomedAtMs: 400_000 });
+    w.drones.push(d);
+
+    // Phantom back near home (x≈50) but no antenna ⇒ never "in coverage": still shown.
+    tickDrones(w, 700_000, 0);
+    expect(d.status).toBe('active');
+
+    // Due back and absent ⇒ removed at expectedReturnTime.
+    const r = tickDrones(w, 801_000, 700_000);
+    expect(d.status).toBe('lost');
+    expect(r.lost).toContain(d);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Fix 6.4 — rare-island bias only applies to rare islands
 // ---------------------------------------------------------------------------
 
