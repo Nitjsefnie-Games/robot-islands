@@ -285,7 +285,7 @@ describe('advanceIsland — event-driven piecewise integration', () => {
     expect(state.inventory.air ?? 0).toBe(0);
   });
 
-  it('charcoal_kiln produces co2 inventory but accrues 0 climate CO₂ (biogenic)', () => {
+  it('charcoal_kiln biogenic co2 is non-stored and accrues 0 climate CO₂', () => {
     const defs = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
     // Strip power so no power plant is needed.
     const { power: _p1, ...ckRest } = defs.charcoal_kiln;
@@ -300,13 +300,14 @@ describe('advanceIsland — event-driven piecewise integration', () => {
       storageCaps: blankCaps(10_000),
     });
     advanceIsland(state, 33_000, { defs }); // 33 s ≪ one cycle (171998.6 s)
-    // Recipe: 8 wood → 2 charcoal + 1 wood_tar + 2 co2 + 3 water_vapor
-    expect(state.inventory.co2).toBeCloseTo(0.0003837240535678779, 6);
-    // Biogenic CO₂ is carbon-neutral and must not count toward climate CO₂.
+    // Recipe: 8 wood → 2 charcoal + 1 wood_tar + 2 co2 + 3 water_vapor. §2.6:
+    // co2 is non-stored (never enters inventory); being biogenic it also adds
+    // nothing to the climate scalar — so it vanishes (carbon-neutral).
+    expect(state.inventory.co2 ?? 0).toBe(0);
     expect(state.co2Kg).toBe(0);
   });
 
-  it('limekiln accrues both process-CO₂ (inventory) and fuel-CO₂ (exogenous flow)', () => {
+  it('limekiln accrues process-CO₂ + fuel-CO₂ to the climate scalar (co2 non-stored)', () => {
     const defs = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
     const { power: _p1, ...lkRest } = defs.limekiln;
     defs.limekiln = lkRest as BuildingDef;
@@ -320,9 +321,11 @@ describe('advanceIsland — event-driven piecewise integration', () => {
       storageCaps: blankCaps(10_000),
     });
     advanceIsland(state, 40_000, { defs }); // 40 s ≪ one cycle (119443.5 s)
-    // Recipe: 25 limestone → 14 quicklime + 11 co2  [+5 kg fuel-combustion-CO₂]
+    // Recipe: 25 limestone → 14 quicklime + 11 co2  [+5 kg fuel-combustion-CO₂].
+    // §2.6: co2 is non-stored — no inventory double-booking; its climate
+    // contribution lands only on the co2Kg scalar (process + exogenous).
     expect(state.inventory.quicklime).toBeCloseTo(0.0046884091641654834, 6);
-    expect(state.inventory.co2).toBeCloseTo(0.0036837500575585946, 6); // inventory only
+    expect(state.inventory.co2 ?? 0).toBe(0);
     expect(state.co2Kg).toBeCloseTo(0.00535818190190341, 6); // ~0.00368 process + ~0.00167 exogenous
   });
 });
@@ -6046,5 +6049,20 @@ describe('§2.6 byproduct-gas full-bin does not stall the producer', () => {
     // the primary output. If this fails, the §1.2 throttle is live and the fix
     // (vent the byproduct gases out of inventory) is required.
     expect(pinned).toBeCloseTo(free, 6);
+  });
+
+  it('a non-stored byproduct is drained from inventory (does not stay stuck)', () => {
+    // Start with a full `co` bin (e.g. from a pre-vent save) and run.
+    const caps = blankCaps(1_000_000_000);
+    caps.co = 5;
+    const state = makeState({
+      buildings: [SMELTER],
+      inventory: { ...blankInventory(), iron_ore: 1_000_000, coal: 1_000_000, co: 5 },
+      storageCaps: caps,
+    });
+    advanceIsland(state, 100_000, { defs: SMELTER_POWER_FREE });
+    // The Smelter keeps emitting `co`, yet the bin reads empty — it is vented,
+    // not accumulated, and the pre-existing stock was drained.
+    expect(state.inventory.co ?? 0).toBe(0);
   });
 });

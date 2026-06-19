@@ -11,7 +11,7 @@ import { BUILDING_DEFS, type BuildingCategory, type BuildingDefId } from './buil
 import type { PlacedBuilding } from './buildings.js';
 import { nextSunEvent, realPhaseName, solarMultiplier, type DayPhase } from './daynight.js';
 import { cap, inv, type IslandState, type PowerBalance, xpForLevel } from './economy.js';
-import { fmtPower } from './format.js';
+import { fmtMass, fmtPower } from './format.js';
 import { dispatchAction, type InputRegistry } from './input.js';
 import type { NetworkConsciousnessState } from './network-consciousness.js';
 import {
@@ -28,6 +28,7 @@ import { canTierReset } from './tier-reset.js';
 import { toDisplayName } from './ui-tokens.js';
 import { mountPanel, Zone } from './ui-zones.js';
 import type { IslandSpec, WorldState } from './world.js';
+import { sumIslandCo2 } from './weather.js';
 
 
 /**
@@ -751,6 +752,19 @@ export function mountHud(
   netKv.appendChild(netK);
   netKv.appendChild(netV);
 
+  // §7.4 global CO₂ atmosphere — a single world-level value (Σ per-island
+  // co2Kg via sumIslandCo2). Same for every island; shown here in the
+  // bottom-right HUD as the climate-pressure readout.
+  const co2Kv = document.createElement('div');
+  co2Kv.classList.add('ri-kv');
+  const co2K = document.createElement('span');
+  co2K.classList.add('ri-kv__k');
+  co2K.textContent = '☁ ATMOSPHERE CO₂';
+  const co2V = document.createElement('span');
+  co2V.classList.add('ri-kv__v');
+  co2Kv.appendChild(co2K);
+  co2Kv.appendChild(co2V);
+
   // Site section.
   const siteHead = document.createElement('div');
   siteHead.classList.add('ri-sectionhead');
@@ -800,6 +814,7 @@ export function mountHud(
   body.appendChild(powerKv);
   body.appendChild(powerMeter);
   body.appendChild(netKv);
+  body.appendChild(co2Kv);
   body.appendChild(siteHead);
   body.appendChild(modRow);
   body.appendChild(abKv);
@@ -818,6 +833,7 @@ export function mountHud(
   const setPowerPct = gatedStyleProp(powerFill, '--ri-meter-pct');
   const setNetV = gatedText(netV);
   const setNetVTone = gatedTone(netV);
+  const setCo2V = gatedText(co2V);
   const setOfferV = gatedText(offerV);
   const setAbV = gatedText(abV);
 
@@ -933,6 +949,9 @@ export function mountHud(
       setNetV(`${ncState.tier3PlusCount} at T3+ · NC tier ${ncState.milestone} · +${buffPct}%${enRouteSuffix}`);
       setNetVTone('success');
     }
+
+    // §7.4 global CO₂ atmosphere — the single world total (Σ per-island co2Kg).
+    setCo2V(fmtMass(sumIslandCo2(world)));
 
     // ---- Site section -----------------------------------------------------
     // Chips derive entirely from the modifier-id list (static MODIFIER_DEFS),

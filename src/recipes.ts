@@ -1337,7 +1337,7 @@ export const RESOURCE_META: Readonly<Record<ResourceId, ResourceMeta>> = {
   oceanography_crystal_t3: { massPerUnitKg: 1, terminal: 'gameplay-sink' },
   // Phase 2 — SI-units rework new resources (§08)
   co: { massPerUnitKg: 1, terminal: 'expansion-hook:CO afterburn / oxidation chain' },
-  co2: { massPerUnitKg: 1, terminal: 'expansion-hook:weather penalty + sequestration (Phase 6)' },
+  co2: { massPerUnitKg: 1, terminal: 'gameplay-sink' }, // global atmosphere scalar (co2Kg) — weather + capture, non-recipe sink
   refinery_gas: { massPerUnitKg: 1, terminal: 'expansion-hook:residential heating / petrochem feedstock' },
   wood_tar: { massPerUnitKg: 1, terminal: 'expansion-hook:creosote / wood-preservative chain' },
   water_vapor: { massPerUnitKg: 1, terminal: 'expansion-hook:condensing-loop / humidity / fresh-water reclamation' },
