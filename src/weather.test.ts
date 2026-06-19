@@ -716,18 +716,14 @@ describe('co2WeatherMultiplier — band edges', () => {
   });
 });
 
-describe('sumIslandCo2 — aggregation', () => {
-  it('sums co2Kg across the islandStates map', () => {
-    const states = new Map<string, { co2Kg?: number }>([
-      ['a', { co2Kg: 1000 }],
-      ['b', { co2Kg: 2500 }],
-      ['c', { co2Kg: 0 }],
-    ]);
-    expect(sumIslandCo2({ islandStates: states })).toBe(3500);
+describe('sumIslandCo2 — global atmosphere pool', () => {
+  it('returns the single global world.totalCo2Kg, not a per-island sum', () => {
+    // Per-island co2Kg is inert in production; the authoritative climate value
+    // is the one world-level scalar.
+    expect(sumIslandCo2({ totalCo2Kg: 3500 })).toBe(3500);
   });
-  it('treats missing co2Kg as 0', () => {
-    const states = new Map<string, { co2Kg?: number }>([['a', {}]]);
-    expect(sumIslandCo2({ islandStates: states })).toBe(0);
+  it('treats missing totalCo2Kg as 0', () => {
+    expect(sumIslandCo2({})).toBe(0);
   });
 });
 
