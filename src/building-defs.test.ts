@@ -20,7 +20,7 @@ import {
   type BuildingDefId,
 } from './building-defs.js';
 import { SHAPES, shapeHeight, shapeWidth } from './shape-mask.js';
-import { RECIPES, RESOURCE_META } from './recipes.js';
+import { RECIPES, RESOURCE_META, type ResourceId } from './recipes.js';
 import { buildingForRecipe } from './recipe-density.js';
 import type { IslandSpec } from './world.js';
 
@@ -2514,4 +2514,28 @@ describe('LAND_TILE_COST', () => {
   it('is the per-land-tile structural basket', () => {
     expect(LAND_TILE_COST).toEqual({ steel_beam: 1, concrete: 10 });
   });
+});
+
+// Resource-graph-closure plan P2 — endgame structural components are consumed
+// by the placement cost of the building they belong to (a non-recipe sink ⇒
+// gameplay-sink). Each consumer building's tier ≥ the component's producer-lab
+// tier, so it's bootstrap-safe. The two fuel-like components
+// (antimatter_propellant, plasma_charge) are deferred to P4 (consumed per-use,
+// not a structural placement cost).
+describe('closure P2 — endgame components consumed by placement cost', () => {
+  const COMPONENT_BUILDING: ReadonlyArray<readonly [ResourceId, BuildingDefId]> = [
+    ['singularity_battery_unit', 'singularity_battery'],
+    ['particle_accelerator_core', 'particle_accelerator'],
+    ['cryo_containment_unit', 'cryogenic_compute_center'],
+    ['singularity_sensor', 'orbital_tracking_station'],
+    ['probability_calculator', 'probability_engine'],
+    ['aether_beacon', 'lighthouse_t6'],
+    ['reality_engine', 'universe_editor'],
+  ];
+  for (const [component, building] of COMPONENT_BUILDING) {
+    it(`${building} placement cost consumes ${component} (no longer an orphan)`, () => {
+      expect(BUILDING_DEFS[building].placementCost?.[component] ?? 0).toBeGreaterThan(0);
+      expect(RESOURCE_META[component].terminal).toBe('gameplay-sink');
+    });
+  }
 });

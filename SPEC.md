@@ -766,6 +766,8 @@ output_kg_per_cycle = Σ(output_units × RESOURCE_META.massPerUnitKg)   // all o
 
 The areal densities are real *harvesting/processing* rates (a logger strip-mines decades of standing timber, not the ~µg·s⁻¹·m⁻² a forest regrows), so the figures are industrial nameplate, not sustainable yield. `M` is a **generation-time** constant: the resulting `cycleSec` values are baked into `recipes.ts` per recipe; `RESOURCE_META.massPerUnitKg` is the live input that survives in code. Canonical derivation + per-building sources: `docs/superpowers/specs/2026-05-29-throughput-floors-rebalance-design.md` and its companion `…-throughput-density-table.md`.
 
+**Resource-graph closure — `terminal` taxonomy.** Every resource carries `RESOURCE_META[r].terminal` ∈ `'consumed'` (≥1 recipe consumer), `'gameplay-sink'` (consumed by a non-recipe system — fuel ladder, skill crystals, orbital, **placement cost**), or `` `expansion-hook:${reason}` `` (a declared orphan, no consumer yet). `recipes.test.ts` gates it: a produced `'consumed'` resource MUST have a recipe input consumer. Closure status + the live orphan ledger + the phased plan live in `docs/reports/2026-06-19-resource-graph-closure-status.md` and `docs/superpowers/plans/2026-06-19-resource-graph-closure.md`. Landed: P0 byproduct-discard (§15.3 above), P1 tag hygiene (biofuel/aviation_kerosene/air → gameplay-sink; aviation_kerosene_crude → consumed), P2 endgame-component placement closures (`singularity_battery_unit`, `particle_accelerator_core`, `cryo_containment_unit`, `singularity_sensor`, `probability_calculator`, `aether_beacon`, `reality_engine` are each consumed by their building's `placementCost` → `gameplay-sink`).
+
 ### 7.1 Iron / Steel
 
 ```

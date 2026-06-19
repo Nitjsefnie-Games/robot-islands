@@ -1922,7 +1922,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // BOM source: IBM Quantum System Two.
     // 15000 steel_beam frame + 5000 ceramic_insulator + 1000 microchip + 500 cryo_coolant + 200 wire = 20.7 t.
     // cycle-break (P4C2b): removed ai_core per circular-deps invariant.
-    placementCost: { steel_beam: 15000, ceramic_insulator: 5000, microchip: 1000, cryo_coolant: 500, wire: 200 },
+    placementCost: { steel_beam: 15000, ceramic_insulator: 5000, microchip: 1000, cryo_coolant: 500, wire: 200, cryo_containment_unit: 2 },
     glyph: '◈',
   },
   // §9.5: Mass Driver — Plains-unique T4. Long-range cargo route launcher
@@ -2020,7 +2020,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 1500 },
     // BOM source: CERN LEIR scaled-down.
     // 25000 steel_beam ring + 3000 concrete pad + 2000 magnet + 1000 microchip + 200 cryo_coolant = 128.3 t.
-    placementCost: { steel_beam: 25000, concrete: 3000, magnet: 2000, microchip: 1000, cryo_coolant: 200 },
+    placementCost: { steel_beam: 25000, concrete: 3000, magnet: 2000, microchip: 1000, cryo_coolant: 200, particle_accelerator_core: 1 },
     glyph: '◈',
   },
   // §8.8 / §11.5: Launch Tower — T4 omnidirectional drone-pulse launch
@@ -2262,7 +2262,8 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
       heavy_cable: 3000,
       microchip: 1000,
       gear: 800,
-      exotic_alloy: 200
+      exotic_alloy: 200,
+      singularity_battery_unit: 2
     },
     glyph: '▦',
   },
@@ -2354,7 +2355,8 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
       wire: 300,
       glass: 200,
       ai_core: 40,
-      reality_anchor: 30
+      reality_anchor: 30,
+      reality_engine: 1
     },
     glyph: '✺',
   },
@@ -2438,7 +2440,8 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
       microchip: 400,
       wire: 250,
       glass: 150,
-      quantum_chip: 80
+      quantum_chip: 80,
+      probability_calculator: 4
     },
     glyph: '⚄',
   },
@@ -2552,7 +2555,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 80 },
     // BOM source: NASA DSN 70-m antenna support structure — scaled from T4 34-m analog per rev-16 §4.5.
     // 1200 steel_beam structure + 3000 concrete pad + 300 microchip control + 300 glass radome + 400 wire feed + 300 ceramic_insulator = 63.83 t.
-    placementCost: { steel_beam: 1200, concrete: 3000, microchip: 300, glass: 300, wire: 400, ceramic_insulator: 300 },
+    placementCost: { steel_beam: 1200, concrete: 3000, microchip: 300, glass: 300, wire: 400, ceramic_insulator: 300, singularity_sensor: 2 },
     glyph: '◉',
   },
   // §7.12 / §11.7 / §14.10: Antimatter Refinery — produces Antimatter
@@ -4613,7 +4616,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 400 },
     // BOM source: spec-mandate: orbital-pulse fitted.
     // 2400 steel_beam tower + 1300 concrete base + 280 glass lens + 500 microchip beacon + 10 ai_core + 2 reality_anchor = 3.8 t.
-    placementCost: { steel_beam: 2400, concrete: 1300, glass: 280, microchip: 500, ai_core: 10, reality_anchor: 2 },
+    placementCost: { steel_beam: 2400, concrete: 1300, glass: 280, microchip: 500, ai_core: 10, reality_anchor: 2, aether_beacon: 1 },
     glyph: '⛯',
   },
   // §11 telemetry — Antenna family. Six tiers extending the drone-scan
