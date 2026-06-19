@@ -6002,3 +6002,49 @@ describe('§10 CO₂ — biogenic net-zero (#103)', () => {
     expect(state.co2Kg).toBeCloseTo(16, 9);
   });
 });
+
+// ---------------------------------------------------------------------------
+// §2.6 byproduct-gas throttle guard. A byproduct gas (e.g. `co`) with no
+// consumer is a capped `liquid_gas` bin; the resource-graph-closure design
+// (2026-06-13 §1.2) claimed a producer at a full byproduct bin self-throttles
+// to net 0, stalling its PRIMARY output. This guard discovers whether that is
+// live today by comparing two identical Smelter runs that differ only in the
+// `co` bin being pinned at cap.
+// ---------------------------------------------------------------------------
+
+describe('§2.6 byproduct-gas full-bin does not stall the producer', () => {
+  const SMELTER: PlacedBuilding = { id: 'b-smelter', defId: 'smelter', x: 0, y: 0 };
+
+  // Smelter consumes power; strip it so the run is power-neutral like POWER_FREE.
+  function smelterPowerFree(): DefCatalog {
+    const base = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
+    const { power: _p, ...rest } = base['smelter'];
+    base['smelter'] = rest as BuildingDef;
+    return base;
+  }
+  const SMELTER_POWER_FREE: DefCatalog = smelterPowerFree();
+
+  /** Run a Smelter for `ms`, returning iron_ingot produced. `coAtCap` pins the
+   *  `co` byproduct bin full from t=0; everything else has effectively infinite
+   *  headroom so the ONLY difference between runs is the full `co` bin. */
+  function ironIngotAfter(ms: number, coAtCap: boolean): number {
+    const caps = blankCaps(1_000_000_000);
+    caps.co = 5; // tiny co cap so it can be pinned at its ceiling
+    const inv = { ...blankInventory(), iron_ore: 1_000_000, coal: 1_000_000 };
+    if (coAtCap) inv.co = 5; // co bin AT cap from the first tick
+    const state = makeState({ buildings: [SMELTER], inventory: inv, storageCaps: caps });
+    advanceIsland(state, ms, { defs: SMELTER_POWER_FREE });
+    return state.inventory.iron_ingot;
+  }
+
+  it('a full `co` bin must not reduce the Smelter`s iron_ingot output', () => {
+    const free = ironIngotAfter(100_000, false);
+    const pinned = ironIngotAfter(100_000, true);
+    // Sanity: the free run actually produced something.
+    expect(free).toBeGreaterThan(0);
+    // The guard: pinning the unconsumed `co` byproduct at cap must NOT throttle
+    // the primary output. If this fails, the §1.2 throttle is live and the fix
+    // (vent the byproduct gases out of inventory) is required.
+    expect(pinned).toBeCloseTo(free, 6);
+  });
+});

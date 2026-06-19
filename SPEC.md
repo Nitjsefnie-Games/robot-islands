@@ -2146,7 +2146,17 @@ an empty resource `r` yields a shared factor `φ[r]` over all of `r`'s consumers
 `inputAvail`. Each building takes the **min rule**: its gate `g` is the minimum
 of 1, every `θ` over its capped outputs, and every `φ` over its emptied inputs,
 so the most-constrained stream governs the whole building (a full byproduct bin
-still chokes a multi-output building, continuously). The factors are solved
+still chokes a multi-output building, continuously) — **except** for
+`DISCARDED_BYPRODUCTS` (§2.6). Those are byproduct gases/solids with no consumer
+yet (`RESOURCE_META` `expansion-hook`: `co`, `refinery_gas`, `wood_tar`,
+`water_vapor`, `cryo_coolant_vented`, `mill_scale`); without a sink their capped
+bin would otherwise stall the producer on its own exhaust (a long-run/offline
+correctness bug). Until real consumer loops land (resource-graph-closure plan
+P4), they are **discarded**: never written to inventory and never counted as a
+cap-stall, so they can't throttle their producer. `co2` is excluded from the set
+— it is climate-coupled (the per-island `co2Kg` scalar + its inventory
+double-booking) and reconciled with the CO₂-model work (closure plan P6). The
+factors are solved
 *exactly* via an active-set / piecewise-linear method (a constraint binds only
 while it would actually be violated; deactivating constraints relax the other
 producers), not by a fixed-point relaxation. The §15.3 piecewise-constant-rate
