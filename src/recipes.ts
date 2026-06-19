@@ -1682,16 +1682,22 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'extraction',
     cycleSecPinned: true,
   },
-  // §8.1 T2 Deep Mine: ~1.5× ore throughput vs T1 Mine (mine cycleSec=20). Output is iron_ore
-  // (the only ore vein the live game currently surfaces; deeper-vein
-  // variants like copper / nickel land alongside their resource catalog
-  // additions).
+  // §8.1 T2 Deep Mine: hand-tuned for balance — ~2.4× ore throughput vs T1 Mine
+  // (mine cycleSec=20) and ~1.6× the per-tile ore density (footprint 6 tiles vs
+  // mine's 4). The density-derived value would be 13.3 (= mine's per-tile rate ×
+  // 6 tiles), giving identical per-tile output to a T1 Mine — not worth its T2
+  // cost + 120 W draw. The +60% buff (13.3 / 1.6 = 8.3) makes a Deep Mine
+  // genuinely denser per tile, so it earns its footprint. cycleSecPinned excludes
+  // it from the density sanity test. Output is iron_ore (the only ore vein the
+  // live game currently surfaces; deeper-vein variants like copper / nickel land
+  // alongside their resource catalog additions).
   deep_mine: {
-    cycleSec: 13.3, // auto-derived (gen-cyclesec): density × footprint × M
+    cycleSec: 8.3, // hand-tweaked for balance (NOT auto-derived): 13.3 / 1.6 (+60%).
     inputs: {},
     outputs: { iron_ore: 1 },
     exogenousFlow: 'terrain',
     category: 'extraction',
+    cycleSecPinned: true,
   },
 
   // T1 smelting — rebalanced for idle-game scale, step #19 (×10)
