@@ -5283,6 +5283,73 @@ describe('CO₂ sinks (Phase 5)', () => {
     const boosted = treeDrain([{ id: 't', defId: 'plant_a_tree', x: 5, y: 5 }], { activeBonusMul: 2 });
     expect(boosted / base).toBeCloseTo(2, 1);
   });
+
+  // --- §7.4 single global atmosphere: a shared co2Pool holder makes emission
+  //     and capture global. The world driver seeds ONE holder and threads it
+  //     into every per-island advance; here we drive two islands against the
+  //     same holder to prove the pool is not partitioned per island. ---
+
+  it('emission accrues to the shared co2Pool, not per-island co2Kg', () => {
+    const defs = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
+    const { power: _p, ...lkRest } = defs.limekiln;
+    defs.limekiln = lkRest as BuildingDef;
+    const pool = { kg: 0 };
+    const state = makeState({
+      buildings: [
+        { id: 'b-lk', defId: 'limekiln', x: 0, y: 0 },
+        { id: 'b-cf', defId: 'coal_furnace', x: 2, y: 0 },
+      ],
+      inventory: { ...blankInventory(), limestone: 1000, coal: 1000 },
+      storageCaps: blankCaps(10_000),
+    });
+    state.co2Kg = 0;
+    advanceIsland(state, 40_000, { defs, co2Pool: pool });
+    expect(state.co2Kg).toBe(0);          // per-island scalar untouched
+    expect(pool.kg).toBeGreaterThan(0);   // emission landed on the global pool
+  });
+
+  it('capture on one island offsets emission on another via the shared pool', () => {
+    const defs = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
+    const { power: _p, ...lkRest } = defs.limekiln;
+    defs.limekiln = lkRest as BuildingDef;
+    const pool = { kg: 0 };
+
+    // Emitter island raises the global pool.
+    const emitter = makeState({
+      buildings: [
+        { id: 'b-lk', defId: 'limekiln', x: 0, y: 0 },
+        { id: 'b-cf', defId: 'coal_furnace', x: 2, y: 0 },
+      ],
+      inventory: { ...blankInventory(), limestone: 1000, coal: 1000 },
+      storageCaps: blankCaps(10_000),
+    });
+    emitter.co2Kg = 0;
+    advanceIsland(emitter, 40_000, { defs, co2Pool: pool });
+    const afterEmission = pool.kg;
+    expect(afterEmission).toBeGreaterThan(0);
+
+    // A DIFFERENT (forest) island's trees drain the SAME global pool.
+    const forest = makeInitialIslandState(DEMO_ISLANDS_TEST_FIXTURE[0]!, 0);
+    forest.buildings = [
+      { id: 't', defId: 'plant_a_tree', x: 5, y: 5, floorLevel: 3 },
+    ] as unknown as IslandState['buildings'];
+    forest.level = 10;
+    forest.co2Kg = 0;
+    advanceIsland(forest, 600_000, { terrainAt: () => 'tree', co2Pool: pool } as RatesContext);
+    expect(forest.co2Kg).toBe(0);          // forest's own scalar untouched
+    expect(pool.kg).toBeLessThan(afterEmission); // cross-island offset
+  });
+
+  it('global pool floors at 0 — capture cannot drive it negative', () => {
+    const pool = { kg: 0.0001 };
+    const forest = makeInitialIslandState(DEMO_ISLANDS_TEST_FIXTURE[0]!, 0);
+    forest.buildings = [
+      { id: 't', defId: 'plant_a_tree', x: 5, y: 5, floorLevel: 3 },
+    ] as unknown as IslandState['buildings'];
+    forest.level = 10;
+    advanceIsland(forest, 600_000, { terrainAt: () => 'tree', co2Pool: pool } as RatesContext);
+    expect(pool.kg).toBe(0);
+  });
 });
 
 describe('fledglingRecipeMul (§9 fledgling island boost)', () => {

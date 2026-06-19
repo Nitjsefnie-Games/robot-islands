@@ -1581,12 +1581,13 @@ describe('§7.3 coherent weather field for vehicle fate rolls', () => {
       populated: false,
       discovered: true,
     });
-    const world: WorldState = { ...freshWorld([home, target]), seed };
+    // §7.4 single global atmosphere — climate is read from world.totalCo2Kg.
+    const world: WorldState = { ...freshWorld([home, target]), seed, totalCo2Kg: co2Kg };
     const homeState = makeIslandState({ id: 'home', co2Kg });
     homeState.inventory.biofuel = 100;
     homeState.inventory.foundation_kit = 1;
     const islandStates = new Map<string, IslandState>([['home', homeState]]);
-    world.islandStates = islandStates; // sumIslandCo2 reads world.islandStates
+    world.islandStates = islandStates;
     const r = dispatchVehicle(world, home, homeState, target, 'ship', 1, 60, 1, 0);
     expect(r.ok).toBe(true);
     if (!r.ok) throw new Error('dispatch failed');
