@@ -1199,11 +1199,11 @@ export const RESOURCE_META: Readonly<Record<ResourceId, ResourceMeta>> = {
   tachyon_stream: { massPerUnitKg: 1, terminal: 'consumed' },
   dark_matter: { massPerUnitKg: 1, terminal: 'consumed' },
   strange_matter: { massPerUnitKg: 1, terminal: 'consumed' },
-  quantum_foam: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
+  quantum_foam: { massPerUnitKg: 1, terminal: 'consumed' }, // quantum_chip_fab (§12 P3)
   spacetime_fragment: { massPerUnitKg: 1, terminal: 'consumed' },
-  higgs_flux: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
+  higgs_flux: { massPerUnitKg: 1, terminal: 'consumed' }, // reality_forge (§12 P3)
   zero_point_flux: { massPerUnitKg: 1, terminal: 'consumed' },
-  neutronium: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
+  neutronium: { massPerUnitKg: 1, terminal: 'consumed' }, // ascendant_assembly (§12 P3)
   probability_calculator: { massPerUnitKg: 1, terminal: 'gameplay-sink' }, // probability_engine placement cost (P2)
   dimensional_fold: { massPerUnitKg: 1, terminal: 'consumed' },
   causal_regulator: { massPerUnitKg: 1, terminal: 'consumed' },
@@ -1338,6 +1338,10 @@ export const RESOURCE_META: Readonly<Record<ResourceId, ResourceMeta>> = {
 };
 
 export const RECIPE_SPECULATIVE: Readonly<Partial<Record<RecipeId, 'fantasy chemistry' | 'narrative cost' | true>>> = {
+  // §12 P3: quantum_chip_fab now consumes the fantasy raw quantum_foam — no
+  // balanced stoichiometry intended (reality_forge / ascendant_assembly, which
+  // take higgs_flux / neutronium, are already speculative below).
+  quantum_chip_fab: 'fantasy chemistry',
   pyroforge: 'fantasy chemistry',
   cryogenic_compute_center: 'fantasy chemistry',
   carbon_forge: 'fantasy chemistry',
@@ -1899,7 +1903,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // particle_accelerator as the quantum_chip producer.
   quantum_chip_fab: {
     cycleSec: 3822191.6, // auto-derived (gen-cyclesec): density × footprint × M
-    inputs: { steel: 4, pig_iron: 4 },
+    inputs: { steel: 4, pig_iron: 4, quantum_foam: 1 },
     outputs: { quantum_chip: 1 },
     category: 'electronics',
   },
@@ -2421,7 +2425,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // 2026-05-18 ÷3 for display visibility → now 8h cycle.
   reality_forge: {
     cycleSec: 42999.7, // auto-derived (gen-cyclesec): density × footprint × M
-    inputs: { ai_core: 4, antimatter_capsule: 1, time_crystal: 1, exotic_alloy: 1 },
+    inputs: { ai_core: 4, antimatter_capsule: 1, time_crystal: 1, exotic_alloy: 1, higgs_flux: 1 },
     outputs: { reality_anchor: 1 },
     category: 'manufacturing',
   },
@@ -3097,7 +3101,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // 2026-05-18 ÷3 for display visibility → now 40 min cycle (was 2h).
   ascendant_assembly: {
     cycleSec: 429996.6, // auto-derived (gen-cyclesec): density × footprint × M
-    inputs: { reality_anchor: 3, eldritch_processor: 1, ai_core: 5, computing_module: 2 },
+    inputs: { reality_anchor: 3, eldritch_processor: 1, ai_core: 5, computing_module: 2, neutronium: 1 },
     outputs: { ascendant_core: 1 },
     category: 'manufacturing',
   },

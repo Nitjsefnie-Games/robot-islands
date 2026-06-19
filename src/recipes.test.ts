@@ -494,6 +494,7 @@ describe('T6 orbital recipes (§14.10)', () => {
       antimatter_capsule: 1,
       time_crystal: 1,
       exotic_alloy: 1,
+      higgs_flux: 1, // §12 P3: closes the higgs_flux orphan
     });
     expect(r.cycleSec).toBe(42999.7);
     expect(r.category).toBe('manufacturing');
