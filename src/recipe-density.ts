@@ -67,7 +67,7 @@ export const BUILDING_ARCHETYPE: Partial<Record<BuildingDefId, Archetype>> = {
   bearing_assembler: 'machining', spring_press: 'machining',
   solder_alloyer: 'nonferrous_smelter', bronze_alloyer: 'nonferrous_smelter', brass_alloyer: 'nonferrous_smelter',
   mag_alloyer: 'nonferrous_smelter', mag_forge: 'nonferrous_smelter',
-  motor_assembly: 'assembly', pump_assembly: 'assembly', hydraulic_assembly: 'assembly', pneumatic_assembly: 'assembly',
+  motor_assembly: 'assembly', hydraulic_assembly: 'assembly', pneumatic_assembly: 'assembly',
   generator_lab: 'assembly', fuel_cell_lab: 'assembly', fuel_rod_assembler: 'assembly',
   plasma_containment_assembler: 'assembly', cryo_containment_assembler: 'assembly', self_replication_lab: 'assembly',
   sheet_metal_mill: 'rolling_mill', pipe_mill: 'rolling_mill', beam_mill: 'rolling_mill', cable_mill: 'rolling_mill',
@@ -79,7 +79,7 @@ export const BUILDING_ARCHETYPE: Partial<Record<BuildingDefId, Archetype>> = {
   pcb_etcher: 'pcb_fab', lithography_lab: 'wafer_fab', wafer_lab: 'wafer_fab',
   processor_fab: 'wafer_fab', compute_module_fab: 'wafer_fab',
   transistor_doping: 'wafer_fab', capacitor_doping: 'wafer_fab', resistor_doping: 'wafer_fab',
-  memory_lab: 'wafer_fab', circuit_assembler: 'assembly', solar_cell_lab: 'wafer_fab',
+  memory_lab: 'wafer_fab', circuit_assembler: 'assembly',
   singularity_sensor_lab: 'wafer_fab', accelerator_core_lab: 'assembly',
   // fantasy / endgame
   quantum_chip_fab: 'fantasy_quantum_chip', cryogenic_compute_center: 'fantasy_ai_core',

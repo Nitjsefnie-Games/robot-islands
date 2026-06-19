@@ -217,10 +217,8 @@ export const RESOURCE_CATEGORY: Readonly<Record<ResourceId, ResourceCategory>> =
   electric_motor: 'components',
   generator: 'components',
   // T3 mechanical assemblies
-  pump: 'components',
   hydraulic_actuator: 'components',
   pneumatic_actuator: 'components',
-  solar_cell: 'components',
   fuel_cell: 'components',
   // T3 glass/ceramics + fiber spinners
   optical_glass: 'components',

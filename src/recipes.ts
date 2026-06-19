@@ -283,11 +283,8 @@ export type ResourceId =
   // Phase 10b — T3 power components (Task 10.7)
   | 'generator'
   // Phase 10c — T3 mechanical assemblies (Task 10.8)
-  | 'pump'
   | 'hydraulic_actuator'
   | 'pneumatic_actuator'
-  // Phase 10c — T3 power components (Task 10.9)
-  | 'solar_cell'
   // Phase 10c — T3 power components (Task 10.10)
   | 'fuel_cell'
   // Phase 10c — T3 glass/ceramics (Task 10.11)
@@ -614,11 +611,8 @@ export const ALL_RESOURCES: ReadonlyArray<ResourceId> = [
   // Phase 10b — T3 power components (Task 10.7)
   'generator',
   // Phase 10c — T3 mechanical assemblies (Task 10.8)
-  'pump',
   'hydraulic_actuator',
   'pneumatic_actuator',
-  // Phase 10c — T3 power components (Task 10.9)
-  'solar_cell',
   // Phase 10c — T3 power components (Task 10.10)
   'fuel_cell',
   // Phase 10c — T3 glass/ceramics (Task 10.11)
@@ -957,11 +951,8 @@ export const XP_WEIGHT: Readonly<Record<ResourceId, number>> = {
   // Phase 10b — T3 power components (Task 10.7)
   generator: 30,
   // Phase 10c — T3 mechanical assemblies (Task 10.8)
-  pump: 30,
   hydraulic_actuator: 30,
   pneumatic_actuator: 30,
-  // Phase 10c — T3 power components (Task 10.9)
-  solar_cell: 30,
   // Phase 10c — T3 power components (Task 10.10)
   fuel_cell: 30,
   // Phase 10c — T3 glass/ceramics (Task 10.11)
@@ -1249,11 +1240,9 @@ export const RESOURCE_META: Readonly<Record<ResourceId, ResourceMeta>> = {
   lithium: { massPerUnitKg: 1, terminal: 'consumed' },
   magnet: { massPerUnitKg: 50, terminal: 'consumed' },
   electric_motor: { massPerUnitKg: 10, terminal: 'consumed' },
-  generator: { massPerUnitKg: 50, terminal: 'expansion-hook:Phase 2 supplies consumer' },
-  pump: { massPerUnitKg: 8, terminal: 'expansion-hook:Phase 2 supplies consumer' },
-  hydraulic_actuator: { massPerUnitKg: 15, terminal: 'expansion-hook:Phase 2 supplies consumer' },
-  pneumatic_actuator: { massPerUnitKg: 10, terminal: 'expansion-hook:Phase 2 supplies consumer' },
-  solar_cell: { massPerUnitKg: 0.5, terminal: 'expansion-hook:Phase 2 supplies consumer' },
+  generator: { massPerUnitKg: 50, terminal: 'gameplay-sink' },
+  hydraulic_actuator: { massPerUnitKg: 15, terminal: 'gameplay-sink' },
+  pneumatic_actuator: { massPerUnitKg: 10, terminal: 'gameplay-sink' },
   fuel_cell: { massPerUnitKg: 5, terminal: 'consumed' },
   optical_glass: { massPerUnitKg: 1, terminal: 'consumed' },
   glass_fiber: { massPerUnitKg: 1, terminal: 'consumed' },
@@ -3380,12 +3369,6 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     category: 'manufacturing',
   },
   // Phase 10c — T3 mechanical assemblies (Task 10.8)
-  pump_assembly: {
-    cycleSec: 2293.3, // auto-derived (gen-cyclesec): density × footprint × M
-    inputs: { electric_motor: 1, pipe: 2, bearing: 1 },
-    outputs: { pump: 1 },
-    category: 'manufacturing',
-  },
   hydraulic_assembly: {
     cycleSec: 4300, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { pipe: 2, lubricant: 2, bearing: 1, spring: 1 },
@@ -3397,13 +3380,6 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     inputs: { pipe: 2, bearing: 1, spring: 1 },
     outputs: { pneumatic_actuator: 1 },
     category: 'manufacturing',
-  },
-  // Phase 10c — T3 power components (Task 10.9)
-  solar_cell_lab: {
-    cycleSec: 1343739.3, // auto-derived (gen-cyclesec): density × footprint × M
-    inputs: { silicon_wafer: 1, glass: 2, aluminum: 1 },
-    outputs: { solar_cell: 1 },
-    category: 'electronics',
   },
   // Phase 10c — T3 power components (Task 10.10)
   fuel_cell_lab: {

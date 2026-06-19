@@ -1156,11 +1156,7 @@ describe('§6.4/§7.9 generator via generator_lab (Task 10.7)', () => {
   });
 });
 
-describe('§7.10 pump + hydraulic_actuator + pneumatic_actuator (Task 10.8)', () => {
-  it('pump is in ALL_RESOURCES with xp_weight 30 (T3 component)', () => {
-    expect(ALL_RESOURCES).toContain('pump' as ResourceId);
-    expect(XP_WEIGHT.pump).toBe(30);
-  });
+describe('§7.10 hydraulic_actuator + pneumatic_actuator (Task 10.8)', () => {
   it('hydraulic_actuator is in ALL_RESOURCES with xp_weight 30 (T3 component)', () => {
     expect(ALL_RESOURCES).toContain('hydraulic_actuator' as ResourceId);
     expect(XP_WEIGHT.hydraulic_actuator).toBe(30);
@@ -1168,12 +1164,6 @@ describe('§7.10 pump + hydraulic_actuator + pneumatic_actuator (Task 10.8)', ()
   it('pneumatic_actuator is in ALL_RESOURCES with xp_weight 30 (T3 component)', () => {
     expect(ALL_RESOURCES).toContain('pneumatic_actuator' as ResourceId);
     expect(XP_WEIGHT.pneumatic_actuator).toBe(30);
-  });
-  it('pump_assembly recipe: electric_motor + pipe + bearing → pump', () => {
-    expect(RECIPES.pump_assembly).toBeDefined();
-    expect(RECIPES.pump_assembly!.inputs).toEqual({ electric_motor: 1, pipe: 2, bearing: 1 });
-    expect(RECIPES.pump_assembly!.outputs).toEqual({ pump: 1 });
-    expect(RECIPES.pump_assembly!.cycleSec).toBe(2293.3);
   });
   it('hydraulic_assembly recipe: pipe + lubricant + bearing + spring → hydraulic_actuator', () => {
     expect(RECIPES.hydraulic_assembly).toBeDefined();
@@ -1186,19 +1176,6 @@ describe('§7.10 pump + hydraulic_actuator + pneumatic_actuator (Task 10.8)', ()
     expect(RECIPES.pneumatic_assembly!.inputs).toEqual({ pipe: 2, bearing: 1, spring: 1 });
     expect(RECIPES.pneumatic_assembly!.outputs).toEqual({ pneumatic_actuator: 1 });
     expect(RECIPES.pneumatic_assembly!.cycleSec).toBe(2866.6);
-  });
-});
-
-describe('§7.9 solar_cell via solar_cell_lab (Task 10.9)', () => {
-  it('solar_cell is in ALL_RESOURCES with xp_weight 30 (T3 component)', () => {
-    expect(ALL_RESOURCES).toContain('solar_cell' as ResourceId);
-    expect(XP_WEIGHT.solar_cell).toBe(30);
-  });
-  it('solar_cell_lab recipe: silicon_wafer + glass + aluminum → solar_cell', () => {
-    expect(RECIPES.solar_cell_lab).toBeDefined();
-    expect(RECIPES.solar_cell_lab!.inputs).toEqual({ silicon_wafer: 1, glass: 2, aluminum: 1 });
-    expect(RECIPES.solar_cell_lab!.outputs).toEqual({ solar_cell: 1 });
-    expect(RECIPES.solar_cell_lab!.cycleSec).toBe(1343739.3);
   });
 });
 
