@@ -1636,6 +1636,8 @@ Travel time scales with distance and is determined by vehicle tier (helicopter i
 
 Pre-placed buildings are placed by the engine at deterministic default positions (inscribed tiles in scan order, skipping the auto-placed dock/helipad). Terrain-tagged extractors such as the Mine are placed on valid terrain first (e.g. an ore or coal vein) so they produce immediately; if no valid tile exists the engine falls back to any inscribed unoccupied tile. Skill points are added to the new colony's `unspentSkillPoints` total.
 
+**En-route discovery (single-cell, antenna-gated).** While travelling, a settlement vehicle (ship or helicopter) reveals the stratification cell **directly under it** — the cells its straight path passes through by floor-division, with **no neighbouring cells** (unlike a drone's swept corridor, which has a scan radius). The same antenna-range telemetry rule as drones (§11) applies: a cell scanned while the vehicle is inside an Antenna's signal range is revealed live; cells scanned in **dark mode** are buffered and flushed only when the vehicle re-enters signal range **or on successful arrival** at the target (the crossing succeeded, so the trail is recovered). A vehicle lost to weather or mechanical failure forfeits its buffered trail (§12.5). An undiscovered island whose footprint a revealed cell touches flips to `discovered`, exactly like the drone any-cell rule.
+
 **Foundation Kit decomposition on arrival.** The kit, which lives in source-island inventory as a single composite item per §12.3, decomposes into its raw constituent resources (5 Iron ingot + 10 Wood + 5 Bolt for the Standard kit; this Standard recipe is credited per kit regardless of vehicle tier) the moment it arrives at the colony. A level-1 colony has no storage buildings, so the kit contents are held under a one-time **starter inventory grace cap** that allows the colony to hold the kit's raw contents even with zero specialized or generic storage. The grace cap shrinks resource-by-resource as the player builds proper storage (Crates, Silos, etc.) — once normal cap meets or exceeds current inventory for a given resource, that resource's grace allowance is removed. Resources still held under grace cannot exceed the kit-delivered quantities (player can't "fill" the grace bucket with more from routes; routes still respect normal caps).
 
 ### 12.5 Failure
@@ -1649,6 +1651,9 @@ On failure (any cause):
 
 * Vehicle, fuel, and Foundation Kit are lost
 * Target island remains unpopulated (can be retried with another vehicle)
+* Any buffered en-route discovery trail (§12.4) is forfeited
+
+**Loss visibility (dark-aware), same rule as drones (§11.4).** The fleet list and map dot show what the player can *observe*, not ground truth. The weather fate is frozen deterministically the first time the vehicle is ticked (so the §15.1 wall anchor and §7.3 CO₂ field that tick samples decide it). A vehicle destroyed by weather while inside Antenna signal range is witnessed and removed at once; one destroyed in **dark mode** keeps showing as still travelling until its trajectory would re-enter coverage, at which point its absence makes the loss obvious — capped at `expectedArrivalTime` as the fallback when coverage never returns (the common case, since a vehicle travels one-way toward an unsettled target). Mechanical failure (no spatial cell) is resolved at arrival, so a mechanically-failed vehicle shows as travelling for the whole voyage and is removed when it fails to arrive.
 
 Long routes through bad weather become genuinely risky, especially with low-tier vehicles. The player can mitigate by waiting for weather windows (visible only within Weather Station range), using higher-tier vehicles, or routing through known-clear cells.
 

@@ -918,6 +918,7 @@ describe('id counter seeding', () => {
       weatherMultiplier: 1.0,
       fuelResource: 'biofuel',
       failureRate: 0.02,
+      scanBuffer: new Set<string>(),
     });
     const snap = serializeWorld(world, new Map(), 0);
     const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
@@ -991,6 +992,7 @@ describe('drone and route timestamp remapping', () => {
       weatherMultiplier: 1.0,
       fuelResource: 'biofuel',
       failureRate: 0.02,
+      scanBuffer: new Set<string>(),
     });
     const states = new Map<string, IslandState>();
     const savedAtWallMs = 100_000;
@@ -1129,12 +1131,37 @@ describe('§11.7 tier-matched fuelResource persistence', () => {
       weatherMultiplier: 0.7,
       fuelResource: 'diesel',
       failureRate: 0.01,
+      scanBuffer: new Set<string>(),
     });
     const snap = serializeWorld(world, new Map(), 0, 0);
     const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
     const { world: restored } = deserializeWorld(json, 0, 0);
     expect(restored.vehicles).toHaveLength(1);
     expect(restored.vehicles[0]!.fuelResource).toBe('diesel');
+  });
+
+  it('round-trips a vehicle weather-freeze: doomedAtMs perf-shifted, weatherRolled kept, scanBuffer rehydrated empty', () => {
+    const world = makeInitialWorld(0);
+    world.vehicles.push({
+      id: 'vehicle-1', kind: 'ship', tier: 1, from: 'home', target: 'coast-unknown',
+      fuelLoaded: 10, foundationKitCount: 1, speed: 1,
+      launchTime: 1_000, expectedArrivalTime: 11_000,
+      weatherMultiplier: 1.0, fuelResource: 'biofuel', failureRate: 0.02,
+      status: 'active', weatherRolled: true, doomedAtMs: 5_000,
+      // Runtime-only buffer is dropped on save by design (rehydrated empty).
+      scanBuffer: new Set<string>(['3,0']),
+    });
+    // Save at (wall 0, perf 0); restore at (wall 0, perf 2_000) ⇒ perfShift
+    // = nowPerf − savedPerf − (nowWall − savedWall) = +2_000.
+    const snap = serializeWorld(world, new Map(), 0, 0);
+    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    const { world: restored } = deserializeWorld(json, 0, 2_000);
+    const rv = restored.vehicles[0]!;
+    expect(rv.weatherRolled).toBe(true);
+    expect(rv.doomedAtMs).toBe(7_000);            // 5_000 + 2_000 perfShift
+    expect(rv.launchTime).toBe(3_000);            // 1_000 + 2_000
+    expect(rv.scanBuffer).toBeInstanceOf(Set);
+    expect(rv.scanBuffer.size).toBe(0);           // dropped on save by design
   });
 
 });

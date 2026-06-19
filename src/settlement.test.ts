@@ -1605,3 +1605,112 @@ describe('§7.3 coherent weather field for vehicle fate rolls', () => {
     expect(flipped).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// §12 + §11: vehicles discover the single cell directly under them (antenna-
+// gated, buffered/flushed like drones) and use the same dark-aware loss
+// visibility as drones (lost-in-coverage → removed at once; lost in the dark →
+// kept until expectedArrivalTime).
+// ---------------------------------------------------------------------------
+
+describe('§12 vehicle single-cell discovery + dark-aware loss', () => {
+  // Home (0,0): shipyard + T1 antenna (radius 80, footprint centre ~(0.5,0.5)).
+  function vworld(targetCx: number): {
+    world: WorldState; home: IslandSpec; homeState: IslandState;
+    target: IslandSpec; islandStates: Map<string, IslandState>;
+  } {
+    const home = makeIslandSpec({
+      id: 'home', cx: 0, cy: 0, populated: true, discovered: true,
+      buildings: [
+        { id: 'sy', defId: 'shipyard', x: 0, y: 0 },
+        { id: 'a1', defId: 'antenna_t1', x: 0, y: 0 },
+      ],
+    });
+    const target = makeIslandSpec({ id: 'target', cx: targetCx, cy: 0, populated: false, discovered: true });
+    const world = freshWorld([home, target]);
+    const homeState = makeIslandState({ id: 'home' });
+    homeState.inventory.biofuel = 100_000;
+    homeState.inventory.foundation_kit = 3;
+    const islandStates = new Map<string, IslandState>([['home', homeState]]);
+    return { world, home, homeState, target, islandStates };
+  }
+
+  /** Ship from home→target. `weatherRolled: true` + omitted `doomedAtMs` ⇒ the
+   *  tick treats the fate as already-frozen-survives, so no seed-hunting; tests
+   *  that want a loss set `doomedAtMs` explicitly. */
+  function manualVehicle(over: Partial<SettlementVehicle> & Pick<SettlementVehicle, 'expectedArrivalTime'>): SettlementVehicle {
+    return {
+      id: 'v1', kind: 'ship', tier: 1, from: 'home', target: 'target',
+      fuelLoaded: 200, foundationKitCount: 1, speed: 0.25, launchTime: 0,
+      weatherMultiplier: 1.0, fuelResource: 'biofuel', failureRate: 0,
+      status: 'active', scanBuffer: new Set<string>(), weatherRolled: true,
+      ...over,
+    };
+  }
+
+  it('reveals the cell directly under the vehicle while in antenna range', () => {
+    const { world, islandStates } = vworld(60);
+    // dist 60, speed 0.25 → arrival 240_000. Tick across [0, 100s]: pos 0→25.
+    world.vehicles.push(manualVehicle({ expectedArrivalTime: 240_000 }));
+    tickVehicles(world, islandStates, 100_000, 0, 0);
+    expect(world.revealedCells.has('0,0')).toBe(true);
+    expect(world.revealedCells.has('1,0')).toBe(true);
+  });
+
+  it('reveals ONLY cells directly under it — no neighbouring rows', () => {
+    const { world, islandStates } = vworld(60);
+    world.vehicles.push(manualVehicle({ expectedArrivalTime: 240_000 }));
+    tickVehicles(world, islandStates, 100_000, 0, 0);
+    // Travelling along y=0 must never touch row y=±1 (cell centres at y=±24,
+    // perpendicular distance 24 ≫ half-cell-diagonal).
+    expect(world.revealedCells.has('0,1')).toBe(false);
+    expect(world.revealedCells.has('0,-1')).toBe(false);
+    expect(world.revealedCells.has('1,1')).toBe(false);
+  });
+
+  it('buffers cells out of antenna range and flushes them on arrival', () => {
+    const { world, islandStates } = vworld(300);
+    // dist 300, speed 0.25 → arrival 1_200_000.
+    world.vehicles.push(manualVehicle({ expectedArrivalTime: 1_200_000 }));
+    // Tick to t=600s → pos x=150 (out of the 80-tile range): nothing flushed.
+    tickVehicles(world, islandStates, 600_000, 0, 0);
+    expect(world.revealedCells.has('9,0')).toBe(false); // x=144..159 cell, dark
+    // Arrival flushes the whole buffer.
+    const r = tickVehicles(world, islandStates, 1_201_000, 0, 600_000);
+    expect(world.revealedCells.has('9,0')).toBe(true);
+    expect(r.revealedCellsAdded).toBeGreaterThan(0);
+  });
+
+  it('discovers an undiscovered island whose cell the vehicle passes over', () => {
+    const { world, islandStates } = vworld(60);
+    const reef = makeIslandSpec({ id: 'reef', cx: 40, cy: 0, populated: false, discovered: false });
+    world.islands.push(reef);
+    world.vehicles.push(manualVehicle({ expectedArrivalTime: 240_000 }));
+    // Single tick covering the whole trip; reef cell (2,0) is in antenna range.
+    const r = tickVehicles(world, islandStates, 241_000, 0, 0);
+    expect(reef.discovered).toBe(true);
+    expect(r.newlyDiscoveredIslandIds).toContain('reef');
+  });
+
+  it('weather-destroyed INSIDE antenna range disappears before arrival', () => {
+    const { world, islandStates } = vworld(300);
+    // doomed at t=100s → pos x=25 (inside 80-tile range). arrival 1.2M.
+    world.vehicles.push(manualVehicle({ expectedArrivalTime: 1_200_000, doomedAtMs: 100_000 }));
+    const r = tickVehicles(world, islandStates, 101_000, 0, 50_000);
+    expect(world.vehicles[0]!.status).toBe('lost'); // gone well before arrival
+    expect(r.lost).toHaveLength(1);
+  });
+
+  it('weather-destroyed in the DARK stays shown until expectedArrivalTime', () => {
+    const { world, islandStates } = vworld(300);
+    // doomed at t=400s → pos x=100 (outside the 80-tile range).
+    world.vehicles.push(manualVehicle({ expectedArrivalTime: 1_200_000, doomedAtMs: 400_000 }));
+    // After death, still in the dark heading away: shown as travelling.
+    tickVehicles(world, islandStates, 500_000, 0, 0);
+    expect(world.vehicles[0]!.status).toBe('active');
+    // Due to arrive and absent ⇒ removed at expectedArrivalTime.
+    const r = tickVehicles(world, islandStates, 1_201_000, 0, 500_000);
+    expect(world.vehicles[0]!.status).toBe('lost');
+    expect(r.lost).toHaveLength(1);
+  });
+});
