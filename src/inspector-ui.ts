@@ -41,7 +41,7 @@ import { defineAction, dispatchAction, type InputRegistry } from './input.js';
 import type { IslandState } from './economy.js';
 import { tierForResource } from './economy.js';
 import { activeBonusMul } from './active-bonus.js';
-import { computeRates, fledglingRecipeMul, type RatesContext } from './economy.js';
+import { computeRates, fledglingRecipeMul, hasNeighborWithAnyDefId, type RatesContext } from './economy.js';
 import {
   type Axis,
   type ExpandResult,
@@ -985,6 +985,15 @@ export function mountInspectorUi(
   );
   heatSection.body.appendChild(heatLine);
 
+  // CO₂ Capture section — shown for any def with co2CaptureKgPerCycle > 0.
+  const co2Section = makeSection('CO₂ Capture');
+  const co2Line = document.createElement('span');
+  styled(co2Line, [`color: ${'var(--ri-fg-1)'}`, 'font-size: 11px', 'letter-spacing: 0.02em'].join(';'));
+  const co2DerivLine = document.createElement('span');
+  styled(co2DerivLine, [`color: ${'var(--ri-fg-3)'}`, 'font-size: 10px', 'letter-spacing: 0.02em'].join(';'));
+  co2Section.body.appendChild(co2Line);
+  co2Section.body.appendChild(co2DerivLine);
+
   // Floor-upgrade section
   const floorSection = makeSection('Floors');
   const floorLine = document.createElement('span');
@@ -1498,6 +1507,7 @@ export function mountInspectorUi(
   body.appendChild(constructionSection.wrap);
   body.appendChild(pausedSection.wrap);
   body.appendChild(recipeSection.wrap);
+  body.appendChild(co2Section.wrap);
   // Effective rate row sits below the recipe lines but inside the recipe
   // section visually — append a thin spacer + row to the recipe section body.
   // Bonuses sits between recipe lines and effective rate so the skill stack
@@ -1671,6 +1681,7 @@ export function mountInspectorUi(
       state.buildings.filter(participatesInCluster),
       BUILDING_DEFS,
     );
+    let captureEffectiveRate = 0;
     if (!recipe) {
       recipeStatus.textContent = '— no recipe';
       recipeStatus.style.color = 'var(--ri-fg-4)';
@@ -1688,6 +1699,7 @@ export function mountInspectorUi(
       const rates = computeRates(state, ratesCtx, undefined, Date.now());
       const br = rates.byBuilding.find((r) => r.building.id === building.id);
       const effective = br?.effectiveRate ?? 0;
+      captureEffectiveRate = effective;
       // Header status line — show cycle time + base rate (= 1 / cycleSec).
       recipeStatus.textContent = `cycle ${recipe.cycleSec}s · base ${(1 / recipe.cycleSec).toFixed(3)}/s`;
       recipeStatus.style.color = 'var(--ri-fg-3)';
@@ -1922,6 +1934,34 @@ export function mountInspectorUi(
       floorUpgradeBtn.style.opacity = '1';
     }
     floorSection.wrap.style.display = '';
+
+    // CO₂ Capture section paint
+    const co2PerCycle = def.co2CaptureKgPerCycle ?? 0;
+    if (co2PerCycle > 0) {
+      const recipeBacked = recipe !== undefined;
+      const adjacencyActive = def.co2CaptureAdjacency
+        ? hasNeighborWithAnyDefId(building, state.buildings, def.co2CaptureAdjacency)
+        : true;
+      const kgPerMin = co2CaptureKgPerMin({
+        co2CaptureKgPerCycle: co2PerCycle,
+        recipeBacked,
+        effectiveRate: captureEffectiveRate,
+        adjacencyActive,
+      });
+      co2Line.textContent = `−${kgPerMin.toFixed(2)} kg/min`;
+      co2Line.style.color = kgPerMin > 0 ? 'var(--ri-accent)' : 'var(--ri-fg-4)';
+      if (recipeBacked) {
+        co2DerivLine.textContent = `${co2PerCycle} kg/cycle × ${captureEffectiveRate.toFixed(3)} cyc/s`;
+      } else if (!adjacencyActive) {
+        co2DerivLine.textContent = 'IDLE — needs adjacent emitter';
+      } else {
+        co2DerivLine.textContent = `${co2PerCycle} kg/cycle (flat)`;
+      }
+      co2DerivLine.style.display = '';
+      co2Section.wrap.style.display = '';
+    } else {
+      co2Section.wrap.style.display = 'none';
+    }
 
     // §4.7 maintenance section. Three display modes:
     //   - Eternal Servitor exempt → single bold line, recipe hidden.

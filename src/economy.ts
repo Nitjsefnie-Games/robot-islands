@@ -47,7 +47,7 @@ import type { CrystalId, EdgeId, Graph } from './skilltree-graph.js';
 import { networkedIslandIds } from './network-consciousness.js';
 
 /** Returns true if any 4-neighbor of `focal` has a `defId` in `defIds`. */
-function hasNeighborWithAnyDefId(
+export function hasNeighborWithAnyDefId(
   focal: PlacedBuilding,
   buildings: ReadonlyArray<PlacedBuilding>,
   defIds: ReadonlyArray<BuildingDefId>,
