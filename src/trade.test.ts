@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { advanceIsland, type DefCatalog, type IslandState } from './economy.js';
+import { advanceIsland, NON_STORED_OUTPUTS, type DefCatalog, type IslandState } from './economy.js';
 import { BUILDING_DEFS, type BuildingDef, type BuildingDefId } from './building-defs.js';
 import { attachTerrainAt, makeInitialIslandState } from './world.js';
 import { generateOffer, applyOffer, DEFAULT_TRADE_TUNING, tierOf, tickTradeOffers, tuningFor, islandHasSignalExchange, effectiveCadenceMs, FLOOR_MS, ONLINE_DT_CAP_MS, type TradeOffer, type TradeRuntime } from './trade.js';
@@ -576,5 +576,39 @@ describe('effectiveCadenceMs', () => {
 
   it('exposes a positive online-dt cap', () => {
     expect(ONLINE_DT_CAP_MS).toBeGreaterThan(0);
+  });
+});
+
+describe('generateOffer — non-stored byproduct gases', () => {
+  function stocked(): IslandState {
+    const s = homeState();
+    s.storageCaps.stone = 100; s.inventory.stone = 90;
+    s.storageCaps.wood = 100; s.inventory.wood = 10;
+    s.everProduced.add('stone'); s.everProduced.add('wood'); s.everProduced.add('iron_ingot');
+    s.storageCaps.iron_ingot = 100; s.inventory.iron_ingot = 5;
+    return s;
+  }
+
+  it('never offers a non-stored gas on either side', () => {
+    const s = stocked();
+    s.everProduced.add('co2');
+    s.everProduced.add('co');
+    for (let k = 0; k < 300; k++) {
+      const o = generateOffer(s, `gas-seed${k}`, DEFAULT_TRADE_TUNING, 1000);
+      if (o !== null) {
+        expect(NON_STORED_OUTPUTS.has(o.get.res)).toBe(false);
+        expect(NON_STORED_OUTPUTS.has(o.give.res)).toBe(false);
+      }
+    }
+  });
+
+  it('returns null when every ever-produced resource is non-stored', () => {
+    const s = homeState();
+    for (const k of Object.keys(s.inventory) as ResourceId[]) s.inventory[k] = 0;
+    s.storageCaps.wood = 100; s.inventory.wood = 50;
+    s.everProduced.clear();
+    s.everProduced.add('co2');
+    s.everProduced.add('refinery_gas');
+    expect(generateOffer(s, () => 0.0, DEFAULT_TRADE_TUNING, 1000)).toBeNull();
   });
 });
