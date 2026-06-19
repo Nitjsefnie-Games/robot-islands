@@ -233,12 +233,21 @@ export class RouteRenderer {
       }
     }
 
-    // Per-route: arrival pulse + in-flight chevrons.
+    // §perf: chevrons + pulses. Each chevron used to do its OWN fill()+stroke(),
+    // so a busy save (thousands of in-flight batches) issued thousands of
+    // tessellation INSTRUCTIONS per frame — each paying the per-instruction
+    // toStrokeStyle / toFillStyle / GPU-context setup that dominated steady-state
+    // CPU. Now we accumulate EVERY chevron's triangle into one path and do a
+    // SINGLE fill()+stroke() for all of them (all chevrons share one style),
+    // collapsing those per-instruction costs from O(batches) to O(1). Pulses are
+    // drawn FIRST (they stroke immediately, and are few — at most one per route
+    // with an arrival in the last 2 s) so they don't commit the accumulated
+    // chevron path early.
+
+    // Pass 1: arrival pulses (amber ring on the destination for the last 2 s).
     for (const r of routes) {
       const entry = this.entries.get(r.id);
       if (!entry) continue;
-
-      // Arrival pulse: amber ring on the destination for the last 2s.
       let nextEta = Infinity;
       for (const b of r.inFlight) {
         const eta = (b.arrivalTime - nowMs) / 1000;
@@ -250,8 +259,13 @@ export class RouteRenderer {
         g.circle(entry.toX, entry.toY, radius)
          .stroke({ width: 1.5, color: 0xf5a742, alpha: 0.4 + 0.4 * pulse });
       }
+    }
 
-      // In-flight chevrons interpolated along the polyline.
+    // Pass 2: accumulate every in-flight chevron's triangle into ONE path.
+    let anyChevron = false;
+    for (const r of routes) {
+      const entry = this.entries.get(r.id);
+      if (!entry) continue;
       const pts = entry.points;
       if (pts.length < 2) continue;
 
@@ -289,15 +303,22 @@ export class RouteRenderer {
         const cy = p1.y + (p2.y - p1.y) * segT;
         const ux = segLen > 0 ? (p2.x - p1.x) / segLen : 0;
         const uy = segLen > 0 ? (p2.y - p1.y) / segLen : 0;
-        this.drawChevron(g, cx, cy, ux, uy);
+        this.appendChevronPath(g, cx, cy, ux, uy);
+        anyChevron = true;
       }
+    }
+    // ONE fill + ONE stroke for ALL chevrons (every chevron has the same style).
+    if (anyChevron) {
+      g.fill({ color: VISION_BLUE, alpha: 0.85 })
+       .stroke({ width: 1, color: 0xf5a742, alpha: 0.6 });
     }
   }
 
-  /** ▶ chevron centred at (cx, cy) pointing along (ux, uy). Geometry
-   *  mirrors the pre-existing routes-ui drawChevron — kept identical so
-   *  the visual smoke-test agrees with baseline. */
-  private drawChevron(
+  /** Append one ▶ chevron's triangle (centred at (cx,cy), pointing along
+   *  (ux,uy)) to `g`'s CURRENT path — no fill/stroke. The caller batches a
+   *  single fill()+stroke() over every chevron's accumulated triangle, so the
+   *  per-instruction tessellation/setup cost is paid once, not per chevron. */
+  private appendChevronPath(
     g: Graphics, cx: number, cy: number, ux: number, uy: number,
   ): void {
     const len = 6, back = 4, width = 4;
@@ -310,9 +331,7 @@ export class RouteRenderer {
     g.moveTo(tipX, tipY)
      .lineTo(bLX, bLY)
      .lineTo(bRX, bRY)
-     .closePath()
-     .fill({ color: VISION_BLUE, alpha: 0.85 })
-     .stroke({ width: 1, color: 0xf5a742, alpha: 0.6 });
+     .closePath();
   }
 
   dispose(): void {
