@@ -75,7 +75,7 @@ export const STORAGE_KEY_DISPLAY = 'robot-islands:save';
 
 /** Current schema version. `loadWorld` rejects (returns null) any
  *  snapshot whose `v` is not strictly equal to this. */
-export const SCHEMA_VERSION = 26 as const;
+export const SCHEMA_VERSION = 27 as const;
 
 /** Versions that loadWorld accepts. The walker (loadWorld) chains
  *  migrateV<N>toV<N+1> functions from the lowest known version up to
@@ -83,7 +83,7 @@ export const SCHEMA_VERSION = 26 as const;
  *
  *  See AGENTS.md → "Persistence migrations" for the full "bump = migrate"
  *  policy from v7 onward. */
-export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26]);
+export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27]);
 
 // ---------------------------------------------------------------------------
 // Serialized shapes
@@ -495,6 +495,25 @@ export function migrateV14toV15(s: SerializedSnapshotV14): SaveSnapshot {
  *  absent in v15 saves is handled by the floorLevel() helper at read time. */
 export function migrateV15toV16(s: SerializedSnapshotV15): SaveSnapshot {
   return { ...s, v: 16 as const } as unknown as SaveSnapshot;
+}
+
+/** v26 top-level snapshot shape — structurally identical to v27 (SaveSnapshot)
+ *  except the v literal. The v26 → v27 migration reconciles the global CO₂ pool:
+ *  pre-v27 saves keep climate pressure in per-island `co2Kg` with
+ *  `world.totalCo2Kg == 0`; v27 makes `world.totalCo2Kg` the single authoritative
+ *  global atmosphere (§7.4). */
+export type SerializedSnapshotV26 = Omit<SaveSnapshot, 'v'> & { readonly v: 26 };
+
+/** v26 → v27: seed the single global atmosphere from the legacy per-island sum.
+ *  Per-island `co2Kg` is retained on the state (it still serves the standalone
+ *  `advanceIsland` fallback) but is inert in production from v27 on. */
+export function migrateV26toV27(s: SerializedSnapshotV26): SaveSnapshot {
+  const sumCo2 = s.islandStates.reduce((acc, e) => acc + (e.state.co2Kg ?? 0), 0);
+  return {
+    ...s,
+    v: 27 as const,
+    world: { ...s.world, totalCo2Kg: (s.world.totalCo2Kg ?? 0) + sumCo2 },
+  } as unknown as SaveSnapshot;
 }
 
 /** v16 top-level snapshot shape. Structurally identical to v17 (SaveSnapshot)
@@ -985,6 +1004,9 @@ export function deserializeWorld(
   }
   if ((snapshot as unknown as { v: number }).v === 25) {
     snapshot = migrateV25toV26(snapshot as unknown as SerializedSnapshotV25);
+  }
+  if ((snapshot as unknown as { v: number }).v === 26) {
+    snapshot = migrateV26toV27(snapshot as unknown as SerializedSnapshotV26);
   }
 
   if (snapshot.v !== SCHEMA_VERSION) {
