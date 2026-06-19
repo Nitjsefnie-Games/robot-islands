@@ -1213,13 +1213,13 @@ export const RESOURCE_META: Readonly<Record<ResourceId, ResourceMeta>> = {
   higgs_flux: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
   zero_point_flux: { massPerUnitKg: 1, terminal: 'consumed' },
   neutronium: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
-  probability_calculator: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
+  probability_calculator: { massPerUnitKg: 1, terminal: 'gameplay-sink' }, // probability_engine placement cost (P2)
   dimensional_fold: { massPerUnitKg: 1, terminal: 'consumed' },
   causal_regulator: { massPerUnitKg: 1, terminal: 'consumed' },
   tachyonic_transmitter: { massPerUnitKg: 1, terminal: 'consumed' },
-  aether_beacon: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
-  reality_engine: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
-  singularity_battery_unit: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
+  aether_beacon: { massPerUnitKg: 1, terminal: 'gameplay-sink' }, // lighthouse_t6 placement cost (P2)
+  reality_engine: { massPerUnitKg: 1, terminal: 'gameplay-sink' }, // universe_editor placement cost (P2)
+  singularity_battery_unit: { massPerUnitKg: 1, terminal: 'gameplay-sink' }, // singularity_battery placement cost (P2)
   ascendant_core: { massPerUnitKg: 1, terminal: 'gameplay-sink' },
   antimatter_propellant: { massPerUnitKg: 1e-12, terminal: 'expansion-hook:Phase 2 supplies consumer' },
   scanner_sat: { massPerUnitKg: 500, terminal: 'gameplay-sink' },
@@ -1238,9 +1238,9 @@ export const RESOURCE_META: Readonly<Record<ResourceId, ResourceMeta>> = {
   antimatter_capsule: { massPerUnitKg: 1e-12, terminal: 'consumed' },
   nuclear_fuel_rod: { massPerUnitKg: 1, energyPerUnitKWh: 1000, terminal: 'consumed' },
   plasma_containment_vessel: { massPerUnitKg: 1, terminal: 'consumed' },
-  singularity_sensor: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
-  cryo_containment_unit: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
-  particle_accelerator_core: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
+  singularity_sensor: { massPerUnitKg: 1, terminal: 'gameplay-sink' }, // orbital_tracking_station placement cost (P2)
+  cryo_containment_unit: { massPerUnitKg: 1, terminal: 'gameplay-sink' }, // cryogenic_compute_center placement cost (P2)
+  particle_accelerator_core: { massPerUnitKg: 1, terminal: 'gameplay-sink' }, // particle_accelerator placement cost (P2)
   self_replication_module: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
   mercury: { massPerUnitKg: 1, terminal: 'expansion-hook:amalgamation chemistry / chlor-alkali Hg-cell variant' },
   diamond_ore: { massPerUnitKg: 1, terminal: 'consumed' },
