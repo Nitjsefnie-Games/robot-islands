@@ -1871,9 +1871,15 @@ export function mountInspectorUi(
     const nextEffectLevel = rawFl + 1;
     // §2.4 logistics buildings have no recipe/storage/power; their floors
     // scale the route they host (capacity & speed) instead.
+    const isRecipeBackedCapture =
+      (def.co2CaptureKgPerCycle ?? 0) > 0 &&
+      recipe !== undefined &&
+      Object.keys(recipe.outputs).length === 0;
     const floorEffectDesc = def.category === 'logistics'
       ? 'route capacity & speed'
-      : 'throughput / capacity / power-out';
+      : isRecipeBackedCapture
+        ? 'CO₂ capture'
+        : 'throughput / capacity / power-out';
     floorLine.textContent = `${currentLevel} floors · next: ×${floorEffectMul(nextEffectLevel)} ${floorEffectDesc}`;
     // The preview reflects the NEXT queued upgrade's target: top queued raw
     // level + 1 (displayed = raw + 2).
