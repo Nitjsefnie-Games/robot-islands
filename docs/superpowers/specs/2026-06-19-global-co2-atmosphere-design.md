@@ -51,13 +51,15 @@ implementation with the spec's already-stated conceptual model.
 
 `RatesContext` gains an optional mutable holder `co2Pool?: { kg: number }`.
 
-Inside `advanceIsland`, all CO₂ accrual/drain operates on a holder:
+The CO₂ accrual/drain lives in `applySegmentSideEffects` (called per-segment by `advanceIsland`),
+which already receives `ctx`. Each of the three mutation sites (recipe-output emission, exogenous
+fuel-combustion emission, sink drain) branches on `ctx?.co2Pool`:
 
 ```ts
-const pool = ctx?.co2Pool ?? { kg: state.co2Kg };
-// ... emissions: pool.kg += emit
-// ... drains:    pool.kg = Math.max(0, pool.kg - drainKg)
-if (!ctx?.co2Pool) state.co2Kg = pool.kg;   // standalone fallback only
+const pool = ctx?.co2Pool;
+// emission:  if (pool) pool.kg += emit;        else state.co2Kg += emit;
+// drain:     if (pool) pool.kg = Math.max(0, pool.kg - drainKg);
+//            else      state.co2Kg = Math.max(0, state.co2Kg - drainKg);
 ```
 
 - When the **world driver** supplies a shared `co2Pool`, accrual/drain is global and
@@ -66,10 +68,17 @@ if (!ctx?.co2Pool) state.co2Kg = pool.kg;   // standalone fallback only
   pool, the holder is seeded from and written back to `state.co2Kg` — preserving existing
   per-island unit-test semantics.
 
-`advanceWorldEconomy` (and the grouped lattice / shared-network advance paths that fan out
-to per-member integration) construct **one** holder `const pool = { kg: world.totalCo2Kg }`,
-pass it via `ctx.co2Pool` to every island advance, then write `world.totalCo2Kg = pool.kg`
-once the batch completes. Production is therefore always global.
+`advanceWorldEconomy` constructs **one** holder `const co2Pool = { kg: world.totalCo2Kg }`,
+passes it via `ctx.co2Pool` on every per-island `advanceIsland` call, then writes
+`world.totalCo2Kg = co2Pool.kg` once the loop completes. Production is therefore always global.
+
+**Scope note — grouped advance paths stay CO₂-inert.** The grouped lattice (`advanceLatticeGroup`)
+and shared-network (`advanceSharedNetworkGroup`) paths reimplement the integration loop inline and
+**do not accrue or drain CO₂ at all today** — verified by grep (`co2`/`exogenousFlow`/`biogenic`/
+`CaptureKg` absent from both files). That is pre-existing behavior, not introduced here. This change
+threads the global pool only into the per-island `advanceIsland` path; islands advancing under a
+lattice or cross-island shared network remain CO₂-inert exactly as before. Wiring CO₂ into the
+grouped loops is a separate follow-up, out of scope.
 
 ### 3. Sinks eat from global (plant_a_tree included)
 
@@ -84,19 +93,20 @@ already scales with floor; that is unchanged.
 The global pool clamps at 0 kg (matching the spec's "atmosphere" framing; weather severity
 bands start at <100 kg). Excess capture past 0 is wasted — no carbon-negative banking.
 
-### 5. Persistence migration v15 → v16
+### 5. Persistence migration v26 → v27
 
-Existing saves hold accumulated climate pressure in per-island `co2Kg` (with
-`totalCo2Kg == 0`). The migration seeds the global pool from the old sum:
+(Current `SCHEMA_VERSION = 26`; `totalCo2Kg` has been a serialized world field since the
+v14→v15 migration, but every save to date has it at 0 with the real climate pressure living
+in per-island `co2Kg`.) The migration seeds the global pool from the old sum:
 
 ```
-world.totalCo2Kg = Σ islandStates[*].co2Kg   (old per-island scalars)
+world.totalCo2Kg = (existing world.totalCo2Kg) + Σ islandStates[*].state.co2Kg
 ```
 
 Per-island `co2Kg` is retained in the `IslandState` type (it still serves the standalone
 advanceIsland path) but is inert in production. Follows AGENTS.md bump=migrate discipline:
-add `SerializedSnapshotV15` alias, `migrateV15toV16`, wire into `loadWorld`, add 16 to
-`SUPPORTED_LOAD_VERSIONS`.
+add `SerializedSnapshotV26` alias, `migrateV26toV27`, bump `SCHEMA_VERSION` to 27, wire into
+`loadWorld`'s dispatch chain, add 27 to `SUPPORTED_LOAD_VERSIONS`.
 
 ### 6. SPEC.md (same change)
 
