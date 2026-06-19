@@ -602,20 +602,27 @@ export type DefCatalog = Readonly<Record<BuildingDefId, BuildingDef>>;
  * this binary stall; this helper survives solely for the pass-3 power
  * probe on baseRate-0 buildings (stalled for non-storage reasons).
  */
-/** §2.6 byproduct-gas correctness (resource-graph-closure plan P0). These
- *  resources are produced as byproducts but have no consumer yet (RESOURCE_META
- *  `expansion-hook`). Without a sink they fill their capped `liquid_gas`/
- *  `dry_goods` bin and the §15.3 flow solver gates the PRODUCER to net 0 — so a
- *  long-run/offline emitter stalls on its own exhaust (proven by the §2.6
- *  byproduct-throttle guard in `economy.test.ts`). Until real consumer loops
- *  land (closure plan P4) they are DISCARDED: never written to inventory and
- *  never counted as a cap-stall, so they can't throttle their producer.
- *  `co2` is intentionally excluded — it is climate-coupled (the per-island
- *  `co2Kg` scalar + its inventory double-booking) and handled with the CO₂-model
- *  work (closure plan P6). Remove an entry here the moment it gains a real
- *  recipe consumer. */
-export const DISCARDED_BYPRODUCTS: ReadonlySet<ResourceId> = new Set<ResourceId>([
-  'co', 'refinery_gas', 'wood_tar', 'water_vapor', 'cryo_coolant_vented', 'mill_scale',
+/** §2.6 non-stored outputs (resource-graph-closure plans P0 + P6). These
+ *  resources are produced but never sit in island inventory:
+ *
+ *  - The byproduct gases/solid (`co`, `refinery_gas`, `wood_tar`,
+ *    `water_vapor`, `cryo_coolant_vented`, `mill_scale`) have no consumer yet
+ *    (RESOURCE_META `expansion-hook`); with a capped bin and no sink the §15.3
+ *    flow solver would gate the PRODUCER to net 0 — a long-run/offline emitter
+ *    stalls on its own exhaust (proven by the §2.6 byproduct-throttle guard in
+ *    `economy.test.ts`). They are **discarded** (vented) until real consumer
+ *    loops land (closure plan P4). Remove an entry when it gains a consumer.
+ *  - `co2` is the **single global atmosphere** (§7.4 / closure plan P6): its
+ *    climate contribution lives in the per-island `state.co2Kg` scalar
+ *    (`advanceIsland`), and the world total is `Σ co2Kg` (`sumIslandCo2`). It
+ *    must NOT also sit in inventory — that was a double-booking. So `co2` is
+ *    non-stored here while its `co2Kg` accrual continues independently.
+ *
+ *  Membership means: never written to inventory (`applyRates`), never counted
+ *  as a cap-stall (`outputAvail` / the solver's `capConstrained`), and drained
+ *  to 0 each `advanceIsland` so a pre-change save can't strand stock. */
+export const NON_STORED_OUTPUTS: ReadonlySet<ResourceId> = new Set<ResourceId>([
+  'co', 'refinery_gas', 'wood_tar', 'water_vapor', 'cryo_coolant_vented', 'mill_scale', 'co2',
 ]);
 
 function outputAvail(
@@ -628,7 +635,7 @@ function outputAvail(
   const outputs = resolveRotatingOutput(recipe, nowMs);
   for (const [r, _yield] of Object.entries(outputs)) {
     const id = r as ResourceId;
-    if (DISCARDED_BYPRODUCTS.has(id)) continue; // §2.6: discarded — never stalls
+    if (NON_STORED_OUTPUTS.has(id)) continue; // §2.6: not stored — never stalls
     if (inv(state, id) >= cap(state, id, caps, undefined, baseMult)) return 0;
   }
   return 1;
@@ -1622,9 +1629,9 @@ export function computeRates(
     for (const fb of regimeScan) {
       for (const r of [...Object.keys(fb.produces), ...Object.keys(fb.consumes)]) {
         const id = r as ResourceId;
-        // §2.6: a discarded byproduct has no sink — its full bin must never
-        // cap-constrain (and thus throttle) its producer.
-        if (DISCARDED_BYPRODUCTS.has(id)) continue;
+        // §2.6: a non-stored output (vented byproduct / co2) has no inventory
+        // bin — it must never cap-constrain (and thus throttle) its producer.
+        if (NON_STORED_OUTPUTS.has(id)) continue;
         const stock = ctx?.inventory?.[id] ?? state.inventory[id] ?? 0;
         // Issue #112: classify with STOCK_BOUNDARY_EPS so float DUST at a
         // boundary is treated as pinned and solveFlow gates the dust-bin
@@ -2211,9 +2218,10 @@ export function applyRates(
   baseMult?: SkillMultipliers,
 ): void {
   for (const r of Object.keys(net) as ResourceId[]) {
-    // §2.6: discarded byproducts are vented, not stored — skip the write so
-    // they never accumulate (and so can't fill a bin and stall the producer).
-    if (DISCARDED_BYPRODUCTS.has(r)) continue;
+    // §2.6: non-stored outputs (vented byproducts + co2) are never written to
+    // inventory, so they never accumulate, fill a bin, or stall the producer.
+    // co2's climate contribution is accrued to state.co2Kg separately.
+    if (NON_STORED_OUTPUTS.has(r)) continue;
     const rate = net[r] ?? 0;
     if (rate === 0) continue;
     const next = inv(state, r) + rate * dtSec;
@@ -2601,6 +2609,14 @@ export function advanceIsland(
   wallClockNowMs?: number,
 ): void {
   const { defs = BUILDING_DEFS } = ctx ?? {};
+  // §2.6 vent: non-stored outputs (vented byproducts + co2) never sit in island
+  // inventory. Drain any stock here — runtime never writes them (applyRates
+  // skips), so the only way a bin is non-zero is a save written before this
+  // behavior; clear it so the bin reads empty. co2's climate value is the
+  // per-island `co2Kg` scalar (untouched), summed globally by `sumIslandCo2`.
+  for (const r of NON_STORED_OUTPUTS) {
+    if ((state.inventory[r] ?? 0) !== 0) state.inventory[r] = 0;
+  }
   // §2.7 perf→wall offset. `wallClockNowMs - nowMs` is constant across this
   // advance call, so each segment's wall-clock time is `t + wallOffset`.
   // Tests that omit `wallClockNowMs` fall back to `wallOffset = 0` — the

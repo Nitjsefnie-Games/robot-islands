@@ -15,3 +15,13 @@ export function fmtPower(kW: number): string {
   if (a < 1_000_000) return `${trim(kW / 1000)} MW`;
   return `${trim(kW / 1_000_000)} GW`;
 }
+
+/** Format a mass value (canonical unit = kg) as kg / t / kt / Mt. */
+export function fmtMass(kg: number): string {
+  const a = Math.abs(kg);
+  if (a === 0) return '0 kg';
+  if (a < 1000) return `${trim(kg)} kg`;
+  if (a < 1_000_000) return `${trim(kg / 1000)} t`;
+  if (a < 1_000_000_000) return `${trim(kg / 1_000_000)} kt`;
+  return `${trim(kg / 1_000_000_000)} Mt`;
+}
