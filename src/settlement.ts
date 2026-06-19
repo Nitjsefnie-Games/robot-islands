@@ -26,8 +26,10 @@ import { tierForLevel } from './skilltree.js';
 import { biomeForCell, rasterizePath, rollVehicleDestruction, sumIslandCo2 } from './weather.js';
 import { islandInscribedAny } from './island.js';
 import { footprintTiles } from './shape-mask.js';
-import { CELL_SIZE_TILES, makeInitialIslandState } from './world.js';
+import { CELL_SIZE_TILES, ensureCellGenerated, makeInitialIslandState } from './world.js';
 import type { IslandSpec, WorldState } from './world.js';
+import { computeSignalRanges, pointInSignalRange, type SignalRange } from './antenna.js';
+import { islandIntersectsCells, markIslandDiscovered } from './discovery.js';
 
 /** Find a deterministic 1×1 coastal tile within `spec` — the first tile in
  *  scan order (top-left to bottom-right) that's inscribed in the island
@@ -93,6 +95,21 @@ export interface SettlementVehicle {
   /** §2.6 weather-destruction fate. `active` while in flight; `lost` if the
    *  weather roll destroyed it; `arrived` after a successful landing. */
   status?: 'active' | 'lost' | 'arrived';
+  /** §11 telemetry: cells scanned directly under the vehicle's path (single
+   *  cell, no neighbours — see `tickVehicles`). Buffered while out of antenna
+   *  range, flushed to `world.revealedCells` when the vehicle is in range OR on
+   *  successful arrival; forfeited on loss. Runtime-only (rehydrated empty on
+   *  load) — mirrors the drone scan buffer's role. */
+  scanBuffer: Set<string>;
+  /** §2.6 deterministic weather fate, frozen on the FIRST tick that processes
+   *  the vehicle (mirrors the drone `doomedAtMs`, but lazily — so the §15.1
+   *  wall anchor + §7.3 CO₂ field that the first tick samples decide the fate,
+   *  without changing the `dispatchVehicle` signature). `doomedAtMs` is the
+   *  perf-clock entry time of the cell that destroys the vehicle, or absent if
+   *  it survives. `weatherRolled` guards the freeze (distinguishes "survives"
+   *  from "not yet rolled"). Old saves lack both → rolled fresh on first tick. */
+  doomedAtMs?: number;
+  weatherRolled?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -578,6 +595,7 @@ export function dispatchVehicle(
     fuelResource,
     failureRate: t.failureRate,
     status: 'active',
+    scanBuffer: new Set<string>(),
   };
   world.vehicles.push(vehicle);
   return { ok: true, vehicle };
@@ -665,6 +683,12 @@ export interface TickVehiclesResult {
   readonly arrivals: VehicleArrival[];
   readonly failures: VehicleArrival[];
   readonly lost: VehicleArrival[];
+  /** §11/§12 discovery: islands that flipped `discovered` because a vehicle's
+   *  single-cell scan trail revealed one of their footprint cells this tick. */
+  readonly newlyDiscoveredIslandIds: string[];
+  /** Number of cells added to `world.revealedCells` this tick (flushed vehicle
+   *  scan buffers). The caller rebuilds render layers when this is > 0. */
+  readonly revealedCellsAdded: number;
 }
 
 /**
@@ -703,6 +727,66 @@ export interface TickVehiclesResult {
  * Returns the list of arrivals so the caller can react (rebuild render
  * layers, update modifier-multiplier caches, etc.).
  */
+/** Freeze the §2.6 weather fate for a vehicle: the perf-clock entry time of the
+ *  cell that destroys it, or undefined if it survives. Uses the SAME path +
+ *  coherent biome/CO₂ field + wall anchor as the legacy arrival-time roll, so
+ *  the outcome is identical — only the sampling MOMENT moves to the first tick
+ *  (which freezes the §15.1 anchor + §7.3 CO₂ the tick sees). */
+function computeVehicleDoom(world: WorldState, v: SettlementVehicle, wallOffsetMs: number): number | undefined {
+  const from = world.islands.find((s) => s.id === v.from);
+  const target = world.islands.find((s) => s.id === v.target);
+  if (!from || !target) return undefined;
+  const dx = target.cx - from.cx;
+  const dy = target.cy - from.cy;
+  const distance = Math.sqrt(dx * dx + dy * dy);
+  if (distance <= 0) return undefined;
+  const path = rasterizePath(from.cx, from.cy, dx / distance, dy / distance, distance, v.speed, v.launchTime, CELL_SIZE_TILES);
+  const roll = rollVehicleDestruction(
+    world.seed, path, v.weatherMultiplier, v.id, wallOffsetMs,
+    (cx, cy) => biomeForCell(world, cx, cy), sumIslandCo2(world),
+  );
+  return roll.destroyed && roll.atCellIndex !== null ? path[roll.atCellIndex]!.entryMs : undefined;
+}
+
+/** Cells whose interior the segment a→b passes through, by floor-division —
+ *  the tiles "directly under" the vehicle with NO neighbour slack (unlike the
+ *  drone corridor's half-diagonal widening). Sampled at quarter-cell resolution
+ *  so no traversed cell is skipped. Returns `{cx, cy, key}` triples. */
+function cellsUnderSegment(
+  ax: number, ay: number, bx: number, by: number,
+): Array<{ cx: number; cy: number; key: string }> {
+  const dx = bx - ax;
+  const dy = by - ay;
+  const len = Math.sqrt(dx * dx + dy * dy);
+  const steps = Math.max(1, Math.ceil(len / (CELL_SIZE_TILES / 4)));
+  const seen = new Set<string>();
+  const out: Array<{ cx: number; cy: number; key: string }> = [];
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const cx = Math.floor((ax + dx * t) / CELL_SIZE_TILES);
+    const cy = Math.floor((ay + dy * t) / CELL_SIZE_TILES);
+    const key = `${cx},${cy}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ cx, cy, key });
+  }
+  return out;
+}
+
+/** Drain a vehicle's scan buffer into `world.revealedCells`; returns the count
+ *  of newly-revealed cells. Mirrors the drone buffer flush — called when the
+ *  vehicle is in antenna range OR on successful arrival; cleared in place. */
+function flushVehicleBuffer(v: SettlementVehicle, world: WorldState): number {
+  let added = 0;
+  for (const k of v.scanBuffer) {
+    if (world.revealedCells.has(k)) continue;
+    world.revealedCells.add(k);
+    added++;
+  }
+  v.scanBuffer.clear();
+  return added;
+}
+
 export function tickVehicles(
   world: WorldState,
   islandStates: Map<string, IslandState>,
@@ -710,11 +794,20 @@ export function tickVehicles(
   /** §15.1 wall anchor: the §2.6 destruction roll samples weather at each
    *  path cell's `entryMs + wallOffsetMs` (see `weatherClockMs`). */
   wallOffsetMs: number = 0,
+  /** Wall-clock ms of the previous tick — drives the per-tick single-cell scan
+   *  trail (defaults to `nowMs`, i.e. a point sample, for single-shot callers). */
+  prevTickMs: number = nowMs,
+  /** PERF: optional precomputed antenna ranges (catch-up loop reuse), mirroring
+   *  `tickDrones`. Omitted ⇒ computed from populated islands' Antennas. */
+  precomputedRanges?: ReadonlyArray<SignalRange>,
 ): TickVehiclesResult {
   const arrivals: VehicleArrival[] = [];
   const failures: VehicleArrival[] = [];
   const lost: VehicleArrival[] = [];
+  const newlyDiscoveredIslandIds: string[] = [];
   const remaining: SettlementVehicle[] = [];
+  const ranges = precomputedRanges ?? computeSignalRanges(world.islands.filter((s) => s.populated));
+  let cellsAddedThisTick = 0;
 
   for (const v of world.vehicles) {
     // Terminal-status vehicles are kept for UI/history but no longer
@@ -722,6 +815,48 @@ export function tickVehicles(
     if (v.status === 'lost' || v.status === 'arrived') {
       remaining.push(v);
       continue;
+    }
+
+    // Freeze the §2.6 weather fate on the first tick (see SettlementVehicle).
+    if (!v.weatherRolled) {
+      v.doomedAtMs = computeVehicleDoom(world, v, wallOffsetMs);
+      v.weatherRolled = true;
+    }
+
+    // 1) Per-tick discovery: reveal the single cell(s) directly under the
+    //    vehicle from its prev-tick position to now, antenna-gated exactly like
+    //    drones. Clamp the trail end to `doomedAtMs` so a doomed vehicle never
+    //    scans past its death point.
+    const segStartMs = Math.max(prevTickMs, v.launchTime);
+    const segEndMs = Math.min(nowMs, v.doomedAtMs !== undefined ? v.doomedAtMs : v.expectedArrivalTime);
+    if (segEndMs >= segStartMs) {
+      const a = vehicleCurrentPosition(v, world, segStartMs);
+      const b = vehicleCurrentPosition(v, world, segEndMs);
+      if (a && b) {
+        for (const { cx, cy, key } of cellsUnderSegment(a.x, a.y, b.x, b.y)) {
+          ensureCellGenerated(world, cx, cy);
+          v.scanBuffer.add(key);
+        }
+        // Flush trigger A: in any antenna's range at the segment end (live).
+        if (pointInSignalRange(ranges, b.x, b.y)) {
+          cellsAddedThisTick += flushVehicleBuffer(v, world);
+        }
+      }
+    }
+
+    // 1.5) §11.4 dark-aware loss visibility (mirrors drones): a weather-doomed
+    //      vehicle is removed the instant its phantom position re-enters antenna
+    //      coverage at/after death. Out-of-range deaths stay shown as travelling
+    //      until the `expectedArrivalTime` fallback in the arrival branch.
+    if (v.doomedAtMs !== undefined && nowMs >= v.doomedAtMs && nowMs < v.expectedArrivalTime) {
+      const phantom = vehicleCurrentPosition(v, world, nowMs);
+      if (phantom && pointInSignalRange(ranges, phantom.x, phantom.y)) {
+        v.status = 'lost';
+        lost.push({ targetIslandId: v.target, fromIslandId: v.from, kind: v.kind });
+        v.scanBuffer.clear(); // §11.6 telemetry forfeited on loss
+        remaining.push(v);
+        continue;
+      }
     }
 
     if (nowMs < v.expectedArrivalTime) {
@@ -734,42 +869,19 @@ export function tickVehicles(
       // Target despawned mid-flight — vehicle + cargo lost. (Should never
       // happen in step 12; islands aren't removed.)
       v.status = 'lost';
+      v.scanBuffer.clear();
       remaining.push(v);
       continue;
     }
 
-    // §2.6 weather destruction roll.
-    const from = world.islands.find((s) => s.id === v.from);
-    if (from) {
-      const dx = target.cx - from.cx;
-      const dy = target.cy - from.cy;
-      const distance = Math.sqrt(dx * dx + dy * dy);
-      if (distance > 0) {
-        const dirX = dx / distance;
-        const dirY = dy / distance;
-        const path = rasterizePath(
-          from.cx,
-          from.cy,
-          dirX,
-          dirY,
-          distance,
-          v.speed,
-          v.launchTime,
-          CELL_SIZE_TILES,
-        );
-        // §7.3 coherent field: biome + CO₂ so the vehicle fate sees the
-        // SAME weather every other consumer samples for these cells.
-        const roll = rollVehicleDestruction(
-          world.seed, path, v.weatherMultiplier, v.id, wallOffsetMs,
-          (cx, cy) => biomeForCell(world, cx, cy), sumIslandCo2(world),
-        );
-        if (roll.destroyed) {
-          v.status = 'lost';
-          lost.push({ targetIslandId: target.id, fromIslandId: v.from, kind: v.kind });
-          remaining.push(v);
-          continue;
-        }
-      }
+    // §2.6 weather destruction — use the frozen fate (fallback: undefined ⇒
+    // survived). Identical to the legacy inline roll, just decided at the freeze.
+    if (v.doomedAtMs !== undefined) {
+      v.status = 'lost';
+      lost.push({ targetIslandId: target.id, fromIslandId: v.from, kind: v.kind });
+      v.scanBuffer.clear();
+      remaining.push(v);
+      continue;
     }
 
     // §12.5 mechanical failure roll.
@@ -777,14 +889,16 @@ export function tickVehicles(
     if (rng() < v.failureRate) {
       v.status = 'lost';
       failures.push({ targetIslandId: target.id, fromIslandId: v.from, kind: v.kind });
+      v.scanBuffer.clear();
       remaining.push(v);
       continue; // vehicle lost; target stays unsettled
     }
     if (target.populated) {
       // Target became populated via a parallel path (e.g. two vehicles
       // racing to the same island). Vehicle + cargo are consumed; no
-      // new state created.
+      // new state created. It still made the crossing, so flush its trail.
       v.status = 'arrived';
+      cellsAddedThisTick += flushVehicleBuffer(v, world);
       arrivals.push({ targetIslandId: target.id, fromIslandId: v.from, kind: v.kind });
       remaining.push(v);
       continue;
@@ -793,15 +907,32 @@ export function tickVehicles(
     populateSettledIsland(world, islandStates, target, v.kind, v.tier, v.foundationKitCount, nowMs);
 
     v.status = 'arrived';
+    // Successful arrival recovers the full buffered scan trail (like a drone
+    // flushing on return).
+    cellsAddedThisTick += flushVehicleBuffer(v, world);
     arrivals.push({ targetIslandId: target.id, fromIslandId: v.from, kind: v.kind });
     remaining.push(v);
+  }
+
+  // Any-cell island discovery from the cells flushed this tick (mirrors the
+  // drone post-reveal walk): flip undiscovered, unpopulated islands whose
+  // footprint now intersects a revealed cell.
+  if (cellsAddedThisTick > 0) {
+    for (const isl of world.islands) {
+      if (isl.populated) continue;
+      if (isl.discovered) continue;
+      if (islandIntersectsCells(isl, world.revealedCells)) {
+        markIslandDiscovered(isl, world.revealedCells);
+        newlyDiscoveredIslandIds.push(isl.id);
+      }
+    }
   }
 
   // Replace world.vehicles contents in-place so external references stay valid.
   world.vehicles.length = 0;
   for (const v of remaining) world.vehicles.push(v);
 
-  return { arrivals, failures, lost };
+  return { arrivals, failures, lost, newlyDiscoveredIslandIds, revealedCellsAdded: cellsAddedThisTick };
 }
 
 // ---------------------------------------------------------------------------

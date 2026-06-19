@@ -124,6 +124,11 @@ export type SerializedDrone = Omit<Drone, 'scanBuffer'> & {
   readonly scanBuffer: ReadonlyArray<string>;
 };
 
+/** Vehicle with the runtime-only scan buffer dropped (rehydrated empty on load).
+ *  The §2.6 `doomedAtMs` / `weatherRolled` freeze fields are plain JSON values
+ *  and round-trip as-is (doomedAtMs is perf-shifted on load like the drone's). */
+export type SerializedVehicle = Omit<SettlementVehicle, 'scanBuffer'>;
+
 /** World data minus the per-island closures. Drones, Routes, and Vehicles
  *  are already JSON-friendly (only numbers, strings, and arrays — see the
  *  respective types) and round-trip without transformation.
@@ -137,7 +142,7 @@ export interface SerializedWorld {
   readonly seed?: string;
   readonly drones: ReadonlyArray<SerializedDrone>;
   readonly routes: ReadonlyArray<Route>;
-  readonly vehicles: ReadonlyArray<SettlementVehicle>;
+  readonly vehicles: ReadonlyArray<SerializedVehicle>;
   readonly revealedCells?: ReadonlyArray<string>;
   /** §14.2 satellite fleet. */
   readonly satellites: ReadonlyArray<import('./orbital.js').Satellite>;
@@ -842,8 +847,12 @@ export function serializeWorld(
           })),
         };
       }),
-      // Vehicles are immutable records, no nested mutable state to deep-copy.
-      vehicles: [...world.vehicles],
+      // Vehicles: drop the runtime-only scan buffer (Set → not JSON-safe;
+      // rehydrated empty on load). doomedAtMs / weatherRolled round-trip as-is.
+      vehicles: world.vehicles.map(({ scanBuffer: _sb, ...rest }) => {
+        void _sb;
+        return rest;
+      }),
       // §11 telemetry: snapshot the revealed-cell set as a sorted array.
       // Sorted for deterministic blob output (diff-friendly between saves).
       revealedCells: [...world.revealedCells].sort(),
@@ -1074,6 +1083,11 @@ export function deserializeWorld(
       ...v,
       launchTime: v.launchTime + perfShift,
       expectedArrivalTime: v.expectedArrivalTime + perfShift,
+      // §2.6 doomedAtMs is a perf-clock timestamp — shift it like the drone's.
+      // Absent on old saves / surviving vehicles → stays undefined.
+      ...(v.doomedAtMs !== undefined ? { doomedAtMs: v.doomedAtMs + perfShift } : {}),
+      // Runtime-only scan buffer: rehydrate empty (old saves never had it).
+      scanBuffer: new Set<string>(),
     })),
     revealedCells: deserializeRevealedCells(islands, snapshot.world.revealedCells),
     satellites: snapshot.world.satellites.map((s) => ({

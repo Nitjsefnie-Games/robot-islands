@@ -2982,7 +2982,15 @@ async function main(): Promise<void> {
       // Dock / Helipad, and inserts a fresh IslandState into the map. We
       // register the new modifier-multiplier cache entry and rebuild render
       // layers so the colony becomes visible immediately.
-      const vehicleResult = tickVehicles(worldState, islandStates, now, weatherWallOffsetMs);
+      // §12 discovery: pass `prevFrameMs` so the vehicle's per-tick single-cell
+      // scan trail is computed from its prev-tick position (same as drones).
+      const vehicleResult = tickVehicles(worldState, islandStates, now, weatherWallOffsetMs, prevFrameMs);
+      if (
+        vehicleResult.newlyDiscoveredIslandIds.length > 0 ||
+        vehicleResult.revealedCellsAdded > 0
+      ) {
+        rebuildWorldLayers();
+      }
       if (vehicleResult.arrivals.length > 0) {
         for (const arr of vehicleResult.arrivals) {
           const newSpec = islandSpecsById.get(arr.targetIslandId);

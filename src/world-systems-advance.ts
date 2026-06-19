@@ -171,10 +171,14 @@ export function advanceWorldSystems(
     tickRepairDrones(world, cur);
     tickSonarBuoys(world);
 
-    const vr: TickVehiclesResult = tickVehicles(world, states, cur, wallOffsetMs);
+    const vr: TickVehiclesResult = tickVehicles(world, states, cur, wallOffsetMs, prev, signalRanges);
     result.vehicleArrivals.push(...vr.arrivals);
     result.vehicleFailures.push(...vr.failures);
     result.vehicleLost.push(...vr.lost);
+    // §12 discovery: a vehicle's single-cell scan trail can reveal cells / flip
+    // islands during catch-up exactly like a drone corridor.
+    result.newlyDiscoveredIslandIds.push(...vr.newlyDiscoveredIslandIds);
+    result.revealedCellsAdded += vr.revealedCellsAdded;
     // A settlement arrival can populate a new island → the NEXT step's tickDrones
     // must see fresh ranges (vehicles run after tickDrones, so the effect is seen
     // next step — matching the old per-step recompute). Arrivals are rare.
