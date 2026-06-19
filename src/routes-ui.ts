@@ -1406,21 +1406,33 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
 
   // ---- API impl --------------------------------------------------------------
   function refresh(nowMs: number): void {
-    const key = populatedKey();
-    if (key !== lastPopulatedKey) {
-      buildOptions();
-      lastPopulatedKey = key;
+    // §perf: the panel DOM work (form options, stats, ledger) only matters when
+    // the panel is open — but this runs EVERY frame from the ticker. When the
+    // panel is closed (the normal map-viewing case) it rebuilt the form/stats
+    // and re-sampled per-route weather for the ledger throttle readout
+    // (routeEffectiveCapacity → weather) for a hidden panel — pure waste
+    // (~refreshStats + ledger weather were a real slice of steady-state CPU).
+    // Gate it on `visible`; show() calls refresh() on open so the panel is fresh
+    // the moment it appears. paintLayer drives the ON-MAP route render
+    // (routeRenderer.update) and MUST run every frame regardless, so it stays
+    // outside the gate.
+    if (visible) {
+      const key = populatedKey();
+      if (key !== lastPopulatedKey) {
+        buildOptions();
+        lastPopulatedKey = key;
+      }
+      const rKey = routesKey();
+      const viaKey = viaBuildingsKey();
+      if (rKey !== lastRoutesKey || viaKey !== lastViaBuildingsKey) {
+        buildBuildingOptions();
+        lastRoutesKey = rKey;
+        lastViaBuildingsKey = viaKey;
+      }
+      refreshFormReadout();
+      refreshStats();
+      repaintLedger(nowMs);
     }
-    const rKey = routesKey();
-    const viaKey = viaBuildingsKey();
-    if (rKey !== lastRoutesKey || viaKey !== lastViaBuildingsKey) {
-      buildBuildingOptions();
-      lastRoutesKey = rKey;
-      lastViaBuildingsKey = viaKey;
-    }
-    refreshFormReadout();
-    refreshStats();
-    repaintLedger(nowMs);
     paintLayer(nowMs);
   }
 
