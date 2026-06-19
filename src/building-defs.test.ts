@@ -235,10 +235,8 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   'motor_assembly',
   'generator_lab',
   // T3 mechanical assemblies
-  'pump_assembly',
   'hydraulic_assembly',
   'pneumatic_assembly',
-  'solar_cell_lab',
   'fuel_cell_lab',
   // T3 glass/ceramics + fiber spinners
   'optical_glass_kiln',
@@ -469,21 +467,6 @@ describe('BUILDING_DEFS catalog', () => {
     });
   });
 
-  describe('§7.10 pump_assembly (T3 pump producer)', () => {
-    it('is T3, 2x2, manufacturing category', () => {
-      const def = BUILDING_DEFS.pump_assembly;
-      expect(def).toBeDefined();
-      expect(def.tier).toBe(3);
-      expect(def.footprint).toEqual(SHAPES.square2);
-      expect(def.category).toBe('manufacturing');
-    });
-    it('produces pump from electric_motor + pipe + bearing', () => {
-      expect(RECIPES.pump_assembly).toBeDefined();
-      expect(RECIPES.pump_assembly!.inputs).toEqual({ electric_motor: 1, pipe: 2, bearing: 1 });
-      expect(RECIPES.pump_assembly!.outputs).toEqual({ pump: 1 });
-    });
-  });
-
   describe('§7.10 hydraulic_assembly (T3 hydraulic_actuator producer)', () => {
     it('is T3, 2x2, manufacturing category', () => {
       const def = BUILDING_DEFS.hydraulic_assembly;
@@ -511,21 +494,6 @@ describe('BUILDING_DEFS catalog', () => {
       expect(RECIPES.pneumatic_assembly).toBeDefined();
       expect(RECIPES.pneumatic_assembly!.inputs).toEqual({ pipe: 2, bearing: 1, spring: 1 });
       expect(RECIPES.pneumatic_assembly!.outputs).toEqual({ pneumatic_actuator: 1 });
-    });
-  });
-
-  describe('§7.9 solar_cell_lab (T3 solar_cell producer)', () => {
-    it('is T3, 2x2, electronics category', () => {
-      const def = BUILDING_DEFS.solar_cell_lab;
-      expect(def).toBeDefined();
-      expect(def.tier).toBe(3);
-      expect(def.footprint).toEqual(SHAPES.square2);
-      expect(def.category).toBe('electronics');
-    });
-    it('produces solar_cell from silicon_wafer + glass + aluminum', () => {
-      expect(RECIPES.solar_cell_lab).toBeDefined();
-      expect(RECIPES.solar_cell_lab!.inputs).toEqual({ silicon_wafer: 1, glass: 2, aluminum: 1 });
-      expect(RECIPES.solar_cell_lab!.outputs).toEqual({ solar_cell: 1 });
     });
   });
 

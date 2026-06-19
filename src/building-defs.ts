@@ -295,11 +295,9 @@ export type BuildingDefId =
   // Phase 10b — T3 power components (Task 10.7)
   | 'generator_lab'
   // Phase 10c — T3 mechanical assemblies (Task 10.8)
-  | 'pump_assembly'
   | 'hydraulic_assembly'
   | 'pneumatic_assembly'
   // Phase 10c — T3 power components (Task 10.9)
-  | 'solar_cell_lab'
   // Phase 10c — T3 power components (Task 10.10)
   | 'fuel_cell_lab'
   // Phase 10c — T3 glass/ceramics (Task 10.11)
@@ -721,7 +719,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // BOM source: Babcock & Wilcox, *Steam* 41e ch. 25.
     // Small coal-fired steam generator: 500 steel_beam + 200 clay fire-brick + 100 stone
     // foundation + 50 pipe + 10 microchip control = ~1000 kg.
-    placementCost: { steel_beam: 500, clay: 200, stone: 100, pipe: 50, microchip: 10 },
+    placementCost: { steel_beam: 500, clay: 200, stone: 100, pipe: 50, microchip: 10, generator: 2 },
     glyph: '⚡',
   },
   dock: {
@@ -860,7 +858,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { produces: 1000 },  // energy SI rebalance: 1 MW electrical (1000 kW)
     // BOM source: USDA ARS biomass-boiler reference.
     // 400 steel_beam boiler + 150 clay fire-brick + 100 stone pad + 30 pipe + 80 wood fuel = ~850 kg.
-    placementCost: { steel_beam: 400, clay: 150, stone: 100, pipe: 30, wood: 80 },
+    placementCost: { steel_beam: 400, clay: 150, stone: 100, pipe: 30, wood: 80, generator: 2 },
     glyph: '❀',
   },
   // §si-units rev-16 §7.4 — T1 environment building, forest-biome only.
@@ -912,7 +910,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     requiredTile: ['water'],
     // BOM source: NREL ATB-2024 land-based wind.
     // 800 steel_beam tower + 50 aluminum nacelle + 200 stone foundation + 5 magnet + 30 wire = 1315 kg.
-    placementCost: { steel_beam: 800, aluminum: 50, stone: 200, magnet: 5, wire: 30 },
+    placementCost: { steel_beam: 800, aluminum: 50, stone: 200, magnet: 5, wire: 30, generator: 2 },
     glyph: '✦',
   },
   // rev-16 §10.15-A — bootstrap power, no fuel, open-air grass.
@@ -1024,7 +1022,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // §14 placeholder — tune in Appendix A.
     // BOM source: IRENA low-grade geothermal wellhead reference.
     // 200 kg stone pad + 80 kg iron pipe + 30 kg wood shelter = 310 kg.
-    placementCost: { stone: 200, iron_ingot: 80, wood: 30 },
+    placementCost: { stone: 200, iron_ingot: 80, wood: 30, generator: 2 },
     glyph: '♨',
   },
   // rev-16 §12.5 Bonus — pre-electric thermal power, burns coal/charcoal.
@@ -1061,7 +1059,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // §14 placeholder — tune in Appendix A.
     // BOM source: Roberts, *Engineering Workshop* — light assembly bench.
     // 150 kg stone pad + 60 kg wood bench + 40 kg iron fixtures + 10 kg bolt hardware = 260 kg.
-    placementCost: { stone: 150, wood: 60, iron_ingot: 40, bolt: 200 },
+    placementCost: { stone: 150, wood: 60, iron_ingot: 40, bolt: 200, pneumatic_actuator: 2 },
     glyph: '⚙',
   },
   // §12.3: Kit Assembler Enriched — T3 variant producing Foundation Kit Enriched.
@@ -1387,7 +1385,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 100 },
     // BOM source: IspatGuru, "Cold Rolling Mill" — 4-stand finishing-mill installation (scaled).
     // 12000 concrete + 8000 stone + 4000 iron_ingot + 300 gear + 3000 clay = 27.6 t.
-    placementCost: { concrete: 12000, stone: 8000, iron_ingot: 4000, gear: 300, clay: 3000 },
+    placementCost: { concrete: 12000, stone: 8000, iron_ingot: 4000, gear: 300, clay: 3000, hydraulic_actuator: 2 },
     glyph: '▭',
   },
   pipe_mill: {
@@ -1771,7 +1769,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 200 },
     // BOM source: offshore jack-up platform leg + deck segment.
     // 2000 steel_beam truss + 25000 concrete pad + 500 stone ballast + 150 microchip + 300 wire ≈ 125.7 t.
-    placementCost: { steel_beam: 2000, concrete: 25000, stone: 500, microchip: 150, wire: 300 },
+    placementCost: { steel_beam: 2000, concrete: 25000, stone: 500, microchip: 150, wire: 300, hydraulic_actuator: 2 },
     glyph: '⬢',
   },
   // §8.5 T3 power: Nuclear Reactor (4x4, any tile). Consumes uranium fuel
@@ -1790,7 +1788,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // BOM source: IAEA ARIS NuScale SMR.
     // 200000 steel_beam vessel + 600000 concrete shield + 30000 lead_ingot shielding
     // + 2000 microchip control + 500 pipe cooling = 832 t.
-    placementCost: { steel_beam: 200000, concrete: 600000, lead_ingot: 30000, microchip: 2000, pipe: 500 },
+    placementCost: { steel_beam: 200000, concrete: 600000, lead_ingot: 30000, microchip: 2000, pipe: 500, generator: 2 },
     glyph: '☢',
   },
   // §8.7 T2 cooling: Cooling Tower (2x2). Adjacency anchor. The spec's
@@ -1941,7 +1939,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     requiredBiomes: ['plains'],
     // BOM source: NASA electromagnetic launch facility (scaled track + superconducting magnets).
     // 307.52 t embodied (steel_beam 250 + magnet 50 + heavy_cable 4 + concrete 3 + gear 0.4 + wire 0.1 + microchip 0.02).
-    placementCost: { steel_beam: 5000, concrete: 3000, magnet: 1000, microchip: 200, heavy_cable: 500, gear: 200, wire: 200 },
+    placementCost: { steel_beam: 5000, concrete: 3000, magnet: 1000, microchip: 200, heavy_cable: 500, gear: 200, wire: 200, hydraulic_actuator: 2 },
     glyph: '➶',
   },
   // §9.5: Carbon Forge — Forest-unique T4. Only producer of Carbon Fiber /
@@ -2038,7 +2036,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // §14 placeholder — tune in Appendix A.
     // BOM source: Rocket Lab Launch Complex 1 tower + pad structure.
     // 127.27 t embodied.
-    placementCost: { steel_beam: 2500, concrete: 1500, microchip: 200, glass: 200, wire: 100, pipe: 100, gear: 50 },
+    placementCost: { steel_beam: 2500, concrete: 1500, microchip: 200, glass: 200, wire: 100, pipe: 100, gear: 50, hydraulic_actuator: 2 },
     glyph: '▲',
   },
   // Phase 11 — T4 endgame (Task 11.1): Quantum Manipulator → time_crystal.
@@ -3491,7 +3489,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 100 },
     // BOM source: Roberts, *Engineering Workshop* — hydraulic rigid-plastic press.
     // 6000 concrete + 4000 stone + 1500 iron_ingot + 100 gear + 200 copper_ingot = 11.9 t.
-    placementCost: { concrete: 6000, stone: 4000, iron_ingot: 1500, gear: 100, copper_ingot: 200 },
+    placementCost: { concrete: 6000, stone: 4000, iron_ingot: 1500, gear: 100, copper_ingot: 200, hydraulic_actuator: 2 },
     glyph: '⚙',
   },
   flexible_plastic_press: {
@@ -3505,7 +3503,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 100 },
     // BOM source: Roberts, *Engineering Workshop* — hydraulic flexible-plastic press.
     // 6000 concrete + 4000 stone + 1500 iron_ingot + 100 gear + 200 copper_ingot = 11.9 t.
-    placementCost: { concrete: 6000, stone: 4000, iron_ingot: 1500, gear: 100, copper_ingot: 200 },
+    placementCost: { concrete: 6000, stone: 4000, iron_ingot: 1500, gear: 100, copper_ingot: 200, hydraulic_actuator: 2 },
     glyph: '⚙',
   },
   rubber_synthesizer: {
@@ -3995,20 +3993,6 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     glyph: '⚡',
   },
   // Phase 10c — T3 mechanical assemblies (Task 10.8)
-  pump_assembly: {
-    id: 'pump_assembly',
-    displayName: 'Pump Assembly',
-    category: 'manufacturing',
-    tier: 3,
-    footprint: SHAPES.square2,
-    fill: 0x405880,
-    stroke: 0x182838,
-    power: { consumes: 100 },
-    // BOM source: Grundfos centrifugal pump assembly line — casing + impeller test.
-    // 400 steel_beam frame + 5000 concrete pad + 120 gear + 100 pipe + 60 microchip ≈ 26.4 t.
-    placementCost: { steel_beam: 400, concrete: 5000, gear: 120, pipe: 100, microchip: 60 },
-    glyph: '⚙',
-  },
   hydraulic_assembly: {
     id: 'hydraulic_assembly',
     displayName: 'Hydraulic Assembly',
@@ -4036,21 +4020,6 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // 300 steel_beam frame + 4000 concrete pad + 80 gear + 80 pipe + 50 microchip ≈ 20.1 t.
     placementCost: { steel_beam: 300, concrete: 4000, gear: 80, pipe: 80, microchip: 50 },
     glyph: '⚙',
-  },
-  // Phase 10c — T3 power components (Task 10.9)
-  solar_cell_lab: {
-    id: 'solar_cell_lab',
-    displayName: 'Solar Cell Lab',
-    category: 'electronics',
-    tier: 3,
-    footprint: SHAPES.square2,
-    fill: 0x405080,
-    stroke: 0x182838,
-    power: { consumes: 200 },
-    // BOM source: NREL PV manufacturing — cell tabber + stringer bay.
-    // 500 steel_beam frame + 7000 concrete pad + 200 glass + 60 microchip + 100 wire ≈ 33.1 t.
-    placementCost: { steel_beam: 500, concrete: 7000, glass: 200, microchip: 60, wire: 100 },
-    glyph: '◈',
   },
   // Phase 10c — T3 power components (Task 10.10)
   fuel_cell_lab: {
@@ -4992,7 +4961,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 30 },
     // BOM source: SMT pick-and-place line — cleanroom bay + reflow oven.
     // 350 steel_beam frame + 4500 concrete pad + 50 microchip control + 100 wire bus + 70 gear conveyor + 60 glass partition ≈ 22.3 t.
-    placementCost: { steel_beam: 350, concrete: 4500, microchip: 50, wire: 100, gear: 70, glass: 60 },
+    placementCost: { steel_beam: 350, concrete: 4500, microchip: 50, wire: 100, gear: 70, glass: 60, pneumatic_actuator: 2 },
     glyph: '◈',
   },
   processor_fab: {
