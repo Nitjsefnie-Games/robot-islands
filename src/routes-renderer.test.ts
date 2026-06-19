@@ -100,7 +100,14 @@ describe('RouteRenderer — Phase 2 world-space contract', () => {
 });
 
 describe('RouteRenderer — Phase 3 animation contract', () => {
-  it('dashed texture animation advances frame-to-frame WITHOUT calling .clear() on the static layer', () => {
+  it('dash line is STATIC — neither layer is cleared on unchanged animation-only frames', () => {
+    // Flicker fix: the dash line no longer re-strokes every frame. Pixi 8 bakes
+    // stroke UVs into geometry, so the old per-frame dash-scroll had to
+    // clear()+re-stroke the animated Graphics each frame — re-uploading that
+    // geometry ~60×/s made the yellow lines flicker. The line is now built once
+    // (buildRouteGeometry) and left alone on frames where nothing changed; the
+    // chevrons carry the motion. So across unchanged frames NEITHER the static
+    // nor the animated layer is cleared.
     const r = new RouteRenderer(makeResolver());
     const routes = [makeRoute('r1')];
     r.update(routes, 0, '', false); // warm
@@ -113,10 +120,8 @@ describe('RouteRenderer — Phase 3 animation contract', () => {
       r.update(routes, i * 16, '', false);
     }
 
-    // Static layer must NOT be cleared during animation-only frames.
     expect(staticClearSpy).not.toHaveBeenCalled();
-    // Animated layer MUST clear+restroke every frame (Pixi 8 limitation).
-    expect(animatedClearSpy).toHaveBeenCalledTimes(10);
+    expect(animatedClearSpy).not.toHaveBeenCalled();
   });
 });
 

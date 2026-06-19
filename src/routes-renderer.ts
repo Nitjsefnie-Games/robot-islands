@@ -33,10 +33,6 @@ export interface RouteRenderState {
 export type IslandPosResolver =
   (islandId: string) => { x: number; y: number } | null;
 
-/** Pixels of UV scroll per millisecond. Matches the pre-impl visual
- *  feel (~12 px / 600 ms = 0.02 px/ms in routes-ui.ts:1037). The dash
- *  pattern repeats every 12 px, so a full cycle takes 600 ms. */
-const SCROLL_SPEED_PX_PER_MS = 12 / 600;
 
 export class RouteRenderer {
   readonly staticLayer = new Container();
@@ -239,33 +235,18 @@ export class RouteRenderer {
    *  per-segment dashed-line loop (one line + one stroke vs N segments).
    */
   private updateAnimationOnly(nowMs: number): void {
-    const offsetPx = nowMs * SCROLL_SPEED_PX_PER_MS;
-    for (const entry of this.entries.values()) {
-      const tex = getDashedStrokeTexture(entry.routeType);
-      entry.animatedGraphics.clear();
-
-      // Stroke segment-by-segment so each straight span of a bent route
-      // scrolls its dash pattern along its own angle.
-      const pts = entry.points;
-      for (let i = 0; i < pts.length - 1; i++) {
-        const p1 = pts[i]!;
-        const p2 = pts[i + 1]!;
-        const dx = p2.x - p1.x;
-        const dy = p2.y - p1.y;
-        const angle = Math.atan2(dy, dx);
-
-        // Fix 7.1: translate BEFORE rotate so the phase advances uniformly
-        // along the line at every angle.  See §perf-2026-05-28 API note above.
-        // The correct composition: identity → translate → rotate yields
-        // M⁻¹.tx = offsetPx (uniform) instead of offsetPx·cos(angle) (old).
-        this._scrollMatrix.set(1, 0, 0, 1, 0, 0).translate(-offsetPx, 0).rotate(angle);
-
-        entry.animatedGraphics
-          .moveTo(p1.x, p1.y)
-          .lineTo(p2.x, p2.y)
-          .stroke({ texture: tex, matrix: this._scrollMatrix, width: 2.0, alpha: 0.85 });
-      }
-    }
+    // FLICKER FIX: the dash line is now STATIC — drawn once in
+    // buildRouteGeometry and left alone. Pixi 8 bakes stroke-texture UVs into
+    // vertex geometry (see API note above), so the old per-frame dash-scroll
+    // had to clear() and re-stroke the Graphics EVERY frame. Re-tessellating +
+    // re-uploading that geometry every frame made the yellow route lines
+    // visibly flicker (~30 Hz: the line's drawn yellow oscillated frame-to-
+    // frame, confirmed by a per-frame canvas capture). The "cargo flowing"
+    // read is still carried by the chevrons, which animate in paintOverlay.
+    // (A flicker-free scroll is possible via per-segment TilingSprites scrolled
+    // by tilePosition — no geometry rebuild — but that's a larger change; this
+    // removes the flicker now.)
+    void nowMs;
   }
 
   /** Per-frame overlay rebuild: chevrons + arrival-pulse + draft preview.
