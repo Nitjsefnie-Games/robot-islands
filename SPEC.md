@@ -914,7 +914,7 @@ The recipe ties T6 launch fuel back to the T4 antimatter chain — a player who 
 |Logger|1x1|T1|tree|none|Wood output|
 |Heavy Logger|2x2|T2|dense forest|medium|Wood output, higher rate|
 |Mine|2x2|T1|ore vein or coal vein|medium|Ore or coal output by tile|
-|Deep Mine|2x3|T2|ore vein|high|Higher rate, deeper veins, requires Mining sub-path|
+|Deep Mine|2x3|T2|ore vein|high|Higher rate **and denser per tile** than Mine (~1.6× ore/tile), deeper veins, requires Mining sub-path|
 |Quarry|2x2|T1|stone or sand|low|Stone/sand output|
 |Well|1x1|T1|water|low|Fresh water output|
 |Pump Jack|2x2|T2|(placed near oil)|medium|Crude oil output|
