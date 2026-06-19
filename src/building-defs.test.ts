@@ -2231,7 +2231,7 @@ describe('§6.5 quantum_chip_fab (T4 quantum_chip producer, Task 11.2)', () => {
   });
   it('produces quantum_chip from steel + pig_iron', () => {
     expect(RECIPES.quantum_chip_fab).toBeDefined();
-    expect(RECIPES.quantum_chip_fab!.inputs).toEqual({ steel: 4, pig_iron: 4 });
+    expect(RECIPES.quantum_chip_fab!.inputs).toEqual({ steel: 4, pig_iron: 4, quantum_foam: 1 }); // §12 P3
     expect(RECIPES.quantum_chip_fab!.outputs).toEqual({ quantum_chip: 1 });
     expect(RECIPES.quantum_chip_fab!.cycleSec).toBe(3822191.6);
   });
