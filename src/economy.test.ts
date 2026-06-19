@@ -58,7 +58,7 @@ import type { Graph } from './skilltree-graph.js';
 import { DEFAULT_GRAPH, effectiveSkillMultipliers, type SkillMultipliers, type NodeId, type SkillNode } from './skilltree.js';
 import * as skilltreeModule from './skilltree.js';
 import { FULL_CATALOG } from './skilltree-catalog.js';
-import { attachTerrainAt, makeInitialIslandState } from './world.js';
+import { attachTerrainAt, makeInitialIslandState, DEMO_ISLANDS_TEST_FIXTURE } from './world.js';
 import { resolveShot, SHOT_DURATION_MS } from './terrain-modifier.js';
 import { TOXICITY_DURATION_MS } from './reactor-toxicity.js';
 import { islandInscribedAny } from './island.js';
@@ -5244,6 +5244,44 @@ describe('CO₂ sinks (Phase 5)', () => {
     state.co2Kg = 0;
     advanceIsland(state, 60_000);
     expect(state.co2Kg).toBeCloseTo(12.6, 1); // 72.6 − 60
+  });
+
+  // --- regression lock: plant_a_tree capture scaling ---
+
+  function treeDrain(
+    buildings: Array<{ id: string; defId: PlacedBuilding['defId']; x: number; y: number; floorLevel?: number }>,
+    ctxExtra: Record<string, unknown> = {},
+  ): number {
+    const spec = DEMO_ISLANDS_TEST_FIXTURE[0]!;
+    const state = makeInitialIslandState(spec, 0);
+    state.buildings = buildings as unknown as IslandState['buildings'];
+    state.level = 10;
+    state.co2Kg = 1000;
+    advanceIsland(state, 600_000, { terrainAt: () => 'tree', ...ctxExtra } as RatesContext);
+    return 1000 - state.co2Kg;
+  }
+
+  it('tree capture: floor upgrade scales tree capture by floorEffectMul', () => {
+    const d0 = treeDrain([{ id: 't', defId: 'plant_a_tree', x: 5, y: 5, floorLevel: 0 }]);
+    const d3 = treeDrain([{ id: 't', defId: 'plant_a_tree', x: 5, y: 5, floorLevel: 3 }]);
+    expect(d3 / d0).toBeCloseTo(4, 1); // floorEffectMul(3) = 1 + 3
+  });
+
+  it('tree capture: cluster bonus scales tree capture (4-cluster ≈ ×1.15/tree)', () => {
+    const lone = treeDrain([{ id: 't', defId: 'plant_a_tree', x: 5, y: 5 }]);
+    const cluster = treeDrain([
+      { id: 'a', defId: 'plant_a_tree', x: 5, y: 5 },
+      { id: 'b', defId: 'plant_a_tree', x: 6, y: 5 },
+      { id: 'c', defId: 'plant_a_tree', x: 5, y: 6 },
+      { id: 'd', defId: 'plant_a_tree', x: 6, y: 6 },
+    ]);
+    expect(cluster / 4 / lone).toBeCloseTo(1.15, 2); // 1 + 0.05×(K−c_i), K=4, c_i=1
+  });
+
+  it('tree capture: active-play bonus scales tree capture', () => {
+    const base = treeDrain([{ id: 't', defId: 'plant_a_tree', x: 5, y: 5 }]);
+    const boosted = treeDrain([{ id: 't', defId: 'plant_a_tree', x: 5, y: 5 }], { activeBonusMul: 2 });
+    expect(boosted / base).toBeCloseTo(2, 1);
   });
 });
 
