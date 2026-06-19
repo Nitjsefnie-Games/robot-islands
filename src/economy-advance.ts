@@ -92,6 +92,12 @@ export function advanceWorldEconomy(
   const islandSpecsById = new Map<string, IslandSpec>();
   for (const s of world.islands) islandSpecsById.set(s.id, s);
 
+  // §7.4 single global atmosphere — one shared holder seeded from the world
+  // total, threaded into every per-island advance, written back after the loop.
+  // (Grouped lattice / shared-network members are CO₂-inert today and are NOT
+  // given the holder; only the per-island advanceIsland path carries it.)
+  const co2Pool = { kg: world.totalCo2Kg };
+
   // Per-island modifier multipliers, cached for the duration of this tick.
   const modifierMulCache = new Map<string, ModifierMultipliers>();
   const modifierMulFor = (id: string): ModifierMultipliers => {
@@ -267,6 +273,7 @@ export function advanceWorldEconomy(
       advanceIsland(s, now, {
         ...buildIslandRatesContext(),
         worldSeed: world.seed,
+        co2Pool,
         onTerrainShotFire: (buildingId) => {
           const modifier = s.buildings.find((b) => b.id === buildingId);
           if (!modifier) return;
@@ -277,6 +284,9 @@ export function advanceWorldEconomy(
     }
     islandCtx.set(s.id, buildIslandRatesContext());
   }
+
+  // §7.4 write the global atmosphere back once the per-island loop completes.
+  world.totalCo2Kg = co2Pool.kg;
 
   return { ncState, islandCtx };
 }

@@ -151,6 +151,12 @@ export interface RatesContext {
   readonly modifierMul?: ModifierMultipliers;
   readonly defs?: DefCatalog;
   readonly ncBuff?: number;
+  /** §7.4 single global atmosphere. When the world driver supplies this shared
+   *  mutable holder, `applySegmentSideEffects` accrues emissions to / drains
+   *  sinks from it (floored at 0) — making CO₂ global across all islands —
+   *  instead of the per-island `state.co2Kg`. Absent ⇒ standalone advance falls
+   *  back to `state.co2Kg`, preserving isolated-unit-test semantics. */
+  readonly co2Pool?: { kg: number };
   /** §9.9 active-play production bonus — world-level recipe-rate multiplier
    *  (`activeBonusMul(world)` in active-bonus.ts). Unlike `ncBuff`
    *  (per-island, networked T3+ only) this applies to EVERY island.
@@ -2435,7 +2441,9 @@ export function applySegmentSideEffects(
   for (const br of byBuilding) {
     const co2Out = br.recipe.outputs.co2 ?? 0;
     if (co2Out > 0 && !br.recipe.biogenic) {
-      state.co2Kg += co2Out * br.effectiveRate * dtSec;
+      const emit = co2Out * br.effectiveRate * dtSec;
+      if (ctx?.co2Pool) ctx.co2Pool.kg += emit;
+      else state.co2Kg += emit;
     }
   }
   // Path 2: exogenous fuel-combustion CO₂ (not in outputs ledger). Biogenic
@@ -2446,7 +2454,9 @@ export function applySegmentSideEffects(
       br.recipe.exogenousFlowKg &&
       !br.recipe.biogenic
     ) {
-      state.co2Kg += br.recipe.exogenousFlowKg * br.effectiveRate * dtSec;
+      const emit = br.recipe.exogenousFlowKg * br.effectiveRate * dtSec;
+      if (ctx?.co2Pool) ctx.co2Pool.kg += emit;
+      else state.co2Kg += emit;
     }
   }
   // §si-units rev-16 §7.4: CO₂ sink drain — accrual fires before, drain after.
@@ -2470,7 +2480,8 @@ export function applySegmentSideEffects(
       ? (rateById.get(b.id) ?? 0) * dtSec
       : dtSec / 60;
     const drainKg = capture * cyclesThisSegment;
-    state.co2Kg = Math.max(0, state.co2Kg - drainKg);
+    if (ctx?.co2Pool) ctx.co2Pool.kg = Math.max(0, ctx.co2Pool.kg - drainKg);
+    else state.co2Kg = Math.max(0, state.co2Kg - drainKg);
   }
   accrueXp(state, production, consumption, dtSec, 1, skillMul.xpGain);
   // §13.3 Battery buffer — apply charge/discharge over the segment.

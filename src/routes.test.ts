@@ -2209,7 +2209,8 @@ describe('§7.3 coherent weather field across route consumers', () => {
       makeIslandSpec('b', toX, toY),
     ]);
     const states = new Map([['a', src], ['b', dst]]);
-    world.islandStates = states; // sumIslandCo2 reads world.islandStates
+    world.islandStates = states;
+    world.totalCo2Kg = co2Kg; // §7.4 single global atmosphere — sumIslandCo2 reads world.totalCo2Kg
     const r = cargoRoute('a', 'b', 'iron_ore', [], 10, 1);
     world.routes.push(r);
     const out = tickRoutes(world, states, 0, 1);

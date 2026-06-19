@@ -2590,7 +2590,8 @@ describe('§7.3 coherent weather field for drone fate rolls', () => {
       latticeActive: false,
       latticeNodeIslands: [],
       commPackets: [],
-      totalCo2Kg: 0,
+      // §7.4 single global atmosphere — climate is read from world.totalCo2Kg.
+      totalCo2Kg: co2Kg,
       playerLat: null,
       playerLon: null,
       oceanCells: new Map(),
