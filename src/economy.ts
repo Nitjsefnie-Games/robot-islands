@@ -602,6 +602,22 @@ export type DefCatalog = Readonly<Record<BuildingDefId, BuildingDef>>;
  * this binary stall; this helper survives solely for the pass-3 power
  * probe on baseRate-0 buildings (stalled for non-storage reasons).
  */
+/** §2.6 byproduct-gas correctness (resource-graph-closure plan P0). These
+ *  resources are produced as byproducts but have no consumer yet (RESOURCE_META
+ *  `expansion-hook`). Without a sink they fill their capped `liquid_gas`/
+ *  `dry_goods` bin and the §15.3 flow solver gates the PRODUCER to net 0 — so a
+ *  long-run/offline emitter stalls on its own exhaust (proven by the §2.6
+ *  byproduct-throttle guard in `economy.test.ts`). Until real consumer loops
+ *  land (closure plan P4) they are DISCARDED: never written to inventory and
+ *  never counted as a cap-stall, so they can't throttle their producer.
+ *  `co2` is intentionally excluded — it is climate-coupled (the per-island
+ *  `co2Kg` scalar + its inventory double-booking) and handled with the CO₂-model
+ *  work (closure plan P6). Remove an entry here the moment it gains a real
+ *  recipe consumer. */
+export const DISCARDED_BYPRODUCTS: ReadonlySet<ResourceId> = new Set<ResourceId>([
+  'co', 'refinery_gas', 'wood_tar', 'water_vapor', 'cryo_coolant_vented', 'mill_scale',
+]);
+
 function outputAvail(
   state: IslandState,
   recipe: Recipe,
@@ -612,6 +628,7 @@ function outputAvail(
   const outputs = resolveRotatingOutput(recipe, nowMs);
   for (const [r, _yield] of Object.entries(outputs)) {
     const id = r as ResourceId;
+    if (DISCARDED_BYPRODUCTS.has(id)) continue; // §2.6: discarded — never stalls
     if (inv(state, id) >= cap(state, id, caps, undefined, baseMult)) return 0;
   }
   return 1;
@@ -1605,6 +1622,9 @@ export function computeRates(
     for (const fb of regimeScan) {
       for (const r of [...Object.keys(fb.produces), ...Object.keys(fb.consumes)]) {
         const id = r as ResourceId;
+        // §2.6: a discarded byproduct has no sink — its full bin must never
+        // cap-constrain (and thus throttle) its producer.
+        if (DISCARDED_BYPRODUCTS.has(id)) continue;
         const stock = ctx?.inventory?.[id] ?? state.inventory[id] ?? 0;
         // Issue #112: classify with STOCK_BOUNDARY_EPS so float DUST at a
         // boundary is treated as pinned and solveFlow gates the dust-bin
@@ -2191,6 +2211,9 @@ export function applyRates(
   baseMult?: SkillMultipliers,
 ): void {
   for (const r of Object.keys(net) as ResourceId[]) {
+    // §2.6: discarded byproducts are vented, not stored — skip the write so
+    // they never accumulate (and so can't fill a bin and stall the producer).
+    if (DISCARDED_BYPRODUCTS.has(r)) continue;
     const rate = net[r] ?? 0;
     if (rate === 0) continue;
     const next = inv(state, r) + rate * dtSec;
