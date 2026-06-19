@@ -1,6 +1,6 @@
 import { makeSeededRng } from './rng.js';
 import { XP_WEIGHT, type ResourceId } from './recipes.js';
-import { inv, cap, type IslandState } from './economy.js';
+import { inv, cap, NON_STORED_OUTPUTS, type IslandState } from './economy.js';
 import type { PlacedBuilding } from './buildings.js';
 import type { SkillMultipliers } from './skilltree.js';
 
@@ -118,8 +118,8 @@ export function generateOffer(
   const rng = typeof rngOrSeed === 'string'
     ? makeSeededRng(`${rngOrSeed}_trade_${state.id}_${state.tradeAcceptCount}`)
     : rngOrSeed;
-  const givePool = (Object.keys(state.inventory) as ResourceId[]).filter((r) => inv(state, r) > 0);
-  const getPool = [...state.everProduced];
+  const givePool = (Object.keys(state.inventory) as ResourceId[]).filter((r) => inv(state, r) > 0 && !NON_STORED_OUTPUTS.has(r));
+  const getPool = [...state.everProduced].filter((r) => !NON_STORED_OUTPUTS.has(r));
   if (givePool.length === 0 || getPool.length === 0) return null;
 
   for (let attempt = 0; attempt < 12; attempt++) {
