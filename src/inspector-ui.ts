@@ -281,6 +281,23 @@ export function recipeToLines(recipe: Recipe, effectiveRate: number, recipeInput
   return lines;
 }
 
+/** kg of CO₂ removed per minute by a sink building. Recipe-backed sinks
+ *  (plant_a_tree) scale with their effective cycle rate — so floor/cluster/
+ *  active multipliers flow through; flat sinks (wastewater/scrubber) capture a
+ *  fixed amount per 60 s cadence (`economy.ts` `dtSec/60` fallback). A scrubber
+ *  with no adjacent emitter is idle and captures nothing. */
+export function co2CaptureKgPerMin(opts: {
+  co2CaptureKgPerCycle: number;
+  recipeBacked: boolean;
+  effectiveRate: number;
+  adjacencyActive: boolean;
+}): number {
+  if (!opts.adjacencyActive) return 0;
+  return opts.recipeBacked
+    ? opts.co2CaptureKgPerCycle * opts.effectiveRate * 60
+    : opts.co2CaptureKgPerCycle;
+}
+
 /** Build the inspector "bonuses" readout string from the resolved multipliers,
  *  or `null` when nothing is worth showing. The recipe-rate factors
  *  (fledgling / category / yield / cluster / active) compose into a single

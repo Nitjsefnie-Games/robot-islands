@@ -2,7 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeRegistry } from './input.js';
-import { mountInspectorUi, recipeToLines, bonusesText, type InspectorDeps } from './inspector-ui.js';
+import { mountInspectorUi, recipeToLines, bonusesText, co2CaptureKgPerMin, type InspectorDeps } from './inspector-ui.js';
 import { makeInitialIslandState, type IslandSpec, type WorldState } from './world.js';
 import type { PlacedBuilding } from './buildings.js';
 import type { Recipe } from './recipes.js';
@@ -186,5 +186,21 @@ describe('mountInspectorUi', () => {
     expect(inspector.isVisible()).toBe(false);
     expect(inspector.getSelectedBuildingId()).toBeNull();
     expect(inspector.getSelectedIslandId()).toBeNull();
+  });
+});
+
+describe('co2CaptureKgPerMin', () => {
+  it('recipe-backed: kg/cycle × effectiveRate × 60', () => {
+    // tree: 0.1 kg/cycle, effectiveRate 0.130 cyc/s → 0.78 kg/min
+    expect(co2CaptureKgPerMin({ co2CaptureKgPerCycle: 0.1, recipeBacked: true, effectiveRate: 0.130, adjacencyActive: true }))
+      .toBeCloseTo(0.78, 2);
+  });
+  it('flat: kg/min equals kg/cycle', () => {
+    expect(co2CaptureKgPerMin({ co2CaptureKgPerCycle: 5, recipeBacked: false, effectiveRate: 0, adjacencyActive: true }))
+      .toBeCloseTo(5, 6);
+  });
+  it('idle adjacency → 0', () => {
+    expect(co2CaptureKgPerMin({ co2CaptureKgPerCycle: 20, recipeBacked: false, effectiveRate: 0, adjacencyActive: false }))
+      .toBe(0);
   });
 });
