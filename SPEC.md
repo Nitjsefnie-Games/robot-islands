@@ -1954,10 +1954,12 @@ interface Island {
   biome: BiomeType;
   modifiers: ModifierId\[];
   size: {
-    ellipses: { major: number; minor: number; rotation: number; offsetX: number; offsetY: number }[];
+    ellipses: { biome: BiomeType; major: number; minor: number; rotation: number; offsetX: number; offsetY: number }[];
     // Initial: a single ellipse at offset (0, 0) with biome-default radii.
     // Land Reclamation grows ellipses[0]'s radii. Joining (§3.6) appends new ellipses
     // with offsets equal to the absorbed island's position relative to the absorber.
+    // Each constituent records a cap-only `biome` (origin biome of the absorbed island)
+    // that derives its Land Reclamation cap; terrain still queries the absorber's biome per §3.6.
   };
   terrain: TerrainType\[]\[];
   buildings: PlacedBuilding\[];
