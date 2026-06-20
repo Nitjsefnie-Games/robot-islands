@@ -211,8 +211,9 @@ export interface InspectorDeps {
   onRefreshMaintenance(target: InspectorTarget): void;
   /** Floor-upgrade callback. main.ts owns the mutation (applyUpgrade),
    *  rebuilds world layers, and refreshes the inspector so the new floor
-   *  count and effect are visible. */
-  onUpgradeFloor(target: InspectorTarget): void;
+   *  count and effect are visible. `spendToken` waives material cost by
+   *  consuming one self_replication_module (§4.9 free-floor token). */
+  onUpgradeFloor(target: InspectorTarget, spendToken: boolean): void;
   /** §3.4 Land Reclamation: called when the player clicks one of the
    *  +1 major / +1 minor expand buttons. main.ts owns the actual
    *  `expandIsland` call (so the inspector stays DOM-pure) and is
@@ -1006,10 +1007,43 @@ export function mountInspectorUi(
   floorUpgradeBtn.addEventListener('click', () => {
     const target = resolveTarget();
     if (!target) { close(); return; }
-    deps.onUpgradeFloor(target);
+    deps.onUpgradeFloor(target, floorTokenCheckbox.checked);
     paint();
   });
   floorSection.body.appendChild(floorUpgradeBtn);
+
+  // §4.9 free-floor token toggle: spend one self_replication_module to waive
+  // the material cost of the next floor upgrade. Visible only when the island
+  // holds at least one module.
+  const tokenToggleWrap = document.createElement('label');
+  styled(
+    tokenToggleWrap,
+    [
+      'display: flex',
+      'align-items: center',
+      'gap: 6px',
+      'margin-top: 6px',
+      'color: var(--ri-fg-2)',
+      'font-size: 10.5px',
+      'letter-spacing: 0.02em',
+      'cursor: pointer',
+    ].join(';'),
+  );
+  const floorTokenCheckbox = document.createElement('input');
+  floorTokenCheckbox.type = 'checkbox';
+  styled(
+    floorTokenCheckbox,
+    [
+      'margin: 0',
+      'cursor: pointer',
+      'accent-color: var(--ri-accent)',
+    ].join(';'),
+  );
+  const tokenToggleText = document.createElement('span');
+  tokenToggleText.textContent = 'Spend self-replication module (free floor)';
+  tokenToggleWrap.appendChild(floorTokenCheckbox);
+  tokenToggleWrap.appendChild(tokenToggleText);
+  floorSection.body.appendChild(tokenToggleWrap);
 
   // §4.7 maintenance section — operating-time / threshold readout, plus the
   // tier's maintenance bill of materials. For an Eternal Servitor the
@@ -1890,11 +1924,18 @@ export function mountInspectorUi(
     const upgradeShortfall = affordabilityShortfall(state.inventory, upgradeCostBasket);
     const canAffordUpgrade = Object.keys(upgradeShortfall).length === 0;
     const upgradeMs = upgradeConstructionMs(def, targetRawLevel);
+    const hasToken = (state.inventory.self_replication_module ?? 0) >= 1;
+    tokenToggleWrap.style.display = hasToken ? 'flex' : 'none';
+    const spendingToken = hasToken && floorTokenCheckbox.checked;
     const upgradeCostParts: string[] = [];
-    for (const [r, n] of Object.entries(upgradeCostBasket) as Array<[ResourceId, number]>) {
-      if (n <= 0) continue;
-      const have = Math.floor(state.inventory[r] ?? 0);
-      upgradeCostParts.push(`${n} ${r.toUpperCase().replace(/_/g, ' ')} (${have})`);
+    if (spendingToken) {
+      upgradeCostParts.push('1 SELF REPLICATION MODULE');
+    } else {
+      for (const [r, n] of Object.entries(upgradeCostBasket) as Array<[ResourceId, number]>) {
+        if (n <= 0) continue;
+        const have = Math.floor(state.inventory[r] ?? 0);
+        upgradeCostParts.push(`${n} ${r.toUpperCase().replace(/_/g, ' ')} (${have})`);
+      }
     }
     const upgradeDurationStr = `${(upgradeMs / 1000).toFixed(1)}s`;
     // An upgrade is a construction job: mirrors applyUpgrade's gates so the
@@ -1915,10 +1956,11 @@ export function mountInspectorUi(
     const willQueue = (selfBuilding || runningFull) && qCount < qSlots;
     const queuedUpgrades = countQueuedUpgrades(state, building.id);
     const queuedSuffix = queuedUpgrades > 0 ? ` (${queuedUpgrades} queued)` : '';
+    const canAfford = spendingToken || canAffordUpgrade;
     if (hardFull) {
       floorUpgradeBtn.textContent = `QUEUE FULL (${runCount}/${runSlots} run · ${qCount}/${qSlots} queue)`;
       floorUpgradeBtn.disabled = true;
-    } else if (!canAffordUpgrade) {
+    } else if (!canAfford) {
       floorUpgradeBtn.textContent = `NEED ${formatShortfall(upgradeShortfall)}`;
       floorUpgradeBtn.disabled = true;
     } else if (willQueue) {

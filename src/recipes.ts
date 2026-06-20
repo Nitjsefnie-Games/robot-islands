@@ -1232,7 +1232,7 @@ export const RESOURCE_META: Readonly<Record<ResourceId, ResourceMeta>> = {
   singularity_sensor: { massPerUnitKg: 1, terminal: 'gameplay-sink' }, // orbital_tracking_station placement cost (P2)
   cryo_containment_unit: { massPerUnitKg: 1, terminal: 'gameplay-sink' }, // cryogenic_compute_center placement cost (P2)
   particle_accelerator_core: { massPerUnitKg: 1, terminal: 'gameplay-sink' }, // particle_accelerator placement cost (P2)
-  self_replication_module: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
+  self_replication_module: { massPerUnitKg: 1, terminal: 'gameplay-sink' },
   mercury: { massPerUnitKg: 1, terminal: 'expansion-hook:amalgamation chemistry / chlor-alkali Hg-cell variant' },
   diamond_ore: { massPerUnitKg: 1, terminal: 'consumed' },
   cryogenic_compound: { massPerUnitKg: 1, terminal: 'consumed' },

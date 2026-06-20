@@ -644,6 +644,8 @@ A building starts at floor 1 (`floorLevel === 0`). Each floor upgrade raises the
 
 The L>10 curve starts at 92% of a fresh build (floor 11 = 0.8 × 1.15) and grows 15% per subsequent floor (floor 12 ≈ 106%, floor 15 ≈ 161%, floor 20 ≈ 324%, etc.). It uses the same resource basket as the base placement cost; only the scalar changes.
 
+**Free-floor token.** A `self_replication_module` (produced by the `self_replication_lab`) can be spent to waive the MATERIAL cost of a single floor upgrade. The upgrade still consumes a build slot and runs for its full construction time; only the material basket is waived. The token is usable on any building and any floor level. If the player opts to spend a token but no module is on hand, the upgrade falls back to normal material payment. Build-time and module scarcity preserve the §4.9 soft cap — the token does not bypass the construction queue or the timer.
+
 **Effect scaling** is unbounded: throughput, power output, and storage scale as `×(1 + L)` where `L` is the raw floor level. Consumer power draw scales as `×(1 + 0.5 × L)`. These multipliers apply to every floor, including floors beyond 10. A **logistics** (transport) building — `dock` / `dronepad` / `airship_dock` / `mass_driver` / `teleporter_pad`, which has no recipe, storage, or power — instead applies its floors to the **route it hosts**: capacity and transit speed both scale `×(1 + L)` via `routeFloorMultiplier` (see §2.4). Its inspector floor-upgrade preview reads "route capacity & speed" rather than "throughput / capacity / power-out".
 
 **Relocate / demolish.** `totalInvestedCost` is `placementCost` plus the sum of every completed upgrade's cost, so refund and move-fee calculations automatically include the exponential floors.

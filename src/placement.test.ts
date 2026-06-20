@@ -2039,6 +2039,40 @@ describe('applyUpgrade', () => {
     expect(state.inventory.stone).toBe(1000 - 160 * 2);
     expect(state.inventory.wood).toBe(1000 - 64 * 2);
   });
+
+  it('spends one self_replication_module to waive material cost and still enqueues the build', () => {
+    const spec = makeSpec();
+    const state = makeState(spec);
+    state.inventory.stone = 0;
+    state.inventory.wood = 0;
+    state.inventory.self_replication_module = 3;
+    const b: PlacedBuilding = { id: 'b1', defId: 'mine', x: 0, y: 0 };
+    spec.buildings.push(b);
+    const r = applyUpgrade(spec, state, 'b1', true);
+    expect(r.ok).toBe(true);
+    expect(b.floorLevel).toBe(1);
+    expect(state.inventory.self_replication_module).toBe(2);
+    expect(state.inventory.stone).toBe(0);
+    expect(state.inventory.wood).toBe(0);
+    expect((b.constructionRemainingMs ?? 0)).toBeGreaterThan(0);
+  });
+
+  it('falls back to material payment when spendToken=true but no module is on hand', () => {
+    const spec = makeSpec();
+    const state = makeState(spec);
+    state.inventory.stone = 300;
+    state.inventory.wood = 200;
+    state.inventory.self_replication_module = 0;
+    const b: PlacedBuilding = { id: 'b1', defId: 'mine', x: 0, y: 0 };
+    spec.buildings.push(b);
+    const before = { ...state.inventory };
+    const r = applyUpgrade(spec, state, 'b1', true);
+    expect(r.ok).toBe(true);
+    expect(b.floorLevel).toBe(1);
+    expect(state.inventory.self_replication_module).toBe(0);
+    expect(state.inventory.stone).toBe(before.stone! - 160);
+    expect(state.inventory.wood).toBe(before.wood! - 64);
+  });
 });
 
 // ---------------------------------------------------------------------------
