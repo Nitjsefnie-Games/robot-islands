@@ -1445,7 +1445,7 @@ describe('IslandState Time Lock state round-trip', () => {
   it('preserves timeLockBankedMin, accelerationQueue, accelerationRemainingMin, and bankingEnabled', () => {
     const home = makeIslandState({
       timeLockBankedMin: 120,
-      accelerationQueue: [{ sourceIslandId: 'home', durationMin: 5 }, { sourceIslandId: 'forest-ne', durationMin: 10 }],
+      accelerationQueue: [{ durationMin: 5 }, { durationMin: 10 }],
       accelerationRemainingMin: 7.5,
       bankingEnabled: true,
     });
@@ -1456,7 +1456,7 @@ describe('IslandState Time Lock state round-trip', () => {
     const { islandStates: restored } = deserializeWorld(json, 0, 0);
     const r = restored.get('home')!;
     expect(r.timeLockBankedMin).toBe(120);
-    expect(r.accelerationQueue).toEqual([{ sourceIslandId: 'home', durationMin: 5 }, { sourceIslandId: 'forest-ne', durationMin: 10 }]);
+    expect(r.accelerationQueue).toEqual([{ durationMin: 5 }, { durationMin: 10 }]);
     expect(r.accelerationRemainingMin).toBe(7.5);
     expect(r.bankingEnabled).toBe(true);
   });

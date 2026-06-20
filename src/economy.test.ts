@@ -330,43 +330,6 @@ describe('advanceIsland — event-driven piecewise integration', () => {
   });
 });
 
-describe('tutorial production flags (lubricantProduced / boltProduced)', () => {
-  it('flips boltProduced once a Workshop produces bolts', () => {
-    const state = makeState({
-      buildings: [MINE, WORKSHOP],
-      inventory: { ...blankInventory(), coal: 50 },
-    });
-    expect(state.boltProduced).toBeFalsy();
-    advanceIsland(state, 100_000, { defs: POWER_FREE });
-    expect(state.inventory.bolt).toBeGreaterThan(0);
-    expect(state.boltProduced).toBe(true);
-  });
-
-  it('flips lubricantProduced once a Lubricant Refinery produces lubricant', () => {
-    // Lubricant Refinery is tier 2 — the §9.7 runtime tier gate zeroes its
-    // rate below a T2 island, so the island must be level 5+ (T2).
-    const state = makeState({
-      level: 10,
-      buildings: [LUBRICANT_REFINERY],
-      inventory: { ...blankInventory(), heavy_oil: 50, chlorine: 50, calcium_sulfonate: 50 },
-    });
-    expect(state.lubricantProduced).toBeFalsy();
-    advanceIsland(state, 1_000_000, { defs: POWER_FREE });
-    expect(state.inventory.lubricant).toBeGreaterThan(0);
-    expect(state.lubricantProduced).toBe(true);
-  });
-
-  it('leaves boltProduced false when no bolt is produced', () => {
-    // Mine alone produces iron_ore, never bolt.
-    const state = makeState({
-      buildings: [MINE],
-      inventory: blankInventory(),
-    });
-    advanceIsland(state, 100_000, { defs: POWER_FREE });
-    expect(state.boltProduced).toBeFalsy();
-  });
-});
-
 describe('XP accrual', () => {
   it('accrues XP proportional to production × xp_weight × time', () => {
     // Mine produces 0.02 iron_ore/s. iron_ore xp_weight = 1.
@@ -3733,7 +3696,7 @@ describe('Time Lock', () => {
     expect(r2.ok).toBe(true);
     expect(target.accelerationRemainingMin).toBe(30);
     expect(target.accelerationQueue).toHaveLength(1);
-    expect(target.accelerationQueue[0]).toEqual({ sourceIslandId: 'source-b', durationMin: 20 });
+    expect(target.accelerationQueue[0]).toEqual({ durationMin: 20 });
     expect(sourceB.timeLockBankedMin).toBe(0);
 
     // Advance 30 minutes — first block exhausted, queue pops.
