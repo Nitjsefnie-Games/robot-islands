@@ -154,12 +154,13 @@ export interface IslandSpec {
    *  forward-compat only — merge propagation isn't wired, so absorbed primaries
    *  enter with rotation 0 (see `island-merge.ts`). */
   extraEllipses?: Array<{
-    /** §3.4 cap-only origin biome of this absorbed constituent. Derives the
-     *  per-lobe Land Reclamation cap (BIOME_MAX_RADII[biome]). Terrain is NOT
-     *  routed through this — tiles still query the absorber's biome (§3.6).
-     *  Optional in input shape only: legacy saves lack it (migrated v27→v28);
-     *  readers default via `?? spec.biome`. */
-    readonly biome: Biome;
+    /** Cap-only origin biome of this absorbed constituent — derives the per-lobe
+     *  Land Reclamation cap (BIOME_MAX_RADII[biome]). Terrain is NOT routed
+     *  through this; tiles still query the absorber's biome (§3.6). Optional:
+     *  legacy saves and in-memory fixtures may omit it, readers default via
+     *  `?? spec.biome`, and the v27→v28 persistence migration stamps it
+     *  explicitly. */
+    readonly biome?: Biome;
     readonly major: number;
     readonly minor: number;
     readonly rotation: number;
