@@ -1023,6 +1023,23 @@ async function aUserWithModifiedGame(
   return userWithSnapshot(serializeWorld(world, islandStates, now, now) as SaveSnapshot);
 }
 
+/** Build a game where `home` has absorbed one extra ellipse and carries a
+ *  Land Reclamation Hub with enough materials to expand. */
+async function aUserWithMergedHomeIsland(now: number): Promise<string> {
+  return aUserWithModifiedGame(now, (world, islandStates) => {
+    const home = world.islands.find((s: any) => s.id === 'home');
+    const state = islandStates.get('home');
+    home.buildings.push({
+      id: 'hub-1', defId: 'land_reclamation_hub', x: 0, y: 0,
+      constructionRemainingMs: 0, placedAt: now,
+    });
+    state.buildings = home.buildings;
+    home.extraEllipses = [{ major: 3, minor: 3, rotation: 0, offsetX: 20, offsetY: 0 }];
+    state.inventory.steel_beam = 1000;
+    state.inventory.concrete = 10000;
+  });
+}
+
 /** Return the serialized snapshot's home island spec. */
 async function homeSpec(uid: string): Promise<any> {
   const snap = await loadSnapshot(pool, uid);
@@ -1282,7 +1299,7 @@ describe('relabel-cargo', () => {
 });
 
 describe('expand-island', () => {
-  it('legal: expands the island radius and deducts cost', async () => {
+  it('legal: expands the primary radius and deducts cost', async () => {
     const now = Date.now();
     const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
       const home = world.islands.find((s: any) => s.id === 'home');
@@ -1300,7 +1317,7 @@ describe('expand-island', () => {
 
     const ack = await applyIntent(
       pool, uid,
-      { type: 'expand-island', payload: { islandId: 'home', axis: 'major' }, seq: 2 },
+      { type: 'expand-island', payload: { islandId: 'home', constituentIndex: 0, axis: 'major' }, seq: 2 },
       now,
     );
     expect(ack).toMatchObject({ ok: true, seq: 2 });
@@ -1308,12 +1325,61 @@ describe('expand-island', () => {
     expect((await homeSpec(uid)).majorRadius).toBe(before + 1);
   });
 
+  it('legal: expands the chosen extra-ellipse constituent', async () => {
+    const now = Date.now();
+    const uid = await aUserWithMergedHomeIsland(now);
+    const before = (await homeSpec(uid)).extraEllipses[0].major;
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'expand-island', payload: { islandId: 'home', constituentIndex: 1, axis: 'major' }, seq: 2 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 2 });
+
+    expect((await homeSpec(uid)).extraEllipses[0].major).toBe(before + 1);
+  });
+
+  it('legal: legacy payload without constituentIndex defaults to index 0', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
+      const home = world.islands.find((s: any) => s.id === 'home');
+      const state = islandStates.get('home');
+      state.inventory.steel_beam = 10000;
+      state.inventory.concrete = 10000;
+      home.buildings.push({
+        id: 'hub-1', defId: 'land_reclamation_hub', x: 0, y: 0,
+        constructionRemainingMs: 0, placedAt: now,
+      });
+      state.buildings = home.buildings;
+    });
+    const before = (await homeSpec(uid)).majorRadius;
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'expand-island', payload: { islandId: 'home', axis: 'major' }, seq: 2 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 2 });
+    expect((await homeSpec(uid)).majorRadius).toBe(before + 1);
+  });
+
+  it('illegal: out-of-range constituentIndex is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithMergedHomeIsland(now);
+    await expectRejectNoChange(
+      uid,
+      { type: 'expand-island', payload: { islandId: 'home', constituentIndex: 9, axis: 'major' }, seq: 9 },
+      now,
+    );
+  });
+
   it('illegal: expansion without a hub is rejected, save unchanged', async () => {
     const now = Date.now();
     const uid = await aUserWithGame();
     await expectRejectNoChange(
       uid,
-      { type: 'expand-island', payload: { islandId: 'home', axis: 'major' }, seq: 9 },
+      { type: 'expand-island', payload: { islandId: 'home', constituentIndex: 0, axis: 'major' }, seq: 9 },
       now,
     );
   });
