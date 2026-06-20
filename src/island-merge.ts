@@ -133,6 +133,7 @@ export function performMerge(
     absorber.extraEllipses = [];
   }
   absorber.extraEllipses.push({
+    biome: absorbed.biome,
     major: absorbed.majorRadius,
     minor: absorbed.minorRadius,
     rotation: 0,
@@ -145,6 +146,7 @@ export function performMerge(
   if (absorbed.extraEllipses) {
     for (const e of absorbed.extraEllipses) {
       absorber.extraEllipses.push({
+        biome: e.biome ?? absorbed.biome,
         major: e.major,
         minor: e.minor,
         rotation: e.rotation,

@@ -454,8 +454,9 @@ When islands A and B touch:
 * Drones in transit returning to the absorbed island return to the merged island.
 * Settlement vehicles whose target or origin is the absorbed island are retargeted to the merged island.
 * The absorber's modifiers are kept; the absorbed island's are voided.
+* Each appended constituent records the origin biome of the absorbed island (recursively-propagated extras keep their own). This biome caps that lobe's Land Reclamation (§3.4) but does NOT change terrain — tiles still query the absorber's biome.
 
-**Implementation note — biome after merge.** The merged island carries a single `biome` field (the absorber's). After merge, `terrainAt` calls `terrainAtForBiome(spec.biome, ...)` for every tile, including tiles inscribed in absorbed constituent ellipses — absorbed tiles are queried under the absorber's biome, not the absorbed island's original biome. No per-constituent biome is stored. Biome-locked unique buildings already placed on the absorbed island remain in place and continue operating (they were placed legally; the island-ownership biome check is at placement time only). No per-constituent biome model is specced; this is the settled behavior.
+**Implementation note — biome after merge.** The merged island carries a single `biome` field (the absorber's). After merge, `terrainAt` calls `terrainAtForBiome(spec.biome, ...)` for every tile, including tiles inscribed in absorbed constituent ellipses — absorbed tiles are queried under the absorber's biome, not the absorbed island's original biome. A cap-only origin biome is recorded per constituent (see the join rule above) to enforce Land Reclamation caps, but it does not alter terrain queries. Biome-locked unique buildings already placed on the absorbed island remain in place and continue operating (they were placed legally; the island-ownership biome check is at placement time only).
 
 Joining is permanent — there is no un-merge.
 
