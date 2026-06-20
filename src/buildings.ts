@@ -157,6 +157,12 @@ export interface PlacedBuilding {
    *  the overflow output is voided at the cap. Free + instantly reversible via
    *  the inspector toggle. */
   forceRun?: boolean;
+  /** §4.6 per-output Ignore Cap overrides. Maps an output resource to an
+   *  explicit on/off that overrides the global OUTPUT_CAP_EXEMPT default for
+   *  THIS building. Absent resource ⇒ use the global default. Absent field ⇒
+   *  all outputs at their global default (byproducts on, everything else off).
+   *  Replaces `forceRun` (removed in the final task); set by the inspector. */
+  ignoreCapOverrides?: Partial<Record<ResourceId, boolean>>;
 }
 
 /** Operational predicates now live in `building-operational.ts` (no PixiJS)

@@ -45,6 +45,8 @@ import { solveFlow, type FlowBuildingSpec } from './flow-solver.js';
 import { solveBrownoutFactor, type PowerSample } from './flow-power-fixpoint.js';
 import type { CrystalId, EdgeId, Graph } from './skilltree-graph.js';
 import { networkedIslandIds } from './network-consciousness.js';
+import { OUTPUT_CAP_EXEMPT } from './output-cap.js';
+export { OUTPUT_CAP_EXEMPT } from './output-cap.js';
 
 /** Returns true if any 4-neighbor of `focal` has a `defId` in `defIds`. */
 export function hasNeighborWithAnyDefId(
@@ -618,44 +620,7 @@ export const NON_STORED_OUTPUTS: ReadonlySet<ResourceId> = new Set<ResourceId>([
   'co2',
 ]);
 
-/**
- * §2.6 / §15.3 per-output cap-exemption (P4 Phase 1, task 2).
- *
- * The 6 byproducts are SIDE outputs of buildings whose PRIMARY output is
- * valuable (smelter→`iron_ingot`, steel_mill→`steel`, the mills→
- * `beam`/`pipe`/`wire`, etc.). Verified resource-level safe: each of the 6 is
- * a side output ONLY — none is ever the sole/primary output of any recipe (nor
- * a sole `rotateOutputs` entry), so exempting the resource never wrongly
- * exempts some building's primary stream.
- *
- * Membership means: the output IS written to inventory up to cap (drawable as
- * a recipe input) and overflow above cap is voided by `applyRates`' clamp —
- * BUT the output is excluded from the producer's cap-stall (`outputAvail`) and
- * from the §15.3 net-flow solver's `capConstrained` set, so a full byproduct
- * bin never gates the producer down (and thus never throttles its primary
- * output). This is scoped to the OUTPUT/resource, unlike building-level
- * `forceRun`/`ignoreOutputCap` which would also void the primary output.
- *
- * Disjoint from NON_STORED_OUTPUTS. `co2` is NOT here (it stays non-stored —
- * the global atmosphere scalar). Remove an entry only if it ever becomes a
- * primary output, or if a different storage policy is wanted once a consumer
- * lands. */
-export const OUTPUT_CAP_EXEMPT: ReadonlySet<ResourceId> = new Set<ResourceId>([
-  'co', 'refinery_gas', 'wood_tar', 'water_vapor', 'cryo_coolant_vented', 'mill_scale',
-  // P4 Phase 1 (task 4): `tar` and `asphalt` are SIDE outputs of
-  // crude_oil_cracker (primary = `heavy_oil`). Closing the tar→asphalt loop
-  // (tar_refinery) gives `tar` a consumer and makes `asphalt` a gameplay-sink
-  // (platform_constructor placement), but neither sink continuously drains the
-  // full crude_oil_cracker output — a placement cost is intermittent and the
-  // refinery may lag. PROVEN (economy.test.ts guard): a full `tar` OR `asphalt`
-  // bin zeroes crude_oil_cracker's `heavy_oil` via `outputAvail`. Exempting
-  // both keeps them stored+drawable yet non-stalling, protecting heavy_oil —
-  // identical rationale to the gas byproducts. `tar` is never a sole output;
-  // `asphalt` is tar_refinery's sole output, so tar_refinery acts as a
-  // pure overflow-voiding sink (acceptable: it's a byproduct-disposal building,
-  // not on any primary chain).
-  'tar', 'asphalt',
-]);
+
 
 function outputAvail(
   state: IslandState,
