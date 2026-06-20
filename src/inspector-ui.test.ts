@@ -187,6 +187,35 @@ describe('mountInspectorUi', () => {
     expect(inspector.getSelectedBuildingId()).toBeNull();
     expect(inspector.getSelectedIslandId()).toBeNull();
   });
+
+  it('keeps reclamation expand-button DOM identity across a repaint', () => {
+    // The ticker repaints the inspector ~5×/s. If the Reclamation section
+    // rebuilds its button nodes every paint, a click that straddles a repaint
+    // (mousedown → repaint swaps the node → mouseup) never fires — which is
+    // exactly the "+1 MAJ/MIN does nothing" bug. Guard: the same button node
+    // must stay connected across refresh() when the constituent set is stable.
+    const deps = makeDeps();
+    const hub = makeBuilding({ id: 'hub', defId: 'land_reclamation_hub' });
+    const spec = makeSpec({ buildings: [hub] });
+    const state = makeInitialIslandState(spec, 0);
+    deps.world.islands[0] = spec;
+    deps.world.islandStates!.set(spec.id, state);
+    const reg = makeRegistry();
+    const inspector = mountInspectorUi(reg, container, deps);
+    inspector.open({ spec, state, building: hub });
+
+    const findMaj = (): HTMLButtonElement | null =>
+      Array.from(inspector.el.querySelectorAll('button')).find((b) =>
+        b.textContent?.includes('+1 MAJ'),
+      ) ?? null;
+    const before = findMaj();
+    expect(before).toBeTruthy();
+
+    inspector.refresh();
+
+    expect(before!.isConnected).toBe(true);
+    expect(findMaj()).toBe(before);
+  });
 });
 
 describe('co2CaptureKgPerMin', () => {
