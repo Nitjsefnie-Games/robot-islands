@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   computePlacementValidity,
+  ghostHitTest,
   placementBlocksGhost,
   type ConstructionCandidate,
 } from './construction-placement.js';
@@ -110,5 +111,36 @@ describe('computePlacementValidity', () => {
     expect(placementBlocksGhost('radius-too-large')).toBe(true);
     expect(placementBlocksGhost('insufficient-materials')).toBe(false);
     expect(placementBlocksGhost(undefined)).toBe(false);
+  });
+});
+
+describe('ghostHitTest', () => {
+  const base: ConstructionCandidate = { founderId: 'f', biome: 'plains', major: 4, minor: 4, cx: 10, cy: 10 };
+
+  it('returns body for a point at the centre', () => {
+    expect(ghostHitTest(base, 10, 10, 0.5)).toBe('body');
+  });
+
+  it('returns null for a point just outside the ellipse on the +x axis', () => {
+    expect(ghostHitTest(base, 15, 10, 0.5)).toBe(null);
+  });
+
+  it('returns the matching corner index for each corner within tolerance', () => {
+    expect(ghostHitTest(base, 6, 6, 0.5)).toBe(0);   // TL
+    expect(ghostHitTest(base, 14, 6, 0.5)).toBe(1);  // TR
+    expect(ghostHitTest(base, 6, 14, 0.5)).toBe(2);  // BL
+    expect(ghostHitTest(base, 14, 14, 0.5)).toBe(3); // BR
+  });
+
+  it('prioritises a corner handle over the body even when the point is inside-ish', () => {
+    // With a small radius the handle tolerance overlaps the ellipse interior.
+    const c: ConstructionCandidate = { founderId: 'f', biome: 'plains', major: 1, minor: 1, cx: 0, cy: 0 };
+    // (-0.7, -0.7) is inside the unit ellipse and within 0.5 tiles of TL (-1, -1).
+    expect(ghostHitTest(c, -0.7, -0.7, 0.5)).toBe(0);
+  });
+
+  it('guards against zero-radius axes by treating the body as a miss', () => {
+    expect(ghostHitTest({ ...base, major: 0 }, 10, 10, 0.5)).toBe(null);
+    expect(ghostHitTest({ ...base, minor: 0 }, 10, 10, 0.5)).toBe(null);
   });
 });
