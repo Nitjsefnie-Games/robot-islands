@@ -135,6 +135,19 @@ export function buildingForRecipe(recipeId: string): BuildingDefId {
     electrolyzer_smr: 'electrolyzer',
     fusion_core_he3_dilute: 'fusion_core',
     fusion_core_tritium_seed: 'fusion_core',
+    // P4 Phase-3a — mid-tier alloy/chem orphan alt-input variants resolve to
+    // the existing CONSUMER building they're hosted on (no new buildings).
+    smelter_charcoal: 'smelter',
+    metal_rolling_mill_tool_steel: 'metal_rolling_mill',
+    bearing_assembler_bronze: 'bearing_assembler',
+    cable_mill_brass: 'cable_mill',
+    pipe_mill_hcl: 'pipe_mill',
+    pcb_etcher_bromine: 'pcb_etcher',
+    lithography_lab_phosphor: 'lithography_lab',
+    cryogenic_compute_center_ram: 'cryogenic_compute_center',
+    kit_assembler_sheet_metal: 'kit_assembler',
+    mortar_mixer_slaked_lime: 'mortar_mixer',
+    hydraulic_assembly_rubber: 'hydraulic_assembly',
   };
   if (recipeId.startsWith('skill_forge_')) return 'skill_forge';
   return (variant[recipeId] ?? recipeId) as BuildingDefId;
