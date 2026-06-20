@@ -177,7 +177,7 @@ export interface MutationGateway {
     fuelLoaded: number,
     nowMs: number,
     waypoints?: ReadonlyArray<{ x: number; y: number }>,
-    selectedTier?: DroneTier | '5-path',
+    selectedTier?: DroneTier,
     wallOffsetMs?: number,
   ): GatewayReturn;
   firePulse(islandId: string, nowMs: number): GatewayReturn;
@@ -578,7 +578,7 @@ export function makeLocalGateway(
     dispatchDrone(islandId, originX, originY, dirX, dirY, fuelLoaded, nowMs, waypoints, selectedTier, wallOffsetMs = weatherWallOffsetMs) {
       const island = resolveIsland(islandId);
       if (!island) return err('unknown island');
-      if (selectedTier !== undefined && selectedTier !== '5-path') {
+      if (selectedTier !== undefined) {
         if (typeof selectedTier !== 'number' || !Number.isInteger(selectedTier) || selectedTier < 1 || selectedTier > 6) {
           return err('selectedTier must be an integer 1..6');
         }
@@ -600,7 +600,7 @@ export function makeLocalGateway(
           fuelLoaded,
           nowMs,
           waypoints as { x: number; y: number }[] | undefined,
-          selectedTier === '5-path' ? undefined : selectedTier as DroneTier | undefined,
+          selectedTier,
           wallOffsetMs,
         ),
       );
