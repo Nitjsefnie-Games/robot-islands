@@ -1084,7 +1084,7 @@ export const RESOURCE_META: Readonly<Record<ResourceId, ResourceMeta>> = {
   saltwater: { massPerUnitKg: 1, volumePerUnitL: 1, terminal: 'consumed' },
   salt: { massPerUnitKg: 1, terminal: 'consumed' },
   crude_oil: { massPerUnitKg: 1, volumePerUnitL: 1, terminal: 'consumed' },
-  natural_gas: { massPerUnitKg: 1, terminal: 'expansion-hook:ammonia / syngas / gas-turbine power' },
+  natural_gas: { massPerUnitKg: 1, terminal: 'consumed' }, // P4 Phase-2: electrolyzer_smr (steam-methane reforming → hydrogen)
   quartz: { massPerUnitKg: 1, terminal: 'consumed' },
   hydrogen: { massPerUnitKg: 1, terminal: 'consumed' },
   limestone: { massPerUnitKg: 1, terminal: 'consumed' },
@@ -1249,20 +1249,20 @@ export const RESOURCE_META: Readonly<Record<ResourceId, ResourceMeta>> = {
   optical_fiber: { massPerUnitKg: 1, terminal: 'consumed' },
   dilute_brine: { massPerUnitKg: 1, volumePerUnitL: 1, terminal: 'consumed' },
   concentrated_brine: { massPerUnitKg: 1, volumePerUnitL: 1, terminal: 'consumed' },
-  he3_dilute: { massPerUnitKg: 1, volumePerUnitL: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
-  mn_nodule: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
+  he3_dilute: { massPerUnitKg: 1, volumePerUnitL: 1, terminal: 'consumed' }, // P4 Phase-2: fusion_core_he3_dilute (alt fusion fuel, speculative)
+  mn_nodule: { massPerUnitKg: 1, terminal: 'consumed' }, // P4 Phase-2: manganese_smelter_nodule → manganese_ingot
   re_nodule: { massPerUnitKg: 1, terminal: 'consumed' },
   co_nodule: { massPerUnitKg: 1, terminal: 'consumed' },
-  methane_hydrate: { massPerUnitKg: 1, volumePerUnitL: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
+  methane_hydrate: { massPerUnitKg: 1, volumePerUnitL: 1, terminal: 'consumed' }, // P4 Phase-2: gas_extractor_hydrate → natural_gas
   heavy_isotope_slurry: { massPerUnitKg: 1, volumePerUnitL: 1, terminal: 'consumed' },
-  vent_sulfide: { massPerUnitKg: 1, volumePerUnitL: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
+  vent_sulfide: { massPerUnitKg: 1, volumePerUnitL: 1, terminal: 'consumed' }, // P4 Phase-2: sulfur_mine_vent → sulfur
   vent_exotic: { massPerUnitKg: 1, terminal: 'consumed' },
-  lithium_brine: { massPerUnitKg: 1, volumePerUnitL: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
+  lithium_brine: { massPerUnitKg: 1, volumePerUnitL: 1, terminal: 'consumed' }, // P4 Phase-2: lithium_extractor_brine → lithium
   bromine: { massPerUnitKg: 1, volumePerUnitL: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
-  rare_earth_concentrate: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
-  refined_cobalt: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
+  rare_earth_concentrate: { massPerUnitKg: 1, terminal: 'consumed' }, // P4 Phase-2: slag_reprocessor_re_concentrate → rare_earth
+  refined_cobalt: { massPerUnitKg: 1, terminal: 'consumed' }, // P4 Phase-2: mag_alloyer_cobalt → magnetic_alloy
   exotic_alloy_seed: { massPerUnitKg: 1, terminal: 'consumed' },
-  tritium_seed: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
+  tritium_seed: { massPerUnitKg: 1, terminal: 'consumed' }, // P4 Phase-2: fusion_core_tritium_seed (alt fusion fuel, speculative)
   heavy_water: { massPerUnitKg: 1, volumePerUnitL: 1, terminal: 'consumed' },
   mining_crystal_t1: { massPerUnitKg: 1, terminal: 'gameplay-sink' },
   mining_crystal_t2: { massPerUnitKg: 1, terminal: 'gameplay-sink' },
@@ -1360,6 +1360,10 @@ export const RECIPE_SPECULATIVE: Readonly<Partial<Record<RecipeId, 'fantasy chem
   plasma_forge: 'fantasy chemistry',
   genesis_forge: 'fantasy chemistry',
   ascendant_assembly: 'fantasy chemistry',
+  // P4 Phase-2 — fusion-seed burns on the Fusion Core have no real
+  // stoichiometry (fusion fuel; empty outputs, power via def.power.produces).
+  fusion_core_he3_dilute: 'fantasy chemistry',
+  fusion_core_tritium_seed: 'fantasy chemistry',
 };
 
 /**
@@ -1518,6 +1522,19 @@ export type RecipeId =
   | 'nodule_concentrator_co'
   | 'vent_mineral_refinery_exotic'
   | 'vent_mineral_refinery_tritium'
+  // P4 Phase-2: ocean-concentrate leaf-refine variants (resolveRecipe-routed,
+  // consume the §3 ocean concentrate into the product whose existing consumers
+  // are downstream). No new buildings — each is hosted on the producer of the
+  // target product (or, for the fusion seeds, on the helium_3 producer).
+  | 'lithium_extractor_brine'
+  | 'manganese_smelter_nodule'
+  | 'slag_reprocessor_re_concentrate'
+  | 'mag_alloyer_cobalt'
+  | 'sulfur_mine_vent'
+  | 'gas_extractor_hydrate'
+  | 'electrolyzer_smr'
+  | 'fusion_core_he3_dilute'
+  | 'fusion_core_tritium_seed'
   | 'sheet_mill'
   // Task 6: synthetic recipe ids for Skill Forge crystal variants.
   | 'skill_forge_mining_t2'
@@ -3632,6 +3649,108 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     outputs: { heavy_water: 1 },
     category: 'chemistry',
   },
+
+  // P4 Phase-2 — ocean-concentrate leaf refines (§7 closure). Each is a
+  // resolveRecipe variant on the existing PRODUCER of the target product, so
+  // the §3 ocean concentrate is consumed with ZERO new buildings. Each
+  // variant is registered in SPECIAL_RECIPE_IDS (kept out of BASE_RECIPES) and
+  // routed by inventory presence — when the concentrate is on hand the
+  // building refines it; otherwise it falls back to its base recipe.
+  // Deadlock-safe: every target product already has downstream consumers and
+  // the ocean rigs never depend on their own product.
+  //
+  // Real chemistry → balanced by game-unit coefficients (all masses 1 kg here
+  // except helium_3 = 0.001 kg). Fusion-seed transmutation → RECIPE_SPECULATIVE.
+
+  // lithium_brine → lithium (1 kg → 1 kg). Hosted on lithium_extractor.
+  lithium_extractor_brine: {
+    cycleSec: 3440, // matches lithium_extractor base cycle
+    inputs: { lithium_brine: 1 },
+    outputs: { lithium: 1 },
+    category: 'extraction',
+  },
+  // mn_nodule → manganese_ingot (1 kg → 1 kg). Hosted on manganese_smelter
+  // (the base recipe's manganese_ore + coal feed is unbalanced/out-of-scope;
+  // this leaf refine balances exactly on its own).
+  manganese_smelter_nodule: {
+    cycleSec: 2774.2, // matches manganese_smelter base cycle
+    inputs: { mn_nodule: 1 },
+    outputs: { manganese_ingot: 1 },
+    category: 'smelting',
+  },
+  // rare_earth_concentrate → rare_earth (1 kg → 1 kg). Hosted on
+  // slag_reprocessor (the §6.7 trace-mineral producer of rare_earth).
+  slag_reprocessor_re_concentrate: {
+    cycleSec: 2774.2, // auto-derived (gen-cyclesec): density × footprint × M (single-output refine, faster than the batch base recipe)
+    inputs: { rare_earth_concentrate: 1 },
+    outputs: { rare_earth: 1 },
+    category: 'smelting',
+  },
+  // refined_cobalt → magnetic_alloy (1 kg → 1 kg). Hosted on mag_alloyer
+  // (the magnetic_alloy producer). Cobalt is a real magnet-alloy constituent;
+  // this is the §brief "magnetic_alloy" target for refined_cobalt.
+  mag_alloyer_cobalt: {
+    cycleSec: 2774.2, // matches mag_alloyer base cycle
+    inputs: { refined_cobalt: 1 },
+    outputs: { magnetic_alloy: 1 },
+    category: 'manufacturing',
+  },
+  // vent_sulfide → sulfur (1 kg → 1 kg). Hosted on sulfur_mine. Real:
+  // hydrothermal-vent sulfide minerals roast to elemental sulfur.
+  sulfur_mine_vent: {
+    cycleSec: 20, // matches sulfur_mine base cycle
+    inputs: { vent_sulfide: 1 },
+    outputs: { sulfur: 1 },
+    category: 'extraction',
+  },
+  // methane_hydrate → natural_gas (1 kg → 1 kg). Hosted on gas_extractor.
+  // Real: gas hydrate dissociation releases methane (the natural-gas
+  // component). natural_gas in turn is now consumed by electrolyzer_smr below.
+  gas_extractor_hydrate: {
+    cycleSec: 430, // matches gas_extractor base cycle
+    inputs: { methane_hydrate: 1 },
+    outputs: { natural_gas: 1 },
+    category: 'extraction',
+  },
+  // natural_gas → hydrogen via steam-methane reforming. Real chemistry:
+  // CH4 + 2 H2O → CO2 + 4 H2. In game units (all 1 kg/unit) the molar
+  // coefficients aren't representable, so we balance by game mass:
+  //   natural_gas:1 + fresh_water:1 → hydrogen:1 + co2:1   (2 kg → 2 kg).
+  // This keeps the SMR character (methane + water → hydrogen + CO2) and
+  // mass-balances exactly. Hosted on electrolyzer (the existing hydrogen
+  // producer); routed when natural_gas is on hand.
+  electrolyzer_smr: {
+    cycleSec: 45866.3, // auto-derived (gen-cyclesec): density × footprint × M
+    inputs: { natural_gas: 1, fresh_water: 1 },
+    outputs: { hydrogen: 1, co2: 1 },
+    category: 'chemistry',
+  },
+  // he3_dilute → fusion power. Host-selection policy option 1: alt-input on a
+  // CONSUMER of the fusion fuel. The Fusion Core burns helium_3 as fuel (empty
+  // outputs; power via def.power.produces). These variants let it burn the
+  // dilute He-3 / tritium fusion seeds directly as alternative fuel — consuming
+  // the concentrate WITHOUT minting new helium_3. Hosting the seed→helium_3
+  // refine on the helium_3 PRODUCER (drilling_rig) instead would create a real
+  // circular deadlock: drilling_rig ⇄ vent_mineral_refinery (tritium_seed is
+  // produced by vent_mineral_refinery, whose chain transitively needs the
+  // helium_3 drilling_rig would mint). Burning on the consumer side breaks that
+  // cycle. Fusion-fuel burn has no real stoichiometry → RECIPE_SPECULATIVE.
+  fusion_core_he3_dilute: {
+    cycleSec: 600, // matches fusion_core base cycle
+    inputs: { he3_dilute: 1 },
+    outputs: {},
+    exogenousFlow: 'fuel-combustion-energy',
+    category: 'power',
+  },
+  // tritium_seed → fusion power. tritium is not a ResourceId in the catalog;
+  // the tritium seed is burned as alternative fusion fuel on the Fusion Core.
+  fusion_core_tritium_seed: {
+    cycleSec: 600, // matches fusion_core base cycle
+    inputs: { tritium_seed: 1 },
+    outputs: {},
+    exogenousFlow: 'fuel-combustion-energy',
+    category: 'power',
+  },
   // §si-units rev-16 §7.4 — synthetic no-op recipe for CO₂ sink.
   plant_a_tree: {
     cycleSec: 60,
@@ -3672,6 +3791,19 @@ const SPECIAL_RECIPE_IDS = new Set<RecipeId>([
   'nodule_concentrator_co',
   'vent_mineral_refinery_exotic',
   'vent_mineral_refinery_tritium',
+  // P4 Phase-2 — ocean-concentrate leaf-refine variants. Kept out of
+  // BASE_RECIPES so the host building runs its base recipe by default and
+  // resolveRecipe swaps in the concentrate refine only when the concentrate is
+  // on hand (mirrors steel_mill_from_scrap).
+  'lithium_extractor_brine',
+  'manganese_smelter_nodule',
+  'slag_reprocessor_re_concentrate',
+  'mag_alloyer_cobalt',
+  'sulfur_mine_vent',
+  'gas_extractor_hydrate',
+  'electrolyzer_smr',
+  'fusion_core_he3_dilute',
+  'fusion_core_tritium_seed',
 ]);
 export const BASE_RECIPES: Partial<Record<BuildingDefId, Recipe[]>> = {};
 for (const [id, recipe] of Object.entries(RECIPES)) {
@@ -3784,6 +3916,42 @@ export function resolveRecipe(
   // per rev-16 §3.9 cohort discipline; building id unchanged).
   if (def.id === 'sheet_metal_mill') {
     return RECIPES.sheet_mill;
+  }
+  // P4 Phase-2 — ocean-concentrate leaf refines. Each host runs its base
+  // recipe unless the corresponding ocean concentrate is on hand, in which
+  // case it refines the concentrate into the target product (mirrors the
+  // steel_mill scrap-substitution pattern: variant only when the alt feedstock
+  // is present). Without an inventory snapshot we keep the base recipe.
+  if (inventory) {
+    if (def.id === 'lithium_extractor' && (inventory.lithium_brine ?? 0) > 0) {
+      return RECIPES.lithium_extractor_brine;
+    }
+    if (def.id === 'manganese_smelter' && (inventory.mn_nodule ?? 0) > 0) {
+      return RECIPES.manganese_smelter_nodule;
+    }
+    if (def.id === 'slag_reprocessor' && (inventory.rare_earth_concentrate ?? 0) > 0) {
+      return RECIPES.slag_reprocessor_re_concentrate;
+    }
+    if (def.id === 'mag_alloyer' && (inventory.refined_cobalt ?? 0) > 0) {
+      return RECIPES.mag_alloyer_cobalt;
+    }
+    if (def.id === 'sulfur_mine' && (inventory.vent_sulfide ?? 0) > 0) {
+      return RECIPES.sulfur_mine_vent;
+    }
+    if (def.id === 'gas_extractor' && (inventory.methane_hydrate ?? 0) > 0) {
+      return RECIPES.gas_extractor_hydrate;
+    }
+    if (def.id === 'electrolyzer' && (inventory.natural_gas ?? 0) > 0) {
+      return RECIPES.electrolyzer_smr;
+    }
+    // Fusion Core burns the dilute He-3 / tritium seeds as alternative fuel
+    // only when its primary helium_3 fuel is exhausted (mirrors steel_mill's
+    // pig_iron-over-scrap preference): keep the base helium_3 burn while any
+    // helium_3 is on hand, else fall to whichever seed is available.
+    if (def.id === 'fusion_core' && (inventory.helium_3 ?? 0) <= 0) {
+      if ((inventory.he3_dilute ?? 0) > 0) return RECIPES.fusion_core_he3_dilute;
+      if ((inventory.tritium_seed ?? 0) > 0) return RECIPES.fusion_core_tritium_seed;
+    }
   }
   return RECIPES[def.id as RecipeId];
 }
