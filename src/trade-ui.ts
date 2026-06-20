@@ -35,6 +35,54 @@ export function mountTradeUi(
   body.classList.add('ri-panel__body');
   el.appendChild(body);
 
+  // Build the offer card's DOM ONCE and keep references; update() only mutates
+  // text and visibility. Rebuilding innerHTML each frame (the old design did so
+  // every time the 1s countdown changed the content key) recreated the Accept/
+  // Reject nodes, so a click straddling the rebuild was dropped — the bug. The
+  // buttons bind once to a closure-held `currentOffer`, so they never need
+  // re-creating or re-binding as terms/countdown change.
+  let currentOffer: TradeOffer | null = null;
+
+  const offerBlock = document.createElement('div');
+  const offerHead = document.createElement('div');
+  offerHead.classList.add('ri-sectionhead');
+  const kv = document.createElement('div');
+  kv.classList.add('ri-kv');
+  kv.style.margin = '4px 0 8px';
+  const giveSpan = document.createElement('span');
+  giveSpan.classList.add('ri-kv__k');
+  const giveB = document.createElement('b');
+  giveB.classList.add('ri-mono');
+  giveSpan.append('Give ', giveB);
+  const arrowSpan = document.createElement('span');
+  arrowSpan.classList.add('ri-kv__v', 'ri-mono');
+  arrowSpan.style.color = 'var(--ri-accent)';
+  arrowSpan.textContent = '→';
+  const getSpan = document.createElement('span');
+  getSpan.classList.add('ri-kv__v');
+  const getB = document.createElement('b');
+  getB.classList.add('ri-mono');
+  getB.style.color = 'var(--ri-success)';
+  getSpan.append('Get ', getB);
+  kv.append(giveSpan, arrowSpan, getSpan);
+  const acceptBtn = document.createElement('button');
+  acceptBtn.classList.add('ri-accentbtn');
+  acceptBtn.textContent = 'Accept';
+  acceptBtn.onclick = () => { if (currentOffer) onAccept(currentOffer); };
+  const rejectBtn = document.createElement('button');
+  rejectBtn.classList.add('ri-btn');
+  rejectBtn.style.marginLeft = '8px';
+  rejectBtn.textContent = 'Reject';
+  rejectBtn.onclick = () => { if (currentOffer) onReject(currentOffer); };
+  offerBlock.append(offerHead, kv, acceptBtn, rejectBtn);
+
+  const elsewhereLine = document.createElement('div');
+  elsewhereLine.classList.add('ri-muted');
+  elsewhereLine.style.marginTop = '8px';
+  elsewhereLine.style.fontSize = '11px';
+
+  body.append(offerBlock, elsewhereLine);
+
   const panel = mountPanel(el, {
     id: 'trade-offer-panel',
     zone: Zone.TL,
@@ -46,10 +94,12 @@ export function mountTradeUi(
   });
 
   // Content-key early-out: update() runs ~60fps but only the 1s countdown
-  // changes between most frames. Skip the innerHTML rebuild + onclick rebind
-  // when the rendered content is identical to last frame. `''` forces the
-  // first render after each (re)show.
+  // changes between most frames. Skip the text writes when the rendered content
+  // is identical to last frame. The button NODES persist regardless. `''`
+  // forces the first render after each (re)show. `lastStruct` tracks which
+  // blocks are visible so a layout is requested only when that changes.
   let lastKey = '';
+  let lastStruct = '';
 
   function update(rt: TradeRuntime, activeIslandId: string, nowMs: number): void {
     const here = rt.offers.find((o) => o.islandId === activeIslandId);
@@ -68,32 +118,34 @@ export function mountTradeUi(
     }
 
     const secs = here ? Math.max(0, Math.ceil((here.expiresAt - nowMs) / 1000)) : 0;
-    const key = `${here?.id ?? 'none'}:${secs}:${elsewhere}`;
+    const key = `${here?.id ?? 'none'}:${secs}:${here?.give.qty ?? 0}:${here?.give.res ?? ''}:${here?.get.qty ?? 0}:${here?.get.res ?? ''}:${elsewhere}`;
     if (key === lastKey) return;
     lastKey = key;
 
-    const parts: string[] = [];
+    currentOffer = here ?? null;
     if (here) {
-      parts.push(
-        '<div class="ri-sectionhead">Offer · ' + secs + 's</div>' +
-          '<div class="ri-kv" style="margin:4px 0 8px;">' +
-            '<span class="ri-kv__k">Give <b class="ri-mono">' + here.give.qty.toFixed(0) + ' ' + here.give.res + '</b></span>' +
-            '<span class="ri-kv__v ri-mono" style="color:var(--ri-accent);">→</span>' +
-            '<span class="ri-kv__v">Get <b class="ri-mono" style="color:var(--ri-success);">' + here.get.qty.toFixed(0) + ' ' + here.get.res + '</b></span>' +
-          '</div>' +
-          '<button class="ri-accentbtn" data-accept="' + here.id + '">Accept</button>' +
-          '<button class="ri-btn" data-reject="' + here.id + '" style="margin-left:8px;">Reject</button>',
-      );
+      offerBlock.style.display = '';
+      offerHead.textContent = 'Offer · ' + secs + 's';
+      giveB.textContent = here.give.qty.toFixed(0) + ' ' + here.give.res;
+      getB.textContent = here.get.qty.toFixed(0) + ' ' + here.get.res;
+    } else {
+      offerBlock.style.display = 'none';
     }
-    if (elsewhere > 0) {
-      parts.push('<div class="ri-muted" style="margin-top:8px;font-size:11px;">' + elsewhere + ' offer' + (elsewhere === 1 ? '' : 's') + ' waiting elsewhere</div>');
-    }
-    body.innerHTML = parts.join('');
 
-    const acceptBtn = body.querySelector<HTMLButtonElement>('button[data-accept]');
-    if (acceptBtn && here) acceptBtn.onclick = () => onAccept(here);
-    const rejectBtn = body.querySelector<HTMLButtonElement>('button[data-reject]');
-    if (rejectBtn && here) rejectBtn.onclick = () => onReject(here);
+    if (elsewhere > 0) {
+      elsewhereLine.style.display = '';
+      elsewhereLine.textContent = elsewhere + ' offer' + (elsewhere === 1 ? '' : 's') + ' waiting elsewhere';
+    } else {
+      elsewhereLine.style.display = 'none';
+    }
+
+    // Only the show/hide of whole blocks changes panel height; request a layout
+    // pass when that structure flips, not on every countdown tick.
+    const struct = `${here ? 1 : 0}:${elsewhere > 0 ? 1 : 0}`;
+    if (struct !== lastStruct) {
+      lastStruct = struct;
+      panel.requestLayout();
+    }
   }
 
   return { el, update };
