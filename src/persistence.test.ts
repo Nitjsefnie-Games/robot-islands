@@ -79,6 +79,7 @@ import {
   attachTerrainAt,
   makeInitialIslandState,
   makeInitialWorld,
+  type Biome,
   type IslandSpec,
 } from './world.js';
 import { generateCellIslands } from './world-gen.js';
@@ -251,7 +252,7 @@ describe('schema v27 → v28 — global CO₂ atmosphere + extraEllipses biome (
   it('migrateV27toV28 defaults missing extra biome to island biome', () => {
     const world = makeInitialWorld(0);
     const home = world.islands.find((s) => s.id === 'home')!;
-    home.biome = 'plains';
+    (home as { biome: Biome }).biome = 'plains';
     home.extraEllipses = [
       { major: 6, minor: 6, rotation: 0, offsetX: 12, offsetY: 0 }, // no biome
     ];
@@ -265,7 +266,7 @@ describe('schema v27 → v28 — global CO₂ atmosphere + extraEllipses biome (
   it('migrateV27toV28 leaves an explicit extra biome untouched', () => {
     const world = makeInitialWorld(0);
     const home = world.islands.find((s) => s.id === 'home')!;
-    home.biome = 'plains';
+    (home as { biome: Biome }).biome = 'plains';
     home.extraEllipses = [
       { major: 6, minor: 6, rotation: 0, offsetX: 12, offsetY: 0, biome: 'forest' },
     ];
