@@ -2400,7 +2400,7 @@ async function main(): Promise<void> {
    *  `renderIsland` draws building sprites and terrain tiles, so a building
    *  placed / demolished / moved / upgraded, an island expanded/merged, or a
    *  terrain-modifier/tile-override change must repaint. Non-visual fields such
-   *  as forceRun, paused, cargoLabel, anchorIslandId and the construction
+   *  as ignoreCapOverrides, paused, cargoLabel, anchorIslandId and the construction
    *  boolean are intentionally excluded — they affect overlays/economy, not the
    *  baked world-layer texture. Paired with the vision-source signature below —
    *  the same diff discipline the LOCAL ticker uses to avoid re-baking GPU

@@ -57,8 +57,8 @@ describe('discoverySignature', () => {
     const world = makeWorld({ islands: [spec] });
     const sig1 = discoverySignature(world);
 
-    const withForceRun = makeSpec({ buildings: [makeBuilding({ id: 'b1', defId: 'workshop', x: 1, y: 2, forceRun: true })] });
-    expect(discoverySignature(makeWorld({ islands: [withForceRun] }))).toBe(sig1);
+    const withIgnoreCap = makeSpec({ buildings: [makeBuilding({ id: 'b1', defId: 'workshop', x: 1, y: 2, ignoreCapOverrides: { gear: true } })] });
+    expect(discoverySignature(makeWorld({ islands: [withIgnoreCap] }))).toBe(sig1);
 
     const withPaused = makeSpec({ buildings: [makeBuilding({ id: 'b1', defId: 'workshop', x: 1, y: 2, paused: 'anchor-depopulated' })] });
     expect(discoverySignature(makeWorld({ islands: [withPaused] }))).toBe(sig1);

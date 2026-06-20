@@ -4,7 +4,7 @@
 // textures in `renderIsland` / `renderBuildings` (world.ts / buildings.ts):
 // island population/discovered flags, ellipse geometry, terrain modifiers and
 // tile overrides, and per-building defId + position + rotation. It deliberately
-// excludes non-visual fields such as forceRun, paused, cargoLabel, anchorIslandId
+// excludes non-visual fields such as ignoreCapOverrides, paused, cargoLabel, anchorIslandId
 // and the construction boolean so those toggles do not churn the GPU layers.
 //
 // Extracted from main.ts so the rebuild gate is unit-testable without importing
@@ -44,7 +44,7 @@ function tileOverridesDigest(
  *  caused depth-scout reveals on already-surface-revealed cells to skip the
  *  repaint (#78, #83).
  *
- *  Non-visual fields such as forceRun, paused, cargoLabel, anchorIslandId and
+ *  Non-visual fields such as ignoreCapOverrides, paused, cargoLabel, anchorIslandId and
  *  the construction boolean are intentionally excluded — they affect
  *  overlays/economy, not the baked world-layer texture. */
 export function discoverySignature(worldState: WorldState): string {
