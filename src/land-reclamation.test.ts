@@ -1,5 +1,5 @@
-// §3.4 Land Reclamation Hub — pure unit tests for canExpandIsland outcomes,
-// the expandIsland mutation, the cost curve, and BIOME_MAX_RADII caps.
+// §3.4 Land Reclamation Hub — pure unit tests for canExpandConstituent outcomes,
+// the expandConstituent mutation, the cost curve, and BIOME_MAX_RADII caps.
 
 import { describe, expect, it } from 'vitest';
 
@@ -7,8 +7,8 @@ import type { IslandState } from './economy.js';
 import type { PlacedBuilding } from './buildings.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import {
-  canExpandIsland,
-  expandIsland,
+  canExpandConstituent,
+  expandConstituent,
   inscribedTileCount,
   landReclamationCost,
 } from './land-reclamation.js';
@@ -192,11 +192,11 @@ describe('landReclamationCost — constituent-indexed (union delta per lobe)', (
   });
 });
 
-describe('canExpandIsland', () => {
+describe('canExpandConstituent (primary, index 0)', () => {
   it('rejects with no-hub when the island has no Land Reclamation Hub', () => {
     const spec = makeSpec({ buildings: [] });
     const state = makeState({ stone: 100_000 });
-    const result = canExpandIsland(spec, state, 'major');
+    const result = canExpandConstituent(spec, state, 0, 'major');
     expect(result).toEqual({ ok: false, reason: 'no-hub' });
   });
 
@@ -204,33 +204,33 @@ describe('canExpandIsland', () => {
     // Plains caps both axes at 28.
     const spec = makeSpec({ majorRadius: 28, minorRadius: 14, buildings: [hubBuilding()] });
     const state = makeState({ steel_beam: 1_000_000, concrete: 10_000_000 });
-    expect(canExpandIsland(spec, state, 'major')).toEqual({
+    expect(canExpandConstituent(spec, state, 0, 'major')).toEqual({
       ok: false,
       reason: 'axis-at-max',
     });
     // The OTHER axis (minor at 14) is still expandable.
-    expect(canExpandIsland(spec, state, 'minor')).toEqual({ ok: true });
+    expect(canExpandConstituent(spec, state, 0, 'minor')).toEqual({ ok: true });
   });
 
   it('rejects with insufficient-resources when inventory is below cost', () => {
     const spec = makeSpec({ buildings: [hubBuilding()] });
     const state = makeState({ steel_beam: 0, concrete: 0 });
-    const result = canExpandIsland(spec, state, 'major');
+    const result = canExpandConstituent(spec, state, 0, 'major');
     expect(result).toEqual({ ok: false, reason: 'insufficient-resources' });
   });
 
   it('returns ok when hub is placed, axis is below cap, and resources suffice', () => {
     const spec = makeSpec({ buildings: [hubBuilding()] });
     const state = makeState({ steel_beam: 1_000_000, concrete: 10_000_000 });
-    expect(canExpandIsland(spec, state, 'major')).toEqual({ ok: true });
-    expect(canExpandIsland(spec, state, 'minor')).toEqual({ ok: true });
+    expect(canExpandConstituent(spec, state, 0, 'major')).toEqual({ ok: true });
+    expect(canExpandConstituent(spec, state, 0, 'minor')).toEqual({ ok: true });
   });
 
   it('checks the no-hub gate before axis-at-max (precedence)', () => {
     // No hub AND axis at cap — no-hub fires first.
     const spec = makeSpec({ majorRadius: 28, minorRadius: 28, buildings: [] });
     const state = makeState({ stone: 100_000 });
-    expect(canExpandIsland(spec, state, 'major')).toEqual({
+    expect(canExpandConstituent(spec, state, 0, 'major')).toEqual({
       ok: false,
       reason: 'no-hub',
     });
@@ -241,18 +241,18 @@ describe('canExpandIsland', () => {
     // the player sees the right reason rather than "go mine more stone".
     const spec = makeSpec({ majorRadius: 28, minorRadius: 14, buildings: [hubBuilding()] });
     const state = makeState({ stone: 0 });
-    expect(canExpandIsland(spec, state, 'major')).toEqual({
+    expect(canExpandConstituent(spec, state, 0, 'major')).toEqual({
       ok: false,
       reason: 'axis-at-max',
     });
   });
 });
 
-describe('expandIsland', () => {
+describe('expandConstituent (primary, index 0)', () => {
   it('increments the chosen axis by 1 and leaves the other untouched', () => {
     const spec = makeSpec({ majorRadius: 14, minorRadius: 14, buildings: [hubBuilding()] });
     const state = makeState({ steel_beam: 1_000_000, concrete: 10_000_000 });
-    expandIsland(spec, state, 'major');
+    expandConstituent(spec, state, 0, 'major');
     expect(spec.majorRadius).toBe(15);
     expect(spec.minorRadius).toBe(14);
   });
@@ -260,7 +260,7 @@ describe('expandIsland', () => {
   it('increments minor when minor is chosen', () => {
     const spec = makeSpec({ majorRadius: 14, minorRadius: 14, buildings: [hubBuilding()] });
     const state = makeState({ steel_beam: 1_000_000, concrete: 10_000_000 });
-    expandIsland(spec, state, 'minor');
+    expandConstituent(spec, state, 0, 'minor');
     expect(spec.majorRadius).toBe(14);
     expect(spec.minorRadius).toBe(15);
   });
@@ -270,7 +270,7 @@ describe('expandIsland', () => {
     const state = makeState({ steel_beam: 1_000_000, concrete: 10_000_000 });
     const expectedCost = landReclamationCost(
       singleEllipseSpec({ biome: 'plains', major: 14, minor: 14 }), 0, 'major');
-    expandIsland(spec, state, 'major');
+    expandConstituent(spec, state, 0, 'major');
     expect(state.inventory.steel_beam).toBe(1_000_000 - (expectedCost.steel_beam ?? 0));
     expect(state.inventory.concrete).toBe(10_000_000 - (expectedCost.concrete ?? 0));
   });
@@ -281,7 +281,7 @@ describe('expandIsland', () => {
     const state = makeState({ steel_beam: 1_000_000, concrete: 10_000_000 });
     const costAt14 = landReclamationCost(
       singleEllipseSpec({ biome: 'plains', major: 14, minor: 14 }), 0, 'major');
-    expandIsland(spec, state, 'major');
+    expandConstituent(spec, state, 0, 'major');
     expect(state.inventory.steel_beam).toBe(1_000_000 - (costAt14.steel_beam ?? 0));
     expect(state.inventory.concrete).toBe(10_000_000 - (costAt14.concrete ?? 0));
   });
@@ -335,15 +335,15 @@ describe('§3.4 BIOME_MAX_RADII gates', () => {
       buildings: [hubBuilding()],
     });
     const state = makeState({ steel_beam: 10_000_000, concrete: 100_000_000 });
-    expandIsland(spec, state, 'major');
-    expandIsland(spec, state, 'minor');
+    expandConstituent(spec, state, 0, 'major');
+    expandConstituent(spec, state, 0, 'minor');
     expect(spec.majorRadius).toBe(28);
     expect(spec.minorRadius).toBe(28);
-    expect(canExpandIsland(spec, state, 'major')).toEqual({
+    expect(canExpandConstituent(spec, state, 0, 'major')).toEqual({
       ok: false,
       reason: 'axis-at-max',
     });
-    expect(canExpandIsland(spec, state, 'minor')).toEqual({
+    expect(canExpandConstituent(spec, state, 0, 'minor')).toEqual({
       ok: false,
       reason: 'axis-at-max',
     });
@@ -357,14 +357,14 @@ describe('§3.4 BIOME_MAX_RADII gates', () => {
       buildings: [hubBuilding()],
     });
     const state = makeState({ steel_beam: 10_000_000, concrete: 100_000_000 });
-    expandIsland(spec, state, 'minor');
+    expandConstituent(spec, state, 0, 'minor');
     expect(spec.minorRadius).toBe(14);
-    expect(canExpandIsland(spec, state, 'minor')).toEqual({
+    expect(canExpandConstituent(spec, state, 0, 'minor')).toEqual({
       ok: false,
       reason: 'axis-at-max',
     });
     // But major still has room (14 → 28 is open).
-    expect(canExpandIsland(spec, state, 'major')).toEqual({ ok: true });
+    expect(canExpandConstituent(spec, state, 0, 'major')).toEqual({ ok: true });
   });
 
   it('Volcanic: both axes cap at 14', () => {
@@ -375,17 +375,71 @@ describe('§3.4 BIOME_MAX_RADII gates', () => {
       buildings: [hubBuilding()],
     });
     const state = makeState({ steel_beam: 10_000_000, concrete: 100_000_000 });
-    expandIsland(spec, state, 'major');
-    expandIsland(spec, state, 'minor');
+    expandConstituent(spec, state, 0, 'major');
+    expandConstituent(spec, state, 0, 'minor');
     expect(spec.majorRadius).toBe(14);
     expect(spec.minorRadius).toBe(14);
-    expect(canExpandIsland(spec, state, 'major')).toEqual({
+    expect(canExpandConstituent(spec, state, 0, 'major')).toEqual({
       ok: false,
       reason: 'axis-at-max',
     });
-    expect(canExpandIsland(spec, state, 'minor')).toEqual({
+    expect(canExpandConstituent(spec, state, 0, 'minor')).toEqual({
       ok: false,
       reason: 'axis-at-max',
     });
+  });
+});
+
+// Per-lobe constituent gate + mutation: each absorbed lobe caps at its OWN
+// origin biome (BIOME_MAX_RADII[lobe.biome]), not the absorber's; the mutation
+// grows ONLY the targeted constituent; a bad index is rejected, not thrown.
+describe('canExpandConstituent / expandConstituent — absorbed lobes', () => {
+  // stateWithPlentyOfResources: ample steel_beam + concrete (the LAND_TILE_COST
+  // basket) so the gate never trips on insufficient-resources.
+  function stateWithPlentyOfResources(): IslandState {
+    return makeState({ steel_beam: 10_000_000, concrete: 100_000_000 });
+  }
+
+  it('lobe capped at its OWN origin biome, not the absorber', () => {
+    // Plains primary (cap 28) + Volcanic lobe (cap 14) already at minor 14.
+    const spec = mergedSpec({
+      primary: { biome: 'plains', major: 20, minor: 20 },
+      extras: [{ biome: 'volcanic', major: 8, minor: 14, offsetX: 26, offsetY: 0 }],
+    });
+    spec.buildings = [hubBuilding()];
+    const st = stateWithPlentyOfResources();
+    // Volcanic lobe minor already at its cap (14) → axis-at-max.
+    expect(canExpandConstituent(spec, st, 1, 'minor')).toEqual({ ok: false, reason: 'axis-at-max' });
+    // Volcanic lobe major 8 < 14 → ok.
+    expect(canExpandConstituent(spec, st, 1, 'major')).toEqual({ ok: true });
+    // Primary plains major 20 < 28 → ok.
+    expect(canExpandConstituent(spec, st, 0, 'major')).toEqual({ ok: true });
+  });
+
+  it('expandConstituent grows ONLY the targeted lobe', () => {
+    const spec = mergedSpec({
+      primary: { biome: 'plains', major: 20, minor: 20 },
+      extras: [{ biome: 'volcanic', major: 8, minor: 8, offsetX: 26, offsetY: 0 }],
+    });
+    spec.buildings = [hubBuilding()];
+    const st = stateWithPlentyOfResources();
+    expandConstituent(spec, st, 1, 'major');
+    expect(spec.extraEllipses![0]!.major).toBe(9); // lobe grew
+    expect(spec.extraEllipses![0]!.minor).toBe(8); // other axis untouched
+    expect(spec.majorRadius).toBe(20); // primary untouched
+    expect(spec.minorRadius).toBe(20); // primary untouched
+  });
+
+  it('bad index rejects with bad-constituent (no throw)', () => {
+    const spec = singleEllipseSpec({ biome: 'plains', major: 10, minor: 10 });
+    spec.buildings = [hubBuilding()];
+    const st = stateWithPlentyOfResources();
+    expect(canExpandConstituent(spec, st, 5, 'major')).toEqual({
+      ok: false,
+      reason: 'bad-constituent',
+    });
+    // Mutation on a bad index is a safe no-op (does not throw, does not mutate).
+    expect(() => expandConstituent(spec, st, 5, 'major')).not.toThrow();
+    expect(spec.majorRadius).toBe(10);
   });
 });

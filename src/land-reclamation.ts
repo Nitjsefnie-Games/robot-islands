@@ -3,7 +3,7 @@
 // The Hub is a per-island unique trigger building. Placing one enables the
 // inspector's "+1 major / +1 minor" expansion action; this module provides
 // the gate predicates and the mutation primitive. Multiple Hubs do not
-// stack — `canExpandIsland` only checks for "at least one Hub present".
+// stack — `canExpandConstituent` only checks for "at least one Hub present".
 //
 // Cost curve (§3.4): cost = inscribed-tile delta × LAND_TILE_COST where the
 // delta is the number of new fully-inscribed tiles gained by a +1 expansion
@@ -23,7 +23,7 @@ import { inv } from './economy.js';
 import { islandInscribedAny, tileInscribedInEllipse } from './island.js';
 import { LAND_TILE_COST } from './building-defs.js';
 import type { ResourceId } from './recipes.js';
-import { BIOME_MAX_RADII, type IslandSpec } from './world.js';
+import { BIOME_MAX_RADII, type Biome, type IslandSpec } from './world.js';
 
 /** Which ellipse semi-axis to grow on an expansion. */
 export type Axis = 'major' | 'minor';
@@ -32,12 +32,18 @@ export type Axis = 'major' | 'minor';
  *  Partial so future basket growth doesn't break partial-cost previews. */
 export type LandReclamationCost = Partial<Record<ResourceId, number>>;
 
-/** `canExpandIsland` result. `ok: true` means `expandIsland` will succeed. */
+/** `canExpandConstituent` result. `ok: true` means `expandConstituent` will
+ *  succeed. `bad-constituent` is returned when `index` selects no real
+ *  constituent (out of range), so the gate never throws on stale UI input. */
 export type ExpandResult =
   | { readonly ok: true }
   | {
       readonly ok: false;
-      readonly reason: 'no-hub' | 'axis-at-max' | 'insufficient-resources';
+      readonly reason:
+        | 'no-hub'
+        | 'axis-at-max'
+        | 'insufficient-resources'
+        | 'bad-constituent';
     };
 
 /** Count of fully-inscribed tiles in an axis-aligned ellipse of the given
@@ -140,34 +146,70 @@ function hasLandReclamationHub(spec: IslandSpec): boolean {
 }
 
 /**
- * §3.4 expansion gate. Three rejection reasons in deliberate precedence:
+ * Resolve a constituent's current radius on `axis` and the biome whose
+ * `BIOME_MAX_RADII` entry caps it. §3.4: each constituent is capped by its
+ * OWN origin biome — an absorbed lobe keeps its origin cap even though its
+ * terrain queries the absorber's biome (§3.6).
+ *
+ *   - index 0  → the primary ellipse: `spec.major/minorRadius`, `spec.biome`.
+ *   - index N  → `extraEllipses[N-1]`: its `major/minor`, `biome ?? spec.biome`.
+ *   - out of range → `null` (gate maps this to `bad-constituent`).
+ */
+function constituentAxis(
+  spec: IslandSpec,
+  index: number,
+  axis: Axis,
+): { current: number; biome: Biome } | null {
+  if (index === 0) {
+    return {
+      current: axis === 'major' ? spec.majorRadius : spec.minorRadius,
+      biome: spec.biome,
+    };
+  }
+  const e = (spec.extraEllipses ?? [])[index - 1];
+  if (!e) return null;
+  return {
+    current: axis === 'major' ? e.major : e.minor,
+    biome: e.biome ?? spec.biome,
+  };
+}
+
+/**
+ * §3.4 expansion gate for a single constituent. Rejection reasons in
+ * deliberate precedence:
  *
  *   1. `no-hub` — no Land Reclamation Hub on the island. Until the player
  *      places one, the inspector should not even surface the expand action.
- *   2. `axis-at-max` — chosen axis already at the biome cap (`BIOME_MAX_RADII`).
- *      Checked BEFORE inventory so the player gets a structural reason
- *      ("axis is full") rather than a resource reason ("go mine more stone")
- *      when they're already capped.
- *   3. `insufficient-resources` — inventory below `landReclamationCost`.
+ *   2. `bad-constituent` — `index` selects no real constituent (out of range).
+ *      Checked before the cap so a stale/garbage index can never throw.
+ *   3. `axis-at-max` — chosen axis already at the constituent's own origin-biome
+ *      cap (`BIOME_MAX_RADII[constituent.biome]`). Checked BEFORE inventory so
+ *      the player gets a structural reason ("axis is full") rather than a
+ *      resource reason ("go mine more stone") when they're already capped.
+ *   4. `insufficient-resources` — inventory below `landReclamationCost`.
  *
- * Pure; no mutation. `expandIsland` defensively re-checks and no-ops on
+ * Pure; no mutation. `expandConstituent` defensively re-checks and no-ops on
  * rejection so misuse can't silently corrupt state.
  */
-export function canExpandIsland(
+export function canExpandConstituent(
   spec: IslandSpec,
   state: IslandState,
+  index: number,
   axis: Axis,
 ): ExpandResult {
   if (!hasLandReclamationHub(spec)) {
     return { ok: false, reason: 'no-hub' };
   }
-  const caps = BIOME_MAX_RADII[spec.biome];
-  const current = axis === 'major' ? spec.majorRadius : spec.minorRadius;
+  const c = constituentAxis(spec, index, axis);
+  if (!c) {
+    return { ok: false, reason: 'bad-constituent' };
+  }
+  const caps = BIOME_MAX_RADII[c.biome];
   const max = axis === 'major' ? caps.major : caps.minor;
-  if (current >= max) {
+  if (c.current >= max) {
     return { ok: false, reason: 'axis-at-max' };
   }
-  const cost = landReclamationCost(spec, 0, axis);
+  const cost = landReclamationCost(spec, index, axis);
   for (const [r, n] of Object.entries(cost) as Array<[ResourceId, number]>) {
     if (inv(state, r as ResourceId) < n) {
       return { ok: false, reason: 'insufficient-resources' };
@@ -177,32 +219,52 @@ export function canExpandIsland(
 }
 
 /**
- * Apply one +1 Land Reclamation expansion on the chosen axis. Mutates
- * `spec` (radius increment) and `state.inventory` (cost deduction). The
- * caller is responsible for rebuilding render layers (`renderIsland` reads
- * the spec's radii each rebuild, so a fresh `rebuildWorldLayers()` call
- * propagates the new tile mask) and refreshing the inspector.
+ * Apply one +1 Land Reclamation expansion on the chosen axis of constituent
+ * `index`. Mutates `spec` (radius increment) and `state.inventory` (cost
+ * deduction). The caller is responsible for rebuilding render layers
+ * (`renderIsland` reads the spec's radii each rebuild, so a fresh
+ * `rebuildWorldLayers()` call propagates the new tile mask) and refreshing
+ * the inspector.
  *
- * Defensive no-op on rejection: if `canExpandIsland` would return
- * `ok: false`, this function returns without mutation. The inspector
- * UI checks `canExpandIsland` before offering the button, so this guard
- * exists to keep the API safe from out-of-order calls (e.g. a stale
- * click after the player just hit cap on a previous expansion).
+ * Constituent dispatch:
+ *   - index 0  → mutate `spec.major/minorRadius` in place.
+ *   - index N  → REBUILD `extraEllipses[N-1]` (entries are `readonly`): a fresh
+ *     entry with the chosen axis +1 and every other field preserved.
+ *
+ * Defensive no-op on rejection: if `canExpandConstituent` would return
+ * `ok: false` (including `bad-constituent`), this function returns without
+ * mutation. The inspector UI checks `canExpandConstituent` before offering the
+ * button, so this guard exists to keep the API safe from out-of-order calls
+ * (e.g. a stale click after the player just hit cap on a previous expansion).
  */
-export function expandIsland(
+export function expandConstituent(
   spec: IslandSpec,
   state: IslandState,
+  index: number,
   axis: Axis,
 ): void {
-  const guard = canExpandIsland(spec, state, axis);
+  const guard = canExpandConstituent(spec, state, index, axis);
   if (!guard.ok) return;
-  // Pre-expansion radius drives the cost (matches the cost-preview text
-  // in the inspector). The post-mutation radius is `current + 1` per
-  // §3.4 ("adds 1 to either the major or the minor radius").
-  const cost = landReclamationCost(spec, 0, axis);
+  // Pre-expansion radius drives the cost (matches the cost-preview text in the
+  // inspector). The post-mutation radius is `current + 1` per §3.4 ("adds 1 to
+  // either the major or the minor radius").
+  const cost = landReclamationCost(spec, index, axis);
   for (const [r, n] of Object.entries(cost) as Array<[ResourceId, number]>) {
     state.inventory[r] = (state.inventory[r] ?? 0) - n;
   }
-  if (axis === 'major') spec.majorRadius = spec.majorRadius + 1;
-  else spec.minorRadius = spec.minorRadius + 1;
+  if (index === 0) {
+    if (axis === 'major') spec.majorRadius = spec.majorRadius + 1;
+    else spec.minorRadius = spec.minorRadius + 1;
+  } else {
+    // `canExpandConstituent` already guaranteed this index resolves, so the
+    // entry exists. Rebuild it (entries are readonly) with the chosen axis +1
+    // and all other fields (biome, rotation, offsets, untouched axis) preserved.
+    const extras = spec.extraEllipses!;
+    const e = extras[index - 1]!;
+    extras[index - 1] = {
+      ...e,
+      major: axis === 'major' ? e.major + 1 : e.major,
+      minor: axis === 'minor' ? e.minor + 1 : e.minor,
+    };
+  }
 }
