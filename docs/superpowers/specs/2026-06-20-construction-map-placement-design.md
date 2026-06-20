@@ -95,8 +95,8 @@ computed vision via `vision-source.ts`.)
    Construct is enabled only when placement is valid **and** affordable.
 6. Click **Construct** → `gateway.constructIsland` (LOCAL direct call / REMOTE
    `construct-island` intent) → server re-validates (incl. discovery) → island
-   is inserted and `rebuildWorldLayers()` runs. **The panel stays open** and the
-   ghost re-seeds to a fresh valid spot, so the player can build again.
+   is inserted and `rebuildWorldLayers()` runs. **On a successful construct the
+   panel closes (the ghost clears); reopen it (key C) to place another island.**
 
 ## Validity model
 

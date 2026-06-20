@@ -1927,10 +1927,6 @@ async function main(): Promise<void> {
       // later doesn't accidentally skip the fold).
       modifierMulsById.set(newSpec.id, effectiveModifierMultipliers([]));
       rebuildWorldLayers();
-
-      // Seed the next placement to the right so repeated constructs don't stack.
-      constructionCandidate.cx += constructionCandidate.major * 2 + 6;
-      redrawGhost();
     },
   });
 

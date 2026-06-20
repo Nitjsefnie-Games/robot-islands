@@ -254,7 +254,7 @@
         <li>Drag the ghost body to move; drag handles to resize (clamped to cap). Sliders and X/Y fields stay synced both ways.</li>
         <li>Ghost is cyan when valid, red on overlap / off-map / extends-into-unknown; the panel status line gives the reason.</li>
         <li>Cost grid shows <code>have / need</code>; Construct enables only when valid <em>and</em> affordable.</li>
-        <li>Construct → gateway (LOCAL direct / REMOTE intent) → server re-validates incl. discovery → island inserted, <code>rebuildWorldLayers()</code>. Panel stays open; ghost re-seeds.</li>
+        <li>Construct → gateway (LOCAL direct / REMOTE intent) → server re-validates incl. discovery → island inserted, <code>rebuildWorldLayers()</code>. On a successful construct the panel closes (the ghost clears); reopen it (key C) to place another island.</li>
       </ol>
     </section>
 
