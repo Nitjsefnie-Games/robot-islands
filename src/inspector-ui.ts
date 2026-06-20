@@ -1627,33 +1627,59 @@ export function mountInspectorUi(
       btn.style.opacity = '0.6';
     }
   }
+  // Persistent per-constituent row controls. The inspector repaints on the
+  // ticker (~5×/s); recreating these button nodes every paint detaches them
+  // between a click's mousedown and mouseup, dropping the click entirely (the
+  // "+1 MAJ/MIN does nothing" bug). So the nodes are built ONCE per constituent
+  // count and only their text/disabled-state is updated each paint — matching
+  // how every other inspector button (floor, convert, …) is wired.
+  type ReclamationRowControls = {
+    row: HTMLDivElement;
+    label: HTMLSpanElement;
+    buttons: { axis: Axis; btn: HTMLButtonElement }[];
+  };
+  const reclamationRows: ReclamationRowControls[] = [];
+  function buildReclamationRow(index: number): ReclamationRowControls {
+    const row = document.createElement('div');
+    styled(row, ['display:flex','align-items:center','gap:6px','flex-wrap:wrap'].join(';'));
+    const label = document.createElement('span');
+    row.appendChild(label);
+    const buttons: { axis: Axis; btn: HTMLButtonElement }[] = [];
+    for (const axis of ['major', 'minor'] as const) {
+      const btn = makeExpandButton();
+      btn.addEventListener('click', () => {
+        const target = resolveTarget();
+        if (!target) { close(); return; }
+        deps.onExpandIsland(target, index, axis);
+      });
+      buttons.push({ axis, btn });
+      row.appendChild(btn);
+    }
+    return { row, label, buttons };
+  }
   function paintReclamation(spec: IslandSpec, state: IslandState): void {
     const cs = islandConstituents(spec);
     const primaryCaps = BIOME_MAX_RADII[spec.biome];
     reclamationCaption.textContent =
       `${spec.biome} · ${spec.majorRadius}/${primaryCaps.major} maj · ${spec.minorRadius}/${primaryCaps.minor} min`;
-    reclamationList.replaceChildren();
+    // Rebuild the row nodes only when the constituent count changes (merge adds
+    // a lobe); a plain radius expand keeps the same rows so clicks survive.
+    if (reclamationRows.length !== cs.length) {
+      reclamationRows.length = 0;
+      for (let i = 0; i < cs.length; i++) reclamationRows.push(buildReclamationRow(i));
+      reclamationList.replaceChildren(...reclamationRows.map((r) => r.row));
+    }
     cs.forEach((c, index) => {
+      const controls = reclamationRows[index];
+      if (!controls) return;
       const caps = BIOME_MAX_RADII[c.biome];
-      const row = document.createElement('div');
-      styled(row, ['display:flex','align-items:center','gap:6px','flex-wrap:wrap'].join(';'));
-      const label = document.createElement('span');
-      label.textContent =
+      controls.label.textContent =
         `#${index + 1} · ${c.biome} · r${c.major}/${caps.major} · r${c.minor}/${caps.minor}`;
-      row.appendChild(label);
-      for (const axis of ['major', 'minor'] as const) {
+      for (const { axis, btn } of controls.buttons) {
         const gate = canExpandConstituent(spec, state, index, axis);
-        const btn = makeExpandButton();
         btn.textContent = reclamationButtonText(spec, index, axis, gate);
         setExpandButtonState(btn, gate);
-        btn.addEventListener('click', () => {
-          const target = resolveTarget();
-          if (!target) { close(); return; }
-          deps.onExpandIsland(target, index, axis);
-        });
-        row.appendChild(btn);
       }
-      reclamationList.appendChild(row);
     });
   }
 
