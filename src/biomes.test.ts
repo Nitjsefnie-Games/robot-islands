@@ -304,19 +304,60 @@ describe('terrainAtForBiome', () => {
     expect(a).toBe(b);
   });
 
-  it('preserves the home island layout exactly', () => {
-    // Sweep every (x,y) inside the radius-14 ellipse and assert identity
-    // with `defaultTerrainAt`. This is the load-bearing invariant: home
-    // looks unchanged from step-1.
+  it('no longer special-cases the home id — it generates procedural plains', () => {
+    // §3.7 change: the `islandId === 'home'` short-circuit was removed from
+    // terrainAtForBiome. The locked starter layout now lives in attachTerrainAt
+    // (see "home base layout" below). Here we pin that terrainAtForBiome treats
+    // 'home' like any other seed — i.e. it produces procedural plains, NOT the
+    // hand-placed defaultTerrainAt. At least one tile must differ from the hand
+    // layout (otherwise the short-circuit is silently back).
+    let differs = 0;
     for (let y = -14; y <= 14; y++) {
       for (let x = -14; x <= 14; x++) {
         if (!tileInscribedInEllipse(x, y, 14, 14)) continue;
-        expect(
-          terrainAtForBiome('plains', 'home', x, y, TRUE_PRED),
-          `home (${x},${y}) drift`,
-        ).toBe(defaultTerrainAt(x, y));
+        if (terrainAtForBiome('plains', 'home', x, y, TRUE_PRED) !== defaultTerrainAt(x, y)) differs++;
       }
     }
+    expect(differs, 'terrainAtForBiome must no longer return the home hand-layout').toBeGreaterThan(0);
+  });
+
+  it('home base layout is locked within baseLayoutRadius and procedural beyond (§3.7)', () => {
+    // A grown home: original footprint r16, expanded to r28 via Land Reclamation.
+    const home = attachTerrainAt({
+      id: 'home',
+      name: 'home',
+      biome: 'plains',
+      cx: 0,
+      cy: 0,
+      majorRadius: 28,
+      minorRadius: 28,
+      baseLayoutRadius: 16,
+      populated: true,
+      discovered: true,
+      buildings: [],
+      modifiers: [],
+    });
+    // Within r16 — the locked hand-placed starter layout, identical to defaultTerrainAt.
+    for (let y = -16; y <= 16; y++) {
+      for (let x = -16; x <= 16; x++) {
+        if (!tileInscribedInEllipse(x, y, 16, 16)) continue;
+        expect(home.terrainAt!(x, y), `home base (${x},${y}) drift`).toBe(defaultTerrainAt(x, y));
+      }
+    }
+    // The grown ring (16 < r ≤ 28) must NOT be all grass — growth pulls
+    // procedural plains terrain (tree/stone/ore/coal/limestone veins).
+    let ringTiles = 0;
+    let nonGrass = 0;
+    for (let y = -28; y <= 28; y++) {
+      for (let x = -28; x <= 28; x++) {
+        if (!tileInscribedInEllipse(x, y, 28, 28)) continue;
+        if (tileInscribedInEllipse(x, y, 16, 16)) continue; // skip the locked base
+        ringTiles++;
+        if (home.terrainAt!(x, y) !== 'grass') nonGrass++;
+      }
+    }
+    expect(ringTiles).toBeGreaterThan(0);
+    expect(nonGrass, 'grown ring must carry procedural (non-grass) terrain').toBeGreaterThan(0);
   });
 
   it('produces biome-distinct default terrain on non-home islands', () => {

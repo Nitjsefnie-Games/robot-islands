@@ -58,6 +58,7 @@ import {
   migrateV25toV26,
   migrateV26toV27,
   migrateV27toV28,
+  migrateV28toV29,
   serializeWorld,
   type SaveSnapshot,
   type SerializedSnapshotV7,
@@ -72,6 +73,7 @@ import {
   type SerializedSnapshotV25,
   type SerializedSnapshotV26,
   type SerializedSnapshotV27,
+  type SerializedSnapshotV28,
   type SerializedIslandStateV11,
   type SerializedWorld,
 } from './persistence.js';
@@ -213,8 +215,8 @@ describe('schema v25 — tradeOffers (§9.8 server-authoritative trades)', () =>
     expect(loaded.tradeOffers![0]!.expiresAt).toBe(301_000);
   });
 
-  it('current serialize emits schema v28', () => {
-    expect(serializeWorld(makeInitialWorld(0), new Map(), 0).v).toBe(28);
+  it('current serialize emits schema v29', () => {
+    expect(serializeWorld(makeInitialWorld(0), new Map(), 0).v).toBe(29);
   });
 });
 
@@ -243,10 +245,10 @@ describe('schema v27 → v28 — global CO₂ atmosphere + extraEllipses biome (
     expect(loaded.totalCo2Kg).toBe(2000);
   });
 
-  it('SCHEMA_VERSION is 28 and 27/28 are in SUPPORTED_LOAD_VERSIONS', () => {
-    expect(SCHEMA_VERSION).toBe(28);
-    expect(SUPPORTED_LOAD_VERSIONS.has(27)).toBe(true);
+  it('SCHEMA_VERSION is 29 and 28/29 are in SUPPORTED_LOAD_VERSIONS', () => {
+    expect(SCHEMA_VERSION).toBe(29);
     expect(SUPPORTED_LOAD_VERSIONS.has(28)).toBe(true);
+    expect(SUPPORTED_LOAD_VERSIONS.has(29)).toBe(true);
   });
 
   it('migrateV27toV28 defaults missing extra biome to island biome', () => {
@@ -277,19 +279,87 @@ describe('schema v27 → v28 — global CO₂ atmosphere + extraEllipses biome (
     expect(out.world.islands[0]!.extraEllipses![0]!.biome).toBe('forest');
   });
 
-  it('v28 round-trips identity through serialize/loadWorld with a biome-stamped lobe', () => {
+  it('current serialize round-trips identity through serialize/loadWorld with a biome-stamped lobe', () => {
     const world = makeInitialWorld(0);
     const home = world.islands.find((s) => s.id === 'home')!;
     home.extraEllipses = [
       { major: 6, minor: 6, rotation: 0, offsetX: 12, offsetY: 0, biome: 'coast' },
     ];
     const snap = serializeWorld(world, new Map(), 0, 0);
-    expect(snap.v).toBe(28);
+    expect(snap.v).toBe(29);
     const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
     const { world: loaded } = deserializeWorld(json, 0, 0);
     const isl = loaded.islands.find((i) => i.extraEllipses?.length);
     expect(isl).toBeDefined();
     expect(isl!.extraEllipses![0]!.biome).toBe('coast');
+  });
+});
+
+describe('schema v28 → v29 — home base-layout radius (§3.7)', () => {
+  function v28Snapshot(mutate: (w: ReturnType<typeof makeInitialWorld>) => void): SerializedSnapshotV28 {
+    const world = makeInitialWorld(0);
+    mutate(world);
+    const snap = serializeWorld(world, new Map(), 0, 0);
+    // Strip the field a genuine v28 save never had, and stamp v28.
+    const islands = snap.world.islands.map((i) => {
+      const { baseLayoutRadius: _drop, ...rest } = i as { baseLayoutRadius?: number };
+      return rest;
+    });
+    return { ...snap, v: 28, world: { ...snap.world, islands } } as unknown as SerializedSnapshotV28;
+  }
+
+  it('migrateV28toV29 stamps baseLayoutRadius=16 on home only', () => {
+    const v28 = v28Snapshot(() => {});
+    // Precondition: the synthetic v28 has no baseLayoutRadius anywhere.
+    expect(v28.world.islands.every((i) => (i as { baseLayoutRadius?: number }).baseLayoutRadius === undefined)).toBe(true);
+    const out = migrateV28toV29(v28);
+    expect(out.v).toBe(29);
+    const home = out.world.islands.find((i) => i.id === 'home')!;
+    expect(home.baseLayoutRadius).toBe(16);
+    // Every non-home island stays free of the field.
+    for (const isl of out.world.islands) {
+      if (isl.id === 'home') continue;
+      expect(isl.baseLayoutRadius).toBeUndefined();
+    }
+  });
+
+  it('does NOT touch a merged island\'s constituents/terrain', () => {
+    // home carries an absorbed desert lobe; the migration must leave the lobe
+    // entry byte-identical (no baseLayoutRadius, biome/originId intact).
+    const v28 = v28Snapshot((w) => {
+      const home = w.islands.find((s) => s.id === 'home')!;
+      home.extraEllipses = [
+        { biome: 'desert', originId: 'gen-1--3', major: 12, minor: 12, rotation: 0, offsetX: 27, offsetY: -35 },
+      ];
+    });
+    const lobeBefore = JSON.stringify(
+      v28.world.islands.find((i) => i.id === 'home')!.extraEllipses,
+    );
+    const out = migrateV28toV29(v28);
+    const home = out.world.islands.find((i) => i.id === 'home')!;
+    expect(home.baseLayoutRadius).toBe(16);
+    // The lobe constituent is unchanged — same biome, originId, geometry.
+    expect(JSON.stringify(home.extraEllipses)).toBe(lobeBefore);
+  });
+
+  it('a v28 save loads through loadWorld and home gains baseLayoutRadius', () => {
+    const v28 = v28Snapshot(() => {});
+    const json = JSON.parse(JSON.stringify(v28)) as SaveSnapshot;
+    const { world: loaded } = deserializeWorld(json, 0, 0);
+    const home = loaded.islands.find((i) => i.id === 'home')!;
+    expect(home.baseLayoutRadius).toBe(16);
+  });
+
+  it('v29 round-trips identity (baseLayoutRadius survives serialize/deserialize)', () => {
+    const world = makeInitialWorld(0);
+    const snap = serializeWorld(world, new Map(), 0, 0);
+    expect(snap.v).toBe(29);
+    const home0 = snap.world.islands.find((i) => i.id === 'home')!;
+    expect(home0.baseLayoutRadius).toBe(16);
+    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    const { world: loaded } = deserializeWorld(json, 0, 0);
+    const home = loaded.islands.find((i) => i.id === 'home')!;
+    expect(home.baseLayoutRadius).toBe(16);
   });
 });
 
@@ -317,7 +387,7 @@ describe('schema v26 — route waypoints (§2.6 route bending)', () => {
       waypoints: [{ x: 10, y: 20 }, { x: 30, y: 40 }],
     });
     const snap = serializeWorld(world, new Map(), 0, 0);
-    expect(snap.v).toBe(28);
+    expect(snap.v).toBe(29);
     const route = snap.world.routes.find((r) => r.id === 'r1')!;
     expect(route.waypoints).toEqual([{ x: 10, y: 20 }, { x: 30, y: 40 }]);
     const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
@@ -375,7 +445,7 @@ describe('serializeWorld', () => {
     const states = new Map<string, IslandState>();
     const snap = serializeWorld(world, states, /* savedAt */ 1_234_567);
     expect(snap.v).toBe(SCHEMA_VERSION);
-    expect(snap.v).toBe(28);
+    expect(snap.v).toBe(29);
     expect(snap.savedAt).toBe(1_234_567);
   });
 
@@ -1961,7 +2031,7 @@ describe('persistence — tileOverrides round-trip (schema 7)', () => {
     const states = new Map<string, IslandState>();
     states.set('home', makeInitialIslandState(homeSpec!, 0));
     const snap = serializeWorld(world, states, 1_700_000_000_000, 0);
-    expect(snap.v).toBe(28);
+    expect(snap.v).toBe(29);
     const { world: rehydrated } = deserializeWorld(snap, 1_700_000_000_000, 0);
     const rh = rehydrated.islands.find((s) => s.id === 'home');
     expect(rh?.tileOverrides).toEqual({
@@ -2658,8 +2728,8 @@ describe('v17 -> v18 migration', () => {
     homeState.nextQueueSeq = 2;
     const states = new Map<string, IslandState>([['home', homeState]]);
     const snap = serializeWorld(world, states, 0, 0);
-    // The snapshot must be at v28 (SCHEMA_VERSION).
-    expect(snap.v).toBe(28);
+    // The snapshot must be at v29 (SCHEMA_VERSION).
+    expect(snap.v).toBe(29);
     const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
     const { world: restored, islandStates: restoredStates } = deserializeWorld(json, 0, 0);
     const rSpec = restored.islands.find((s) => s.id === 'home')!;
@@ -2684,8 +2754,8 @@ describe('v17 -> v18 migration', () => {
 });
 
 describe('v18 -> v19 migration (everProduced seen-set)', () => {
-  it('SCHEMA_VERSION is 28', () => {
-    expect(SCHEMA_VERSION).toBe(28);
+  it('SCHEMA_VERSION is 29', () => {
+    expect(SCHEMA_VERSION).toBe(29);
   });
 
   it('migrateV18toV19 backfills everProduced only from POSITIVE-stock resources', () => {
@@ -2729,7 +2799,7 @@ describe('v18 -> v19 migration (everProduced seen-set)', () => {
     homeState.everProduced = new Set(['bolt', 'iron_ingot']);
     const states = new Map<string, IslandState>([['home', homeState]]);
     const snap = serializeWorld(world, states, 0, 0);
-    expect(snap.v).toBe(28);
+    expect(snap.v).toBe(29);
     const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
     const { islandStates: restored } = deserializeWorld(json, 0, 0);
     const rState = restored.get('home')!;
@@ -2773,7 +2843,7 @@ describe('v20 -> v21 tutorial xpBumpClaimed migration', () => {
     } as unknown as Parameters<typeof migrateV20toV21>[0];
     const out = migrateV20toV21(v20);
     expect(out.v).toBe(21);
-    expect(SCHEMA_VERSION).toBe(28);
+    expect(SCHEMA_VERSION).toBe(29);
     expect((out.world.tutorialState as unknown as { xpBumpClaimed: string[] }).xpBumpClaimed)
       .toEqual(['a', 'b']);
   });
@@ -2824,7 +2894,7 @@ describe('schema v22 — activeBonusMs (§9.9)', () => {
     const world = makeInitialWorld(0);
     world.activeBonusMs = 600_000; // 10 focused minutes banked
     const snap = serializeWorld(world, new Map(), 1_000_000, 500);
-    expect(snap.v).toBe(28);
+    expect(snap.v).toBe(29);
     expect(snap.world.activeBonusMs).toBe(600_000);
     // Reload 1 minute of wall-clock later: decay 3 × 60_000. Closed-game decay
     // is the LOCAL cold-load path → opt in (§9.9 heartbeat owns REMOTE).
@@ -2989,8 +3059,8 @@ describe('migrateV22toV23 — regenerates procedural islands at density 0.02', (
 // v23 → v24 — buildJobs + disabled→disabledFloors (§4.8 stacked upgrade queue)
 // ---------------------------------------------------------------------------
 describe('schema v24 — buildJobs + disabled→disabledFloors', () => {
-  it('SCHEMA_VERSION is 28', () => {
-    expect(SCHEMA_VERSION).toBe(28);
+  it('SCHEMA_VERSION is 29', () => {
+    expect(SCHEMA_VERSION).toBe(29);
   });
 
   function makeV23(islandStates: Array<{ id: string; state: unknown }>): SaveSnapshot {
@@ -3041,7 +3111,7 @@ describe('schema v24 — buildJobs + disabled→disabledFloors', () => {
     homeState.buildJobs = [{ seq: 1, buildingId: 'upg-1', kind: 'upgrade' }];
     const states = new Map<string, IslandState>([['home', homeState]]);
     const snap = serializeWorld(world, states, 0);
-    expect(snap.v).toBe(28);
+    expect(snap.v).toBe(29);
     const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
     const { world: restored, islandStates: restoredStates } = deserializeWorld(json, 0, 0);
     expect(restoredStates.get('home')!.buildJobs).toEqual([

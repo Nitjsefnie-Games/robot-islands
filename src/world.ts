@@ -27,6 +27,7 @@ import type { IslandState } from './economy.js';
 import { type TerrainKind, type Tile } from './island.js';
 import {
   computeIslandTiles,
+  defaultTerrainAt,
   islandInscribedAny,
   renderIslandTiles,
   tileInscribedInEllipse,
@@ -180,6 +181,14 @@ export interface IslandSpec {
    *  consumer rotates the ellipse yet. Optional so legacy saves hydrate cleanly
    *  (missing reads as 0). */
   rotation?: number;
+  /** §3.7 hand-placed base-layout radius. When set (only the home island, = 16),
+   *  the PRIMARY constituent's tiles WITHIN this radius use the locked
+   *  `defaultTerrainAt` starter layout; tiles beyond it generate procedurally
+   *  from the island's biome (so growing home past its original footprint yields
+   *  real terrain, not grass — §3.7). Absent on every other island (and on
+   *  absorbed lobes, which never use the hand layout). Added in the v28→v29
+   *  migration; readers treat absent as "no locked base layout". */
+  baseLayoutRadius?: number;
 }
 
 /** §3.6 constituent ellipse view — the primary ellipse re-expressed as the
@@ -264,10 +273,22 @@ export function attachTerrainAt<B extends Omit<IslandSpec, 'terrainAt'>>(base: B
     // then merge order), and the FIRST that inscribes the tile owns it — the
     // same precedence as the `computeIslandTiles` dedup, so the tile set and its
     // terrain never disagree on a shared (overlap) tile.
-    for (const c of islandConstituents(spec)) {
+    const constituents = islandConstituents(spec);
+    for (let i = 0; i < constituents.length; i++) {
+      const c = constituents[i]!;
       const lx = x - c.offsetX;
       const ly = y - c.offsetY;
       if (!tileInscribedInEllipse(lx, ly, c.major, c.minor)) continue;
+      // §3.7 hand-placed base layout (home): the PRIMARY constituent of an
+      // island that carries `baseLayoutRadius` uses the locked `defaultTerrainAt`
+      // layout WITHIN that radius, and procedural biome terrain BEYOND it (so
+      // growth past the original footprint isn't all grass). Scoped to the
+      // primary (i === 0) ONLY — absorbed lobes (i > 0) never use the hand
+      // layout, so merged-in islands keep their own §3.6 terrain untouched.
+      if (i === 0 && spec.baseLayoutRadius !== undefined &&
+          tileInscribedInEllipse(lx, ly, spec.baseLayoutRadius, spec.baseLayoutRadius)) {
+        return defaultTerrainAt(lx, ly);
+      }
       return terrainAtForBiome(c.biome, c.originId, lx, ly, (px, py) =>
         tileInscribedInEllipse(px, py, c.major, c.minor),
       );
@@ -716,6 +737,9 @@ function makeHomeIslandSpec(): IslandSpec {
     cy: 0,
     majorRadius: 16,
     minorRadius: 16,
+    // §3.7 hand-placed starter layout is locked within the original r16
+    // footprint; growth beyond it generates procedural plains.
+    baseLayoutRadius: 16,
     populated: true,
     discovered: true,
     // §3.7: empty buildings — the player places their first via the UI.
