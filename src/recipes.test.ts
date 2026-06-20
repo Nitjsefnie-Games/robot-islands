@@ -199,6 +199,18 @@ describe('produced resources have terminal classification (rev-16 §3.5.4)', () 
   it('aviation_kerosene_crude is a closed intermediate (consumed), not an orphan', () => {
     expect(RESOURCE_META.aviation_kerosene_crude.terminal).toBe('consumed');
   });
+
+  it('P4 Phase-0: already-consumed orphans are correctly tagged', () => {
+    // recipe-input consumer → 'consumed'
+    expect(RESOURCE_META.heavy_oil.terminal).toBe('consumed');
+    // non-recipe (placement-cost) consumer → 'gameplay-sink'
+    for (const r of [
+      'antimatter_propellant', 'plasma_charge', 'ceramic_insulator',
+      'heavy_cable', 'glass_panel', 'saltwater_cell',
+    ] as ResourceId[]) {
+      expect(RESOURCE_META[r].terminal, r).toBe('gameplay-sink');
+    }
+  });
 });
 
 describe('step-18 producer coverage (§7 chain closures)', () => {
