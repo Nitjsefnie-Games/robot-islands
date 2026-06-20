@@ -350,6 +350,25 @@ describe('advanceLatticeGroup — §13.3 D-01 shared flow', () => {
     expect(b.co2Kg).toBe(0);
   });
 
+  it('grouped members drain CO₂ from the shared co2Pool, not per-island co2Kg (§7.4)', () => {
+    // Regression lock: lattice/shared-network members run side effects through
+    // the same applySegmentSideEffects as solo islands. With a shared co2Pool in
+    // their ctx, a forest member's trees must drain the GLOBAL pool (so a lattice
+    // forest island offsets the world), leaving its per-island co2Kg untouched.
+    const pool = { kg: 1000 };
+    const treeCtx = (_state: IslandState): RatesContext => ({
+      defs: DEFS,
+      terrainAt: () => 'tree',
+      co2Pool: pool,
+    });
+    const f = makeState('F', { buildings: [{ id: 't', defId: 'plant_a_tree', x: 0, y: 0 }] });
+    const g = makeState('G', { buildings: [MINE('m')] });
+    g.inventory.coal = 1_000_000;
+    advanceLatticeGroup([f, g], 600_000, treeCtx);
+    expect(pool.kg).toBeLessThan(1000); // tree capture drained the global pool
+    expect(f.co2Kg).toBe(0);            // per-island scalar untouched
+  });
+
   it('pooled everProduced is attributed to the real producer, not member 0', () => {
     const producer = makeState('producer', { buildings: [MINE('mProd')] });
     const consumer = makeState('consumer', { buildings: [WORKSHOP('w')] });

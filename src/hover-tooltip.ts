@@ -272,7 +272,7 @@ function formatDuration(ms: number): string {
  *  forecast-capable station's range. Without that, the player sees the
  *  current state but not the next-cycle lookahead. */
 function weatherInfoForCell(
-  world: Pick<WorldState, 'seed' | 'islands' | 'islandStates'>,
+  world: Pick<WorldState, 'seed' | 'islands' | 'islandStates' | 'totalCo2Kg'>,
   cellX: number,
   cellY: number,
   nowMs: number,
@@ -320,7 +320,7 @@ function consumersForTerrain(terrain: string): ReadonlyArray<ConsumerSummary> {
  *  narrow so the helper is trivial to fixture in unit tests. */
 type HoverWorld = Pick<
   WorldState,
-  'seed' | 'islands' | 'oceanCells' | 'revealedCells' | 'depthRevealedCells' | 'islandStates'
+  'seed' | 'islands' | 'oceanCells' | 'revealedCells' | 'depthRevealedCells' | 'islandStates' | 'totalCo2Kg'
 >;
 
 /** Tile (n) is rendered centred on world pixel (n * TILE_PX), so its
