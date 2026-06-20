@@ -26,6 +26,10 @@ const SIGNAL_COLOR = 0x7dd3e8;
  *  at least one other antenna. Matches the spec §05 chosen value (~90% blend
  *  of cyan toward 0xE08B7F). */
 const REDUNDANT_COLOR = 0xd6928a;
+/** Alpha for the red frame drawn around a redundant Antenna building itself
+ *  (in addition to its range ring) — slightly bolder than the ring so the
+ *  culprit building is easy to spot, but still a "slight" hint. */
+const REDUNDANT_FRAME_ALPHA = 0.55;
 
 export interface AntennaOverlayHandle {
   readonly layer: Container;
@@ -46,7 +50,8 @@ export function mountAntennaOverlay(world: WorldState): AntennaOverlayHandle {
     for (let i = 0; i < ranges.length; i++) {
       const r = ranges[i]!;
       const others = ranges.slice(0, i).concat(ranges.slice(i + 1));
-      const colour = isAntennaRedundant(r, others) ? REDUNDANT_COLOR : SIGNAL_COLOR;
+      const redundant = isAntennaRedundant(r, others);
+      const colour = redundant ? REDUNDANT_COLOR : SIGNAL_COLOR;
       const px = r.cx * TILE_PX;
       const py = r.cy * TILE_PX;
       const radiusPx = r.radius * TILE_PX;
@@ -54,6 +59,16 @@ export function mountAntennaOverlay(world: WorldState): AntennaOverlayHandle {
         .circle(px, py, radiusPx)
         .fill({ color: colour, alpha: RING_FILL_ALPHA })
         .stroke({ color: colour, width: 1, alpha: RING_STROKE_ALPHA });
+      // Slight red frame around the building footprint itself for redundant
+      // antennas, so the culprit is identifiable without tracing the ring back
+      // to its centre. `cx`/`cy` are the footprint centre; derive the top-left.
+      if (redundant) {
+        const x0 = (r.cx - (r.width - 1) / 2) * TILE_PX;
+        const y0 = (r.cy - (r.height - 1) / 2) * TILE_PX;
+        gfx
+          .rect(x0, y0, r.width * TILE_PX, r.height * TILE_PX)
+          .stroke({ color: REDUNDANT_COLOR, width: 2, alpha: REDUNDANT_FRAME_ALPHA });
+      }
     }
   }
 

@@ -33,6 +33,10 @@ export interface SignalRange {
   readonly cx: number;
   readonly cy: number;
   readonly radius: number;
+  /** Antenna building footprint size in tiles (1 or 2). Lets the overlay frame
+   *  the building itself, not just its range ring. */
+  readonly width: number;
+  readonly height: number;
 }
 
 /** Walk every populated island's `buildings` array; emit one `SignalRange`
@@ -53,10 +57,14 @@ export function computeSignalRanges(
       const radius = ANTENNA_SIGNAL_RADII[b.defId];
       if (radius === undefined) continue;
       const def = BUILDING_DEFS[b.defId as BuildingDefId];
+      const width = shapeWidth(def.footprint);
+      const height = shapeHeight(def.footprint);
       out.push({
-        cx: spec.cx + b.x + (shapeWidth(def.footprint) - 1) / 2,
-        cy: spec.cy + b.y + (shapeHeight(def.footprint) - 1) / 2,
+        cx: spec.cx + b.x + (width - 1) / 2,
+        cy: spec.cy + b.y + (height - 1) / 2,
         radius,
+        width,
+        height,
       });
     }
   }

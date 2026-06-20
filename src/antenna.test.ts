@@ -58,6 +58,8 @@ describe('computeSignalRanges', () => {
     expect(ranges[0]!.cx).toBeCloseTo(10);
     expect(ranges[0]!.cy).toBeCloseTo(20);
     expect(ranges[0]!.radius).toBe(80);
+    expect(ranges[0]!.width).toBe(1);
+    expect(ranges[0]!.height).toBe(1);
   });
 
   it('returns empty when no antennas are placed', () => {
@@ -116,6 +118,8 @@ describe('computeSignalRanges', () => {
     // 2×2 → centre offset (W-1)/2 = 0.5 from the NW tile's centre.
     expect(ranges[0]!.cx).toBeCloseTo(0.5);
     expect(ranges[0]!.cy).toBeCloseTo(0.5);
+    expect(ranges[0]!.width).toBe(2);
+    expect(ranges[0]!.height).toBe(2);
   });
 });
 
@@ -125,21 +129,21 @@ describe('pointInSignalRange', () => {
   });
 
   it('returns true at the center of a range', () => {
-    expect(pointInSignalRange([{ cx: 10, cy: 20, radius: 5 }], 10, 20)).toBe(true);
+    expect(pointInSignalRange([{ cx: 10, cy: 20, radius: 5, width: 1, height: 1 }], 10, 20)).toBe(true);
   });
 
   it('returns true at the boundary (distance == radius)', () => {
-    expect(pointInSignalRange([{ cx: 0, cy: 0, radius: 5 }], 5, 0)).toBe(true);
+    expect(pointInSignalRange([{ cx: 0, cy: 0, radius: 5, width: 1, height: 1 }], 5, 0)).toBe(true);
   });
 
   it('returns false outside the boundary', () => {
-    expect(pointInSignalRange([{ cx: 0, cy: 0, radius: 5 }], 6, 0)).toBe(false);
+    expect(pointInSignalRange([{ cx: 0, cy: 0, radius: 5, width: 1, height: 1 }], 6, 0)).toBe(false);
   });
 
   it('unions multiple ranges — inside any one returns true', () => {
     const ranges = [
-      { cx: 0, cy: 0, radius: 5 },
-      { cx: 100, cy: 100, radius: 5 },
+      { cx: 0, cy: 0, radius: 5, width: 1, height: 1 },
+      { cx: 100, cy: 100, radius: 5, width: 1, height: 1 },
     ];
     expect(pointInSignalRange(ranges, 0, 0)).toBe(true);
     expect(pointInSignalRange(ranges, 100, 100)).toBe(true);
@@ -149,21 +153,21 @@ describe('pointInSignalRange', () => {
 
 describe('isAntennaRedundant', () => {
   it('a lone antenna is never redundant', () => {
-    const test: SignalRange = { cx: 0, cy: 0, radius: 80 };
+    const test: SignalRange = { cx: 0, cy: 0, radius: 80, width: 1, height: 1 };
     expect(isAntennaRedundant(test, [])).toBe(false);
   });
 
   it('an antenna fully inside one bigger antenna is redundant', () => {
     // test radius 50 centred at origin; other radius 200 also at origin → fully covers.
-    const test: SignalRange = { cx: 0, cy: 0, radius: 50 };
-    const others: SignalRange[] = [{ cx: 0, cy: 0, radius: 200 }];
+    const test: SignalRange = { cx: 0, cy: 0, radius: 50, width: 1, height: 1 };
+    const others: SignalRange[] = [{ cx: 0, cy: 0, radius: 200, width: 1, height: 1 }];
     expect(isAntennaRedundant(test, others)).toBe(true);
   });
 
   it('two co-located identical antennas — each redundant relative to the other', () => {
     // closed-disc test: perimeter samples lie ON the other's perimeter → inside.
-    const a: SignalRange = { cx: 0, cy: 0, radius: 80 };
-    const b: SignalRange = { cx: 0, cy: 0, radius: 80 };
+    const a: SignalRange = { cx: 0, cy: 0, radius: 80, width: 1, height: 1 };
+    const b: SignalRange = { cx: 0, cy: 0, radius: 80, width: 1, height: 1 };
     expect(isAntennaRedundant(a, [b])).toBe(true);
     expect(isAntennaRedundant(b, [a])).toBe(true);
   });
@@ -171,8 +175,8 @@ describe('isAntennaRedundant', () => {
   it('an antenna with a clearly-uncovered perimeter is not redundant', () => {
     // test centred at (0, 0) radius 100; the only "other" sits far to the right.
     // The test's left perimeter (~ x = -100) is nowhere near the other's disc.
-    const test: SignalRange = { cx: 0, cy: 0, radius: 100 };
-    const others: SignalRange[] = [{ cx: 500, cy: 0, radius: 50 }];
+    const test: SignalRange = { cx: 0, cy: 0, radius: 100, width: 1, height: 1 };
+    const others: SignalRange[] = [{ cx: 500, cy: 0, radius: 50, width: 1, height: 1 }];
     expect(isAntennaRedundant(test, others)).toBe(false);
   });
 
@@ -183,10 +187,10 @@ describe('isAntennaRedundant', () => {
     // Their UNION covers every perimeter sample. The test must return true
     // only if isAntennaRedundant uses the union (pointInSignalRange) and not
     // any single-other check.
-    const test: SignalRange = { cx: 0, cy: 0, radius: 80 };
+    const test: SignalRange = { cx: 0, cy: 0, radius: 80, width: 1, height: 1 };
     const others: SignalRange[] = [
-      { cx: 40, cy: 0, radius: 100 },
-      { cx: -40, cy: 0, radius: 100 },
+      { cx: 40, cy: 0, radius: 100, width: 1, height: 1 },
+      { cx: -40, cy: 0, radius: 100, width: 1, height: 1 },
     ];
     expect(isAntennaRedundant(test, others)).toBe(true);
   });
