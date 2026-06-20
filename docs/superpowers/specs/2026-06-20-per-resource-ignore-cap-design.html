@@ -1,0 +1,496 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Per-resource Ignore Cap — design spec</title>
+  <style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--ivory);
+      color: var(--gray-700);
+      line-height: 1.58;
+      padding: 56px 32px 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { margin: 0 auto; max-width: 1000px; }
+
+    header.page-head { margin-bottom: 40px; max-width: 840px; }
+    .eyebrow {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--gray-500);
+      margin-bottom: 12px;
+    }
+    h1 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 38px;
+      line-height: 1.14;
+      color: var(--slate);
+      margin-bottom: 18px;
+      letter-spacing: -0.01em;
+    }
+    .context-box {
+      background: var(--gray-150);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      font-size: 14.5px;
+      color: var(--gray-700);
+    }
+    .context-box .label {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 56px;
+    }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+    }
+    .summary .k {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      margin-bottom: 6px;
+    }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent  { color: var(--clay); }
+    .summary .v.ok      { color: var(--olive); }
+
+    .decision {
+      background: var(--white);
+      border: var(--border);
+      border-left: 4px solid var(--clay);
+      border-radius: var(--radius);
+      padding: 22px 26px;
+      margin-bottom: 56px;
+    }
+    .decision .d-tag {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--clay);
+      margin-bottom: 8px;
+    }
+    .decision .d-head {
+      font-family: var(--serif);
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--slate);
+      margin-bottom: 10px;
+      letter-spacing: -0.01em;
+    }
+    .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 820px; }
+    .decision .d-body + .d-body { margin-top: 8px; }
+
+    section { margin-bottom: 60px; }
+    .sec-head {
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+      margin-bottom: 8px;
+    }
+    .sec-head .num {
+      font-family: var(--mono);
+      font-size: 12px;
+      background: var(--oat);
+      color: var(--slate);
+      padding: 3px 9px;
+      border-radius: 8px;
+    }
+    .sec-head h2 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 26px;
+      color: var(--slate);
+      letter-spacing: -0.01em;
+    }
+    .sec-intro {
+      font-size: 14.5px;
+      color: var(--gray-500);
+      max-width: 820px;
+      margin-bottom: 24px;
+    }
+    p.body { font-size: 14.5px; max-width: 820px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+    code {
+      font-family: var(--mono);
+      font-size: 0.88em;
+      background: var(--gray-150);
+      border: 1px solid var(--gray-300);
+      border-radius: 5px;
+      padding: 1px 5px;
+      color: #C9B98A;
+    }
+    pre {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      background: var(--gray-150);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 18px;
+      overflow-x: auto;
+      color: var(--gray-700);
+      margin-bottom: 16px;
+      max-width: 880px;
+    }
+    pre .cm { color: var(--gray-500); }
+
+    .tbl {
+      width: 100%;
+      border: var(--border);
+      border-radius: var(--radius);
+      border-collapse: separate;
+      border-spacing: 0;
+      overflow: hidden;
+      font-size: 13.5px;
+    }
+    .tbl th, .tbl td {
+      text-align: left;
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--gray-300);
+      vertical-align: top;
+    }
+    .tbl th {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--gray-500);
+      background: var(--gray-150);
+      font-weight: 600;
+    }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+
+    .compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 820px) { .compare { grid-template-columns: 1fr; } }
+    .compare .col {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .compare .col-head {
+      padding: 12px 18px;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      border-bottom: var(--border);
+    }
+    .compare .col.bad  .col-head { background: #2E211C; color: var(--rust); }
+    .compare .col.good .col-head { background: #232A1C; color: var(--olive); }
+    .compare .col-body { padding: 16px 18px; font-size: 13.5px; }
+    .compare .col-body ul { list-style: none; }
+    .compare .col-body li { margin: 7px 0; padding-left: 18px; position: relative; }
+    .compare .col.bad  li:before { content: '\2715'; position: absolute; left: 0; color: var(--rust); }
+    .compare .col.good li:before { content: '\2713'; position: absolute; left: 0; color: var(--olive); }
+
+    .changes { display: flex; flex-direction: column; gap: 12px; }
+    .change {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      display: grid;
+      grid-template-columns: 260px 1fr;
+      gap: 4px 24px;
+    }
+    @media (max-width: 720px) { .change { grid-template-columns: 1fr; } }
+    .change .file {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      color: var(--clay);
+      word-break: break-all;
+    }
+    .change .what { font-size: 14px; color: var(--gray-700); }
+    .change .what .lead { color: var(--slate); font-weight: 600; }
+
+    .checklist { display: flex; flex-direction: column; gap: 10px; max-width: 820px; }
+    .check {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      background: var(--white);
+      border: var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+    }
+    .check .box {
+      width: 18px; height: 18px;
+      border-radius: 5px;
+      border: 2px solid var(--gray-500);
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .check .ck-text { font-size: 14px; color: var(--gray-700); }
+    .check .ck-text strong { color: var(--slate); }
+
+    .risks {
+      border: var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--white);
+    }
+    .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: var(--border); }
+    .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: var(--border); }
+    @media (max-width: 780px) {
+      .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); }
+    }
+    .risks .head {
+      background: var(--gray-150);
+      font-weight: 600;
+      color: var(--slate);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .sev {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-weight: 600;
+    }
+    .sev.high { background: #4A2A1C; color: #F0B79C; }
+    .sev.med  { background: var(--oat);  color: var(--slate); }
+    .sev.low  { background: #2D3A24; color: #B6CC96; }
+
+    .deferred { display: flex; flex-direction: column; gap: 14px; max-width: 840px; }
+    .defer {
+      background: var(--white);
+      border: var(--border);
+      border-left: 4px solid var(--gray-500);
+      border-radius: 10px;
+      padding: 16px 20px;
+    }
+    .defer .dt { font-weight: 600; font-size: 15px; color: var(--slate); margin-bottom: 4px; }
+    .defer .dd { font-size: 13.5px; color: var(--gray-500); }
+
+    .footer {
+      color: var(--gray-500);
+      font-size: 13px;
+      margin-top: 64px;
+      padding-top: 22px;
+      border-top: 1px solid var(--gray-300);
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Design spec · robot-islands · §4.6 / §15.3</div>
+      <h1>Per-resource Ignore Cap — replaces Force Run</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        Two overlapping mechanisms control "a full output bin must not stall the producer":
+        the per-building <code>forceRun</code> boolean (§4.6, blunt — voids the valuable primary too)
+        and the global automatic <code>OUTPUT_CAP_EXEMPT</code> byproduct set (§15.3 A, invisible to the player).
+        This spec collapses both into a single, user-configurable per-<code>(building, output-resource)</code>
+        <strong>Ignore Cap</strong> flag, and adds <code>slag</code> to the default-on set.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Replaces</div><div class="v accent">Force Run</div></div>
+      <div class="cell"><div class="k">Files touched</div><div class="v">~12 + SPEC</div></div>
+      <div class="cell"><div class="k">Migration</div><div class="v">v29 → v30</div></div>
+      <div class="cell"><div class="k">Existing saves</div><div class="v ok">Behavior-preserving</div></div>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision</div>
+      <div class="d-head">One per-(building, output-resource) Ignore Cap flag, stored as sparse per-building overrides over a global default-on set.</div>
+      <div class="d-body">The global <code>OUTPUT_CAP_EXEMPT</code> set stays as the <strong>default-on</strong> state (now 9 resources, adding <code>slag</code>). Each building stores only deviations in <code>ignoreCapOverrides?: Partial&lt;Record&lt;ResourceId, boolean&gt;&gt;</code>. The single effective predicate <code>isOutputCapExempt(b, r) = b.ignoreCapOverrides?.[r] ?? OUTPUT_CAP_EXEMPT.has(r)</code> subsumes both old code paths. An untouched building carries no field and behaves exactly as today.</div>
+      <div class="d-body"><strong>Fully configurable</strong>: the player can turn a default-on byproduct OFF or a default-off primary ON. The P4 byproduct no-stall invariant becomes the player's choice, not a hard floor — deliberately, per the brainstorming decision.</div>
+    </div>
+
+    <section>
+      <div class="sec-head"><span class="num">01</span><h2>What changes, conceptually</h2></div>
+      <p class="sec-intro">Two mechanisms become one, with a strictly larger configuration space.</p>
+      <div class="compare">
+        <div class="col bad">
+          <div class="col-head">Before</div>
+          <div class="col-body"><ul>
+            <li><code>forceRun</code>: one toggle per building, exempts ALL outputs (voids the primary too).</li>
+            <li><code>OUTPUT_CAP_EXEMPT</code>: global, automatic, 8 byproducts, no player control.</li>
+            <li>No way to say "overflow steel but throttle on full slag".</li>
+          </ul></div>
+        </div>
+        <div class="col good">
+          <div class="col-head">After</div>
+          <div class="col-body"><ul>
+            <li>One Ignore Cap toggle per <em>output resource</em> per building.</li>
+            <li>The 9 default-on resources (8 + <code>slag</code>) just seed the initial checkbox state.</li>
+            <li>Force Run ≡ "every output ON"; recoverable, plus everything finer.</li>
+          </ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">02</span><h2>Change inventory</h2></div>
+      <p class="sec-intro">Every file the implementation touches.</p>
+      <div class="changes">
+        <div class="change"><div class="file">src/buildings.ts</div><div class="what"><span class="lead">Data model.</span> Replace <code>forceRun?: boolean</code> with <code>ignoreCapOverrides?: Partial&lt;Record&lt;ResourceId, boolean&gt;&gt;</code>.</div></div>
+        <div class="change"><div class="file">src/building-operational.ts</div><div class="what"><span class="lead">New predicate.</span> <code>isOutputCapExempt(b, r)</code> — pure, server-usable; the single source of truth.</div></div>
+        <div class="change"><div class="file">src/economy.ts</div><div class="what"><span class="lead">Default set + wiring.</span> Add <code>slag</code> to <code>OUTPUT_CAP_EXEMPT</code>; <code>outputAvail</code> and the flow-spec builder use <code>isOutputCapExempt</code> instead of the global-set check + <code>forceRun</code>.</div></div>
+        <div class="change"><div class="file">src/flow-solver.ts</div><div class="what"><span class="lead">Per-resource exemption.</span> <code>ignoreOutputCap: boolean</code> → <code>capExemptOutputs: ReadonlySet&lt;ResourceId&gt;</code>; exclude only those (building, resource) pairs from <code>capConstrained</code>/<code>θ[r]</code>.</div></div>
+        <div class="change"><div class="file">src/persistence.ts</div><div class="what"><span class="lead">Migration.</span> <code>SerializedSnapshotV29</code> alias; <code>migrateV29toV30</code>; bump <code>SCHEMA_VERSION = 30</code> + <code>SUPPORTED_LOAD_VERSIONS</code>.</div></div>
+        <div class="change"><div class="file">src/inspector-ui.ts</div><div class="what"><span class="lead">UI.</span> Replace the Force Run button with an Ignore Cap subsection: one checkbox per output resource; default-on rendered checked; shown only for buildings with productive recipe outputs.</div></div>
+        <div class="change"><div class="file">src/main.ts</div><div class="what"><span class="lead">Wiring.</span> <code>onSetForceRun</code> dep → <code>onSetIgnoreCap(target, resource, value)</code> → gateway.</div></div>
+        <div class="change"><div class="file">src/mutation-gateway.ts</div><div class="what"><span class="lead">Seam.</span> <code>setForceRun(...)</code> → <code>setIgnoreCap(islandId, buildingId, resource, value)</code> in both LOCAL and REMOTE arms.</div></div>
+        <div class="change"><div class="file">server/src/game/intents.ts</div><div class="what"><span class="lead">Intent.</span> <code>set-force-run</code> → <code>set-ignore-cap</code> with payload <code>{ islandId, buildingId, resource, value }</code>; re-validate resource is an actual output.</div></div>
+        <div class="change"><div class="file">src/building-alerts-overlay.ts</div><div class="what"><span class="lead">Badge.</span> Green when a NON-default output is forced (<code>isOutputCapExempt(b,r) && !OUTPUT_CAP_EXEMPT.has(r)</code>).</div></div>
+        <div class="change"><div class="file">src/discovery-signature.ts</div><div class="what"><span class="lead">Fingerprint.</span> Fold a deterministic serialization of <code>ignoreCapOverrides</code> in place of <code>forceRun</code>.</div></div>
+        <div class="change"><div class="file">SPEC.md §4.6 / §15.3 / §4.7</div><div class="what"><span class="lead">Spec.</span> Rewrite Force Run → per-resource Ignore Cap; reframe <code>OUTPUT_CAP_EXEMPT</code> as default-on (add slag).</div></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">03</span><h2>Default-on set &amp; effective rule</h2></div>
+      <p class="sec-intro">The 9 resources whose Ignore Cap checkbox starts checked, and the lookup every consumer uses.</p>
+      <table class="tbl">
+        <thead><tr><th>Default-on resource</th><th>Side output of</th><th>Protects primary</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">slag <em>(new)</em></td><td>smelter, steel_mill</td><td>iron_ingot, steel</td></tr>
+          <tr><td class="slate">co</td><td>smelter, steel_mill</td><td>iron_ingot, steel</td></tr>
+          <tr><td class="slate">refinery_gas</td><td>refinery loop</td><td>fuel chain</td></tr>
+          <tr><td class="slate">wood_tar</td><td>wood pyrolysis</td><td>charcoal chain</td></tr>
+          <tr><td class="slate">water_vapor</td><td>vapor producers</td><td>primary outputs</td></tr>
+          <tr><td class="slate">cryo_coolant_vented</td><td>cryo loop</td><td>primary outputs</td></tr>
+          <tr><td class="slate">mill_scale</td><td>the mills</td><td>beam / pipe / wire</td></tr>
+          <tr><td class="slate">tar</td><td>crude_oil_cracker</td><td>heavy_oil</td></tr>
+          <tr><td class="slate">asphalt</td><td>tar_refinery</td><td>heavy_oil (chain)</td></tr>
+        </tbody>
+      </table>
+      <pre><span class="cm">// effective per-(building, resource) exemption</span>
+isOutputCapExempt(b, r) = b.ignoreCapOverrides?.[r] ?? OUTPUT_CAP_EXEMPT.has(r)</pre>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">04</span><h2>Migration v29 → v30 (behavior-preserving)</h2></div>
+      <p class="sec-intro">Per building, drop <code>forceRun</code> and derive overrides so the realized economy is identical for every existing save.</p>
+      <table class="tbl">
+        <thead><tr><th>v29 building</th><th>v30 ignoreCapOverrides</th><th>Effective exemption</th><th>vs. today</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">forceRun: true</td><td>{ every output r: true }</td><td>all outputs exempt</td><td>identical</td></tr>
+          <tr><td class="slate">forceRun: false / absent</td><td>(none)</td><td>global default (byproducts incl. slag)</td><td>identical*</td></tr>
+        </tbody>
+      </table>
+      <p class="body">*<code>slag</code> newly joins the default-on set — a deliberate behavior change (a full slag bin no longer throttles steel), documented in §15.3. Every other resource is unchanged.</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">05</span><h2>Verification</h2></div>
+      <p class="sec-intro">How the implementer confirms correctness — runnable, per the test surface.</p>
+      <div class="checklist">
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>flow-solver.test.ts.</strong> A building with one exempt + one non-exempt output gates only on the non-exempt bin; all-exempt matches old force-run.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>economy.test.ts.</strong> A full slag bin no longer stalls steel_mill; turning slag OFF restores the stall; a forced primary keeps producing for XP.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>persistence.test.ts.</strong> v29 (forceRun true / false / absent) → v30 migration; forced building gets all-outputs overrides; v30 round-trips identity.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>inspector-ui.test.ts.</strong> One checkbox per output; toggling dispatches the right resource+value; no subsection for output-less buildings.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>intents.test.ts (server).</strong> set-ignore-cap accepted for a real output, rejected for a non-output resource / unknown building; writes the override.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>discovery-signature.test.ts.</strong> Overrides change the fingerprint deterministically; equal overrides ⇒ equal signature.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Full suite + typecheck.</strong> <code>npm test</code> green; <code>cd server &amp;&amp; npm run typecheck</code> clean.</div></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">06</span><h2>Risks</h2></div>
+      <div class="risks">
+        <div class="row">
+          <div class="cell head">Risk</div>
+          <div class="cell head">Sev</div>
+          <div class="cell head">Mitigation</div>
+        </div>
+        <div class="row">
+          <div class="cell">Player turns a byproduct exemption OFF and re-introduces the P4 stall (e.g. full slag throttles steel).</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Deliberate per the "fully configurable" decision — it is the player's choice and is locally reversible. Default-on keeps the safe behavior unless explicitly changed.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Migration mis-enumerates a def's outputs (rotateOutputs), so a force-run building loses an exemption.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Migration imports the catalog and includes <code>rotateOutputs</code> entries; persistence test asserts a forced multi-output building gets every output.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Renaming the intent/field breaks an in-flight client or stored intent.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Intents are transient (not persisted as the field); the persisted field is migrated. Server rejects the old intent name cleanly.</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">07</span><h2>Out of scope</h2></div>
+      <p class="sec-intro">Considered, deliberately deferred.</p>
+      <div class="deferred">
+        <div class="defer"><div class="dt">"Ignore cap on ALL outputs" master toggle</div><div class="dd">The per-resource checkboxes already cover it; a bulk toggle is sugar, not capability.</div></div>
+        <div class="defer"><div class="dt">Per-floor / per-recipe-variant granularity</div><div class="dd">Ignore Cap is per output resource of the building, not per active floor or rotating-recipe phase.</div></div>
+        <div class="defer"><div class="dt"><code>NON_STORED_OUTPUTS</code> (co2) changes</div><div class="dd">Atmosphere scalar handling is untouched; co2 stays non-stored and is never an Ignore Cap target.</div></div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <p>Design spec · 2026-06-20 · supersedes the §4.6 Force-Run design (2026-06-13) · branch <code>feat/per-resource-ignore-cap</code></p>
+    </div>
+
+  </div>
+</body>
+</html>
