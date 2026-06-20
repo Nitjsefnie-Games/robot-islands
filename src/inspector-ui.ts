@@ -45,7 +45,7 @@ import { computeRates, fledglingRecipeMul, hasNeighborWithAnyDefId, type RatesCo
 import {
   type Axis,
   type ExpandResult,
-  canExpandIsland,
+  canExpandConstituent,
   landReclamationCost,
 } from './land-reclamation.js';
 import {
@@ -60,6 +60,7 @@ import { RESOURCE_STORAGE_CATEGORY, storageBaseFor, type StorageCategory } from 
 import {
   BIOME_MAX_RADII,
   ISLAND_NAME_MAX_LEN,
+  islandConstituents,
   renameIsland,
   type IslandSpec,
   type WorldState,
@@ -215,13 +216,13 @@ export interface InspectorDeps {
    *  consuming one self_replication_module (§4.9 free-floor token). */
   onUpgradeFloor(target: InspectorTarget, spendToken: boolean): void;
   /** §3.4 Land Reclamation: called when the player clicks one of the
-   *  +1 major / +1 minor expand buttons. main.ts owns the actual
-   *  `expandIsland` call (so the inspector stays DOM-pure) and is
+   *  per-constituent +1 major / +1 minor expand buttons. main.ts owns the
+   *  actual `expandIsland` call (so the inspector stays DOM-pure) and is
    *  responsible for rebuilding world layers + refreshing the
    *  inspector after a successful mutation. The inspector pre-checks
-   *  via `canExpandIsland` before surfacing the button, so the
+   *  via `canExpandConstituent` before surfacing the button, so the
    *  callback can assume the action is valid at click time. */
-  onExpandIsland(target: InspectorTarget, axis: Axis): void;
+  onExpandIsland(target: InspectorTarget, index: number, axis: Axis): void;
   /** Called after a successful rename. The inspector has already mutated
    *  `target.spec.name` via the pure `renameIsland` helper before invoking
    *  this. main.ts is responsible for repainting any UI surfaces that
@@ -1397,20 +1398,10 @@ export function mountInspectorUi(
     });
     return btn;
   }
-  const expandMajorBtn = makeExpandButton();
-  const expandMinorBtn = makeExpandButton();
-  expandMajorBtn.addEventListener('click', () => {
-    const target = resolveTarget();
-    if (!target) { close(); return; }
-    deps.onExpandIsland(target, 'major');
-  });
-  expandMinorBtn.addEventListener('click', () => {
-    const target = resolveTarget();
-    if (!target) { close(); return; }
-    deps.onExpandIsland(target, 'minor');
-  });
-  reclamationSection.body.appendChild(expandMajorBtn);
-  reclamationSection.body.appendChild(expandMinorBtn);
+  const reclamationList = document.createElement('div');
+  reclamationList.setAttribute('style', ['display:flex','flex-direction:column','gap:6px',
+    'max-height:220px','overflow-y:auto'].join(';'));
+  reclamationSection.body.appendChild(reclamationList);
 
   // Constraints (requiredTile / requiredBiomes) — shown only when relevant.
   const constraintsSection = makeSection('Constraints');
@@ -1607,25 +1598,20 @@ export function mountInspectorUi(
     }
   }
 
-  // §3.4 Reclamation paint helper — renders the two expand buttons + caption
-  // for the currently-targeted Land Reclamation Hub. Encapsulates the per-
-  // axis gate / cost / labelling so `paint()` stays readable.
-  function reclamationButtonText(spec: IslandSpec, axis: Axis, gate: ExpandResult): string {
-    const label = axis === 'major' ? '+1 MAJOR' : '+1 MINOR';
-    const current = axis === 'major' ? spec.majorRadius : spec.minorRadius;
+  // §3.4 Reclamation paint helper — renders one row per constituent ellipse
+  // (primary + each absorbed lobe) with per-axis +1 buttons. Encapsulates the
+  // per-axis gate / cost / labelling so `paint()` stays readable.
+  function reclamationButtonText(spec: IslandSpec, index: number, axis: Axis, gate: ExpandResult): string {
+    const label = axis === 'major' ? '+1 MAJ' : '+1 MIN';
     if (gate.ok) {
-      const cost = landReclamationCost(spec.majorRadius, spec.minorRadius, axis, spec.extraEllipses);
-      return `${label} · ${formatShortfall(cost)} (r ${current} → ${current + 1})`;
+      const cost = landReclamationCost(spec, index, axis);
+      return `${label} · ${formatShortfall(cost)}`;
     }
-    if (gate.reason === 'axis-at-max') return `${label} · AT CAP`;
+    if (gate.reason === 'axis-at-max') return `${label} · CAP`;
     if (gate.reason === 'insufficient-resources') {
-      const cost = landReclamationCost(spec.majorRadius, spec.minorRadius, axis, spec.extraEllipses);
-      return `${label} · NEED ${formatShortfall(cost)}`;
+      return `${label} · NEED ${formatShortfall(landReclamationCost(spec, index, axis))}`;
     }
-    // no-hub shouldn't reach here (section is only shown for the Hub
-    // itself, so `hasLandReclamationHub` is always true), but treat
-    // defensively.
-    return `${label} · NO HUB`;
+    return `${label} · —`;
   }
   function setExpandButtonState(btn: HTMLButtonElement, gate: ExpandResult): void {
     btn.disabled = !gate.ok;
@@ -1642,15 +1628,33 @@ export function mountInspectorUi(
     }
   }
   function paintReclamation(spec: IslandSpec, state: IslandState): void {
-    const caps = BIOME_MAX_RADII[spec.biome];
+    const cs = islandConstituents(spec);
+    const primaryCaps = BIOME_MAX_RADII[spec.biome];
     reclamationCaption.textContent =
-      `${spec.biome} · ${spec.majorRadius}/${caps.major} maj · ${spec.minorRadius}/${caps.minor} min`;
-    const majorGate = canExpandIsland(spec, state, 'major');
-    const minorGate = canExpandIsland(spec, state, 'minor');
-    expandMajorBtn.textContent = reclamationButtonText(spec, 'major', majorGate);
-    expandMinorBtn.textContent = reclamationButtonText(spec, 'minor', minorGate);
-    setExpandButtonState(expandMajorBtn, majorGate);
-    setExpandButtonState(expandMinorBtn, minorGate);
+      `${spec.biome} · ${spec.majorRadius}/${primaryCaps.major} maj · ${spec.minorRadius}/${primaryCaps.minor} min`;
+    reclamationList.replaceChildren();
+    cs.forEach((c, index) => {
+      const caps = BIOME_MAX_RADII[c.biome];
+      const row = document.createElement('div');
+      styled(row, ['display:flex','align-items:center','gap:6px','flex-wrap:wrap'].join(';'));
+      const label = document.createElement('span');
+      label.textContent =
+        `#${index + 1} · ${c.biome} · r${c.major}/${caps.major} · r${c.minor}/${caps.minor}`;
+      row.appendChild(label);
+      for (const axis of ['major', 'minor'] as const) {
+        const gate = canExpandConstituent(spec, state, index, axis);
+        const btn = makeExpandButton();
+        btn.textContent = reclamationButtonText(spec, index, axis, gate);
+        setExpandButtonState(btn, gate);
+        btn.addEventListener('click', () => {
+          const target = resolveTarget();
+          if (!target) { close(); return; }
+          deps.onExpandIsland(target, index, axis);
+        });
+        row.appendChild(btn);
+      }
+      reclamationList.appendChild(row);
+    });
   }
 
   function paint(): void {
@@ -2157,9 +2161,10 @@ export function mountInspectorUi(
       forceRunBtn.style.borderColor = 'var(--ri-accent-dim)';
     }
 
-    // §3.4 Land Reclamation section — only for the Hub itself. Renders
-    // two expansion buttons; each is enabled when canExpandIsland
-    // returns ok, otherwise disabled with the rejection reason inline.
+    // §3.4 Land Reclamation section — only for the Hub itself. Renders a
+    // scrollable row per constituent ellipse; each +1 button is enabled when
+    // canExpandConstituent returns ok, otherwise disabled with the rejection
+    // reason inline.
     if (def.id === 'land_reclamation_hub') {
       paintReclamation(spec, state);
       reclamationSection.wrap.style.display = '';
