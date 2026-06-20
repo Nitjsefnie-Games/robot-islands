@@ -117,8 +117,8 @@ export function canTierReset(state: IslandState, nowMs: number): TierResetResult
  *      SP that purchases charged (`computeSpentSkillPoints`: owned-edge
  *      costs incl. bridges and crystal mini-tree edges, plus purchase
  *      costs for nodes acquired without an owned incoming edge —
- *      root-fallback buys, legacy spendPoint, keystones at their flat
- *      cost). Refunding `node.cost` per owned node over/under-refunded:
+ *      root-fallback buys and keystones at their flat cost). Refunding
+ *      `node.cost` per owned node over/under-refunded:
  *      bridges are hand-priced ≠ destination node cost, root buys charge
  *      node cost with no edge, and crystal mini-tree nodes aren't in the
  *      static catalog at all (refunded 0 — SP destroyed).

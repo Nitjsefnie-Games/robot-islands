@@ -865,23 +865,6 @@ export function canSpend(
   return { ok: true };
 }
 
-/**
- * Backward-compat point spender. The graph engine uses `buyNode` for real
- * purchases; this stub remains so legacy UI code compiles.
- */
-export function spendPoint(
-  state: IslandState,
-  nodeId: NodeId,
-  catalog: ReadonlyArray<SkillNode> = NODE_CATALOG,
-): void {
-  const cat = catalog === NODE_CATALOG ? DEFAULT_CATALOG : buildCatalog(catalog);
-  const node = cat.byId.get(nodeId);
-  if (!node) throw new Error(`spendPoint: unknown node ${nodeId}`);
-  state.unspentSkillPoints -= node.cost;
-  state.unlockedNodes.add(nodeId);
-  state.auraAmpVersion++;
-}
-
 // Effect aggregation
 
 export interface SkillMultipliers {
@@ -1913,7 +1896,7 @@ export function isBridgeActive(bridge: BridgeEdge, state: IslandState, graph: Gr
  *     crystal mini-tree edges alike) — every owned edge contributes its edge
  *     cost, attributed to its destination node.
  *   - an owned node with NO owned incoming edge was acquired outside the path
- *     solver (root-fallback buy, legacy `spendPoint`, or `buyKeystone`) and
+ *     solver (root-fallback buy or `buyKeystone`) and
  *     contributes its purchase cost: the flat keystone cost for keystones,
  *     `node.cost` otherwise. Synthetic socket nodes cost 0 by construction.
  *   - stale ids with no graph entry contribute nothing (defensive — e.g. a
@@ -1963,7 +1946,7 @@ export function computeSpentSkillPoints(
 /** SP spent into `branchId`, under the same charge model purchases use
  *  (`forEachSpCharge`): owned-edge costs attributed to the destination node's
  *  branch, plus purchase costs of nodes acquired without an owned incoming
- *  edge (root-fallback buys, spendPoint, keystones). The old edge-only sum
+ *  edge (root-fallback buys, keystones). The old edge-only sum
  *  missed root purchases entirely, so the engine undercounted branch spend
  *  versus the UI's node-cost counter — a bridge could render active while
  *  pathing refused to use it. Exported so the graphview consumes THIS. */

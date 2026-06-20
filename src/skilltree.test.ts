@@ -25,7 +25,6 @@ import {
   NODE_CATALOG,
   nodePurchaseStatus,
   skillPointsForLevelUp,
-  spendPoint,
   spentInBranch,
   t5Unlocked,
   t6Unlocked,
@@ -253,28 +252,6 @@ describe('canSpend', () => {
   });
 });
 
-describe('spendPoint', () => {
-  it('decrements points and adds to unlockedNodes', () => {
-    const s = makeState({ level: 5, unspentSkillPoints: 3 });
-    spendPoint(s, 'mining.notable.deepVein');
-    expect(s.unspentSkillPoints).toBe(3 - NODE_CATALOG.find(n => n.id === 'mining.notable.deepVein')!.cost);
-    expect(s.unlockedNodes.has('mining.notable.deepVein')).toBe(true);
-  });
-
-  it('allows spending on all nodes in a small catalog', () => {
-    const TWO_NODE_CATALOG: ReadonlyArray<SkillNode> = [
-      { id: 'mining.1', subPath: 'mining', depth: 1, cost: 1, magnitude: 0.05, effect: { kind: 'placeholder' }, description: '' },
-      { id: 'mining.2', subPath: 'mining', depth: 2, cost: 2, magnitude: 0.10, effect: { kind: 'placeholder' }, description: '' },
-    ];
-    const s = makeState({ level: 5, unspentSkillPoints: 5 });
-    spendPoint(s, 'mining.1', TWO_NODE_CATALOG);
-    spendPoint(s, 'mining.2', TWO_NODE_CATALOG);
-    expect(s.unlockedNodes.has('mining.1')).toBe(true);
-    expect(s.unlockedNodes.has('mining.2')).toBe(true);
-    expect(s.unspentSkillPoints).toBe(2);
-  });
-});
-
 describe('skill tree depth', () => {
   it('costForDepth grows as 1.5^(depth-1) (rounded)', () => {
     expect(costForDepth(1)).toBe(1);
@@ -333,26 +310,15 @@ describe('skill tree depth', () => {
     expect(m.powerProduction).toBe(1);
   });
 
-  it('allows spending all nodes in a deep catalog (no tier/depth gates)', () => {
-    const deepCatalog: ReadonlyArray<SkillNode> = [
-      { id: 'mining.1', subPath: 'mining', depth: 1, cost: 1, magnitude: 0.05, effect: { kind: 'placeholder' }, description: '' },
-      { id: 'mining.2', subPath: 'mining', depth: 2, cost: 2, magnitude: 0.10, effect: { kind: 'placeholder' }, description: '' },
-      { id: 'mining.3', subPath: 'mining', depth: 3, cost: 4, magnitude: 0.20, effect: { kind: 'placeholder' }, description: '' },
-    ];
-    const s = makeState({ level: 15, unspentSkillPoints: 10 });
-    spendPoint(s, 'mining.1', deepCatalog);
-    spendPoint(s, 'mining.2', deepCatalog);
-    expect(s.unlockedNodes.has('mining.1')).toBe(true);
-    expect(s.unlockedNodes.has('mining.2')).toBe(true);
-    spendPoint(s, 'mining.3', deepCatalog);
-    expect(s.unlockedNodes.has('mining.3')).toBe(true);
-  });
-
   it('parallel work in different branches is allowed', () => {
-    const s = makeState({ level: 50, unspentSkillPoints: 10 });
-    spendPoint(s, 'mining.notable.efficientDrills'); // 3
-    spendPoint(s, 'mining.notable.deepVein');        // 4
-    // 10 - 7 = 3 left; cheapest notables in other branches cost 3.
+    // After working the mining branch (efficientDrills 3 + deepVein 4 = 7
+    // spent), 3 points remain — enough for the cheapest notables in other
+    // branches (cost 3). canSpend gates on points + availability, not branch.
+    const s = makeState({
+      level: 50,
+      unspentSkillPoints: 3,
+      unlockedNodes: new Set(['mining.notable.efficientDrills', 'mining.notable.deepVein']),
+    });
     expect(canSpend(s, 'forestry.notable.clearcutCoordination')).toEqual({ ok: true });
     expect(canSpend(s, 'smelting.notable.refractoryLining')).toEqual({ ok: true });
   });
@@ -1310,9 +1276,9 @@ describe('computeAuraAmplifiers — cache', () => {
     s.unlockedNodes.add('mining.recipeRate.5' as import('./skilltree.js').NodeId);
     // Warm the cache.
     const beforeMul = effectiveSkillMultipliers(s).recipeRate.extraction;
-    // Mutate directly — explicit version bump simulates what spendPoint /
-    // buyNode do automatically in production. (The spec's risk analysis
-    // notes this pattern.)
+    // Mutate directly — explicit version bump simulates what buyNode does
+    // automatically in production. (The spec's risk analysis notes this
+    // pattern.)
     s.unlockedNodes.add('mining.notable.blastOptimization' as import('./skilltree.js').NodeId);
     s.auraAmpVersion++;
     const afterMul = effectiveSkillMultipliers(s).recipeRate.extraction;
