@@ -146,7 +146,7 @@ export interface MutationGateway {
   applyUpgrade(islandId: string, buildingId: string, spendToken?: boolean): GatewayReturn;
   cancelConstruction(islandId: string, buildingId: string): GatewayReturn;
   setBuildingActiveFloors(islandId: string, buildingId: string, disabledFloors: number): GatewayReturn;
-  setForceRun(islandId: string, buildingId: string, value: boolean): GatewayReturn;
+  setIgnoreCap(islandId: string, buildingId: string, resource: string, value: boolean): GatewayReturn;
   refreshMaintenance(islandId: string, buildingId: string): GatewayReturn;
   convertToServitor(islandId: string, buildingId: string): GatewayReturn;
   relabelCargo(islandId: string, buildingId: string, newLabel: ResourceId): GatewayReturn;
@@ -429,12 +429,14 @@ export function makeLocalGateway(
       return fromOutcome(outcome);
     },
 
-    setForceRun(islandId, buildingId, value) {
+    setIgnoreCap(islandId, buildingId, resource, value) {
       const island = resolveIsland(islandId);
       if (!island) return err('unknown island');
       const b = island.spec.buildings.find((bb) => bb.id === buildingId);
       if (!b) return err('not-found');
-      b.forceRun = value ? true : undefined;
+      const ov = { ...(b.ignoreCapOverrides ?? {}) };
+      ov[resource as ResourceId] = value;
+      b.ignoreCapOverrides = ov;
       return ok();
     },
 
@@ -970,8 +972,8 @@ export function makeRemoteGateway(client: GameServerClient): MutationGateway {
     setBuildingActiveFloors(islandId, buildingId, disabledFloors) {
       return send('set-active-floors', { islandId, buildingId, disabledFloors });
     },
-    setForceRun(islandId, buildingId, forceRun) {
-      return send('set-force-run', { islandId, buildingId, forceRun });
+    setIgnoreCap(islandId, buildingId, resource, value) {
+      return send('set-ignore-cap', { islandId, buildingId, resource, value });
     },
     refreshMaintenance(islandId, buildingId) {
       return send('refresh-maintenance', { islandId, buildingId });
