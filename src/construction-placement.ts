@@ -66,3 +66,32 @@ export function placementBlocksGhost(reason: ConstructPlacementReason | undefine
     || reason === 'in-unknown-space'
     || reason === 'radius-too-large';
 }
+
+/** Hit-test a world-tile point against a candidate ghost ellipse.
+ *  Returns 'body' (inside the ellipse), a corner-handle index 0..3
+ *  (TL, TR, BL, BR — within handleTol tiles of that corner), or null.
+ *  Handles take priority over the body so a corner grab resizes, not moves. */
+export function ghostHitTest(
+  cand: ConstructionCandidate,
+  tileX: number,
+  tileY: number,
+  handleTol: number,
+): 'body' | 0 | 1 | 2 | 3 | null {
+  const corners = [
+    { x: cand.cx - cand.major, y: cand.cy - cand.minor }, // TL
+    { x: cand.cx + cand.major, y: cand.cy - cand.minor }, // TR
+    { x: cand.cx - cand.major, y: cand.cy + cand.minor }, // BL
+    { x: cand.cx + cand.major, y: cand.cy + cand.minor }, // BR
+  ];
+  for (let i = 0; i < corners.length; i++) {
+    const c = corners[i]!;
+    if (Math.abs(tileX - c.x) <= handleTol && Math.abs(tileY - c.y) <= handleTol) {
+      return i as 0 | 1 | 2 | 3;
+    }
+  }
+  if (cand.major === 0 || cand.minor === 0) return null;
+  const dx = tileX - cand.cx;
+  const dy = tileY - cand.cy;
+  if ((dx / cand.major) ** 2 + (dy / cand.minor) ** 2 <= 1) return 'body';
+  return null;
+}

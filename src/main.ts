@@ -66,6 +66,7 @@ import { mountConstructionUi } from './construction-ui.js';
 import { createConstructionGhostOverlay } from './construction-overlay.js';
 import {
   computePlacementValidity,
+  ghostHitTest,
   placementBlocksGhost,
   type ConstructionCandidate,
 } from './construction-placement.js';
@@ -785,6 +786,9 @@ async function main(): Promise<void> {
     index: number;
     preview: Array<{ x: number; y: number }>;
   } | null = null;
+  // §2.5 construction ghost drag state. Mirrors bendDrag: set in the DOM
+  // mousedown handler, consumed in mousemove/mouseup, and suppresses camera pan.
+  let ghostDrag: 'body' | 0 | 1 | 2 | 3 | null = null;
   // Prior weather-overlay layer visibility, captured when a route is selected
   // so deselect restores it (the overlay has no toggle action — its layer is
   // simply forced visible while editing and restored after).
@@ -866,6 +870,19 @@ async function main(): Promise<void> {
     lastY = e.clientY;
     accumDrag = 0;
     bendDrag = null;
+    // §2.5 ghost grab. Takes priority over the bend/route branch below while
+    // the construction panel is open. The mousemove/mouseup handlers consume
+    // `ghostDrag` and suppress camera panning while it is set.
+    if (constructionUi.isVisible()) {
+      const rect = app.canvas.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      if (sx >= 0 && sx <= rect.width && sy >= 0 && sy <= rect.height) {
+        const wt = screenToWorldTile(sx, sy);
+        const hit = ghostHitTest(constructionCandidate, wt.x, wt.y, bendTolTiles());
+        if (hit !== null) { ghostDrag = hit; return; }
+      }
+    }
     // §2.6 bend grab. Only when no placement / launch mode owns the cursor.
     // We START a bend drag (or change selection) here; the camera pan in the
     // mousemove handler is suppressed whenever `bendDrag` is active. A click
@@ -939,6 +956,9 @@ async function main(): Promise<void> {
   window.addEventListener('mouseup', (e) => {
     if (!dragging) return;
     dragging = false;
+    // §2.5 ghost drag release — consume the gesture before any click/drag
+    // disambiguation below fires.
+    if (ghostDrag !== null) { ghostDrag = null; return; }
     // §2.6 bend gesture commit — runs FIRST (before the launch/placement/
     // building-select branches) and consumes the gesture when a bend was
     // grabbed or a selected route was clicked.
@@ -1132,6 +1152,24 @@ async function main(): Promise<void> {
     lastX = e.clientX;
     lastY = e.clientY;
     accumDrag += Math.abs(dx) + Math.abs(dy);
+    // §2.5 ghost drag owns the cursor — move/resize the construction candidate
+    // instead of panning the camera.
+    if (ghostDrag !== null) {
+      const rect = app.canvas.getBoundingClientRect();
+      const wt = screenToWorldTile(e.clientX - rect.left, e.clientY - rect.top);
+      if (ghostDrag === 'body') {
+        constructionCandidate.cx = Math.round(wt.x);
+        constructionCandidate.cy = Math.round(wt.y);
+      } else {
+        const st = islandStates.get(constructionCandidate.founderId);
+        const cap = st ? maxRadiusForFounderLevel(st.level) : 8;
+        constructionCandidate.major = Math.min(cap, Math.max(1, Math.round(Math.abs(wt.x - constructionCandidate.cx))));
+        constructionCandidate.minor = Math.min(cap, Math.max(1, Math.round(Math.abs(wt.y - constructionCandidate.cy))));
+      }
+      constructionUi.refreshFromCandidate();
+      redrawGhost();
+      return;
+    }
     // §2.6 bend drag owns the cursor — move the grabbed/inserted bend point to
     // the cursor (live preview) instead of panning the camera.
     if (bendDrag) {
@@ -1902,7 +1940,6 @@ async function main(): Promise<void> {
   };
   let ghostWasVisible = false;
   const constructionGhost = createConstructionGhostOverlay(world);
-  constructionGhost.setToTile((gx, gy) => screenToWorldTile(gx, gy));
 
   // Step-11 Construction modal — sister to skill tree + buildings catalog.
   // Inserts the new island into worldState/islandStates, registers its
@@ -1938,23 +1975,6 @@ async function main(): Promise<void> {
     const v = computePlacementValidity(worldState, islandStates, constructionCandidate);
     constructionGhost.update(constructionCandidate, placementBlocksGhost(v.reason));
   }
-
-  constructionGhost.setHandlers({
-    onMove(cx, cy) {
-      constructionCandidate.cx = cx;
-      constructionCandidate.cy = cy;
-      constructionUi.refreshFromCandidate();
-      redrawGhost();
-    },
-    onResize(major, minor) {
-      const st = islandStates.get(constructionCandidate.founderId);
-      const cap = st ? maxRadiusForFounderLevel(st.level) : 8;
-      constructionCandidate.major = Math.min(major, cap);
-      constructionCandidate.minor = Math.min(minor, cap);
-      constructionUi.refreshFromCandidate();
-      redrawGhost();
-    },
-  });
 
   defineAction(reg, 'toggle-construction', () => {
     constructionUi.toggle();
