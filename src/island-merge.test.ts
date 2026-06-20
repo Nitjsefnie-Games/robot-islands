@@ -206,8 +206,32 @@ describe('performMerge', () => {
     ]);
     performMerge(world, states, a, b);
     expect(a.extraEllipses).toEqual([
-      { major: 5, minor: 5, rotation: 0, offsetX: 20, offsetY: -5 },
+      { biome: 'plains', major: 5, minor: 5, rotation: 0, offsetX: 20, offsetY: -5 },
     ]);
+  });
+
+  it('stamps origin biome on appended and propagated extras', () => {
+    // A (plains) is the larger absorber; B (volcanic) already absorbed a C (arctic) lobe.
+    const a = makeSpec({ id: 'a', cx: 0, cy: 0, majorRadius: 14, minorRadius: 14, biome: 'plains' });
+    const b = makeSpec({
+      id: 'b',
+      cx: 18,
+      cy: 0,
+      majorRadius: 5,
+      minorRadius: 5,
+      biome: 'volcanic',
+      extraEllipses: [{ biome: 'arctic', major: 4, minor: 4, rotation: 0, offsetX: 10, offsetY: 0 }],
+    });
+    const world = makeWorld([a, b]);
+    const states = new Map<string, IslandState>([
+      ['a', makeState({ id: 'a' })],
+      ['b', makeState({ id: 'b' })],
+    ]);
+    performMerge(world, states, a, b);
+    const extras = a.extraEllipses!;
+    expect(extras.some((e) => e.biome === 'volcanic')).toBe(true);
+    expect(extras.some((e) => e.biome === 'arctic')).toBe(true);
+    expect(extras.every((e) => e.biome !== undefined)).toBe(true);
   });
 
   it('removes the absorbed island from world.islands and the state map', () => {
@@ -776,9 +800,9 @@ describe('performMerge with absorbed island carrying its own extras', () => {
     performMerge(world, states, a, b);
     expect(a.extraEllipses).toEqual([
       // First: B's primary as a new extra.
-      { major: 5, minor: 5, rotation: 0, offsetX: 20, offsetY: 0 },
+      { biome: 'plains', major: 5, minor: 5, rotation: 0, offsetX: 20, offsetY: 0 },
       // Second: B's pre-existing extra, re-based.
-      { major: 7, minor: 4, rotation: 0, offsetX: 30, offsetY: 0 },
+      { biome: 'plains', major: 7, minor: 4, rotation: 0, offsetX: 30, offsetY: 0 },
     ]);
   });
 });
