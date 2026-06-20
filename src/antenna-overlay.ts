@@ -61,10 +61,14 @@ export function mountAntennaOverlay(world: WorldState): AntennaOverlayHandle {
         .stroke({ color: colour, width: 1, alpha: RING_STROKE_ALPHA });
       // Slight red frame around the building footprint itself for redundant
       // antennas, so the culprit is identifiable without tracing the ring back
-      // to its centre. `cx`/`cy` are the footprint centre; derive the top-left.
+      // to its centre. `cx`/`cy` are the footprint CENTRE, and tile coords address
+      // tile centres (tileToWorldPx maps a tile coord to its centre — see
+      // routeSourceTile in routes.ts), so `cx*TILE_PX` is the building's visual
+      // centre. The footprint's NW corner is therefore half the footprint
+      // (width/2 tiles) up-left of the centre, i.e. (cx - width/2)*TILE_PX.
       if (redundant) {
-        const x0 = (r.cx - (r.width - 1) / 2) * TILE_PX;
-        const y0 = (r.cy - (r.height - 1) / 2) * TILE_PX;
+        const x0 = (r.cx - r.width / 2) * TILE_PX;
+        const y0 = (r.cy - r.height / 2) * TILE_PX;
         gfx
           .rect(x0, y0, r.width * TILE_PX, r.height * TILE_PX)
           .stroke({ color: REDUNDANT_COLOR, width: 2, alpha: REDUNDANT_FRAME_ALPHA });
