@@ -1786,8 +1786,8 @@ async function main(): Promise<void> {
     // current radii on every rebuild). Selection / hover are kept since
     // the Hub itself doesn't move — the inspector stays open on the
     // same building with refreshed numbers.
-    onExpandIsland: (target: InspectorTarget, axis: Axis) => {
-      const gatewayResult = gateway.expandIsland(target.spec.id, 0, axis);
+    onExpandIsland: (target: InspectorTarget, index: number, axis: Axis) => {
+      const gatewayResult = gateway.expandIsland(target.spec.id, index, axis);
       function finish(): void {
         rebuildWorldLayers();
         inspector.refresh();
