@@ -22,6 +22,8 @@ import { serializeWorld } from '../../../src/persistence.js';
 import { createNewGame } from '../../../src/new-game.js';
 import { makeInitialIslandState } from '../../../src/world.js';
 import { DEFAULT_GRAPH } from '../../../src/skilltree.js';
+import { tileToCell, cellKey } from '../../../src/discovery.js';
+import { tileInscribedInEllipse } from '../../../src/island.js';
 
 const pool = testPool();
 beforeEach(() => resetDb(pool));
@@ -2402,6 +2404,17 @@ describe('construct-island', () => {
       state.buildings = home.buildings;
       state.inventory.steel_beam = 10000;
       state.inventory.concrete = 10000;
+      // Reveal the target footprint cells at cx=100, cy=100, radii 4x4.
+      const cx = 100, cy = 100, major = 4, minor = 4;
+      const xMin = -Math.ceil(major), xMax = Math.ceil(major) - 1;
+      const yMin = -Math.ceil(minor), yMax = Math.ceil(minor) - 1;
+      for (let dy = yMin; dy <= yMax; dy++) {
+        for (let dx = xMin; dx <= xMax; dx++) {
+          if (!tileInscribedInEllipse(dx, dy, major, minor)) continue;
+          const c = tileToCell(cx + dx, cy + dy);
+          world.revealedCells.add(cellKey(c.cellX, c.cellY));
+        }
+      }
     });
 
     const ack = await applyIntent(
@@ -2496,6 +2509,91 @@ describe('construct-island', () => {
       now,
     );
     expect(ack).toMatchObject({ ok: false, error: 'position-occupied' });
+  });
+
+  it('illegal: footprint extends into unknown space is rejected with in-unknown-space', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
+      const home = world.islands.find((s: any) => s.id === 'home');
+      const state = islandStates.get('home');
+      state.level = 15;
+      home.buildings.push({
+        id: 'pc-1', defId: 'platform_constructor', x: 0, y: 0,
+        constructionRemainingMs: 0, placedAt: now,
+      });
+      state.buildings = home.buildings;
+      state.inventory.steel_beam = 10000;
+      state.inventory.concrete = 10000;
+      // Do NOT reveal cells at 9000/9000 — footprint must be in unknown space.
+    });
+    const ack = await applyIntent(
+      pool, uid,
+      {
+        type: 'construct-island',
+        payload: {
+          founderIslandId: 'home',
+          biome: 'plains',
+          majorRadius: 4,
+          minorRadius: 4,
+          cx: 9000,
+          cy: 9000,
+        },
+        seq: 10,
+      },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: false, error: 'in-unknown-space' });
+  });
+
+  it('legal: footprint fully within revealedCells succeeds', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
+      const home = world.islands.find((s: any) => s.id === 'home');
+      const state = islandStates.get('home');
+      state.level = 15;
+      home.buildings.push({
+        id: 'pc-1', defId: 'platform_constructor', x: 0, y: 0,
+        constructionRemainingMs: 0, placedAt: now,
+      });
+      state.buildings = home.buildings;
+      state.inventory.steel_beam = 10000;
+      state.inventory.concrete = 10000;
+      // Reveal the target footprint cells at cx=100, cy=100, radii 4x4.
+      const cx = 100, cy = 100, major = 4, minor = 4;
+      const xMin = -Math.ceil(major), xMax = Math.ceil(major) - 1;
+      const yMin = -Math.ceil(minor), yMax = Math.ceil(minor) - 1;
+      for (let dy = yMin; dy <= yMax; dy++) {
+        for (let dx = xMin; dx <= xMax; dx++) {
+          if (!tileInscribedInEllipse(dx, dy, major, minor)) continue;
+          const c = tileToCell(cx + dx, cy + dy);
+          world.revealedCells.add(cellKey(c.cellX, c.cellY));
+        }
+      }
+    });
+
+    const ack = await applyIntent(
+      pool, uid,
+      {
+        type: 'construct-island',
+        payload: {
+          founderIslandId: 'home',
+          biome: 'plains',
+          majorRadius: 4,
+          minorRadius: 4,
+          cx: 100,
+          cy: 100,
+          displayName: 'Revealed Island',
+        },
+        seq: 11,
+      },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 11 });
+
+    const world = await worldSnap(uid);
+    const artificial = world.islands.find((s: any) => s.id === 'art-1');
+    expect(artificial).toBeTruthy();
+    expect(artificial.biome).toBe('plains');
   });
 });
 
