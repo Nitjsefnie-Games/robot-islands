@@ -124,6 +124,7 @@ import { mountHoverTooltip } from './hover-tooltip.js';
 import { mountToastSurface } from './toast.js';
 import { mountSatelliteOverlay } from './satellite-overlay.js';
 import { mountBuildingAlertsOverlay } from './building-alerts-overlay.js';
+import { createLobeBadgeOverlay } from './lobe-badge-overlay.js';
 import { mountDayNightTint } from './daynight-tint.js';
 import { showMapPicker } from './map-picker.js';
 import { tickVehicles } from './settlement.js';
@@ -1878,6 +1879,11 @@ async function main(): Promise<void> {
     },
   });
 
+  // §3.4 Land Reclamation Hub lobe badges — numbered "#1…#N" overlays at each
+  // constituent centre, visible only while the inspector targets a Hub. Lives in
+  // screen space so labels stay readable at any zoom; updated each frame below.
+  const lobeBadges = createLobeBadgeOverlay(app.stage);
+
   // Step-11 Construction modal — sister to skill tree + buildings catalog.
   // Inserts the new island into worldState/islandStates, registers its
   // caches, and rebuilds render layers in the onConstruct callback.
@@ -3127,6 +3133,17 @@ async function main(): Promise<void> {
     // when nothing is selected (one early return) and even when a non-
     // buoy building is selected (single defId compare).
     repaintSonarRing();
+    // §3.4 lobe badges: show "#1…#N" at each constituent centre only while the
+    // inspector is open on a Land Reclamation Hub. Reuses `selectedSpec` and the
+    // inspector's selected-building id (same source the selection outline uses).
+    const selectedBuildingId = inspector.getSelectedBuildingId();
+    const selectedHubBuilding = selectedSpec && selectedBuildingId
+      ? selectedSpec.buildings.find((b) => b.id === selectedBuildingId)
+      : null;
+    lobeBadges.update(
+      selectedHubBuilding?.defId === 'land_reclamation_hub' ? selectedSpec : null,
+      cam,
+    );
     // Hover outline also re-evaluates each frame so the hover-suppression
     // check (hide hover when hover.id === selection.id) reconciles after a
     // click. Without this, the hover layer keeps the previously-drawn
