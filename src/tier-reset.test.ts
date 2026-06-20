@@ -15,7 +15,7 @@ import {
   buyKeystone,
   buyNode,
   effectiveGraph,
-  spendPoint,
+  type NodeId,
 } from './skilltree.js';
 import { KEYSTONE_PREREQS } from './skilltree-catalog.js';
 import type { CrystalId } from './skilltree-graph.js';
@@ -25,6 +25,16 @@ import {
   executeTierReset,
   tierResetCost,
 } from './tier-reset.js';
+
+// Directly unlock a node for test setup (replaces the removed spendPoint
+// stub): debit the node's flat cost and mark it unlocked — the minimal state
+// these refund tests need, without buyNode's path-cost accounting that would
+// change the spent totals the refund assertions pin.
+function unlock(state: IslandState, nodeId: NodeId): void {
+  const node = DEFAULT_GRAPH.nodes.find((n) => n.id === nodeId)!;
+  state.unspentSkillPoints -= node.cost;
+  state.unlockedNodes.add(nodeId);
+}
 
 function emptyInv(): Record<ResourceId, number> {
   const inv = {} as Record<ResourceId, number>;
@@ -179,8 +189,8 @@ describe('executeTierReset — clears progression', () => {
     });
     fund(state);
     // Spend 3 + 3 = 6 points on two notables.
-    spendPoint(state, 'mining.notable.efficientDrills');
-    spendPoint(state, 'smelting.notable.refractoryLining');
+    unlock(state, 'mining.notable.efficientDrills');
+    unlock(state, 'smelting.notable.refractoryLining');
     const unspentBeforeReset = state.unspentSkillPoints; // 13 - 6 = 7
     const refundExpected = 6;
     executeTierReset(state, 1_000);
@@ -197,7 +207,7 @@ describe('executeTierReset — clears progression', () => {
       unspentSkillPoints: 17,
     });
     fund(state);
-    spendPoint(state, 'mining.notable.heliumSeep'); // 5 → total spent = 5
+    unlock(state, 'mining.notable.heliumSeep'); // 5 → total spent = 5
     expect(state.unspentSkillPoints).toBe(12);
     executeTierReset(state, 1_000);
     expect(state.unspentSkillPoints).toBe(12 + 5);
