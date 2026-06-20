@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { advanceIsland, NON_STORED_OUTPUTS, type DefCatalog, type IslandState } from './economy.js';
+import { advanceIsland, NON_STORED_OUTPUTS, OUTPUT_CAP_EXEMPT, type DefCatalog, type IslandState } from './economy.js';
 import { BUILDING_DEFS, type BuildingDef, type BuildingDefId } from './building-defs.js';
 import { attachTerrainAt, makeInitialIslandState } from './world.js';
 import { generateOffer, applyOffer, DEFAULT_TRADE_TUNING, tierOf, tickTradeOffers, tuningFor, islandHasSignalExchange, effectiveCadenceMs, FLOOR_MS, ONLINE_DT_CAP_MS, type TradeOffer, type TradeRuntime } from './trade.js';
@@ -589,30 +589,42 @@ describe('generateOffer — non-stored byproduct gases', () => {
     return s;
   }
 
-  it('never offers a non-stored gas on either side', () => {
+  it('never offers a non-stored or cap-exempt byproduct gas on either side', () => {
+    // Guard: trade.ts excludes both NON_STORED_OUTPUTS (co2) and
+    // OUTPUT_CAP_EXEMPT (the 6 byproducts) from its give/get pools. Seed both
+    // into everProduced and inventory so the only way the guard holds is if
+    // trade.ts actively filters them — not because they happen to be absent.
+    // This test MUST fail if someone later makes an OUTPUT_CAP_EXEMPT resource
+    // offerable without also removing it from the exempt set.
     const s = stocked();
     s.everProduced.add('co2');
     s.everProduced.add('co');
+    s.everProduced.add('refinery_gas');
+    // Seed exempt byproducts into inventory so they'd appear in the give pool
+    // if the filter were missing.
+    s.inventory.co = 50;
+    s.inventory.refinery_gas = 50;
     for (let k = 0; k < 300; k++) {
       const o = generateOffer(s, `gas-seed${k}`, DEFAULT_TRADE_TUNING, 1000);
       if (o !== null) {
         expect(NON_STORED_OUTPUTS.has(o.get.res)).toBe(false);
         expect(NON_STORED_OUTPUTS.has(o.give.res)).toBe(false);
+        expect(OUTPUT_CAP_EXEMPT.has(o.get.res)).toBe(false);
+        expect(OUTPUT_CAP_EXEMPT.has(o.give.res)).toBe(false);
       }
     }
   });
 
-  it('returns null when every ever-produced resource is non-stored', () => {
+  it('returns null when every ever-produced resource is non-tradable (non-stored or cap-exempt)', () => {
     const s = homeState();
     for (const k of Object.keys(s.inventory) as ResourceId[]) s.inventory[k] = 0;
     s.storageCaps.wood = 100; s.inventory.wood = 50;
     s.everProduced.clear();
-    // P4 Phase 1 (task 2): the 6 byproducts (refinery_gas, co, …) moved out of
-    // NON_STORED_OUTPUTS into OUTPUT_CAP_EXEMPT — they are now STORED and thus
-    // tradable. co2 is the SOLE remaining non-stored output, so it is the only
-    // resource that keeps this "every ever-produced resource is non-stored ⇒
-    // no offer" guard true.
+    // co2 is non-stored; refinery_gas is OUTPUT_CAP_EXEMPT (stored but non-
+    // tradable until P4 adds real consumer loops). Both are excluded from the
+    // get pool, so no offer is possible.
     s.everProduced.add('co2');
+    s.everProduced.add('refinery_gas');
     expect(generateOffer(s, () => 0.0, DEFAULT_TRADE_TUNING, 1000)).toBeNull();
   });
 });

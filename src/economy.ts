@@ -2246,8 +2246,9 @@ export function applyRates(
   baseMult?: SkillMultipliers,
 ): void {
   for (const r of Object.keys(net) as ResourceId[]) {
-    // §2.6: non-stored outputs (vented byproducts + co2) are never written to
-    // inventory, so they never accumulate, fill a bin, or stall the producer.
+    // §2.6: non-stored outputs (co2 only — P4 Phase 1 moved the 6 byproducts to
+    // OUTPUT_CAP_EXEMPT) are never written to inventory, so they never
+    // accumulate, fill a bin, or stall the producer.
     // co2's climate contribution is accrued to state.co2Kg separately.
     if (NON_STORED_OUTPUTS.has(r)) continue;
     const rate = net[r] ?? 0;
@@ -2633,11 +2634,12 @@ export function advanceIsland(
   wallClockNowMs?: number,
 ): void {
   const { defs = BUILDING_DEFS } = ctx ?? {};
-  // §2.6 vent: non-stored outputs (vented byproducts + co2) never sit in island
-  // inventory. Drain any stock here — runtime never writes them (applyRates
-  // skips), so the only way a bin is non-zero is a save written before this
-  // behavior; clear it so the bin reads empty. co2's climate value is the
-  // per-island `co2Kg` scalar (untouched), summed globally by `sumIslandCo2`.
+  // §2.6 vent: non-stored outputs (co2 only — P4 Phase 1 moved the 6 byproducts
+  // to OUTPUT_CAP_EXEMPT) never sit in island inventory. Drain any stock here —
+  // runtime never writes them (applyRates skips), so the only way a bin is
+  // non-zero is a save written before this behavior; clear it so the bin reads
+  // empty. co2's climate value is the per-island `co2Kg` scalar (untouched),
+  // summed globally by `sumIslandCo2`.
   for (const r of NON_STORED_OUTPUTS) {
     if ((state.inventory[r] ?? 0) !== 0) state.inventory[r] = 0;
   }
