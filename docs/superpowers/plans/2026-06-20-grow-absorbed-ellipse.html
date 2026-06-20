@@ -1,0 +1,221 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Implementation plan — Grow absorbed ellipses via Land Reclamation</title>
+  <style>
+    :root {
+      --ivory:#1B1A17; --slate:#F5F3EC; --clay:#D97757; --oat:#3A352B; --olive:#8FA56E;
+      --rust:#E08B7F; --gray-150:#2E2C27; --gray-300:#3A3833; --gray-500:#8F8D82;
+      --gray-700:#CFCCC2; --white:#252420;
+      --serif:ui-serif,Georgia,'Times New Roman',serif;
+      --sans:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+      --mono:ui-monospace,'SF Mono',Menlo,Monaco,monospace;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:var(--sans); background:var(--ivory); color:var(--gray-700); line-height:1.55; padding:56px 32px 120px; -webkit-font-smoothing:antialiased; }
+    .page { margin:0 auto; max-width:1000px; }
+    header.page-head { margin-bottom:40px; max-width:840px; }
+    .eyebrow { font-family:var(--mono); font-size:12px; letter-spacing:0.08em; text-transform:uppercase; color:var(--gray-500); margin-bottom:12px; }
+    h1 { font-family:var(--serif); font-weight:500; font-size:38px; line-height:1.15; color:var(--slate); margin-bottom:18px; letter-spacing:-0.01em; }
+    .prompt-box { background:var(--gray-150); border:1.5px solid var(--gray-300); border-radius:12px; padding:16px 20px; font-size:14.5px; color:var(--gray-700); }
+    .prompt-box .label { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--gray-500); display:block; margin-bottom:6px; }
+    .prompt-box a { color:var(--clay); }
+    section { margin-bottom:60px; scroll-margin-top:20px; }
+    .sec-head { display:flex; align-items:baseline; gap:14px; margin-bottom:8px; }
+    .sec-head .num { font-family:var(--mono); font-size:12px; background:var(--oat); color:var(--slate); padding:3px 9px; border-radius:8px; }
+    .sec-head h2 { font-family:var(--serif); font-weight:500; font-size:26px; color:var(--slate); letter-spacing:-0.01em; }
+    .sec-intro { font-size:14.5px; color:var(--gray-500); max-width:820px; margin-bottom:24px; }
+    p.body { font-size:14.5px; max-width:840px; margin-bottom:14px; }
+    p.body strong { color:var(--slate); }
+    code { font-family:var(--mono); font-size:0.88em; background:var(--gray-150); border:1px solid var(--gray-300); border-radius:5px; padding:1px 5px; color:#C9B98A; }
+    .summary { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:56px; }
+    @media (max-width:900px){ .summary{ grid-template-columns:repeat(2,1fr);} }
+    .summary .cell { background:var(--white); border:1.5px solid var(--gray-300); border-radius:12px; padding:18px 20px; }
+    .summary .k { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--gray-500); margin-bottom:6px; }
+    .summary .v { font-size:17px; color:var(--slate); font-weight:600; }
+    .summary .v.accent { color:var(--clay); }
+    .tbl { width:100%; border:1.5px solid var(--gray-300); border-radius:12px; border-collapse:separate; border-spacing:0; overflow:hidden; font-size:13.5px; }
+    .tbl th,.tbl td { text-align:left; padding:11px 16px; border-bottom:1px solid var(--gray-300); vertical-align:top; }
+    .tbl th { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.05em; color:var(--gray-500); background:var(--gray-150); font-weight:600; }
+    .tbl tr:last-child td { border-bottom:none; }
+    .tbl td.slate { color:var(--slate); font-weight:600; white-space:nowrap; }
+    .tbl td.file { font-family:var(--mono); font-size:12px; color:var(--clay); }
+    .tbl tbody tr:hover { background:var(--gray-150); }
+    .code { background:#121110; border:1.5px solid var(--gray-300); border-radius:12px; padding:18px 20px; overflow-x:auto; margin-bottom:10px; }
+    .code pre { font-family:var(--mono); font-size:12.5px; line-height:1.65; color:#F5F3EC; white-space:pre; }
+    .code .kw{color:var(--clay);} .code .str{color:var(--olive);} .code .cm{color:var(--gray-500);} .code .fn{color:#C9B98A;}
+    .file-label { font-family:var(--mono); font-size:12px; color:var(--gray-500); margin-bottom:8px; }
+    .risks { border:1.5px solid var(--gray-300); border-radius:12px; overflow:hidden; background:var(--white); }
+    .risks .row { display:grid; grid-template-columns:1.6fr 90px 1.6fr; }
+    @media (max-width:780px){ .risks .row{ grid-template-columns:1fr;} }
+    .risks .row + .row { border-top:1.5px solid var(--gray-300); }
+    .risks .cell { padding:14px 18px; font-size:13.5px; }
+    .risks .cell + .cell { border-left:1.5px solid var(--gray-300); }
+    @media (max-width:780px){ .risks .cell + .cell{ border-left:none; border-top:1px dashed var(--gray-300);} }
+    .risks .head { background:var(--gray-150); font-weight:600; color:var(--slate); font-size:12px; text-transform:uppercase; letter-spacing:0.04em; }
+    .sev { display:inline-block; font-family:var(--mono); font-size:11px; padding:2px 8px; border-radius:6px; font-weight:600; }
+    .sev.high{background:#4A2A1C;color:#F0B79C;} .sev.med{background:var(--oat);color:var(--slate);} .sev.low{background:#2D3A24;color:#B6CC96;}
+    .checklist { display:flex; flex-direction:column; gap:10px; max-width:840px; }
+    .check { display:flex; gap:12px; align-items:flex-start; background:var(--white); border:1.5px solid var(--gray-300); border-radius:10px; padding:12px 16px; }
+    .check .box { width:18px; height:18px; border-radius:5px; border:2px solid var(--gray-500); flex-shrink:0; margin-top:2px; }
+    .check .ck-text { font-size:14px; color:var(--gray-700); }
+    .check .ck-text strong { color:var(--slate); }
+    .footer { color:var(--gray-500); font-size:13px; margin-top:64px; padding-top:22px; border-top:1px solid var(--gray-300); }
+    .footer code { color:#C9B98A; }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Implementation plan · robot-islands</div>
+      <h1>Grow absorbed ellipses via Land Reclamation</h1>
+      <div class="prompt-box">
+        <span class="label">Source</span>
+        Spec: <a href="/#/d/robot-islands/2026-06-20-grow-absorbed-ellipse">robot-islands/2026-06-20-grow-absorbed-ellipse</a>.
+        Canonical executable plan (checkbox-tracked, consumed by
+        subagent-driven-development): <code>docs/superpowers/plans/2026-06-20-grow-absorbed-ellipse.md</code>.
+        This HTML is the human-review companion — the <code>.md</code> is the source of truth.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Tasks</div><div class="v accent">8 + final</div></div>
+      <div class="cell"><div class="k">Files</div><div class="v">~7 + tests</div></div>
+      <div class="cell"><div class="k">Schema</div><div class="v">v27 → v28</div></div>
+      <div class="cell"><div class="k">Track</div><div class="v">Feature branch + PR</div></div>
+    </div>
+
+    <section id="goal">
+      <div class="sec-head"><span class="num">—</span><h2>Goal &amp; approach</h2></div>
+      <p class="body"><strong>Goal:</strong> let the player grow any constituent
+        ellipse of a merged island (not just the primary) via the Land Reclamation
+        Hub, choosing the lobe through a scrollable per-constituent picker, each
+        lobe capped by its own origin biome.</p>
+      <p class="body"><strong>Approach:</strong> a cap-only <code>biome</code> field
+        on each <code>extraEllipses</code> entry (stamped at merge time, defaulted
+        for legacy saves by a v27→v28 migration); the three
+        <code>land-reclamation.ts</code> functions become <strong>constituent-indexed</strong>
+        (index 0 = primary, N = <code>extraEllipses[N-1]</code>); a
+        <code>constituentIndex</code> flows through the <code>expand-island</code>
+        gateway method + server intent (server re-validates with the same pure
+        functions); the inspector's Reclamation section becomes a scrollable
+        row-per-constituent list, with a render-layer overlay drawing numbered
+        badges on the map.</p>
+    </section>
+
+    <section id="constraints">
+      <div class="sec-head"><span class="num">00</span><h2>Global constraints</h2></div>
+      <ul class="body" style="margin-left:22px">
+        <li>TS strict (<code>noUncheckedIndexedAccess</code>, no unused locals/params); new code compiles clean.</li>
+        <li>Pure layer (<code>world</code>, <code>land-reclamation</code>, <code>island-merge</code>, <code>persistence</code>, <code>mutation-gateway</code>) keeps NO PixiJS/DOM imports.</li>
+        <li>Spec moves with code — §15.1 / §3.6 / §3.4 updated in the same tasks.</li>
+        <li>Persistence: bump = migrate (alias + <code>migrateV27toV28</code> + dispatch + <code>SUPPORTED_LOAD_VERSIONS</code>).</li>
+        <li>Terrain stays absorber-biome; the new field is <strong>cap-only</strong>.</li>
+        <li>Tests target the pure layer; render layer verified by <code>npm run build</code> + screenshot.</li>
+        <li>Commit after every passing step; integrate via rebase + fast-forward (linear history).</li>
+      </ul>
+    </section>
+
+    <section id="tasks">
+      <div class="sec-head"><span class="num">01</span><h2>Tasks</h2></div>
+      <p class="sec-intro">Eight tasks in dependency order; each ends with an independently testable deliverable. Pure tasks (1–6) are TDD; render tasks (7–8) verify by build + screenshot.</p>
+      <table class="tbl">
+        <thead><tr><th>#</th><th>Task</th><th>Primary file(s)</th><th>Deliverable</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">1</td><td>Per-constituent biome field</td><td class="file">world.ts</td><td><code>extraEllipses.biome</code> + <code>ConstituentEllipse.biome</code>; <code>islandConstituents</code> populates it (primary=<code>spec.biome</code>, extra=<code>?? spec.biome</code>). §15.1.</td></tr>
+          <tr><td class="slate">2</td><td>Merge stamps origin biome</td><td class="file">island-merge.ts</td><td><code>performMerge</code> records biome on appended + recursively-propagated extras. §3.6.</td></tr>
+          <tr><td class="slate">3</td><td>Constituent-indexed cost</td><td class="file">land-reclamation.ts</td><td><code>landReclamationCost(spec, index, axis)</code> — union delta of growing one constituent.</td></tr>
+          <tr><td class="slate">4</td><td>Indexed gate + mutation</td><td class="file">land-reclamation.ts</td><td><code>canExpandConstituent</code> / <code>expandConstituent</code>; per-lobe origin-biome cap; <code>'bad-constituent'</code> reason. §3.4.</td></tr>
+          <tr><td class="slate">5</td><td>Persistence v27 → v28</td><td class="file">persistence.ts</td><td><code>migrateV27toV28</code> defaults legacy extra biome to island biome; round-trip.</td></tr>
+          <tr><td class="slate">6</td><td>Gateway + server intent</td><td class="file">mutation-gateway.ts · server/intents.ts</td><td><code>expandIsland(id, constituentIndex, axis)</code>; intent carries index (legacy → 0); server re-validates, rejects bad index.</td></tr>
+          <tr><td class="slate">7</td><td>Scrollable lobe picker</td><td class="file">inspector-ui.ts · main.ts</td><td>Row-per-constituent scrollable list; per-row gate/cost; <code>onExpandIsland(target, index, axis)</code>.</td></tr>
+          <tr><td class="slate">8</td><td>Numbered lobe badges</td><td class="file">lobe-badge-overlay.ts (new) · main.ts</td><td><code>#N</code> badges at each constituent center while a Hub inspector is open.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="keycode">
+      <div class="sec-head"><span class="num">02</span><h2>Key code — the engine generalization</h2></div>
+      <p class="sec-intro">The load-bearing change: cost and mutation keyed by constituent index. Index 0 reproduces today's primary behavior exactly; index N rebuilds <code>extraEllipses[N-1]</code> (entries are <code>readonly</code>).</p>
+      <div class="file-label">src/land-reclamation.ts — gate + mutation (Task 4)</div>
+      <div class="code"><pre><span class="kw">function</span> <span class="fn">constituentAxis</span>(spec, index, axis) {       <span class="cm">// radius + cap-biome of a constituent</span>
+  <span class="kw">if</span> (index === 0)
+    <span class="kw">return</span> { current: axis === <span class="str">'major'</span> ? spec.majorRadius : spec.minorRadius, biome: spec.biome };
+  <span class="kw">const</span> e = (spec.extraEllipses ?? [])[index - 1];
+  <span class="kw">if</span> (!e) <span class="kw">return</span> <span class="kw">null</span>;                                 <span class="cm">// → 'bad-constituent'</span>
+  <span class="kw">return</span> { current: axis === <span class="str">'major'</span> ? e.major : e.minor, biome: e.biome ?? spec.biome };
+}
+
+<span class="kw">export function</span> <span class="fn">canExpandConstituent</span>(spec, state, index, axis) {
+  <span class="kw">if</span> (!hasLandReclamationHub(spec)) <span class="kw">return</span> { ok:<span class="kw">false</span>, reason:<span class="str">'no-hub'</span> };
+  <span class="kw">const</span> c = constituentAxis(spec, index, axis);
+  <span class="kw">if</span> (!c) <span class="kw">return</span> { ok:<span class="kw">false</span>, reason:<span class="str">'bad-constituent'</span> };
+  <span class="kw">const</span> max = BIOME_MAX_RADII[c.biome][axis];        <span class="cm">// per-lobe origin biome cap</span>
+  <span class="kw">if</span> (c.current &gt;= max) <span class="kw">return</span> { ok:<span class="kw">false</span>, reason:<span class="str">'axis-at-max'</span> };
+  <span class="cm">// …inventory check against landReclamationCost(spec, index, axis)…</span>
+  <span class="kw">return</span> { ok:<span class="kw">true</span> };
+}
+
+<span class="kw">export function</span> <span class="fn">expandConstituent</span>(spec, state, index, axis) {
+  <span class="kw">if</span> (!canExpandConstituent(spec, state, index, axis).ok) <span class="kw">return</span>;
+  <span class="cm">// …deduct landReclamationCost(spec, index, axis)…</span>
+  <span class="kw">if</span> (index === 0) { axis === <span class="str">'major'</span> ? spec.majorRadius++ : spec.minorRadius++; }
+  <span class="kw">else</span> {                                            <span class="cm">// rebuild the readonly extra entry</span>
+    <span class="kw">const</span> e = spec.extraEllipses![index - 1]!;
+    spec.extraEllipses![index - 1] = { ...e,
+      major: axis === <span class="str">'major'</span> ? e.major + 1 : e.major,
+      minor: axis === <span class="str">'minor'</span> ? e.minor + 1 : e.minor };
+  }
+}</pre></div>
+      <p class="body" style="margin-top:14px">Full TDD steps (failing test → impl → green → commit) for every task live in the <code>.md</code>.</p>
+    </section>
+
+    <section id="risks">
+      <div class="sec-head"><span class="num">03</span><h2>Risks</h2></div>
+      <div class="risks">
+        <div class="row"><div class="cell head">Risk</div><div class="cell head">Sev</div><div class="cell head">Mitigation</div></div>
+        <div class="row">
+          <div class="cell">New <code>biome</code> field tempts future code into per-lobe terrain, contradicting §3.6.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Documented cap-only at the type + §15.1; terrain unchanged.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Constituent index threads the LOCAL/REMOTE trust surface — mismatch could desync.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Server re-runs the same pure validator; gateway-parity test asserts identical state + rejects bad indices.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Growing a lobe newly overlaps a third island → unexpected merge.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Intended — <code>islandsOverlap</code> already walks all constituents; §3.6 working as designed.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Irreversible schema bump strands old saves on a wrong default.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Default reproduces prior behavior (absorber biome); migration + round-trip tests gate it.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="verify">
+      <div class="sec-head"><span class="num">04</span><h2>Final verification</h2></div>
+      <div class="checklist">
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Typecheck.</strong> <code>npx tsc -b --force</code> + <code>cd server &amp;&amp; npm run typecheck</code> clean.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Full suite (Postgres up).</strong> <code>npm test</code> — client + server green.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>End-to-end.</strong> Grow an absorbed lobe to its origin-biome cap; cost matches deduction; capped axis shows <code>CAP</code>; lobe growth into a third island triggers a §3.6 merge.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Spec parity.</strong> SPEC.md §3.4 / §3.6 / §15.1 reflect shipped behavior.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Integrate.</strong> Rebase on <code>master</code>, fast-forward, open PR per CONTRIBUTING.md.</div></div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <p>Implementation plan · robot-islands · generated 2026-06-20 · canonical: <code>docs/superpowers/plans/2026-06-20-grow-absorbed-ellipse.md</code> · execute via superpowers:subagent-driven-development</p>
+    </div>
+
+  </div>
+</body>
+</html>
