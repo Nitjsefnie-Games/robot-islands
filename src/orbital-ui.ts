@@ -12,8 +12,11 @@ import type { IslandState } from './economy.js';
 import { TILE_PX } from './island.js';
 import {
   SAT_FUEL_PER_TILE,
+  dispatchRepairDrone,
   launchSatellite,
+  requestSatMove,
   upgradeSpaceport,
+  type Satellite,
   type SatelliteVariant,
 } from './orbital.js';
 import type { ResourceId } from './recipes.js';
@@ -24,7 +27,7 @@ import { effectiveSkillMultipliers } from './skilltree.js';
 import { mountModal, type ModalHandle } from './ui-modal.js';
 import { VISION_BLUE, type WorldState } from './world.js';
 import { getToastHandle } from './toast.js';
-import { type MutationGateway } from './mutation-gateway.js';
+import { type GatewayReturn, type MutationGateway } from './mutation-gateway.js';
 
 export interface OrbitalUiHandle {
   show(): void;
@@ -120,6 +123,14 @@ const FAIL_REASON_LABEL: Readonly<Record<string, string>> = {
   'launch-failure': 'launch failed',
   'target-at-source': 'target is the launch pad',
   'target-out-of-range': 'target out of onboard-fuel range',
+  'no-satellite': 'satellite missing',
+  'repair-pending': 'repair already in progress',
+  'pending-repair': 'repair in progress',
+  'insufficient-repair-pack': 'no Repair Pack on hand',
+  'insufficient-fuel': 'not enough maneuvering fuel',
+  'already-moving': 'satellite already in transit',
+  'not-locked': 'satellite is not parked',
+  'no-distance': 'target is the current position',
 };
 
 function inv(state: IslandState, id: ResourceId): number {
@@ -171,7 +182,13 @@ export function mountOrbitalUi(
   // While `armed !== null` the modal is hidden and a canvas reticle follows
   // the cursor. Clicking the canvas commits a launch with the captured
   // (islandId, variant) pair; Escape / right-click cancels.
-  let armed: { islandId: string; variant: SatelliteVariant } | null = null;
+  // A launch arms an (island, variant) pair; a move arms an existing satellite.
+  // Both share the canvas reticle + click-commit path (attemptLaunch dispatches
+  // on `kind`), so main.ts needs no change — `isLaunchMode()` covers both.
+  let armed:
+    | { kind: 'launch'; islandId: string; variant: SatelliteVariant }
+    | { kind: 'move'; satId: string; islandId: string }
+    | null = null;
 
   const flash = (msg: string): void => {
     lastFlash = { msg, until: performance.now() + 4000 };
@@ -220,7 +237,9 @@ export function mountOrbitalUi(
   rangeRingLayer.addChild(rangeRingGfx);
   function repaintRangeRing(): void {
     rangeRingGfx.clear();
-    if (!armed) return;
+    // Only launches draw the fixed Spaceport range ring; a move's reach is from
+    // the satellite's own position and is left to gateway validation.
+    if (!armed || armed.kind !== 'launch') return;
     const state = deps.islandStates.get(armed.islandId);
     if (!state) return;
     const spawn = spaceportSpawn(deps.world, state);
@@ -256,7 +275,7 @@ export function mountOrbitalUi(
         }
         return;
       }
-      armed = target;
+      armed = { kind: 'launch', islandId: target.islandId, variant: target.variant };
       reticleLayer.visible = true;
       repaintRangeRing();
       rangeRingLayer.visible = true;
@@ -270,6 +289,31 @@ export function mountOrbitalUi(
     }
   }
 
+  // Arm a satellite relocation (§14.6). Mirrors a launch arm: the modal hides
+  // (done by the caller) and the next canvas click commits via attemptLaunch →
+  // attemptMove. No fixed range ring — the move's reach is from the sat itself.
+  function armMove(satId: string, islandId: string): void {
+    armed = { kind: 'move', satId, islandId };
+    reticleLayer.visible = true;
+    rangeRingGfx.clear();
+    rangeRingLayer.visible = false;
+    deps.onLaunchModeChanged?.(true);
+  }
+
+  // Normalize a gateway return (sync LOCAL or async REMOTE) or a pure-fn result
+  // to a uniform { ok, reason }. Pure results carry `reason`; gateway errors
+  // carry `error` (mapped to reason here).
+  async function normalizeResult(
+    r: GatewayReturn<unknown> | { ok: boolean; reason?: string },
+  ): Promise<{ ok: boolean; reason?: string }> {
+    const res = await r;
+    if (res.ok) return { ok: true };
+    const reason = 'reason' in res && res.reason !== undefined
+      ? res.reason
+      : 'error' in res ? res.error : undefined;
+    return { ok: false, reason };
+  }
+
   // ----- attemptLaunch (canvas click commit) ------------------------------
   function attemptLaunch(
     targetWorldTileX: number,
@@ -277,6 +321,9 @@ export function mountOrbitalUi(
     nowMs: number,
   ): { ok: boolean; reason?: string } {
     if (!armed) return { ok: false, reason: 'not-armed' };
+    if (armed.kind === 'move') {
+      return attemptMove(armed.satId, targetWorldTileX, targetWorldTileY, nowMs);
+    }
     const armedCapture = armed;
     const gatewayResult = deps.gateway
       ? deps.gateway.launchSatellite(armedCapture.islandId, armedCapture.variant, targetWorldTileX, targetWorldTileY, nowMs)
@@ -343,10 +390,48 @@ export function mountOrbitalUi(
     return { ok: false, reason: result.reason };
   }
 
+  // ----- attemptMove (canvas click commit for a relocation) ---------------
+  function attemptMove(
+    satId: string,
+    targetWorldTileX: number,
+    targetWorldTileY: number,
+    nowMs: number,
+  ): { ok: boolean; reason?: string } {
+    void (async () => {
+      const res = await normalizeResult(
+        deps.gateway
+          ? deps.gateway.moveSatellite(satId, targetWorldTileX, targetWorldTileY, nowMs)
+          : requestSatMove(deps.world, satId, targetWorldTileX, targetWorldTileY, nowMs),
+      );
+      const toast = getToastHandle();
+      if (res.ok) {
+        const msg = `Relocating satellite ${satId}`;
+        flash(msg);
+        toast?.show(msg, 'success');
+      } else {
+        const label = FAIL_REASON_LABEL[res.reason ?? ''] ?? res.reason ?? 'unknown';
+        const msg = `Move failed: ${label}`;
+        flash(msg);
+        toast?.show(msg, 'failure');
+      }
+      // Either way, disarm and reopen the roster so the player sees the result.
+      setLaunchMode(false);
+      modal.show();
+      render();
+    })();
+    return { ok: true };
+  }
+
   // ----- Reticle position + reachability colour ---------------------------
   function setReticleScreenPos(x: number, y: number): void {
     if (!armed) return;
     reticleGfx.position.set(x, y);
+    // A move has no fixed origin ring; keep the reticle neutral (gateway
+    // validates reach on commit).
+    if (armed.kind !== 'launch') {
+      ensurePainted(RETICLE_OK);
+      return;
+    }
     const state = deps.islandStates.get(armed.islandId);
     if (!state) return;
     const spawn = spaceportSpawn(deps.world, state);
@@ -530,6 +615,82 @@ export function mountOrbitalUi(
     return card;
   };
 
+  function rosterBtn(
+    label: string,
+    enabled: boolean,
+    title: string,
+    onClick: () => void,
+  ): HTMLButtonElement {
+    const btn = document.createElement('button');
+    btn.textContent = label;
+    btn.className = 'ri-btn';
+    btn.style.cssText = 'font-size: 11px; padding: 2px 8px;';
+    btn.title = title;
+    if (!enabled) {
+      btn.disabled = true;
+      btn.style.opacity = '0.4';
+      btn.style.cursor = 'not-allowed';
+    }
+    btn.addEventListener('click', () => {
+      if (enabled) onClick();
+    });
+    return btn;
+  }
+
+  // Per-satellite roster controls: Move (§14.6) and Repair (§14.12). Backend +
+  // gateway + server intents already exist — this is the missing entry point.
+  function renderSatActions(sat: Satellite): HTMLSpanElement {
+    const wrap = document.createElement('span');
+    wrap.style.cssText = 'display: flex; gap: 6px;';
+    // §14.6: only a parked (locked) satellite that isn't moving or awaiting a
+    // repair can be relocated — mirrors requestSatMove's gate.
+    const canMove = sat.locked && !sat.movingTo && !sat.pendingRepairDroneId;
+    const moveTitle = canMove
+      ? 'Relocate this satellite — then click a map target'
+      : sat.pendingRepairDroneId
+        ? 'Repair in progress'
+        : !sat.locked
+          ? 'Satellite is not parked'
+          : 'Cannot move right now';
+    wrap.appendChild(
+      rosterBtn('Move', canMove, moveTitle, () => {
+        modal.hide();
+        armMove(sat.id, sat.spaceportIslandId);
+      }),
+    );
+    if (sat.pendingRepairDroneId) {
+      const pending = document.createElement('span');
+      pending.textContent = 'repairing…';
+      pending.style.cssText = 'color: var(--ri-fg-2); font-size: 11px; align-self: center;';
+      wrap.appendChild(pending);
+    } else {
+      wrap.appendChild(
+        rosterBtn('Repair', true, 'Dispatch a repair drone from the owning Spaceport', () => {
+          void (async () => {
+            const res = await normalizeResult(
+              deps.gateway
+                ? deps.gateway.dispatchRepairDrone(sat.spaceportIslandId, sat.id, performance.now())
+                : dispatchRepairDrone(deps.world, sat.spaceportIslandId, sat.id, performance.now()),
+            );
+            const toast = getToastHandle();
+            if (res.ok) {
+              const msg = `Repair drone dispatched to ${sat.id}`;
+              flash(msg);
+              toast?.show(msg, 'success');
+            } else {
+              const label = FAIL_REASON_LABEL[res.reason ?? ''] ?? res.reason ?? 'unknown';
+              const msg = `Repair failed: ${label}`;
+              flash(msg);
+              toast?.show(msg, 'failure');
+            }
+            render();
+          })();
+        }),
+      );
+    }
+    return wrap;
+  }
+
   const renderRoster = (): HTMLDivElement => {
     const wrap = document.createElement('div');
     wrap.style.cssText = 'display: flex; flex-direction: column; gap: 4px; font-family: ui-monospace, monospace; font-size: 12px; min-width: 320px;';
@@ -545,8 +706,8 @@ export function mountOrbitalUi(
       return wrap;
     }
     const list = document.createElement('div');
-    list.style.cssText = 'display: grid; grid-template-columns: 1fr 1fr auto auto; gap: 4px 12px;';
-    const cols = ['VARIANT', 'OWNER', 'FUEL', 'STATE'];
+    list.style.cssText = 'display: grid; grid-template-columns: 1fr 1fr auto auto auto; gap: 4px 12px; align-items: center;';
+    const cols = ['VARIANT', 'OWNER', 'FUEL', 'STATE', 'ACTIONS'];
     for (const c of cols) {
       const th = document.createElement('span');
       th.textContent = c;
@@ -566,6 +727,7 @@ export function mountOrbitalUi(
         td.textContent = c;
         list.appendChild(td);
       }
+      list.appendChild(renderSatActions(sat));
     }
     wrap.appendChild(list);
     return wrap;
