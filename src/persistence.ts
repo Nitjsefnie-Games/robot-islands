@@ -74,7 +74,7 @@ export const STORAGE_KEY_DISPLAY = 'robot-islands:save';
 
 /** Current schema version. `loadWorld` rejects (returns null) any
  *  snapshot whose `v` is not strictly equal to this. */
-export const SCHEMA_VERSION = 28 as const;
+export const SCHEMA_VERSION = 29 as const;
 
 /** Versions that loadWorld accepts. The walker (loadWorld) chains
  *  migrateV<N>toV<N+1> functions from the lowest known version up to
@@ -82,7 +82,7 @@ export const SCHEMA_VERSION = 28 as const;
  *
  *  See AGENTS.md → "Persistence migrations" for the full "bump = migrate"
  *  policy from v7 onward. */
-export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28]);
+export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]);
 
 // ---------------------------------------------------------------------------
 // Serialized shapes
@@ -530,6 +530,30 @@ export function migrateV27toV28(s: SerializedSnapshotV27): SaveSnapshot {
                 e.biome === undefined ? { ...e, biome: isl.biome } : e),
             }
           : isl),
+    },
+  } as unknown as SaveSnapshot;
+}
+
+/** v28 top-level snapshot shape — structurally identical to v29 (SaveSnapshot)
+ *  except the v literal and the home island's new `baseLayoutRadius`. */
+export type SerializedSnapshotV28 = Omit<SaveSnapshot, 'v'> & { readonly v: 28 };
+
+/** v28 → v29: stamp the home island's hand-placed base-layout radius (§3.7).
+ *  ONLY the island with id `'home'` is touched — it gains `baseLayoutRadius: 16`
+ *  (its original footprint). Terrain WITHIN r16 stays the locked starter layout;
+ *  growth beyond it now generates procedural plains instead of all grass. No
+ *  other island, no `extraEllipses`/lobe, and no terrain data is read or written,
+ *  so already-merged islands are provably untouched. Idempotent (re-stamping 16
+ *  is a no-op); a save whose home was itself absorbed has no `'home'` island and
+ *  is left unchanged. */
+export function migrateV28toV29(s: SerializedSnapshotV28): SaveSnapshot {
+  return {
+    ...s,
+    v: 29 as const,
+    world: {
+      ...s.world,
+      islands: s.world.islands.map((isl) =>
+        isl.id === 'home' ? { ...isl, baseLayoutRadius: 16 } : isl),
     },
   } as unknown as SaveSnapshot;
 }
@@ -1023,6 +1047,9 @@ export function deserializeWorld(
   }
   if ((snapshot as unknown as { v: number }).v === 27) {
     snapshot = migrateV27toV28(snapshot as unknown as SerializedSnapshotV27);
+  }
+  if ((snapshot as unknown as { v: number }).v === 28) {
+    snapshot = migrateV28toV29(snapshot as unknown as SerializedSnapshotV28);
   }
 
   if (snapshot.v !== SCHEMA_VERSION) {

@@ -6,7 +6,7 @@
 // `computeRates` in `economy.ts`.
 
 import type { Biome } from './world.js';
-import { defaultTerrainAt, type TerrainKind } from './island.js';
+import { type TerrainKind } from './island.js';
 import type { RecipeCategory } from './recipes.js';
 import { ALL_RECIPE_CATEGORIES } from './recipes.js';
 import { makeSeededRng } from './rng.js';
@@ -551,11 +551,12 @@ export function terrainAtForBiome(
   y: number,
   inscribed: (px: number, py: number) => boolean,
 ): TerrainKind {
-  // Preserve home island's hand-placed layout exactly — `inscribed` is
-  // unused on this branch.
-  if (islandId === 'home') {
-    return defaultTerrainAt(x, y);
-  }
+  // NOTE: home's hand-placed starter layout (`defaultTerrainAt`) is NO LONGER
+  // routed here. `attachTerrainAt` (world.ts) applies it directly to the home
+  // PRIMARY within `baseLayoutRadius` (§3.7); tiles beyond the locked radius —
+  // and every absorbed lobe — fall through to the procedural generation below.
+  // So `terrainAtForBiome('plains', 'home', …)` now yields procedural plains,
+  // which is exactly what a grown home's outer ring needs.
   const def = BIOME_DEFS[biome];
   // Hash on the cluster-cell coords (Math.floor — NOT trunc — so negative
   // tiles cluster correctly: floor(-2/3) === -1 vs trunc(-2/3) === 0).
