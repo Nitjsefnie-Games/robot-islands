@@ -18,7 +18,7 @@ export type GateKind =
   | 'tier'      // def.tier (1-4) -- runtime: tierForLevel(state.level) >= def.tier
   | 't5'        // def.tier === 5 -- runtime: t5Unlocked(state)
   | 't6'        // def.tier === 6 -- runtime: t6Unlocked(state, hasSpaceport)
-  | 'biome'     // def.requiredBiomes -- runtime: canPlaceOnIsland(def, spec)
+  | 'biome'     // def.requiredBiomes -- runtime: canPlaceOnAnyConstituent(def, spec) (coarse catalog gate; all-tiles rule at actual placement)
   | 'tile'      // def.requiredTile -- placement-time only (catalog row = N/A)
   | 'coastal'   // def.coastal -- placement-time only (catalog row = N/A)
   | 'heat'      // def.requiresHeat -- runtime adjacency (catalog row = N/A)

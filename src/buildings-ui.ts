@@ -5,11 +5,11 @@ import {
   ALL_BUILDING_DEF_IDS,
   BUILDING_DEFS,
   buildingUnlocked,
-  canPlaceOnIsland,
   type BuildingCategory,
   type BuildingDef,
   type BuildingDefId,
 } from './building-defs.js';
+import { canPlaceOnAnyConstituent } from './placement.js';
 import { hasOperationalBuilding } from './buildings.js';
 import { BIOME_DEFS } from './biomes.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
@@ -124,7 +124,7 @@ export function buildingCardLockState(
       unlocked = tierForLevel(state.level) >= def.tier - tierShift;
     }
   }
-  const biomeOk = canPlaceOnIsland(def, spec) || hasBiomeBypass(state, def.id);
+  const biomeOk = canPlaceOnAnyConstituent(def, spec) || hasBiomeBypass(state, def.id);
   const placementLocked = unlocked && !biomeOk;
   return { unlocked, biomeOk, placementLocked };
 }
