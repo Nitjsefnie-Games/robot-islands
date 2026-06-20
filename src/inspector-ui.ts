@@ -35,7 +35,7 @@ import { clusterBonusMul, gateSatisfied } from './adjacency.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
 import { affordabilityShortfall, applyRelabelStorageCap, countQueuedUpgrades, formatShortfall, inProgressBuildCount, parallelBuildSlots, queuedBuildCount, queuedBuildSlots, relocateFee, topUpgradeLevel, totalInvestedCost, upgradeCost } from './placement.js';
 import { upgradeConstructionMs } from './construction.js';
-import { activeFloors, displayedFloorLevel, floorEffectMul, floorLevel, floorScaledCapacity, hasOperationalBuilding, isOperationalBuilding, participatesInCluster, rawFloorLevel, ratedBuildingPower, type PlacedBuilding } from './buildings.js';
+import { activeFloorLevel, activeFloors, displayedFloorLevel, floorEffectMul, floorLevel, floorPowerDrawMul, floorScaledCapacity, hasOperationalBuilding, isOperationalBuilding, participatesInCluster, rawFloorLevel, ratedBuildingPower, type PlacedBuilding } from './buildings.js';
 import { convertToServitor as pureConvertToServitor } from './servitor.js';
 import { defineAction, dispatchAction, type InputRegistry } from './input.js';
 import type { IslandState } from './economy.js';
@@ -1900,28 +1900,34 @@ export function mountInspectorUi(
     if (def.requiresHeat || def.heatSource) {
       const heat = computeRates(state, ratesCtx, undefined, Date.now()).heat;
       if (def.requiresHeat) {
+        // Consumer: floor-scaled demand `heatDemandKW·(1+0.5L)` (power-draw
+        // formula) vs heat actually received (demand × throttle).
+        const demand = (def.heatDemandKW ?? 0) * floorPowerDrawMul(activeFloorLevel(building));
         const has = heat.hasHeat.get(building.id) === true;
         if (has) {
+          const throttle = heat.heatThrottleFactor.get(building.id) ?? 1;
+          const received = demand * throttle;
           const src = heat.assignedSource.get(building.id) ?? '?';
-          heatLine.textContent = `✓ heat OK  ·  source: ${src}`;
-          heatLine.style.color = 'var(--ri-accent)';
+          heatLine.textContent =
+            `heat ${received.toFixed(0)} / ${demand.toFixed(0)} kW (${(throttle * 100).toFixed(0)}%)  ·  source: ${src}`;
+          // Amber when throttled below full (under-supplied), accent when met.
+          heatLine.style.color = throttle >= 0.999 ? 'var(--ri-accent)' : 'var(--ri-warn)';
         } else {
-          heatLine.textContent = 'NO HEAT SOURCE ADJACENT';
+          heatLine.textContent = `NO HEAT SOURCE ADJACENT  ·  needs ${demand.toFixed(0)} kW`;
           heatLine.style.color = 'var(--ri-warn)';
         }
       } else if (def.heatSource) {
-        // Source: report served consumers. Free sources show their tag, coal
-        // sources also show the count (which drives fuel burn).
-        const served =
-          def.heatSource.freeOrCoal === 'coal'
-            ? (heat.coalConsumersByFurnace.get(building.id) ?? 0)
-            : // Free sources don't aggregate in coalConsumersByFurnace; count
-              // by scanning assignments. Cheap (≤ ~30 consumers per island).
-              Array.from(heat.assignedSource.values()).filter(
-                (sid) => sid === building.id,
-              ).length;
+        // Source: floor-scaled capacity `thermalKW·(1+L)` (power-output formula)
+        // vs kW currently delivered to adjacent consumers.
+        const cap = (def.heatSource.thermalKW ?? 0) * floorEffectMul(activeFloorLevel(building));
+        const produced = heat.deliveredBySource.get(building.id) ?? 0;
+        // Consumers primarily fed by this source (largest-contributor assignment).
+        const served = Array.from(heat.assignedSource.values()).filter(
+          (sid) => sid === building.id,
+        ).length;
         const tag = def.heatSource.freeOrCoal === 'free' ? 'free' : 'coal';
-        heatLine.textContent = `${tag} source  ·  serving ${served} consumer${served === 1 ? '' : 's'}`;
+        heatLine.textContent =
+          `${tag} source  ·  ${produced.toFixed(0)} / ${cap.toFixed(0)} kW  ·  ${served} consumer${served === 1 ? '' : 's'}`;
         heatLine.style.color = 'var(--ri-fg-1)';
       }
       heatSection.wrap.style.display = '';

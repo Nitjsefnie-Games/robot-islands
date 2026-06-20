@@ -2584,7 +2584,10 @@ describe('§5.2 — heat adjacency in computeRates/advanceIsland', () => {
     // Partial pooled override WITHOUT a coal key (mirrors a non-coal-sharing
     // network participant's ctx.inventory).
     const res = computeRates(state, { inventory: {} } as unknown as RatesContext, 0, 0);
-    expect(res.heat.coalConsumersByFurnace.get('cf') ?? 0).toBe(1);
+    // limekiln is a kW consumer (60 kW) now (boolean heat retired): the furnace's
+    // fractional served-count = delivered/thermalKW = 60/830. The point of THIS
+    // test is that the furnace serves heat at all (coal read per-key), not zero.
+    expect(res.heat.coalConsumersByFurnace.get('cf') ?? 0).toBeCloseTo(60 / 830, 4);
     expect(res.heat.hasHeat.get('lk')).toBe(true);
   });
 

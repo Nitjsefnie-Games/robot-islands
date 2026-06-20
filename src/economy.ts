@@ -1262,7 +1262,7 @@ export function computeRates(
       assignedSource.delete(consumerId);
     }
     for (const furnaceId of coalStarvedFurnaces) coalConsumersByFurnace.delete(furnaceId);
-    heat = { hasHeat, coalConsumersByFurnace, assignedSource, heatThrottleFactor };
+    heat = { hasHeat, coalConsumersByFurnace, assignedSource, heatThrottleFactor, deliveredBySource: heat.deliveredBySource };
   }
   // §9.7 Tier Reset runtime gate. A building whose tier exceeds the island's
   // current tier band (e.g. a T2 building on a post-reset L1 island) is

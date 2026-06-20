@@ -2511,3 +2511,21 @@ describe('closure P2 — endgame components consumed by placement cost', () => {
     });
   }
 });
+
+describe('§5.2 heat — every requiresHeat def carries a kW demand (boolean heat retired)', () => {
+  it('every requiresHeat building has a positive heatDemandKW', () => {
+    for (const [id, def] of Object.entries(BUILDING_DEFS)) {
+      if (!def.requiresHeat) continue;
+      expect(def.heatDemandKW, `${id} requiresHeat but has no heatDemandKW`).toBeDefined();
+      expect(def.heatDemandKW!, `${id} heatDemandKW must be > 0`).toBeGreaterThan(0);
+    }
+  });
+
+  it('every heatSource def carries a positive thermalKW', () => {
+    for (const [id, def] of Object.entries(BUILDING_DEFS)) {
+      if (!def.heatSource) continue;
+      expect(def.heatSource.thermalKW, `${id} heatSource must have thermalKW`).toBeDefined();
+      expect(def.heatSource.thermalKW!, `${id} thermalKW must be > 0`).toBeGreaterThan(0);
+    }
+  });
+});
