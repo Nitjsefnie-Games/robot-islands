@@ -52,6 +52,44 @@ function makeSpec(over: Partial<IslandSpec> = {}): IslandSpec {
   return { ...defaults, ...over };
 }
 
+// Single-constituent spec (primary ellipse only) for cost-of-growth tests.
+function singleEllipseSpec(
+  over: { biome: Biome; major: number; minor: number },
+): IslandSpec {
+  return makeSpec({
+    biome: over.biome,
+    majorRadius: over.major,
+    minorRadius: over.minor,
+  });
+}
+
+// Merged spec: a primary ellipse plus N absorbed constituents (extraEllipses).
+function mergedSpec(over: {
+  primary: { biome: Biome; major: number; minor: number };
+  extras: ReadonlyArray<{
+    biome: Biome;
+    major: number;
+    minor: number;
+    offsetX: number;
+    offsetY: number;
+    rotation?: number;
+  }>;
+}): IslandSpec {
+  return makeSpec({
+    biome: over.primary.biome,
+    majorRadius: over.primary.major,
+    minorRadius: over.primary.minor,
+    extraEllipses: over.extras.map((e) => ({
+      biome: e.biome,
+      major: e.major,
+      minor: e.minor,
+      rotation: e.rotation ?? 0,
+      offsetX: e.offsetX,
+      offsetY: e.offsetY,
+    })),
+  });
+}
+
 function makeState(inventory: Partial<Record<ResourceId, number>> = {}): IslandState {
   const inv = emptyInv();
   for (const [k, v] of Object.entries(inventory)) {
@@ -99,7 +137,8 @@ describe('landReclamationCost — tile-delta × LAND_TILE_COST', () => {
     const major = 14, minor = 14;
     const delta = inscribedTileCount(major + 1, minor) - inscribedTileCount(major, minor);
     expect(delta).toBeGreaterThan(0);
-    expect(landReclamationCost(major, minor, 'major')).toEqual({
+    const spec = singleEllipseSpec({ biome: 'plains', major, minor });
+    expect(landReclamationCost(spec, 0, 'major')).toEqual({
       steel_beam: delta * (LAND_TILE_COST.steel_beam ?? 0),
       concrete: delta * (LAND_TILE_COST.concrete ?? 0),
     });
@@ -107,13 +146,49 @@ describe('landReclamationCost — tile-delta × LAND_TILE_COST', () => {
   it('minor-axis +1 uses the minor delta', () => {
     const major = 14, minor = 7;
     const delta = inscribedTileCount(major, minor + 1) - inscribedTileCount(major, minor);
-    expect(landReclamationCost(major, minor, 'minor')).toEqual({
+    const spec = singleEllipseSpec({ biome: 'plains', major, minor });
+    expect(landReclamationCost(spec, 0, 'minor')).toEqual({
       steel_beam: delta * 1,
       concrete: delta * 10,
     });
   });
   it('inscribedTileCount grows with radius', () => {
     expect(inscribedTileCount(15, 14)).toBeGreaterThan(inscribedTileCount(14, 14));
+  });
+});
+
+describe('landReclamationCost — constituent-indexed (union delta per lobe)', () => {
+  it('cost index 0 grows primary (matches legacy primary delta)', () => {
+    const spec = singleEllipseSpec({ biome: 'plains', major: 10, minor: 8 });
+    const cost = landReclamationCost(spec, 0, 'major');
+    // delta > 0 and proportional to LAND_TILE_COST
+    const stone = Object.keys(LAND_TILE_COST)[0]! as keyof typeof LAND_TILE_COST;
+    expect(cost[stone]! % LAND_TILE_COST[stone]!).toBe(0);
+    expect(cost[stone]!).toBeGreaterThan(0);
+  });
+
+  it('cost for an absorbed lobe charges only NEW union tiles', () => {
+    // Primary plains r10 at (0,0); absorbed lobe r6 at offset (12,0) partly
+    // overlapping the primary. Growing the lobe toward the primary adds fewer
+    // new tiles than its full ring (overlap already counted).
+    const spec = mergedSpec({
+      primary: { biome: 'plains', major: 10, minor: 10 },
+      extras: [{ biome: 'volcanic', major: 6, minor: 6, offsetX: 12, offsetY: 0 }],
+    });
+    const costLobe = landReclamationCost(spec, 1, 'major'); // grow the lobe
+    const stone = Object.keys(LAND_TILE_COST)[0]! as keyof typeof LAND_TILE_COST;
+    // Strictly less than an isolated r6→r7 ring would cost (some tiles already
+    // inside the primary union).
+    const isolated = landReclamationCost(
+      singleEllipseSpec({ biome: 'volcanic', major: 6, minor: 6 }), 0, 'major');
+    expect(costLobe[stone]!).toBeLessThan(isolated[stone]!);
+    expect(costLobe[stone]!).toBeGreaterThan(0);
+  });
+
+  it('out-of-range index → no charge (empty basket)', () => {
+    const spec = singleEllipseSpec({ biome: 'plains', major: 10, minor: 10 });
+    // No extraEllipses → index 1 is out of range.
+    expect(landReclamationCost(spec, 1, 'major')).toEqual({});
   });
 });
 
@@ -193,7 +268,8 @@ describe('expandIsland', () => {
   it('deducts the cost from inventory', () => {
     const spec = makeSpec({ majorRadius: 14, minorRadius: 14, buildings: [hubBuilding()] });
     const state = makeState({ steel_beam: 1_000_000, concrete: 10_000_000 });
-    const expectedCost = landReclamationCost(14, 14, 'major');
+    const expectedCost = landReclamationCost(
+      singleEllipseSpec({ biome: 'plains', major: 14, minor: 14 }), 0, 'major');
     expandIsland(spec, state, 'major');
     expect(state.inventory.steel_beam).toBe(1_000_000 - (expectedCost.steel_beam ?? 0));
     expect(state.inventory.concrete).toBe(10_000_000 - (expectedCost.concrete ?? 0));
@@ -203,7 +279,8 @@ describe('expandIsland', () => {
     // Growing 14→15 should cost cost(14,14,'major'), not cost(15,14,'major').
     const spec = makeSpec({ majorRadius: 14, minorRadius: 14, buildings: [hubBuilding()] });
     const state = makeState({ steel_beam: 1_000_000, concrete: 10_000_000 });
-    const costAt14 = landReclamationCost(14, 14, 'major');
+    const costAt14 = landReclamationCost(
+      singleEllipseSpec({ biome: 'plains', major: 14, minor: 14 }), 0, 'major');
     expandIsland(spec, state, 'major');
     expect(state.inventory.steel_beam).toBe(1_000_000 - (costAt14.steel_beam ?? 0));
     expect(state.inventory.concrete).toBe(10_000_000 - (costAt14.concrete ?? 0));
@@ -217,9 +294,16 @@ describe('landReclamationCost — union-aware delta for merged islands', () => {
     // tiles. The 2 right-edge growth tiles are absorbed by the extra ellipse,
     // so the charged tiles are the 2 left-edge ones. Union delta should be
     // 2 vs primary-only delta of 4.
-    const extra: IslandSpec['extraEllipses'] = [{ major: 3, minor: 3, rotation: 0, offsetX: 4, offsetY: 0 }];
-    const primaryOnly = landReclamationCost(3, 3, 'major');
-    const unionAware = landReclamationCost(3, 3, 'major', extra);
+    const primaryOnly = landReclamationCost(
+      singleEllipseSpec({ biome: 'plains', major: 3, minor: 3 }), 0, 'major');
+    const unionAware = landReclamationCost(
+      mergedSpec({
+        primary: { biome: 'plains', major: 3, minor: 3 },
+        extras: [{ biome: 'plains', major: 3, minor: 3, offsetX: 4, offsetY: 0 }],
+      }),
+      0,
+      'major',
+    );
 
     // Verify the union-aware cost is strictly smaller.
     expect(unionAware.steel_beam).toBeLessThan(primaryOnly.steel_beam!);
@@ -230,9 +314,14 @@ describe('landReclamationCost — union-aware delta for merged islands', () => {
     expect(unionAware.concrete).toBe(2 * (LAND_TILE_COST.concrete ?? 0));
   });
 
-  it('falls back to primary-only delta when extraEllipses is absent', () => {
-    const withoutExtra = landReclamationCost(3, 3, 'major');
-    const withEmptyExtra = landReclamationCost(3, 3, 'major', []);
+  it('falls back to primary-only delta when extraEllipses is absent or empty', () => {
+    const withoutExtra = landReclamationCost(
+      singleEllipseSpec({ biome: 'plains', major: 3, minor: 3 }), 0, 'major');
+    const withEmptyExtra = landReclamationCost(
+      mergedSpec({ primary: { biome: 'plains', major: 3, minor: 3 }, extras: [] }),
+      0,
+      'major',
+    );
     expect(withEmptyExtra).toEqual(withoutExtra);
   });
 });
