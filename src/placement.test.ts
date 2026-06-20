@@ -14,6 +14,8 @@ import {
   applyUpgrade,
   buildingAtTile,
   cancelConstruction,
+  canPlaceOnAnyConstituent,
+  canPlaceOnIslandAt,
   countQueuedUpgrades,
   creditStorageCaps,
   demolishBuilding,
@@ -39,8 +41,8 @@ import {
   rotatedDims,
   type Rotation,
 } from './shape-mask.js';
-import { makeInitialIslandState, attachTerrainAt } from './world.js';
-import type { IslandSpec } from './world.js';
+import { makeInitialIslandState, attachTerrainAt, constituentBiomeAt, islandConstituentBiomes } from './world.js';
+import type { IslandSpec, Biome } from './world.js';
 import type { IslandState } from './economy.js';
 import type { TerrainKind } from './island.js';
 import { conversionCostForTarget } from './terrain-modifier.js';
@@ -249,6 +251,79 @@ describe('validatePlacement', () => {
     const v = validatePlacement(spec, state, 'pyroforge', 0, 0, 0);
     expect(v.ok).toBe(false);
     expect(v.reason).toBe('biome-locked');
+  });
+
+  // -------------------------------------------------------------------------
+  // #147 multibiome biome-locked placement
+  // -------------------------------------------------------------------------
+  describe('#147 multibiome biome-locked placement', () => {
+    function makeMergedForestVolcanicSpec(): IslandSpec {
+      return attachTerrainAt(
+        makeSpec({
+          biome: 'forest',
+          majorRadius: 14,
+          minorRadius: 14,
+          extraEllipses: [
+            {
+              major: 10,
+              minor: 10,
+              rotation: 0,
+              offsetX: 12,
+              offsetY: 0,
+              biome: 'volcanic',
+            },
+          ],
+        }),
+      );
+    }
+
+    it('allows a volcanic unique placed fully on the volcanic constituent', () => {
+      const spec = makeMergedForestVolcanicSpec();
+      const state = makeState(spec, 30); // T4 level so the tier gate passes
+      // Verify the anchor and its 3×3 footprint sit on the volcanic lobe only.
+      for (const t of footprintTiles(BUILDING_DEFS.pyroforge.footprint, 16, 0, 0)) {
+        expect(constituentBiomeAt(spec, t.x, t.y)).toBe('volcanic');
+      }
+      const v = validatePlacement(spec, state, 'pyroforge', 16, 0, 0);
+      expect(v.ok).toBe(true);
+    });
+
+    it('rejects a volcanic unique placed fully on the forest primary', () => {
+      const spec = makeMergedForestVolcanicSpec();
+      const state = makeState(spec, 30);
+      const v = validatePlacement(spec, state, 'pyroforge', 0, 0, 0);
+      expect(v.ok).toBe(false);
+      expect(v.reason).toBe('biome-locked');
+    });
+
+    it('rejects a volcanic unique straddling forest + volcanic (all-tiles rule)', () => {
+      const spec = makeMergedForestVolcanicSpec();
+      const state = makeState(spec, 30);
+      const v = validatePlacement(spec, state, 'pyroforge', 12, 0, 0);
+      expect(v.ok).toBe(false);
+      expect(v.reason).toBe('biome-locked');
+    });
+
+    it('canPlaceOnIslandAt all-tiles gate and canPlaceOnAnyConstituent coarse gate', () => {
+      const spec = makeMergedForestVolcanicSpec();
+      const pyroforge = BUILDING_DEFS.pyroforge;
+      const volcanicOnlyTiles = footprintTiles(pyroforge.footprint, 16, 0, 0);
+      const straddlingTiles = footprintTiles(pyroforge.footprint, 12, 0, 0);
+      expect(canPlaceOnIslandAt(pyroforge, spec, volcanicOnlyTiles)).toBe(true);
+      expect(canPlaceOnIslandAt(pyroforge, spec, straddlingTiles)).toBe(false);
+      expect(canPlaceOnAnyConstituent(pyroforge, spec)).toBe(true);
+      expect(islandConstituentBiomes(spec)).toContain('volcanic' as Biome);
+      expect(islandConstituentBiomes(spec)).toContain('forest' as Biome);
+    });
+
+    it('reports out-of-bounds before biome-locked for a non-inscribed tile', () => {
+      const spec = makeMergedForestVolcanicSpec();
+      const state = makeState(spec, 30);
+      // (30,0) is well outside both constituents.
+      const v = validatePlacement(spec, state, 'pyroforge', 30, 0, 0);
+      expect(v.ok).toBe(false);
+      expect(v.reason).toBe('out-of-bounds');
+    });
   });
 
   // -------------------------------------------------------------------------

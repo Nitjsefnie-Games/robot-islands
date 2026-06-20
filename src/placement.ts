@@ -20,7 +20,7 @@
 // is pure: takes a spec + state + def id + anchor + rotation, returns a
 // validation verdict, optionally appends a new PlacedBuilding.
 
-import { BUILDING_DEFS, buildingUnlocked, canPlaceOnIsland, type BuildingDef, type BuildingDefId } from './building-defs.js';
+import { BUILDING_DEFS, buildingUnlocked, type BuildingDef, type BuildingDefId } from './building-defs.js';
 import {
   rotateShape,
   shapeWidth,
@@ -41,7 +41,7 @@ import { hasStructuralEffect } from './structural.js';
 import type { Graph } from './skilltree-graph.js';
 import { RESOURCE_STORAGE_CATEGORY, storageBaseFor } from './storage-categories.js';
 import { candidateAnchors } from './anchor-picker.js';
-import { isOceanTile, type IslandSpec, type WorldState } from './world.js';
+import { isOceanTile, type IslandSpec, type WorldState, constituentBiomeAt, islandConstituentBiomes, type Biome } from './world.js';
 import { CELL_SIZE_TILES } from './constants.js';
 import { brushTilesAt, conversionCostForTarget } from './terrain-modifier.js';
 
@@ -221,6 +221,36 @@ export function sortByFillDesc(
   return [...resources].sort((a, b) => fillPct(b) - fillPct(a) || a.localeCompare(b));
 }
 
+/** §9.5/§3.6 (#147) — actual-placement biome gate. A biome-locked def is
+ *  placeable only if EVERY footprint tile's constituent biome is in
+ *  `requiredBiomes` (all-tiles rule; a tile owned by no constituent → reject).
+ *  Artificial islands never host biome-locked uniques. Non-biome-locked defs
+ *  always pass. */
+export function canPlaceOnIslandAt(
+  def: BuildingDef,
+  spec: IslandSpec,
+  tiles: ReadonlyArray<{ readonly x: number; readonly y: number }>,
+): boolean {
+  if (!def.requiredBiomes) return true;
+  if (spec.artificial) return false;
+  for (const t of tiles) {
+    const b = constituentBiomeAt(spec, t.x, t.y);
+    if (b === undefined || !def.requiredBiomes.includes(b)) return false;
+  }
+  return true;
+}
+
+/** §9.5/§3.6 (#147) — coarse catalog gate. True if a biome-locked def could be
+ *  placed on AT LEAST ONE constituent of this island (some constituent biome in
+ *  `requiredBiomes`). Used by catalog/recipe-graph UI; the all-tiles rule above
+ *  still applies at actual placement. Artificial islands → false for locked defs. */
+export function canPlaceOnAnyConstituent(def: BuildingDef, spec: IslandSpec): boolean {
+  if (!def.requiredBiomes) return true;
+  if (spec.artificial) return false;
+  const biomes = islandConstituentBiomes(spec);
+  return def.requiredBiomes.some((b) => biomes.has(b as Biome));
+}
+
 /**
  * Validate a placement candidate. Pure: reads `spec.majorRadius/minorRadius/
  * biome/artificial/buildings` and `state.level/aiCoreCrafted`; does not
@@ -231,9 +261,9 @@ export function sortByFillDesc(
  *
  *   1. def-not-unlocked      (player's island level is too low; nothing they
  *      can do in the placement modal will fix this — they need to keep playing).
- *   2. biome-locked          (§9.5 unique that can't be placed here; the
- *      player needs to pick a different island).
- *   3. out-of-bounds         (geometry; the player can move the cursor).
+ *   2. out-of-bounds         (geometry; the player can move the cursor).
+ *   3. biome-locked          (§9.5 unique that can't be placed here; the
+ *      player needs to pick a different island or a different constituent).
  *   4. overlap               (geometry; the player can move the cursor).
  *   5. tile-requirement-not-met (§4.3 — def.requiredTile or def.coastal
  *      isn't satisfied. Geometry-adjacent: the player can move the cursor
@@ -285,14 +315,14 @@ export function validatePlacement(
   if (!isUnlocked) {
     return { ok: false, reason: 'def-not-unlocked' };
   }
-  if (!canPlaceOnIsland(def, spec) && !hasBiomeBypass(state, defId, graph)) {
-    return { ok: false, reason: 'biome-locked' };
-  }
   const tiles = footprintTiles(def.footprint, anchorX, anchorY, rotation);
   for (const t of tiles) {
     if (!islandInscribedAny(spec, t.x, t.y)) {
       return { ok: false, reason: 'out-of-bounds' };
     }
+  }
+  if (!canPlaceOnIslandAt(def, spec, tiles) && !hasBiomeBypass(state, defId, graph)) {
+    return { ok: false, reason: 'biome-locked' };
   }
   // Overlap check: build a Set of (x,y) covered by existing buildings, then
   // probe each new tile. For the home island's ~10 buildings × avg 4 tiles
