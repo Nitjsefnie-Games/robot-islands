@@ -82,7 +82,7 @@ import { convertToServitor } from '../../../src/servitor.js';
 import { BIOME_DEFS } from '../../../src/biomes.js';
 import { tryRefreshMaintenance } from '../../../src/maintenance.js';
 import { hasOperationalBuilding } from '../../../src/building-operational.js';
-import { positionIsFree } from '../../../src/construction-gate.js';
+import { positionIsFree, regionDiscoveredOrVisible } from '../../../src/construction-gate.js';
 import { candidateAnchors } from '../../../src/anchor-picker.js';
 import { ALL_RESOURCES, RECIPES, type ResourceId } from '../../../src/recipes.js';
 import { setGenesisTarget, spendTimeLock } from '../../../src/economy.js';
@@ -864,6 +864,9 @@ export const INTENTS: Record<string, IntentHandler> = {
       // authoritative state so a crafted intent cannot mint an overlapping island.
       if (!positionIsFree(game.world, cx, cy, majorRadius)) {
         return { ok: false, error: 'position-occupied' };
+      }
+      if (!regionDiscoveredOrVisible(game.world, cx, cy, majorRadius, minorRadius)) {
+        return { ok: false, error: 'in-unknown-space' };
       }
       const id = makeArtificialIdGenerator(game.world)();
       let name: string | undefined;

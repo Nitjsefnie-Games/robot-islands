@@ -74,6 +74,7 @@ import { applyOffer, type TradeOffer } from './trade.js';
 import { editIslandBiome } from './universe-editor.js';
 import { renameIsland } from './world.js';
 import type { Biome, IslandSpec, WorldState } from './world.js';
+import { positionIsFree, regionDiscoveredOrVisible } from './construction-gate.js';
 
 // ── Result shape ─────────────────────────────────────────────────────────────
 
@@ -558,6 +559,12 @@ export function makeLocalGateway(
       const req = { biome, majorRadius, minorRadius };
       const can = validateConstruction(founder.state, founder.spec, req);
       if (!can.ok) return err(can.reason ?? 'construction invalid', can.reason);
+      if (!positionIsFree(world, cx, cy, majorRadius)) {
+        return err('position-occupied', 'position-occupied');
+      }
+      if (!regionDiscoveredOrVisible(world, cx, cy, majorRadius, minorRadius)) {
+        return err('in-unknown-space', 'in-unknown-space');
+      }
       const idGenerator = makeArtificialIdGenerator(world);
       const now = nowMsOr(performance.now(), nowMs);
       try {

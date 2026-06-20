@@ -4,6 +4,8 @@ import { makeLocalGateway, makeRemoteGateway, unwrapGatewayResult } from './muta
 import { createNewGame } from './new-game.js';
 import { makeInitialIslandState } from './world.js';
 import type { Ack, GameServerClient } from './server-client.js';
+import { tileToCell, cellKey } from './discovery.js';
+import { tileInscribedInEllipse } from './island.js';
 
 /** Fake client whose `sendIntent` REJECTS — modelling the real reject sources
  *  in server-client.ts: intent timeout, socket-not-open, and socket-close-
@@ -244,6 +246,17 @@ describe('makeLocalGateway — rename / edit-biome / construct-island parity', (
     state.buildings = home.buildings;
     state.inventory.steel_beam = 10000;
     state.inventory.concrete = 10000;
+    // Reveal the target footprint cells at cx=100, cy=100, radii 4x4.
+    const cx = 100, cy = 100, major = 4, minor = 4;
+    const xMin = -Math.ceil(major), xMax = Math.ceil(major) - 1;
+    const yMin = -Math.ceil(minor), yMax = Math.ceil(minor) - 1;
+    for (let dy = yMin; dy <= yMax; dy++) {
+      for (let dx = xMin; dx <= xMax; dx++) {
+        if (!tileInscribedInEllipse(dx, dy, major, minor)) continue;
+        const c = tileToCell(cx + dx, cy + dy);
+        world.revealedCells.add(cellKey(c.cellX, c.cellY));
+      }
+    }
     const gateway = makeLocalGateway(world, islandStates);
     const result = unwrapGatewayResult(
       gateway.constructIsland({
@@ -259,6 +272,35 @@ describe('makeLocalGateway — rename / edit-biome / construct-island parity', (
     if (!result.ok) return;
     expect(result.value!.newSpec.id).toBe('art-1');
     expect(result.value!.newSpec.biome).toBe('plains');
+  });
+
+  it('rejects local construction whose footprint is not revealed', () => {
+    const now = Date.now();
+    const { world, islandStates } = createNewGame(now);
+    const home = world.islands.find((s) => s.id === 'home')!;
+    const state = islandStates.get('home')!;
+    state.level = 15;
+    home.buildings.push({
+      id: 'pc-1', defId: 'platform_constructor', x: 0, y: 0,
+      constructionRemainingMs: 0, placedAt: now,
+    });
+    state.buildings = home.buildings;
+    state.inventory.steel_beam = 10000;
+    state.inventory.concrete = 10000;
+    // cx=10000, cy=10000 — far from home island, cells not in revealedCells.
+    const gateway = makeLocalGateway(world, islandStates);
+    const result = unwrapGatewayResult(
+      gateway.constructIsland({
+        founderIslandId: 'home',
+        biome: 'plains',
+        majorRadius: 4,
+        minorRadius: 4,
+        cx: 10000,
+        cy: 10000,
+      }),
+    );
+    expect(result.ok).toBe(false);
+    expect((result as { ok: false; error: string }).error).toBe('in-unknown-space');
   });
 });
 
