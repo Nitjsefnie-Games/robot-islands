@@ -1,0 +1,494 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Mass Building Actions — Design spec</title>
+  <style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--ivory);
+      color: var(--gray-700);
+      line-height: 1.58;
+      padding: 56px 32px 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { margin: 0 auto; max-width: 980px; }
+
+    header.page-head { margin-bottom: 40px; max-width: 840px; }
+    .eyebrow {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--gray-500);
+      margin-bottom: 12px;
+    }
+    h1 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 38px;
+      line-height: 1.14;
+      color: var(--slate);
+      margin-bottom: 18px;
+      letter-spacing: -0.01em;
+    }
+    .context-box {
+      background: var(--gray-150);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      font-size: 14.5px;
+      color: var(--gray-700);
+    }
+    .context-box .label {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 56px;
+    }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+    }
+    .summary .k {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      margin-bottom: 6px;
+    }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent  { color: var(--clay); }
+    .summary .v.ok      { color: var(--olive); }
+
+    .decision {
+      background: var(--white);
+      border: var(--border);
+      border-left: 4px solid var(--clay);
+      border-radius: var(--radius);
+      padding: 22px 26px;
+      margin-bottom: 56px;
+    }
+    .decision .d-tag {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--clay);
+      margin-bottom: 8px;
+    }
+    .decision .d-head {
+      font-family: var(--serif);
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--slate);
+      margin-bottom: 10px;
+      letter-spacing: -0.01em;
+    }
+    .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 800px; }
+    .decision .d-body + .d-body { margin-top: 8px; }
+
+    section { margin-bottom: 60px; }
+    .sec-head {
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+      margin-bottom: 8px;
+    }
+    .sec-head .num {
+      font-family: var(--mono);
+      font-size: 12px;
+      background: var(--oat);
+      color: var(--slate);
+      padding: 3px 9px;
+      border-radius: 8px;
+    }
+    .sec-head h2 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 26px;
+      color: var(--slate);
+      letter-spacing: -0.01em;
+    }
+    .sec-intro {
+      font-size: 14.5px;
+      color: var(--gray-500);
+      max-width: 800px;
+      margin-bottom: 24px;
+    }
+    p.body { font-size: 14.5px; max-width: 820px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+    ol.body, ul.body { font-size: 14.5px; max-width: 820px; margin: 0 0 14px 22px; }
+    ol.body li, ul.body li { margin: 7px 0; }
+    code {
+      font-family: var(--mono);
+      font-size: 0.88em;
+      background: var(--gray-150);
+      border: 1px solid var(--gray-300);
+      border-radius: 5px;
+      padding: 1px 5px;
+      color: #C9B98A;
+    }
+    pre {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      background: var(--gray-150);
+      border: var(--border);
+      border-radius: 10px;
+      padding: 14px 18px;
+      overflow-x: auto;
+      color: var(--gray-700);
+      max-width: 820px;
+      margin-bottom: 18px;
+    }
+
+    .tbl {
+      width: 100%;
+      border: var(--border);
+      border-radius: var(--radius);
+      border-collapse: separate;
+      border-spacing: 0;
+      overflow: hidden;
+      font-size: 13.5px;
+    }
+    .tbl th, .tbl td {
+      text-align: left;
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--gray-300);
+      vertical-align: top;
+    }
+    .tbl th {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--gray-500);
+      background: var(--gray-150);
+      font-weight: 600;
+    }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl td code { white-space: nowrap; }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+
+    .compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 820px) { .compare { grid-template-columns: 1fr; } }
+    .compare .col {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .compare .col-head {
+      padding: 12px 18px;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      border-bottom: var(--border);
+    }
+    .compare .col.bad  .col-head { background: #2E211C; color: var(--rust); }
+    .compare .col.good .col-head { background: #232A1C; color: var(--olive); }
+    .compare .col-body { padding: 16px 18px; font-size: 13.5px; }
+    .compare .col-body ul { list-style: none; }
+    .compare .col-body li { margin: 7px 0; padding-left: 18px; position: relative; }
+    .compare .col.bad  li:before { content: '\2715'; position: absolute; left: 0; color: var(--rust); }
+    .compare .col.good li:before { content: '\2713'; position: absolute; left: 0; color: var(--olive); }
+
+    .changes { display: flex; flex-direction: column; gap: 12px; }
+    .change {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      display: grid;
+      grid-template-columns: 200px 1fr;
+      gap: 4px 24px;
+    }
+    @media (max-width: 720px) { .change { grid-template-columns: 1fr; } }
+    .change .file {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      color: var(--clay);
+      word-break: break-all;
+    }
+    .change .what { font-size: 14px; color: var(--gray-700); }
+    .change .what .lead { color: var(--slate); font-weight: 600; }
+    .change .tagnew {
+      font-family: var(--mono); font-size: 10px; color: var(--olive);
+      border: 1px solid #2D3A24; background: #232A1C; border-radius: 5px;
+      padding: 0 5px; margin-left: 6px; text-transform: uppercase; letter-spacing: .05em;
+    }
+
+    .checklist { display: flex; flex-direction: column; gap: 10px; max-width: 820px; }
+    .check {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      background: var(--white);
+      border: var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+    }
+    .check .box {
+      width: 18px; height: 18px;
+      border-radius: 5px;
+      border: 2px solid var(--gray-500);
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .check .ck-text { font-size: 14px; color: var(--gray-700); }
+    .check .ck-text strong { color: var(--slate); }
+
+    .deferred { display: flex; flex-direction: column; gap: 14px; max-width: 880px; }
+    .defer {
+      background: var(--white);
+      border: var(--border);
+      border-left: 4px solid var(--gray-500);
+      border-radius: 10px;
+      padding: 16px 20px;
+    }
+    .defer .dt { font-weight: 600; font-size: 15px; color: var(--slate); margin-bottom: 4px; }
+    .defer .dd { font-size: 13.5px; color: var(--gray-500); }
+
+    .footer {
+      color: var(--gray-500);
+      font-size: 13px;
+      margin-top: 64px;
+      padding-top: 22px;
+      border-top: 1px solid var(--gray-300);
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Design spec · Robot Islands</div>
+      <h1>Mass Building Actions — multi-select &amp; batch operations</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        Today every building action (destroy, upgrade, move, enable/disable,
+        ignore-cap) runs one building at a time through the single-building
+        inspector. This spec adds a <strong>multi-select</strong> model
+        (shift-click + shift-drag box, single-island scope) and a
+        <strong>mass-action mode</strong> in the inspector that batches the
+        existing per-building gateway operations — no new authoritative ops, no
+        schema change.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Scope</div><div class="v accent">6 actions</div></div>
+      <div class="cell"><div class="k">Files touched</div><div class="v">7</div></div>
+      <div class="cell"><div class="k">Risk</div><div class="v ok">Low</div></div>
+      <div class="cell"><div class="k">Schema / migration</div><div class="v ok">None</div></div>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision</div>
+      <div class="d-head">Selection state lives in <code>main.ts</code>; the inspector hosts a delegated mass-panel; mass actions loop existing gateway calls.</div>
+      <div class="d-body"><code>main.ts</code> already owns the canvas
+        click/drag handlers, the selection-outline layer, and all
+        <code>gateway</code> wiring, so the selection <em>set</em> belongs there.
+        The inspector visually hosts the mass-action UI (per the chosen
+        approach) but delegates its body to a focused new
+        <code>inspector-multi.ts</code>, keeping the already-2445-line
+        <code>inspector-ui.ts</code> from absorbing batch logic.</div>
+      <div class="d-body">Deliberately <em>not</em> done: cross-island
+        selection, group rotation, and any new <code>MutationGateway</code>
+        method or snapshot-schema bump. Mass actions are sequenced existing
+        intents, so they add zero new trust surface.</div>
+    </div>
+
+    <section>
+      <div class="sec-head"><span class="num">01</span><h2>Selection model</h2></div>
+      <p class="sec-intro"><code>main.ts</code> holds the selection set, scoped to one island.</p>
+      <pre>selection: Set&lt;buildingId&gt;       // building ids on selectionSpec
+selectionSpec: IslandSpec | null  // the single island the selection lives on</pre>
+      <table class="tbl">
+        <thead><tr><th>Gesture</th><th>Effect</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">Plain click on a building</td><td>Single-select (clears set); opens inspector single-mode (existing path).</td></tr>
+          <tr><td class="slate">Shift-click on a building on <code>selectionSpec</code></td><td>Toggle that id in/out of <code>selection</code>.</td></tr>
+          <tr><td class="slate">Shift-click on a different island</td><td>Ignored (single-island scope).</td></tr>
+          <tr><td class="slate">Shift-drag from empty start</td><td>Rubber-band box mode; on release adds every building on <code>selectionSpec</code> whose footprint intersects the box.</td></tr>
+          <tr><td class="slate">Plain click on empty ocean</td><td>Clear selection + close inspector (existing).</td></tr>
+          <tr><td class="slate">Escape</td><td>Clear selection (existing dismiss path).</td></tr>
+        </tbody>
+      </table>
+      <p class="body" style="margin-top:18px;">The selection-outline layer
+        iterates <code>selection</code> and draws one outline per building (today
+        it draws exactly one). The rubber-band box is a new lightweight overlay
+        rect, following the existing ghost-drag / bend-drag overlay pattern.
+        <code>selection.size&nbsp;&le;&nbsp;1</code> → single inspector;
+        <code>&ge;&nbsp;2</code> → multi-mode.</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">02</span><h2>Approach chosen</h2></div>
+      <p class="sec-intro">Where multi-mode lives, and why the inspector delegates rather than absorbs.</p>
+      <div class="compare">
+        <div class="col bad">
+          <div class="col-head">Rejected — all inline in inspector-ui.ts</div>
+          <div class="col-body"><ul>
+            <li>Grows the largest file (already 2445 lines).</li>
+            <li>Tangles single-building and batch responsibilities.</li>
+            <li>Move-group has to loop the single <code>beginRelocate</code>.</li>
+          </ul></div>
+        </div>
+        <div class="col good">
+          <div class="col-head">Chosen — delegate to inspector-multi.ts</div>
+          <div class="col-body"><ul>
+            <li>Selection owned by <code>main.ts</code> (already owns handlers + gateway).</li>
+            <li>Inspector visually hosts the panel; body delegated to a focused new file.</li>
+            <li>Honors "one responsibility per file" (AGENTS.md).</li>
+            <li>Group move gets a dedicated <code>placement-ui</code> mode.</li>
+          </ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">03</span><h2>Mass-action semantics</h2></div>
+      <p class="sec-intro">Each action operates only on selected buildings for which the single-building op is currently legal (operational, not queued); ineligible ones are silently skipped and the panel reports the effective count.</p>
+      <table class="tbl">
+        <thead><tr><th>Action</th><th>Behavior</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">Destroy</td><td>One <code>window.confirm</code> showing aggregate scrap + 50% refund (existing preview helpers, summed). Then <code>demolishBuilding</code> per building, <code>drainRoutesForBuilding</code> per building, one <code>rebuildWorldLayers()</code>; clear selection + close.</td></tr>
+          <tr><td class="slate">Upgrade <em>(n fit)</em></td><td>Pure <code>planMassUpgrade</code> picks the lowest-floor, affordable buildings that fit free build + queue slots (see below). <code>main.ts</code> then calls <code>applyUpgrade</code> per returned id. Button shows "Upgrade (n fit)"; disabled at n=0.</td></tr>
+          <tr><td class="slate">Enable</td><td>Separate button. <code>setBuildingActiveFloors(id, 0)</code> for every selected building.</td></tr>
+          <tr><td class="slate">Disable</td><td>Separate button. <code>setBuildingActiveFloors(id, allFloors)</code> for every selected building with any active floor; drains routes like the single op, one rebuild.</td></tr>
+          <tr><td class="slate">Ignore-cap</td><td>One checkbox per resource in the <strong>union</strong> of selected buildings' outputs. Tick → <code>setIgnoreCap(id, resource, true)</code> for every selected building that outputs it; checkbox shows checked when <em>all</em> such buildings already have it set.</td></tr>
+          <tr><td class="slate">Move</td><td>Group-drag rigid cluster; all-or-nothing drop (see §05).</td></tr>
+        </tbody>
+      </table>
+
+      <p class="body" style="margin-top:22px;"><strong>Mass-upgrade algorithm</strong> — <code>planMassUpgrade(state, selectedIds) → buildingId[]</code>, pure:</p>
+      <ol class="body">
+        <li><code>freeSlots = (parallelBuildSlots − inProgressBuildCount) + (queuedBuildSlots − queuedBuildCount)</code>. If <code>&le; 0</code>, return <code>[]</code>.</li>
+        <li>Eligible selected buildings (operational, below max floor), sorted <strong>ascending by current <code>floorLevel</code></strong> (laggards first); deterministic tie-break.</li>
+        <li>Walk the list with a <strong>running copy</strong> of <code>state.inventory</code>: if a candidate's <code>upgradeCost</code> fits the running inventory, select it and deduct; else <strong>skip</strong> and continue. Stop at <code>freeSlots</code> selected or list end.</li>
+        <li>Return the selected ids (≤ <code>freeSlots</code>).</li>
+      </ol>
+      <p class="body">Skipping (not stopping) on an unaffordable laggard keeps cheaper upgrades flowing into the remaining slots — mirroring what sequential single-clicks would do.</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">04</span><h2>Move — group drag</h2></div>
+      <p class="sec-intro">A new group-relocate mode in <code>placement-ui.ts</code>, sibling to the single <code>beginRelocate</code>.</p>
+      <ul class="body">
+        <li>Selection becomes a <strong>rigid cluster</strong> following the cursor, preserving each member's relative offset.</li>
+        <li>Each frame, validate the whole cluster as a unit via pure <code>validateGroupRelocate(spec, state, members, dx, dy)</code>: every member's new footprint must be in-island, pass biome/tier gates, and not overlap any <em>non-selected</em> building or another member. Ghost renders green (all valid) / red (any invalid).</li>
+        <li><strong>All-or-nothing drop</strong>: on a fully-valid drop, <code>relocateBuilding</code> per member, each paying its own <code>relocateFee</code> (50% invested cost, matching single-move). Invalid drop → no-op.</li>
+        <li>Group <strong>rotation</strong> is out of scope for v1.</li>
+      </ul>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">05</span><h2>Change inventory</h2></div>
+      <p class="sec-intro">Files the implementation touches.</p>
+      <div class="changes">
+        <div class="change">
+          <div class="file">src/main.ts</div>
+          <div class="what"><span class="lead">Selection state + input + wiring.</span> <code>Set</code> + <code>selectionSpec</code>; shift-click/box-drag handlers; multi-outline render; box overlay; mass-action loops over <code>gateway</code>.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/inspector-multi.ts<span class="tagnew">new</span></div>
+          <div class="what"><span class="lead">Multi-select panel.</span> Count + type breakdown, action buttons, per-resource ignore-cap checkboxes.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/mass-actions.ts<span class="tagnew">new · pure</span></div>
+          <div class="what"><span class="lead">Pure batch logic.</span> <code>planMassUpgrade</code>, box-intersection hit-set, ignore-cap union/checked-state, group-footprint validation (final home decided at plan time).</div>
+        </div>
+        <div class="change">
+          <div class="file">src/inspector-ui.ts</div>
+          <div class="what"><span class="lead">Delegate at size ≥ 2.</span> Swap body to <code>inspector-multi</code>; pass the selection through. Single-mode unchanged.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/placement-ui.ts</div>
+          <div class="what"><span class="lead">Group-relocate mode.</span> Rigid-cluster drag sibling to <code>beginRelocate</code>.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/placement.ts</div>
+          <div class="what"><span class="lead">Group validation.</span> Pure <code>validateGroupRelocate</code> (or in <code>mass-actions.ts</code>).</div>
+        </div>
+        <div class="change">
+          <div class="file">SPEC.md</div>
+          <div class="what"><span class="lead">New §4 subsection.</span> Multi-select model + mass-action semantics (upgrade slot/affordability algorithm, all-or-nothing group move). Ships in the same change.</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">06</span><h2>Verification</h2></div>
+      <p class="sec-intro">Pure-layer unit tests (render code stays read-only, untested per convention).</p>
+      <div class="checklist">
+        <div class="check"><div class="box"></div><div class="ck-text"><strong><code>planMassUpgrade</code>.</strong> Lowest-floor-first; skip-unaffordable with running-inventory depletion; respects <code>freeSlots = running + queue</code>; <code>[]</code> when no slots / nothing affordable; excludes max-floor and under-construction.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Box hit-set.</strong> Footprint-intersecting buildings included; partial overlaps count; non-<code>selectionSpec</code> islands excluded.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong><code>validateGroupRelocate</code>.</strong> Rejects member leaving island / hitting biome gate / overlapping a non-selected building or sibling; accepts a clean translation; fee = sum of per-member <code>relocateFee</code>.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Ignore-cap union.</strong> Checked-state derivation: all output-bearing buildings set → checked.</div></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">07</span><h2>Out of scope (v1)</h2></div>
+      <div class="deferred">
+        <div class="defer"><div class="dt">Cross-island selection</div><div class="dd">Slots, inventory, and upgrade costs are per-island; single-island scope keeps the algorithm simple. Revisit only if demanded.</div></div>
+        <div class="defer"><div class="dt">Group rotation during move</div><div class="dd">v1 preserves orientation; rotating the cluster is deferred.</div></div>
+        <div class="defer"><div class="dt">New gateway / schema / migration</div><div class="dd">Mass actions are sequenced existing intents; no authoritative-surface or persistence change.</div></div>
+        <div class="defer"><div class="dt">Inherently single-building inspector features</div><div class="dd">Cargo relabel, land reclamation, servitor conversion, time-lock, etc. stay single-only.</div></div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <p>Design spec · Robot Islands · 2026-06-20 · author: claude-opus-4-8 · companion: <code>docs/superpowers/specs/2026-06-20-mass-building-actions-design.md</code></p>
+    </div>
+
+  </div>
+</body>
+</html>
