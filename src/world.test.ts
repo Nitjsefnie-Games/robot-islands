@@ -8,6 +8,7 @@ import {
   attachTerrainAt,
   DEMO_ISLANDS_TEST_FIXTURE,
   findPopulatedIslandAt,
+  islandConstituents,
   islandRenderState,
   ISLAND_NAME_MAX_LEN,
   makeInitialIslandState,
@@ -597,5 +598,27 @@ describe('attachTerrainAt — tileOverrides precedence', () => {
     const legacy = makeSpec();
     expect(legacy.tileOverrides).toBeUndefined();
     expect(legacy.terrainAt?.(2, 2)).toBeDefined();
+  });
+});
+
+
+describe('islandConstituents', () => {
+  it('islandConstituents carries biome: primary from spec, extras from entry', () => {
+    const spec = {
+      id: 'i1', biome: 'plains' as const,
+      majorRadius: 10, minorRadius: 8, cx: 0, cy: 0,
+      buildings: [],
+      extraEllipses: [
+        { biome: 'volcanic' as const, major: 6, minor: 6, rotation: 0, offsetX: 12, offsetY: 0 },
+        // legacy-shaped entry missing biome (cast to exercise the ?? fallback)
+        { major: 5, minor: 5, rotation: 0, offsetX: -12, offsetY: 0 } as unknown as never,
+      ],
+    } as unknown as Parameters<typeof islandConstituents>[0];
+
+    const cs = islandConstituents(spec);
+    expect(cs).toHaveLength(3);
+    expect(cs[0]!.biome).toBe('plains');     // primary
+    expect(cs[1]!.biome).toBe('volcanic');   // explicit extra biome
+    expect(cs[2]!.biome).toBe('plains');     // legacy extra falls back to spec.biome
   });
 });

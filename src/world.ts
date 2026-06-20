@@ -154,6 +154,12 @@ export interface IslandSpec {
    *  forward-compat only — merge propagation isn't wired, so absorbed primaries
    *  enter with rotation 0 (see `island-merge.ts`). */
   extraEllipses?: Array<{
+    /** §3.4 cap-only origin biome of this absorbed constituent. Derives the
+     *  per-lobe Land Reclamation cap (BIOME_MAX_RADII[biome]). Terrain is NOT
+     *  routed through this — tiles still query the absorber's biome (§3.6).
+     *  Optional in input shape only: legacy saves lack it (migrated v27→v28);
+     *  readers default via `?? spec.biome`. */
+    readonly biome: Biome;
     readonly major: number;
     readonly minor: number;
     readonly rotation: number;
@@ -174,6 +180,7 @@ export interface IslandSpec {
  *  (0,0), extras at their offsets" pattern that overlap / tile / hit-test
  *  / vision code all share. */
 export interface ConstituentEllipse {
+  readonly biome: Biome;
   readonly major: number;
   readonly minor: number;
   readonly rotation: number;
@@ -186,10 +193,13 @@ export interface ConstituentEllipse {
  *  extras.length entries). Pure. */
 export function islandConstituents(spec: IslandSpec): ConstituentEllipse[] {
   const out: ConstituentEllipse[] = [
-    { major: spec.majorRadius, minor: spec.minorRadius, rotation: 0, offsetX: 0, offsetY: 0 },
+    { biome: spec.biome, major: spec.majorRadius, minor: spec.minorRadius,
+      rotation: 0, offsetX: 0, offsetY: 0 },
   ];
   if (spec.extraEllipses) {
-    for (const e of spec.extraEllipses) out.push(e);
+    for (const e of spec.extraEllipses) {
+      out.push({ ...e, biome: e.biome ?? spec.biome });
+    }
   }
   return out;
 }
