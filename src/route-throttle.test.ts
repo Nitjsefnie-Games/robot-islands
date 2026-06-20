@@ -33,7 +33,7 @@ function mkSpec(id: string, buildings: PlacedBuilding[] = []): IslandSpec {
 
 function mkWorld(islands: IslandSpec[], routes: Route[]): WorldState {
   return { islands, drones: [], routes, vehicles: [], revealedCells: new Set(), satellites: [], repairDrones: [],
-    debrisFields: [], endgameState: { achieved: new Set(), firstAchievedMs: null }, latticeActive: false,
+    debrisFields: [], latticeActive: false,
     latticeNodeIslands: [], commPackets: [], totalCo2Kg: 0, playerLat: 0, playerLon: 0, seed: 't',
     oceanCells: new Map(), depthRevealedCells: new Set(), recentBuildAttempts: new Set(), recentBuildAttemptTs: new Map() } as unknown as WorldState;
 }

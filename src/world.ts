@@ -24,7 +24,6 @@ import { floorScaledCapacity, renderBuildings } from './buildings.js';
 import { CELL_SIZE_TILES } from './constants.js';
 import { islandCells } from './discovery.js';
 import type { IslandState } from './economy.js';
-import type { EndgameState, VictoryCondition } from './endgame.js';
 import { type TerrainKind, type Tile } from './island.js';
 import {
   computeIslandTiles,
@@ -762,8 +761,6 @@ export interface WorldState {
   /** Tutorial onboarding state. Optional so legacy saves and test fixtures
    *  compile without change; `makeInitialWorld` always seeds it. */
   tutorialState?: import('./tutorial.js').TutorialState;
-  /** §13.4 endgame progress tracking. */
-  endgameState: EndgameState;
   /** §13.3 Omniscient Lattice global activation flag. */
   latticeActive: boolean;
   /** Island IDs that have an active Lattice Node. */
@@ -909,7 +906,7 @@ export function makeInitialWorld(_nowMs: number): WorldState {
   // Ocean-layer §5 — depth visibility starts empty. Sonar Buoys and Scanner
   // Sat upgrades populate it as the player builds those revealers.
   const depthRevealedCells = new Set<string>();
-  return { islands, drones: [], routes: [], vehicles: [], revealedCells, seed: WORLD_SEED, satellites: [], repairDrones: [], debrisFields: [], tutorialState: { completed: new Set(), current: 'place_solar' }, endgameState: { achieved: new Set<VictoryCondition>(), firstAchievedMs: null }, latticeActive: false, latticeNodeIslands: [], activeBonusMs: 0, tradeOffers: [], commPackets: [], totalCo2Kg: 0, playerLat: null, playerLon: null, generatedCells, oceanCells, depthRevealedCells, recentBuildAttempts: new Set(), recentBuildAttemptTs: new Map() };
+  return { islands, drones: [], routes: [], vehicles: [], revealedCells, seed: WORLD_SEED, satellites: [], repairDrones: [], debrisFields: [], tutorialState: { completed: new Set(), current: 'place_solar' }, latticeActive: false, latticeNodeIslands: [], activeBonusMs: 0, tradeOffers: [], commPackets: [], totalCo2Kg: 0, playerLat: null, playerLon: null, generatedCells, oceanCells, depthRevealedCells, recentBuildAttempts: new Set(), recentBuildAttemptTs: new Map() };
 }
 
 /**

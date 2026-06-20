@@ -77,7 +77,7 @@ function dayWorld(): import('./world.js').WorldState {
   return {
     islands: [], drones: [], routes: [], vehicles: [],
     revealedCells: new Set(), satellites: [], repairDrones: [],
-    debrisFields: [], endgameState: { achieved: new Set(), firstAchievedMs: null },
+    debrisFields: [],
     latticeActive: false, latticeNodeIslands: [],
     commPackets: [], totalCo2Kg: 0,
     playerLat: 0, playerLon: 0,

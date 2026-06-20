@@ -104,7 +104,6 @@ function freshWorld(islands: IslandSpec[] = []): WorldState {
     satellites: [],
     repairDrones: [],
     debrisFields: [],
-    endgameState: { achieved: new Set(), firstAchievedMs: null },
     latticeActive: false,
     latticeNodeIslands: [],
     commPackets: [],

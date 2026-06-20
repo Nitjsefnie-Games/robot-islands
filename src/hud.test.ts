@@ -228,7 +228,6 @@ describe('mountHud DOM persistence', () => {
       satellites: [],
       repairDrones: [],
       debrisFields: [],
-      endgameState: { achieved: new Set(), firstAchievedMs: null },
       latticeActive: false,
       latticeNodeIslands: [],
       commPackets: [],
@@ -334,7 +333,6 @@ describe('mountHud subtitle tier (#134 T6 surfacing)', () => {
     return {
       islands: [], seed: 'test', drones: [], routes: [], vehicles: [],
       revealedCells: new Set(), satellites: [], repairDrones: [], debrisFields: [],
-      endgameState: { achieved: new Set(), firstAchievedMs: null },
       latticeActive: false, latticeNodeIslands: [], commPackets: [],
       oceanCells: new Map(), depthRevealedCells: new Set(), totalCo2Kg: 0,
       playerLat: 0, playerLon: 0, recentBuildAttempts: new Set(), recentBuildAttemptTs: new Map(),
@@ -387,7 +385,6 @@ describe('mountHud retained DOM (perf: change-gated writes, no per-frame rebuild
       satellites: [],
       repairDrones: [],
       debrisFields: [],
-      endgameState: { achieved: new Set(), firstAchievedMs: null },
       latticeActive: false,
       latticeNodeIslands: [],
       commPackets: [],
