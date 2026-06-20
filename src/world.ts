@@ -1011,9 +1011,13 @@ export const DEFAULT_GEN_OPTS: {
  * retained only as a test fixture (`DEMO_ISLANDS_TEST_FIXTURE`) — the
  * production new-game world is the home + procedural layout.
  */
-export function makeInitialWorld(_nowMs: number): WorldState {
+export function makeInitialWorld(_nowMs: number, seed: string = WORLD_SEED): WorldState {
   // §3.7 fresh-game seed: a single populated home island. Procedural
-  // generation appends undiscovered neighbours below.
+  // generation appends undiscovered neighbours below. `seed` drives island
+  // placement / biomes / ocean terrain so each account's world is unique —
+  // the server passes the save's creation (registration / reset) timestamp;
+  // callers that omit it (LOCAL debug, tests, demos) get the canonical
+  // WORLD_SEED. The home island itself is hand-placed and seed-independent.
   const islands: IslandSpec[] = [makeHomeIslandSpec()];
   // Procedural generation runs here, ONCE per fresh game. The resolved
   // list is persisted via the v3 snapshot path; reloads bypass this code.
@@ -1021,7 +1025,7 @@ export function makeInitialWorld(_nowMs: number): WorldState {
   // generated island never lands on top of (0, 0).
   // `world-gen.ts` imports `world.ts` for `IslandSpec` only as a type-only
   // edge, so the dependency cycle is type-side and TS handles it.
-  const generated = generateWorld({ ...DEFAULT_GEN_OPTS, existingIslands: islands });
+  const generated = generateWorld({ ...DEFAULT_GEN_OPTS, seed, existingIslands: islands });
   for (const g of generated) islands.push(g);
   // §11 telemetry: seed revealedCells with every cell touched by a
   // populated OR already-discovered island's footprint. With only home
@@ -1046,11 +1050,11 @@ export function makeInitialWorld(_nowMs: number): WorldState {
   // generator scans only a bounding rect around the placed islands;
   // empty seas beyond that rect stay implicit `deep` via `terrainAt`'s
   // fallback in `ocean-cell.ts`.
-  const oceanCells = generateOceanTerrain(WORLD_SEED, islands);
+  const oceanCells = generateOceanTerrain(seed, islands);
   // Ocean-layer §5 — depth visibility starts empty. Sonar Buoys and Scanner
   // Sat upgrades populate it as the player builds those revealers.
   const depthRevealedCells = new Set<string>();
-  return { islands, drones: [], routes: [], vehicles: [], revealedCells, seed: WORLD_SEED, satellites: [], repairDrones: [], debrisFields: [], tutorialState: { completed: new Set(), current: 'place_solar' }, latticeActive: false, latticeNodeIslands: [], activeBonusMs: 0, tradeOffers: [], commPackets: [], totalCo2Kg: 0, playerLat: null, playerLon: null, generatedCells, oceanCells, depthRevealedCells, recentBuildAttempts: new Set(), recentBuildAttemptTs: new Map() };
+  return { islands, drones: [], routes: [], vehicles: [], revealedCells, seed, satellites: [], repairDrones: [], debrisFields: [], tutorialState: { completed: new Set(), current: 'place_solar' }, latticeActive: false, latticeNodeIslands: [], activeBonusMs: 0, tradeOffers: [], commPackets: [], totalCo2Kg: 0, playerLat: null, playerLon: null, generatedCells, oceanCells, depthRevealedCells, recentBuildAttempts: new Set(), recentBuildAttemptTs: new Map() };
 }
 
 /**

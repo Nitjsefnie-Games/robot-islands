@@ -10,8 +10,12 @@ import { makeInitialIslandState, makeInitialWorld, type WorldState } from './wor
  */
 export function createNewGame(
   nowMs: number,
+  seed?: string,
 ): { world: WorldState; islandStates: Map<string, IslandState> } {
-  const world = makeInitialWorld(nowMs);
+  // `seed` makes the procedural world unique per game; omitted ⇒ the canonical
+  // WORLD_SEED default (LOCAL debug / tests). The server passes the save's
+  // creation timestamp so each account gets its own world (§2.1 / §3.7).
+  const world = seed === undefined ? makeInitialWorld(nowMs) : makeInitialWorld(nowMs, seed);
   const homeSpec = world.islands.find((s) => s.id === 'home');
   if (!homeSpec) throw new Error('createNewGame: home island missing from world');
   const islandStates = new Map<string, IslandState>();

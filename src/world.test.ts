@@ -14,6 +14,7 @@ import {
   makeInitialIslandState,
   makeInitialWorld,
   renameIsland,
+  WORLD_SEED,
   validateIslandName,
   VISION_PADDING_TILES,
   type IslandSpec,
@@ -252,6 +253,27 @@ describe('makeInitialWorld — §3.7 fresh-game contract', () => {
     const w = makeInitialWorld(0);
     const home = w.islands.find((s) => s.id === 'home')!;
     expect(home.buildings).toEqual([]);
+  });
+
+  it('defaults the world seed to WORLD_SEED when none is given', () => {
+    expect(makeInitialWorld(0).seed).toBe(WORLD_SEED);
+  });
+
+  it('uses an explicit seed and that seed produces a different procedural world', () => {
+    const a = makeInitialWorld(0, 'seed-A');
+    const b = makeInitialWorld(0, 'seed-B');
+    expect(a.seed).toBe('seed-A');
+    expect(b.seed).toBe('seed-B');
+    // Home is hand-placed and seed-independent; the procedural NEIGHBOURS differ.
+    const sig = (w: ReturnType<typeof makeInitialWorld>): string =>
+      w.islands
+        .filter((s) => s.id !== 'home')
+        .map((s) => `${s.id}@${s.cx},${s.cy}:${s.biome}`)
+        .sort()
+        .join('|');
+    expect(sig(a)).not.toBe(sig(b));
+    // Same seed ⇒ identical layout (determinism).
+    expect(sig(makeInitialWorld(0, 'seed-A'))).toBe(sig(a));
   });
 
   it('appends procedural neighbours beyond the home island', () => {

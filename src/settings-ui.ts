@@ -28,6 +28,7 @@ import {
   STORAGE_KEY_DISPLAY,
 } from './persistence.js';
 import { showMapPicker } from './map-picker.js';
+import { isRemoteBootEnabled } from './remote-boot.js';
 import { mountModal } from './ui-modal.js';
 import type { IslandState } from './economy.js';
 import type { WorldState } from './world.js';
@@ -425,13 +426,26 @@ export function mountSettingsUi(
         () => {
           if (
             !window.confirm(
-              'Clear the local saved game and reload? This cannot be undone.',
+              'Clear the saved game and reload? This generates a NEW world and cannot be undone.',
             )
           )
             return;
-          void Promise.all([clearSave(), clearPrefs()]).then(() => {
+          void (async () => {
+            // REMOTE: reset the authoritative server save first (POST
+            // /api/game/reset overwrites it with a fresh world seeded by the
+            // reset timestamp). Then clear the local IDB/prefs cache and reload
+            // so the client re-fetches the new world. LOCAL: just clearing IDB
+            // is enough — the fresh-game path mints a new world on reboot.
+            if (isRemoteBootEnabled()) {
+              try {
+                await fetch('/api/game/reset', { method: 'POST', credentials: 'include' });
+              } catch (err) {
+                console.warn('[robot-islands] game reset failed:', err);
+              }
+            }
+            await Promise.all([clearSave(), clearPrefs()]);
             window.location.reload();
-          });
+          })();
         },
         'ri-btn--danger',
       );
@@ -441,7 +455,7 @@ export function mountSettingsUi(
 
       const saveNote = document.createElement('div');
       saveNote.textContent =
-        'Saves are persisted server-side. Clear Save wipes the local IDB copy and reloads. Rebound keys are NOT yet persisted across reloads.';
+        'Saves are persisted server-side. Clear Save resets the server game to a brand-new world (seeded by the reset time) and reloads — this cannot be undone. Rebound keys are NOT yet persisted across reloads.';
       saveNote.className = 'ri-muted';
       saveNote.style.fontSize = '10px';
       saveNote.style.lineHeight = '1.4';

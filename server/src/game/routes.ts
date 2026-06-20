@@ -45,6 +45,22 @@ export function registerGameRoutes(app: FastifyInstance, pool: Pool): void {
     return reply.code(201).send(projectGame(game!));
   });
 
+  // §3.7 "Clear Save" → reset to a brand-new world. Unlike /new this does NOT
+  // 409 on an existing save: it OVERWRITES it (saveSnapshot upserts meta/world
+  // and replaces island rows). The fresh world's seed is the reset timestamp
+  // (`createInitialSnapshot(now)` seeds from `now`), so each reset yields a
+  // different procedurally-generated world. Destructive + irreversible (matches
+  // the client's "this cannot be undone" confirm).
+  app.post('/api/game/reset', { preHandler: guard }, async (req, reply) => {
+    const userId = req.user!.id;
+    const game = await withAccountTx(pool, userId, async (client) => {
+      const now = Date.now();
+      await saveSnapshot(client, userId, createInitialSnapshot(now));
+      return loadAndCatchUp(client, userId, now);
+    });
+    return reply.code(200).send(projectGame(game!));
+  });
+
   app.post('/api/game/import', { preHandler: guard }, async (req, reply) => {
     const userId = req.user!.id;
     const body = req.body as { snapshot?: unknown };
