@@ -8,7 +8,8 @@ import { mountPanel, Zone, type PanelHandle } from './ui-zones.js';
 import type { IslandState } from './economy.js';
 import type { IslandSpec } from './world.js';
 import { t5Unlocked } from './skilltree.js';
-import { canPlaceOnIsland, BUILDING_DEFS } from './building-defs.js';
+import { BUILDING_DEFS } from './building-defs.js';
+import { canPlaceOnAnyConstituent } from './placement.js';
 
 export interface GraphUi {
   show(): void;
@@ -241,7 +242,7 @@ export function mountGraphUi(
                 const def = BUILDING_DEFS[
                   (span.closest('[data-row-building]')?.getAttribute('data-row-building') ?? '') as keyof typeof BUILDING_DEFS
                 ];
-                status = def && canPlaceOnIsland(def, spec) ? 'met' : 'pending';
+                status = def && canPlaceOnAnyConstituent(def, spec) ? 'met' : 'pending';
               }
               break;
             case 'tile':
