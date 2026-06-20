@@ -134,6 +134,9 @@ export function performMerge(
   }
   absorber.extraEllipses.push({
     biome: absorbed.biome,
+    // §3.6 terrain seed: the absorbed island's id, so its terrain (resource
+    // veins included) reproduces under the lobe's own biome post-merge.
+    originId: absorbed.id,
     major: absorbed.majorRadius,
     minor: absorbed.minorRadius,
     rotation: 0,
@@ -142,11 +145,13 @@ export function performMerge(
   });
   // If the absorbed island carried any extras of its own (recursive merge
   // history), propagate them too — each extra's offset shifts by the
-  // (absorbed - absorber) delta so they land in absorber's local frame.
+  // (absorbed - absorber) delta so they land in absorber's local frame. Each
+  // keeps its OWN origin biome/seed (falling back to the absorbed primary's).
   if (absorbed.extraEllipses) {
     for (const e of absorbed.extraEllipses) {
       absorber.extraEllipses.push({
         biome: e.biome ?? absorbed.biome,
+        originId: e.originId ?? absorbed.id,
         major: e.major,
         minor: e.minor,
         rotation: e.rotation,

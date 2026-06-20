@@ -29,6 +29,7 @@ import {
   computeIslandTiles,
   islandInscribedAny,
   renderIslandTiles,
+  tileInscribedInEllipse,
   TILE_PX,
 } from './island.js';
 import type { OceanCellSpec } from './ocean-cell.js';
@@ -154,12 +155,18 @@ export interface IslandSpec {
    *  forward-compat only — merge propagation isn't wired, so absorbed primaries
    *  enter with rotation 0 (see `island-merge.ts`). */
   extraEllipses?: Array<{
-    /** §3.4 cap-only origin biome of this absorbed constituent. Derives the
-     *  per-lobe Land Reclamation cap (BIOME_MAX_RADII[biome]). Terrain is NOT
-     *  routed through this — tiles still query the absorber's biome (§3.6).
-     *  Optional in input shape only: legacy saves lack it (migrated v27→v28);
-     *  readers default via `?? spec.biome`. */
+    /** §3.6 origin biome of this absorbed constituent. Drives BOTH the per-lobe
+     *  Land Reclamation cap (BIOME_MAX_RADII[biome]) AND this lobe's terrain
+     *  generation — tiles inside the lobe are generated under its own biome, not
+     *  the absorber's (see `attachTerrainAt`). Optional in input shape only:
+     *  legacy saves lack it; readers default via `?? spec.biome`. */
     readonly biome?: Biome;
+    /** §3.6 origin id (terrain seed) of the absorbed island. `terrainAtForBiome`
+     *  hashes vein placement on the island id, so reproducing the lobe's original
+     *  terrain after a merge requires its original id. Optional: pre-feature
+     *  merges lack it; readers default via `?? spec.id` (best-effort — a legacy
+     *  lobe then uses the absorber's seed, the pre-feature look). */
+    readonly originId?: string;
     readonly major: number;
     readonly minor: number;
     readonly rotation: number;
@@ -181,6 +188,10 @@ export interface IslandSpec {
  *  / vision code all share. */
 export interface ConstituentEllipse {
   readonly biome: Biome;
+  /** Origin island id — the terrain seed for this constituent. The primary
+   *  carries the island's own id; an absorbed lobe carries the absorbed island's
+   *  id so its terrain reproduces post-merge (§3.6). */
+  readonly originId: string;
   readonly major: number;
   readonly minor: number;
   readonly rotation: number;
@@ -193,12 +204,14 @@ export interface ConstituentEllipse {
  *  extras.length entries). Pure. */
 export function islandConstituents(spec: IslandSpec): ConstituentEllipse[] {
   const out: ConstituentEllipse[] = [
-    { biome: spec.biome, major: spec.majorRadius, minor: spec.minorRadius,
+    { biome: spec.biome, originId: spec.id, major: spec.majorRadius, minor: spec.minorRadius,
       rotation: 0, offsetX: 0, offsetY: 0 },
   ];
   if (spec.extraEllipses) {
     for (const e of spec.extraEllipses) {
-      out.push({ ...e, biome: e.biome ?? spec.biome });
+      // Legacy lobes lack biome/originId — default to the absorber's (the
+      // pre-feature look: absorber biome + absorber seed).
+      out.push({ ...e, biome: e.biome ?? spec.biome, originId: e.originId ?? spec.id });
     }
   }
   return out;
@@ -243,6 +256,25 @@ export function attachTerrainAt<B extends Omit<IslandSpec, 'terrainAt'>>(base: B
       const k = overrides[`${x},${y}`];
       if (k !== undefined) return k;
     }
+    // §3.6 per-constituent terrain. Each constituent generates terrain under
+    // its OWN biome/seed in its OWN local frame, so an absorbed lobe keeps the
+    // terrain (incl. resource veins) it had as a standalone island, and growing
+    // a constituent pulls new terrain from THAT constituent — not the absorber.
+    // "Already placed wins": constituents are walked in age order (primary,
+    // then merge order), and the FIRST that inscribes the tile owns it — the
+    // same precedence as the `computeIslandTiles` dedup, so the tile set and its
+    // terrain never disagree on a shared (overlap) tile.
+    for (const c of islandConstituents(spec)) {
+      const lx = x - c.offsetX;
+      const ly = y - c.offsetY;
+      if (!tileInscribedInEllipse(lx, ly, c.major, c.minor)) continue;
+      return terrainAtForBiome(c.biome, c.originId, lx, ly, (px, py) =>
+        tileInscribedInEllipse(px, py, c.major, c.minor),
+      );
+    }
+    // Not inscribed in any constituent (e.g. a bounding-box probe outside the
+    // footprint). Fall back to the primary's biome/seed in island-local coords,
+    // matching the pre-feature query for non-land tiles.
     return terrainAtForBiome(spec.biome, spec.id, x, y, (px, py) =>
       islandInscribedAny(spec, px, py),
     );

@@ -633,15 +633,14 @@ describe('serialize → JSON → deserialize round-trip', () => {
     // §3.6 extra ellipse, where the rehydrated closure's predicate path is
     // the actual load-bearing thing.
     //
-    // The probe (24, 0) mirrors the I3 by-reference test: cluster cell
-    // (8, 0) sits fully outside the primary r=14 ellipse and fully inside
-    // an extra at offset (22, 0) with semi-axes (8, 8). The hash for id
-    // `'closure-ref-test'` on cell (8, 0) lands rare (≈0.0053 < 0.12), so
-    // the cell only emits a non-default tile when the inscription predicate
-    // is consulted AND sees the extra ellipse. If a future regression drops
-    // `extraEllipses` before binding the rehydrated closure (or binds the
-    // closure to a snapshot instead of the live spec), the rehydrated
-    // terrainAt would demote to default and the assertion would fail.
+    // The probe (24, 0) sits fully outside the primary r=14 ellipse and fully
+    // inside a §3.6 DESERT lobe at offset (22, 0) with semi-axes (8, 8). Under
+    // per-constituent terrain (§3.6) the lobe generates its tiles under its OWN
+    // biome + seed in its OWN local frame, so the probe yields desert terrain —
+    // never plains' 'grass'. If a regression drops `extraEllipses`/`originId`
+    // before binding the rehydrated closure (or binds to a snapshot instead of
+    // the live spec), the rehydrated terrainAt would fall back to the plains
+    // primary and the assertions would drift.
     const world = makeInitialWorld(0);
     const procedural = attachTerrainAt({
       id: 'closure-ref-test',
@@ -656,28 +655,27 @@ describe('serialize → JSON → deserialize round-trip', () => {
       buildings: [],
       modifiers: [],
       extraEllipses: [
-        { major: 8, minor: 8, rotation: 0, offsetX: 22, offsetY: 0 },
+        { biome: 'desert', originId: 'lobe-seed', major: 8, minor: 8, rotation: 0, offsetX: 22, offsetY: 0 },
       ],
     });
     world.islands.push(procedural);
     const probeX = 24;
     const probeY = 0;
     const expected = procedural.terrainAt!(probeX, probeY);
-    // Discrimination guard — if the cell stops being a rare-roll cell, the
-    // assertions below pass vacuously (every tile = default). Force the
-    // test to fail loudly so a maintainer picks a fresh probe.
+    // Discrimination guard — desert terrain is never plains' 'grass', so a
+    // 'grass' here means the per-constituent path collapsed to the primary.
     expect(
       expected,
-      'I4 probe cell must hash rare or the test is vacuous',
+      'desert lobe probe must not yield plains grass',
     ).not.toBe('grass');
     const snap = serializeWorld(world, new Map(), 0);
     const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
     const { world: restored } = deserializeWorld(json, 0, 0);
     const rSpec = restored.islands.find((s) => s.id === 'closure-ref-test')!;
     // The rehydrated extra MUST round-trip into the same shape that
-    // attachTerrainAt's predicate consults — verify the field survives.
+    // attachTerrainAt's per-constituent path consults — incl. biome + originId.
     expect(rSpec.extraEllipses).toEqual([
-      { major: 8, minor: 8, rotation: 0, offsetX: 22, offsetY: 0 },
+      { biome: 'desert', originId: 'lobe-seed', major: 8, minor: 8, rotation: 0, offsetX: 22, offsetY: 0 },
     ]);
     // The load-bearing assertion: the rehydrated closure agrees with the
     // pre-serialization closure at the probe AND at every sibling tile of
