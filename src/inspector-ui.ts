@@ -54,7 +54,8 @@ import {
   maintenanceFactor,
   refreshCostFor,
 } from './maintenance.js';
-import { ALL_RESOURCES, resolveRecipe, type Recipe, type ResourceId } from './recipes.js';
+import { isOutputCapExempt } from './output-cap.js';
+import { ALL_RESOURCES, RECIPES, resolveRecipe, type Recipe, type RecipeId, type ResourceId } from './recipes.js';
 import { effectiveSkillMultipliers, type SkillMultipliers } from './skilltree.js';
 import { RESOURCE_STORAGE_CATEGORY, storageBaseFor, type StorageCategory } from './storage-categories.js';
 import {
@@ -201,11 +202,9 @@ export interface InspectorDeps {
    *  alerts-overlay re-paints the partial/full-disable cue. `newDisabledFloors`
    *  is the desired count of OFF floors (clamped to [0, built] by the mutator). */
   onSetActiveFloors(target: InspectorTarget, newDisabledFloors: number): void;
-  /** §4.6 Set the building's Force Run flag. main.ts owns the mutation
-   *  (`target.building.forceRun = value || undefined`) and bumps autosave.
-   *  Force Run keeps the building producing for XP at a full output bin;
-   *  overflow is voided, inputs / power / wear stay real costs. */
-  onSetForceRun(target: InspectorTarget, value: boolean): void;
+  /** §4.6 Set this building's Ignore Cap flag for one output resource. main.ts
+   *  routes it to the mutation gateway (`setIgnoreCap`). */
+  onSetIgnoreCap(target: InspectorTarget, resource: ResourceId, value: boolean): void;
   /** §4.7 Trigger a manual maintenance refresh. main.ts owns the mutation
    *  (gateway.refreshMaintenance), invalidates alerts, and refreshes the
    *  inspector. */
@@ -391,18 +390,18 @@ export function mountInspectorUi(
     paint();
   });
 
-  // ── Force Run pending ref (§4.6) ────────────────────────────────────────
-  // Mirrors the floor-disable pattern: set the desired value, dispatch the
-  // payload-less registry action, which reads + nulls the ref and calls the dep.
-  let pendingForceRun: boolean | null = null;
-  defineAction(reg, 'set-building-force-run', () => {
-    const v = pendingForceRun;
-    pendingForceRun = null;
-    if (v === null) return;
+  // ── Ignore Cap pending ref (§4.6) ───────────────────────────────────────
+  // Mirrors the floor-disable pattern: set the desired {resource, value}, dispatch
+  // the payload-less registry action, which reads + nulls the ref and calls the dep.
+  let pendingIgnoreCap: { resource: ResourceId; value: boolean } | null = null;
+  defineAction(reg, 'set-building-ignore-cap', () => {
+    const p = pendingIgnoreCap;
+    pendingIgnoreCap = null;
+    if (!p) return;
     const target = resolveTarget();
     if (!target) { close(); return; }
     if ((target.building.constructionRemainingMs ?? 0) > 0) return; // guard: no-op while constructing
-    deps.onSetForceRun(target, v);
+    deps.onSetIgnoreCap(target, p.resource, p.value);
     paint();
   });
 
@@ -1178,46 +1177,68 @@ export function mountInspectorUi(
   const floorAllOnBtn = makeFloorDisableBtn('Max', () => 0);
   maintenanceSection.body.appendChild(floorDisableRow);
 
-  // §4.6 Force Run toggle — keep producing for XP at a full output bin.
-  // Shown only for resource-producing buildings (the only ones a cap can
-  // throttle); hidden under construction. Reuses the accent action-button look.
-  const forceRunBtn = document.createElement('button');
+  // §4.6 Ignore Cap — one toggle per output resource. Default-on resources
+  // (OUTPUT_CAP_EXEMPT, incl. slag) start checked; a checked box keeps the
+  // building producing for XP at a full bin of that resource (overflow voided).
+  const ignoreCapWrap = document.createElement('div');
   styled(
-    forceRunBtn,
+    ignoreCapWrap,
     [
-      'background: transparent',
-      `color: ${'var(--ri-accent)'}`,
-      `border: 1px solid ${'var(--ri-accent-dim)'}`,
-      'padding: 4px 8px',
-      'cursor: pointer',
-      'font-family: ui-monospace, monospace',
-      'font-size: 10.5px',
-      'letter-spacing: 0.08em',
-      'text-transform: uppercase',
-      'border-radius: 2px',
-      'transition: background 80ms ease, border-color 80ms ease',
-      'text-align: left',
+      'display: flex',
+      'flex-direction: column',
+      'gap: 4px',
       'margin-top: 4px',
     ].join(';'),
   );
-  forceRunBtn.addEventListener('mouseenter', () => {
-    if (forceRunBtn.disabled) return;
-    forceRunBtn.style.background = 'rgba(125, 211, 232, 0.08)';
-    forceRunBtn.style.borderColor = 'var(--ri-accent)';
-  });
-  forceRunBtn.addEventListener('mouseleave', () => {
-    forceRunBtn.style.background = forceRunBtn.dataset.on === '1' ? 'rgba(125, 211, 232, 0.12)' : 'transparent';
-    forceRunBtn.style.borderColor = 'var(--ri-accent-dim)';
-  });
-  forceRunBtn.addEventListener('click', () => {
-    if (forceRunBtn.disabled) return;
-    const target = resolveTarget();
-    if (!target) { close(); return; }
-    if ((target.building.constructionRemainingMs ?? 0) > 0) return;
-    pendingForceRun = !(target.building.forceRun === true);
-    dispatchAction(reg, 'set-building-force-run');
-  });
-  maintenanceSection.body.appendChild(forceRunBtn);
+  const ignoreCapHeader = document.createElement('span');
+  ignoreCapHeader.textContent = 'IGNORE CAP';
+  styled(
+    ignoreCapHeader,
+    [`color: ${'var(--ri-fg-3)'}`, 'font-size: 9.5px', 'letter-spacing: 0.14em'].join(';'),
+  );
+  ignoreCapWrap.appendChild(ignoreCapHeader);
+
+  const ignoreCapRows = new Map<
+    ResourceId,
+    { row: HTMLDivElement; checkbox: HTMLInputElement; label: HTMLSpanElement }
+  >();
+
+  function ensureIgnoreCapRow(resource: ResourceId): HTMLInputElement {
+    let existing = ignoreCapRows.get(resource);
+    if (existing) return existing.checkbox;
+    const row = document.createElement('div');
+    styled(
+      row,
+      ['display: flex', 'align-items: center', 'gap: 6px'].join(';'),
+    );
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.dataset.ignoreCapResource = resource;
+    styled(checkbox, ['margin: 0', 'cursor: pointer'].join(';'));
+    const label = document.createElement('span');
+    label.textContent = resource;
+    styled(
+      label,
+      [`color: ${'var(--ri-fg-2)'}`, 'font-size: 10.5px', 'text-transform: uppercase'].join(';'),
+    );
+    row.appendChild(checkbox);
+    row.appendChild(label);
+
+    checkbox.addEventListener('change', () => {
+      const target = resolveTarget();
+      if (!target) { close(); return; }
+      if ((target.building.constructionRemainingMs ?? 0) > 0) return;
+      pendingIgnoreCap = { resource, value: checkbox.checked };
+      dispatchAction(reg, 'set-building-ignore-cap');
+    });
+
+    existing = { row, checkbox, label };
+    ignoreCapRows.set(resource, existing);
+    ignoreCapWrap.appendChild(row);
+    return checkbox;
+  }
+
+  maintenanceSection.body.appendChild(ignoreCapWrap);
 
   // §13.3 Universe Editor — biome-reassign action. Shown only when the
   // selected building is a `universe_editor`. Cost preview + confirm
@@ -2177,20 +2198,29 @@ export function mountInspectorUi(
       setBtn(floorAllOnBtn, atMax);
     }
 
-    // §4.6 Force Run toggle paint. Only meaningful for buildings that PRODUCE
-    // a resource (the only ones a storage cap can throttle); hidden otherwise
-    // and while under construction.
+    // §4.6 Ignore Cap checkboxes paint. One checkbox per possible output
+    // resource of this building's recipe (base outputs + every rotateOutputs
+    // option). Hidden for non-producing buildings and while under construction.
     const producesResource = !!recipe && Object.keys(recipe.outputs).length > 0;
     if (!producesResource || isUnderConstruction) {
-      forceRunBtn.style.display = 'none';
+      ignoreCapWrap.style.display = 'none';
     } else {
-      forceRunBtn.style.display = '';
-      const on = building.forceRun === true;
-      forceRunBtn.dataset.on = on ? '1' : '0';
-      forceRunBtn.textContent = on ? 'FORCE RUN: ON' : 'FORCE RUN: OFF';
-      forceRunBtn.style.background = on ? 'rgba(125, 211, 232, 0.12)' : 'transparent';
-      forceRunBtn.style.color = on ? 'var(--ri-accent)' : 'var(--ri-fg-2)';
-      forceRunBtn.style.borderColor = 'var(--ri-accent-dim)';
+      ignoreCapWrap.style.display = '';
+      const baseRecipe = RECIPES[building.defId as RecipeId];
+      const outputSet = new Set<ResourceId>();
+      if (baseRecipe) {
+        for (const r of Object.keys(baseRecipe.outputs)) outputSet.add(r as ResourceId);
+        for (const rot of baseRecipe.rotateOutputs ?? []) {
+          for (const r of Object.keys(rot)) outputSet.add(r as ResourceId);
+        }
+      }
+      for (const [r, rowData] of ignoreCapRows) {
+        rowData.row.style.display = outputSet.has(r) ? '' : 'none';
+      }
+      for (const r of outputSet) {
+        const checkbox = ensureIgnoreCapRow(r);
+        checkbox.checked = isOutputCapExempt(building, r);
+      }
     }
 
     // §3.4 Land Reclamation section — only for the Hub itself. Renders a
