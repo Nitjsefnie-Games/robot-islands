@@ -448,18 +448,6 @@ export function hasForecastStation(spec: IslandSpec): boolean {
   return false;
 }
 
-export function isWeatherVisible(world: WorldState, cx: number, cy: number): boolean {
-  for (const island of world.islands) {
-    if (!island.populated) continue;
-    const dx = island.cx - cx;
-    const dy = island.cy - cy;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    const range = BASE_WEATHER_VISIBILITY_TILES + weatherStationRangeBonusTiles(island);
-    if (dist <= range) return true;
-  }
-  return false;
-}
-
 /**
  * §2.6 — build the vision-source set used by the weather overlay. Distinct
  * from `computeVisionSources` (ocean + Lighthouse) because:

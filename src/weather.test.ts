@@ -3,7 +3,6 @@ import { DAY_DURATION_MS } from './daynight.js';
 import {
   weather,
   biomeWeatherWeights,
-  isWeatherVisible,
   WEATHER_DESTRUCTION_CHANCE,
   WEATHER_SCAN_PENALTY,
   rasterizePath,
@@ -24,7 +23,7 @@ import {
   rasterizePolylineCells,
   clearWeatherCacheForTests,
 } from './weather.js';
-import type { IslandSpec, WorldState } from './world.js';
+import type { IslandSpec } from './world.js';
 
 describe('weather determinism', () => {
   it('returns the same result for the same inputs', () => {
@@ -175,137 +174,6 @@ describe('§2.7 — night/dawn severe-storm boost', () => {
     }
     // Dusk must not be systematically higher than day (may be equal/lower by chance).
     expect(duskSevere).toBeLessThanOrEqual(daySevere + 30);
-  });
-});
-
-describe('isWeatherVisible', () => {
-  function makeWorld(islands: WorldState['islands']): WorldState {
-    return {
-      islands,
-      drones: [],
-      routes: [],
-      vehicles: [],
-      revealedCells: new Set(),
-      satellites: [],
-      repairDrones: [],
-    debrisFields: [],
-      endgameState: { achieved: new Set(), firstAchievedMs: null },
-      latticeActive: false,
-      latticeNodeIslands: [],
-    commPackets: [],
-    totalCo2Kg: 0,
-    playerLat: null,
-    playerLon: null,
-    oceanCells: new Map(),
-    depthRevealedCells: new Set(),
-      seed: 'test-seed',
-      recentBuildAttempts: new Set(),
-      recentBuildAttemptTs: new Map(),
-    };
-  }
-
-  it('returns true for points within base visibility of a populated island', () => {
-    const world = makeWorld([
-      {
-        id: 'home',
-        name: 'home',
-        biome: 'plains',
-        cx: 0,
-        cy: 0,
-        majorRadius: 10,
-        minorRadius: 10,
-        populated: true,
-        discovered: true,
-        buildings: [],
-        modifiers: [],
-      },
-    ]);
-    expect(isWeatherVisible(world, 0, 0)).toBe(true);
-    expect(isWeatherVisible(world, 4, 0)).toBe(true);
-    expect(isWeatherVisible(world, 5, 0)).toBe(true);
-    expect(isWeatherVisible(world, 6, 0)).toBe(false);
-  });
-
-  it('returns false for unpopulated islands', () => {
-    const world = makeWorld([
-      {
-        id: 'discovered',
-        name: 'discovered',
-        biome: 'plains',
-        cx: 0,
-        cy: 0,
-        majorRadius: 10,
-        minorRadius: 10,
-        populated: false,
-        discovered: true,
-        buildings: [],
-        modifiers: [],
-      },
-    ]);
-    expect(isWeatherVisible(world, 0, 0)).toBe(false);
-  });
-
-  it('extends range with weather stations', () => {
-    const world = makeWorld([
-      {
-        id: 'home',
-        name: 'home',
-        biome: 'plains',
-        cx: 0,
-        cy: 0,
-        majorRadius: 10,
-        minorRadius: 10,
-        populated: true,
-        discovered: true,
-        buildings: [{ id: 'ws1', defId: 'weather_station_t2', x: 0, y: 0 }],
-        modifiers: [],
-      },
-    ]);
-    expect(isWeatherVisible(world, 8, 0)).toBe(true);
-    expect(isWeatherVisible(world, 9, 0)).toBe(false);
-  });
-
-  it('extends range with advanced weather station', () => {
-    const world = makeWorld([
-      {
-        id: 'home',
-        name: 'home',
-        biome: 'plains',
-        cx: 0,
-        cy: 0,
-        majorRadius: 10,
-        minorRadius: 10,
-        populated: true,
-        discovered: true,
-        buildings: [{ id: 'aws1', defId: 'advanced_weather_station_t3', x: 0, y: 0 }],
-        modifiers: [],
-      },
-    ]);
-    expect(isWeatherVisible(world, 11, 0)).toBe(true);
-    expect(isWeatherVisible(world, 12, 0)).toBe(false);
-  });
-
-  it('stacks multiple weather stations', () => {
-    const world = makeWorld([
-      {
-        id: 'home',
-        name: 'home',
-        biome: 'plains',
-        cx: 0,
-        cy: 0,
-        majorRadius: 10,
-        minorRadius: 10,
-        populated: true,
-        discovered: true,
-        buildings: [
-          { id: 'ws1', defId: 'weather_station_t2', x: 0, y: 0 },
-          { id: 'aws1', defId: 'advanced_weather_station_t3', x: 2, y: 0 },
-        ],
-        modifiers: [],
-      },
-    ]);
-    expect(isWeatherVisible(world, 14, 0)).toBe(true);
-    expect(isWeatherVisible(world, 15, 0)).toBe(false);
   });
 });
 
