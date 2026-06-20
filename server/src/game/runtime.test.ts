@@ -159,6 +159,7 @@ describe('runtime loadAndCatchUp', () => {
       fuelResource: 'biofuel',
       failureRate: 0,
       status: 'active',
+      scanBuffer: new Set<string>(),
     };
     world.vehicles.push(vehicle);
 
