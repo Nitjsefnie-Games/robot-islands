@@ -84,7 +84,7 @@ import { tryRefreshMaintenance } from '../../../src/maintenance.js';
 import { hasOperationalBuilding } from '../../../src/building-operational.js';
 import { positionIsFree } from '../../../src/construction-gate.js';
 import { candidateAnchors } from '../../../src/anchor-picker.js';
-import { ALL_RESOURCES, type ResourceId } from '../../../src/recipes.js';
+import { ALL_RESOURCES, RECIPES, type ResourceId } from '../../../src/recipes.js';
 import { setGenesisTarget, spendTimeLock } from '../../../src/economy.js';
 import type { Rotation } from '../../../src/shape-mask.js';
 import { CARGO_WILDCARD, type CargoEntry, type CargoMode } from '../../../src/route-cargo.js';
@@ -645,21 +645,30 @@ export const INTENTS: Record<string, IntentHandler> = {
     },
   },
 
-  // set-force-run — §4.6 per-building production override. Player supplies
-  // { islandId, buildingId, forceRun: boolean }. No cost; authoritative pre-
-  // check is just building existence/ownership on the island.
-  'set-force-run': {
+  // set-ignore-cap — §4.6 per-output Ignore Cap. Player supplies
+  // { islandId, buildingId, resource, value }. Authoritative checks: building
+  // exists on the island AND `resource` is an actual output of its recipe.
+  'set-ignore-cap': {
     apply(game: LiveGame, payload: unknown): IntentResult {
       if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
-      const { islandId, buildingId, forceRun } = payload;
+      const { islandId, buildingId, resource, value } = payload;
       if (typeof islandId !== 'string') return { ok: false, error: 'islandId must be a string' };
       if (typeof buildingId !== 'string') return { ok: false, error: 'buildingId must be a string' };
-      if (typeof forceRun !== 'boolean') return { ok: false, error: 'forceRun must be a boolean' };
+      if (typeof resource !== 'string') return { ok: false, error: 'resource must be a string' };
+      if (typeof value !== 'boolean') return { ok: false, error: 'value must be a boolean' };
       const island = resolveIsland(game, islandId);
       if (!island) return { ok: false, error: 'unknown island' };
       const b = island.spec.buildings.find((bb) => bb.id === buildingId);
       if (!b) return { ok: false, error: 'not-found' };
-      b.forceRun = forceRun ? true : undefined;
+      const recipe = RECIPES[b.defId];
+      const outputs = recipe
+        ? new Set(Object.keys(recipe.outputs).concat(
+            (recipe.rotateOutputs ?? []).flatMap((o) => Object.keys(o))))
+        : new Set<string>();
+      if (!outputs.has(resource)) return { ok: false, error: 'not-an-output' };
+      const ov = { ...(b.ignoreCapOverrides ?? {}) };
+      ov[resource as ResourceId] = value;
+      b.ignoreCapOverrides = ov;
       return { ok: true };
     },
   },

@@ -1110,33 +1110,36 @@ describe('relocate-building', () => {
   });
 });
 
-describe('set-force-run', () => {
-  it('legal: toggles the force-run flag on a building', async () => {
+describe('set-ignore-cap', () => {
+  async function aUserWithSmelterMaterials(now: number): Promise<string> {
+    return aUserWithModifiedGame(now, (_w, states) => {
+      const s = states.get('home');
+      s.level = 5;
+      s.inventory.stone = 1000;
+      s.inventory.clay = 1000;
+      s.inventory.wood = 1000;
+    });
+  }
+
+  it('accepts a real output resource and writes the override', async () => {
     const now = Date.now();
-    const uid = await aUserWithGame();
-    const id = await placeBuilding(uid, 'workshop', 0, 0, now);
-
-    const ack = await applyIntent(
-      pool, uid,
-      { type: 'set-force-run', payload: { islandId: 'home', buildingId: id, forceRun: true }, seq: 2 },
-      now,
-    );
-    expect(ack).toMatchObject({ ok: true, seq: 2 });
-
-    const buildings = await homeBuildings(uid);
-    const b = buildings.find((bb) => bb.id === id)!;
-    expect(b.forceRun).toBe(true);
+    const uid = await aUserWithSmelterMaterials(now);
+    // place a smelter first via place-building, then toggle its iron_ingot
+    const bId = await placeBuilding(uid, 'smelter', 0, 0, now); // helper returns id
+    const ack = await applyIntent(pool, uid,
+      { type: 'set-ignore-cap', payload: { islandId: 'home', buildingId: bId, resource: 'iron_ingot', value: true }, seq: 2 }, now);
+    expect(ack).toMatchObject({ ok: true });
+    const b = (await homeBuildings(uid)).find((bb) => bb.id === bId)!;
+    expect((b.ignoreCapOverrides as Record<string, boolean>).iron_ingot).toBe(true);
   });
 
-  it('illegal: non-boolean forceRun is rejected, save unchanged', async () => {
+  it('rejects a resource that is not an output of the building', async () => {
     const now = Date.now();
-    const uid = await aUserWithGame();
-    const id = await placeBuilding(uid, 'workshop', 0, 0, now);
-    await expectRejectNoChange(
-      uid,
-      { type: 'set-force-run', payload: { islandId: 'home', buildingId: id, forceRun: 'yes' }, seq: 9 },
-      now,
-    );
+    const uid = await aUserWithSmelterMaterials(now);
+    const bId = await placeBuilding(uid, 'smelter', 0, 0, now);
+    const ack = await applyIntent(pool, uid,
+      { type: 'set-ignore-cap', payload: { islandId: 'home', buildingId: bId, resource: 'wood', value: true }, seq: 2 }, now);
+    expect(ack).toMatchObject({ ok: false });
   });
 });
 
