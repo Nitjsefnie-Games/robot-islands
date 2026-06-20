@@ -6,6 +6,8 @@ import { createNewGame } from './new-game.js';
 import { type WorldState } from './world.js';
 import type { IslandState } from './economy.js';
 import type { MutationGateway } from './mutation-gateway.js';
+import { tileInscribedInEllipse } from './island.js';
+import { tileToCell, cellKey } from './discovery.js';
 
 function makeRemoteGateway(result: { ok: true } | { ok: false; error: string }): MutationGateway {
   return {
@@ -33,6 +35,17 @@ function makeWorld(): { world: WorldState; islandStates: Map<string, IslandState
   return { world, islandStates };
 }
 
+/** Reveal every cell touched by a 4x4 ellipse centered at (cx,cy). */
+function revealFootprint(world: WorldState, cx: number, cy: number): void {
+  for (let dy = -4; dy <= 3; dy++) {
+    for (let dx = -4; dx <= 3; dx++) {
+      if (!tileInscribedInEllipse(dx, dy, 4, 4)) continue;
+      const c = tileToCell(cx + dx, cy + dy);
+      world.revealedCells.add(cellKey(c.cellX, c.cellY));
+    }
+  }
+}
+
 describe('mountConstructionUi — REMOTE construct', () => {
   let container: HTMLElement;
 
@@ -48,6 +61,7 @@ describe('mountConstructionUi — REMOTE construct', () => {
 
   it('#47: closes and resets the panel on a successful REMOTE construct', async () => {
     const { world, islandStates } = makeWorld();
+    revealFootprint(world, 200, 200);
     const gateway = makeRemoteGateway({ ok: true });
     const onConstruct = vi.fn();
 
@@ -71,13 +85,13 @@ describe('mountConstructionUi — REMOTE construct', () => {
     founderSelect.value = 'home';
     founderSelect.dispatchEvent(new Event('change'));
 
-    // Pick a non-overlapping position.
+    // Pick a non-overlapping, fully-revealed position.
     const numberInputs = container.querySelectorAll('input[type="number"]');
     const posXInput = numberInputs[0] as HTMLInputElement;
     const posYInput = numberInputs[1] as HTMLInputElement;
     posXInput.value = '200';
-    posYInput.value = '200';
     posXInput.dispatchEvent(new Event('input'));
+    posYInput.value = '200';
     posYInput.dispatchEvent(new Event('input'));
 
     // Click the Construct button.

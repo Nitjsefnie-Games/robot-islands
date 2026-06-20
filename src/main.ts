@@ -63,6 +63,13 @@ import { BUILDING_DEFS } from './building-defs.js';
 import { activeFloors, type PlacedBuilding } from './buildings.js';
 import { mountBuildingsUi } from './buildings-ui.js';
 import { mountConstructionUi } from './construction-ui.js';
+import { createConstructionGhostOverlay } from './construction-overlay.js';
+import {
+  computePlacementValidity,
+  placementBlocksGhost,
+  type ConstructionCandidate,
+} from './construction-placement.js';
+import { maxRadiusForFounderLevel } from './artificial-island.js';
 import { mountInspectorUi, type InspectorTarget } from './inspector-ui.js';
 import { type Axis } from './land-reclamation.js';
 import { mountInventoryUi } from './inventory-ui.js';
@@ -1883,6 +1890,20 @@ async function main(): Promise<void> {
   // screen space so labels stay readable at any zoom; updated each frame below.
   const lobeBadges = createLobeBadgeOverlay(app.stage);
 
+  // §2.5 construction ghost — shared candidate state lives here so the DOM panel
+  // and the world-space ellipse overlay stay synchronized.
+  const constructionCandidate: ConstructionCandidate = {
+    founderId: '',
+    biome: 'plains',
+    major: 4,
+    minor: 4,
+    cx: 0,
+    cy: 0,
+  };
+  let ghostWasVisible = false;
+  const constructionGhost = createConstructionGhostOverlay(world);
+  constructionGhost.setToTile((gx, gy) => screenToWorldTile(gx, gy));
+
   // Step-11 Construction modal — sister to skill tree + buildings catalog.
   // Inserts the new island into worldState/islandStates, registers its
   // caches, and rebuilds render layers in the onConstruct callback.
@@ -1892,6 +1913,8 @@ async function main(): Promise<void> {
   const constructionUi = mountConstructionUi(document.body, {
     world: worldState,
     islandStates,
+    candidate: constructionCandidate,
+    onCandidateChange: () => redrawGhost(),
     getActiveIslandId: () => activeIslandId,
     gateway,
     onConstruct: ({ newSpec, newState }) => {
@@ -1904,8 +1927,39 @@ async function main(): Promise<void> {
       // later doesn't accidentally skip the fold).
       modifierMulsById.set(newSpec.id, effectiveModifierMultipliers([]));
       rebuildWorldLayers();
+
+      // Seed the next placement to the right so repeated constructs don't stack.
+      constructionCandidate.cx += constructionCandidate.major * 2 + 6;
+      redrawGhost();
     },
   });
+
+  function redrawGhost(): void {
+    if (!constructionUi.isVisible()) {
+      constructionGhost.update(null, false);
+      return;
+    }
+    const v = computePlacementValidity(worldState, islandStates, constructionCandidate);
+    constructionGhost.update(constructionCandidate, placementBlocksGhost(v.reason));
+  }
+
+  constructionGhost.setHandlers({
+    onMove(cx, cy) {
+      constructionCandidate.cx = cx;
+      constructionCandidate.cy = cy;
+      constructionUi.refreshFromCandidate();
+      redrawGhost();
+    },
+    onResize(major, minor) {
+      const st = islandStates.get(constructionCandidate.founderId);
+      const cap = st ? maxRadiusForFounderLevel(st.level) : 8;
+      constructionCandidate.major = Math.min(major, cap);
+      constructionCandidate.minor = Math.min(minor, cap);
+      constructionUi.refreshFromCandidate();
+      redrawGhost();
+    },
+  });
+
   defineAction(reg, 'toggle-construction', () => {
     constructionUi.toggle();
   });
@@ -2016,6 +2070,7 @@ async function main(): Promise<void> {
     skillGraph.hide();
     buildingsUi.hide();
     constructionUi.hide();
+    constructionGhost.update(null, false);
     inventoryUi.hide();
     // settingsUi is mounted later; the closure captures the binding which
     // gets assigned before this action ever fires (panel-toggle happens
@@ -2497,6 +2552,13 @@ async function main(): Promise<void> {
     // refresh against the authoritative snapshot while they are visible.
     if (skillGraph.isVisible()) skillGraph.refresh();
     if (constructionUi.isVisible()) constructionUi.refresh();
+    if (constructionUi.isVisible()) {
+      redrawGhost();
+      ghostWasVisible = true;
+    } else if (ghostWasVisible) {
+      constructionGhost.update(null, false);
+      ghostWasVisible = false;
+    }
     if (routesUi.isVisible()) routesUi.refresh(performance.now());
     if (graphUi.isVisible()) graphUi.refresh();
 
