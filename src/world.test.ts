@@ -6,8 +6,10 @@ import { describe, expect, it } from 'vitest';
 import { computeVisionSources, type VisionSource } from './lighthouse.js';
 import {
   attachTerrainAt,
+  constituentBiomeAt,
   DEMO_ISLANDS_TEST_FIXTURE,
   findPopulatedIslandAt,
+  islandConstituentBiomes,
   islandConstituents,
   islandRenderState,
   ISLAND_NAME_MAX_LEN,
@@ -19,7 +21,7 @@ import {
   VISION_PADDING_TILES,
   type IslandSpec,
 } from './world.js';
-import type { TerrainKind } from './island.js';
+import { tileInscribedInEllipse, type TerrainKind } from './island.js';
 import type { ResourceId } from './recipes.js';
 import { ALL_RESOURCES } from './recipes.js';
 
@@ -642,5 +644,99 @@ describe('islandConstituents', () => {
     expect(cs[0]!.biome).toBe('plains');     // primary
     expect(cs[1]!.biome).toBe('volcanic');   // explicit extra biome
     expect(cs[2]!.biome).toBe('plains');     // legacy extra falls back to spec.biome
+  });
+});
+
+
+describe('constituentBiomeAt / islandConstituentBiomes', () => {
+  it('non-merged island: inside tile uses spec.biome, outside returns undefined', () => {
+    const spec = makeSpec({ biome: 'forest', majorRadius: 5, minorRadius: 5 });
+    expect(tileInscribedInEllipse(0, 0, 5, 5)).toBe(true);
+    expect(constituentBiomeAt(spec, 0, 0)).toBe('forest');
+    expect(tileInscribedInEllipse(10, 0, 5, 5)).toBe(false);
+    expect(constituentBiomeAt(spec, 10, 0)).toBeUndefined();
+  });
+
+  it('merged island: each lobe resolves to its own biome', () => {
+    const spec = makeSpec({
+      biome: 'forest',
+      majorRadius: 5,
+      minorRadius: 5,
+      extraEllipses: [
+        {
+          biome: 'volcanic' as const,
+          originId: 'absorbed',
+          major: 6,
+          minor: 6,
+          rotation: 0,
+          offsetX: 12,
+          offsetY: 0,
+        },
+      ],
+    });
+    expect(tileInscribedInEllipse(0, 0, 5, 5)).toBe(true);
+    expect(constituentBiomeAt(spec, 0, 0)).toBe('forest');
+    expect(tileInscribedInEllipse(11 - 12, 0, 6, 6)).toBe(true);
+    expect(constituentBiomeAt(spec, 11, 0)).toBe('volcanic');
+  });
+
+  it('overlap precedence: earliest inscribing constituent wins', () => {
+    const spec = makeSpec({
+      biome: 'forest',
+      majorRadius: 5,
+      minorRadius: 5,
+      extraEllipses: [
+        {
+          biome: 'volcanic' as const,
+          originId: 'absorbed',
+          major: 5,
+          minor: 5,
+          rotation: 0,
+          offsetX: 3,
+          offsetY: 0,
+        },
+      ],
+    });
+    // (0,0) is inside both constituents; primary is earliest.
+    expect(tileInscribedInEllipse(0, 0, 5, 5)).toBe(true);
+    expect(tileInscribedInEllipse(0 - 3, 0, 5, 5)).toBe(true);
+    expect(constituentBiomeAt(spec, 0, 0)).toBe('forest');
+    // (5,0) is inside the extra only.
+    expect(tileInscribedInEllipse(5, 0, 5, 5)).toBe(false);
+    expect(tileInscribedInEllipse(5 - 3, 0, 5, 5)).toBe(true);
+    expect(constituentBiomeAt(spec, 5, 0)).toBe('volcanic');
+  });
+
+  it('islandConstituentBiomes collects distinct biomes', () => {
+    const single = makeSpec({ biome: 'forest' });
+    expect(islandConstituentBiomes(single)).toEqual(new Set(['forest']));
+
+    const merged = makeSpec({
+      biome: 'forest',
+      extraEllipses: [
+        {
+          biome: 'volcanic' as const,
+          originId: 'a',
+          major: 6,
+          minor: 6,
+          rotation: 0,
+          offsetX: 12,
+          offsetY: 0,
+        },
+        {
+          biome: 'volcanic' as const,
+          originId: 'b',
+          major: 4,
+          minor: 4,
+          rotation: 0,
+          offsetX: -12,
+          offsetY: 0,
+        },
+      ],
+    });
+    const biomes = islandConstituentBiomes(merged);
+    expect(biomes.size).toBe(2);
+    expect(biomes.has('forest')).toBe(true);
+    expect(biomes.has('volcanic')).toBe(true);
   });
 });

@@ -226,6 +226,24 @@ export function islandConstituents(spec: IslandSpec): ConstituentEllipse[] {
   return out;
 }
 
+/** §3.6 multibiome: the biome of the constituent that owns tile (x,y) in
+ *  island-local coords — the EARLIEST constituent (primary, then merge order)
+ *  whose ellipse inscribes the tile, matching attachTerrainAt's terrain
+ *  precedence and the computeIslandTiles dedup. Returns undefined when no
+ *  constituent inscribes the tile (outside the footprint). Pure. */
+export function constituentBiomeAt(spec: IslandSpec, x: number, y: number): Biome | undefined {
+  for (const c of islandConstituents(spec)) {
+    if (tileInscribedInEllipse(x - c.offsetX, y - c.offsetY, c.major, c.minor)) return c.biome;
+  }
+  return undefined;
+}
+
+/** The set of distinct constituent biomes on `spec` (primary + absorbed lobes).
+ *  For a non-merged island this is just { spec.biome }. Pure. */
+export function islandConstituentBiomes(spec: IslandSpec): Set<Biome> {
+  return new Set(islandConstituents(spec).map((c) => c.biome));
+}
+
 /**
  * Build an `IslandSpec` from a base lacking `terrainAt` and attach the
  * predicate-aware `terrainAt` closure expected by `renderIsland` and the
