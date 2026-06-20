@@ -36,7 +36,6 @@ function makeWorld(over: Partial<WorldState> & { islands: IslandSpec[] }): World
     repairDrones: [],
     debrisFields: [],
     tutorialState: { completed: [], current: null },
-    endgameState: {},
     latticeActive: false,
     latticeNodeIslands: [],
     activeBonusMs: 0,

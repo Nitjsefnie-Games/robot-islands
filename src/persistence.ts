@@ -53,7 +53,6 @@ import type { ObjectiveId } from './tutorial.js';
 import { _seedVehicleIdCounter } from './settlement.js';
 
 
-import type { VictoryCondition } from './endgame.js';
 import type { NodeId } from './skilltree.js';
 import type { ResourceId } from './recipes.js';
 import { cumulativeSkillPointsForLevel } from './skilltree.js';
@@ -152,11 +151,6 @@ export interface SerializedWorld {
   readonly debrisFields: ReadonlyArray<import('./orbital.js').DebrisField>;
   /** Tutorial onboarding state. */
   readonly tutorialState?: { completed: ObjectiveId[]; current: ObjectiveId | null; xpBumpClaimed?: ObjectiveId[] };
-  /** §13.4 endgame progress. */
-  readonly endgameState?: {
-    readonly achieved: ReadonlyArray<VictoryCondition>;
-    readonly firstAchievedMs: number | null;
-  };
   /** §13.3 Omniscient Lattice activation. */
   readonly latticeActive?: boolean;
   /** §9.9 active-play bonus balance (effective focused ms). Optional:
@@ -392,10 +386,6 @@ export interface SerializedSnapshotV12 {
     readonly repairDrones: ReadonlyArray<import('./orbital.js').RepairDrone>;
     readonly debrisFields: ReadonlyArray<import('./orbital.js').DebrisField>;
     readonly tutorialState?: { completed: ObjectiveId[]; current: ObjectiveId | null; xpBumpClaimed?: ObjectiveId[] };
-    readonly endgameState?: {
-      readonly achieved: ReadonlyArray<VictoryCondition>;
-      readonly firstAchievedMs: number | null;
-    };
     readonly latticeActive?: boolean;
     readonly latticeNodeIslands?: ReadonlyArray<string>;
     readonly commPackets: ReadonlyArray<import('./orbital.js').CommPacket>;
@@ -887,11 +877,6 @@ export function serializeWorld(
         current: world.tutorialState?.current ?? null,
         xpBumpClaimed: Array.from(world.tutorialState?.xpBumpClaimed ?? []),
       },
-      // §13.4 endgame state.
-      endgameState: {
-        achieved: [...(world.endgameState?.achieved ?? [])],
-        firstAchievedMs: world.endgameState?.firstAchievedMs ?? null,
-      },
       latticeActive: world.latticeActive,
       activeBonusMs: world.activeBonusMs ?? 0,
       lastActiveMs: world.lastActiveMs,
@@ -1130,12 +1115,6 @@ export function deserializeWorld(
           xpBumpClaimed: new Set(snapshot.world.tutorialState.xpBumpClaimed ?? []),
         }
       : { completed: new Set(), current: 'place_solar' },
-    endgameState: snapshot.world.endgameState
-      ? {
-          achieved: new Set<VictoryCondition>(snapshot.world.endgameState.achieved),
-          firstAchievedMs: snapshot.world.endgameState.firstAchievedMs,
-        }
-      : { achieved: new Set<VictoryCondition>(), firstAchievedMs: null },
     latticeActive: snapshot.world.latticeActive ?? false,
     // §9.9: the closed-game gap is unfocused time — burn the balance at the
     // decay ratio before offline catch-up runs. This closed-game decay runs

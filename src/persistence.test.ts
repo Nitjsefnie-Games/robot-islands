@@ -29,7 +29,6 @@ import {
   _resetVehicleIdCounter,
   nextVehicleId,
 } from './settlement.js';
-import type { VictoryCondition } from './endgame.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import type { ObjectiveId } from './tutorial.js';
 import type { EdgeId } from './skilltree-graph.js';
@@ -1375,23 +1374,6 @@ describe('IslandState.lastResetAt perfShift (§9.7)', () => {
 // ---------------------------------------------------------------------------
 
 describe('WorldState-level fields round-trip', () => {
-  it('preserves endgameState (achieved Set, firstAchievedMs)', () => {
-    const world = makeInitialWorld(0);
-    world.endgameState = {
-      achieved: new Set<VictoryCondition>(['genesis_cell_crafted', 'ascendant_core_crafted']),
-      firstAchievedMs: 12_345,
-    };
-    const snap = serializeWorld(world, new Map(), 0, 0);
-    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
-    const { world: restored } = deserializeWorld(json, 0, 0);
-    expect(restored.endgameState.achieved).toBeInstanceOf(Set);
-    expect(restored.endgameState.achieved.has('genesis_cell_crafted')).toBe(true);
-    expect(restored.endgameState.achieved.has('ascendant_core_crafted')).toBe(true);
-    expect(restored.endgameState.achieved.has('omniscient_lattice_active')).toBe(false);
-    expect(restored.endgameState.achieved.size).toBe(2);
-    expect(restored.endgameState.firstAchievedMs).toBe(12_345);
-  });
-
   it('preserves latticeActive and latticeNodeIslands', () => {
     const world = makeInitialWorld(0);
     world.latticeActive = true;

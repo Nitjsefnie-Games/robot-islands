@@ -2418,7 +2418,7 @@ async function main(): Promise<void> {
     // orphan them on permanently-frozen data. Object.assign copies every
     // enumerable field the deserialized world carries (islands, drones,
     // routes, vehicles, satellites, repairDrones, debrisFields, revealedCells,
-    // tutorialState, endgameState, latticeActive, latticeNodeIslands,
+    // tutorialState, latticeActive, latticeNodeIslands,
     // activeBonusMs, commPackets, oceanCells, depthRevealedCells, totalCo2Kg,
     // playerLat/Lon, generatedCells, recentBuildAttempts*, seed) onto the live
     // object. `recentBuildAttempts`/`recentBuildAttemptTs` come back fresh-empty

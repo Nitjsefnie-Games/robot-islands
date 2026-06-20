@@ -68,7 +68,6 @@ function makeWorld(opts: {
     repairDrones: [],
     debrisFields: [],
     commPackets: [],
-    endgameState: { activePhase: null, phases: {} } as unknown as WorldState['endgameState'],
     latticeActive: false,
     latticeNodeIslands: [],
     recentBuildAttempts: new Set(),
