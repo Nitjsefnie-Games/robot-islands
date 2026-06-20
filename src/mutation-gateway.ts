@@ -143,7 +143,7 @@ export interface MutationGateway {
     y: number,
     rotation?: Rotation,
   ): GatewayReturn;
-  applyUpgrade(islandId: string, buildingId: string): GatewayReturn;
+  applyUpgrade(islandId: string, buildingId: string, spendToken?: boolean): GatewayReturn;
   cancelConstruction(islandId: string, buildingId: string): GatewayReturn;
   setBuildingActiveFloors(islandId: string, buildingId: string, disabledFloors: number): GatewayReturn;
   setForceRun(islandId: string, buildingId: string, value: boolean): GatewayReturn;
@@ -397,10 +397,10 @@ export function makeLocalGateway(
       return fromOutcome(relocateBuilding(island.spec, island.state, buildingId, x, y, rotation));
     },
 
-    applyUpgrade(islandId, buildingId) {
+    applyUpgrade(islandId, buildingId, spendToken = false) {
       const island = resolveIsland(islandId);
       if (!island) return err('unknown island');
-      return fromOutcome(applyUpgrade(island.spec, island.state, buildingId));
+      return fromOutcome(applyUpgrade(island.spec, island.state, buildingId, spendToken));
     },
 
     cancelConstruction(islandId, buildingId) {
@@ -961,8 +961,8 @@ export function makeRemoteGateway(client: GameServerClient): MutationGateway {
     relocateBuilding(islandId, buildingId, x, y, rotation) {
       return send('relocate-building', { islandId, buildingId, x, y, rotation });
     },
-    applyUpgrade(islandId, buildingId) {
-      return send('upgrade-building', { islandId, buildingId });
+    applyUpgrade(islandId, buildingId, spendToken = false) {
+      return send('upgrade-building', { islandId, buildingId, spendToken });
     },
     cancelConstruction(islandId, buildingId) {
       return send('cancel-construction', { islandId, buildingId });

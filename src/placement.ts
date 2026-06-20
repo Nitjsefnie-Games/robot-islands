@@ -987,6 +987,7 @@ export function applyUpgrade(
   spec: IslandSpec,
   state: IslandState,
   buildingId: string,
+  spendToken = false,
 ): UpgradeResult {
   const b = spec.buildings.find((bb) => bb.id === buildingId);
   if (!b) return { ok: false, reason: 'not-found' };
@@ -1006,18 +1007,28 @@ export function applyUpgrade(
     return { ok: false, reason: 'queue-full', inProgress, slots };
   }
 
+  // §4.9 free-floor token: one self_replication_module waives the MATERIAL cost
+  // of one floor upgrade. Build time and queue rules are unchanged. If the
+  // player asked to spend a token but none are available, fall back to normal
+  // material payment rather than inventing a new failure mode.
+  const canSpendToken = spendToken && (state.inventory.self_replication_module ?? 0) >= 1;
+
   // The displayed target floor for THIS upgrade accounts for the building's
   // raw floor (including any pre-bumped running upgrade) plus every already-
   // queued upgrade, so successive enqueues charge ascending floor costs.
   const targetLevel = topUpgradeLevel(state, b) + 2;
-  const cost = upgradeCost(def, targetLevel);
+  const cost = canSpendToken ? {} : upgradeCost(def, targetLevel);
   const missing = affordabilityShortfall(state.inventory, cost);
   if (Object.keys(missing).length > 0) {
     return { ok: false, reason: 'insufficient-resources', missing };
   }
-  for (const [r, n] of Object.entries(cost) as Array<[ResourceId, number]>) {
-    if (n <= 0) continue;
-    state.inventory[r] = (state.inventory[r] ?? 0) - n;
+  if (canSpendToken) {
+    state.inventory.self_replication_module = (state.inventory.self_replication_module ?? 0) - 1;
+  } else {
+    for (const [r, n] of Object.entries(cost) as Array<[ResourceId, number]>) {
+      if (n <= 0) continue;
+      state.inventory[r] = (state.inventory[r] ?? 0) - n;
+    }
   }
 
   if (mustQueue) {

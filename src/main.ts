@@ -1762,8 +1762,8 @@ async function main(): Promise<void> {
       if (!gatewayResult.ok) return;
       finish();
     },
-    onUpgradeFloor: (target: InspectorTarget) => {
-      const gatewayResult = gateway.applyUpgrade(target.spec.id, target.building.id);
+    onUpgradeFloor: (target: InspectorTarget, spendToken: boolean) => {
+      const gatewayResult = gateway.applyUpgrade(target.spec.id, target.building.id, spendToken);
       function finish(): void {
         rebuildWorldLayers();
         buildingAlertsOverlay.invalidate();

@@ -344,22 +344,26 @@ export const INTENTS: Record<string, IntentHandler> = {
   },
 
   // upgrade-building — §9.3 queued construction job. Player supplies
-  // { islandId, buildingId }. The server derives the ascending upgrade cost
-  // from authoritative floor state. `applyUpgrade` self-validates the cost gate
-  // ('insufficient-resources') AND the §9.3 queue gate ('queue-full'), and
-  // deducts cost from authoritative inventory only on the success path — so no
-  // separate handler-side affordability pre-check is needed beyond payload
-  // validation + island resolution. (The trust surface here is satisfied by the
-  // pure fn's own affordabilityShortfall check against server inventory.)
+  // { islandId, buildingId, spendToken? }. The server derives the ascending
+  // upgrade cost from authoritative floor state. `applyUpgrade` self-validates
+  // the cost gate ('insufficient-resources') AND the §9.3 queue gate
+  // ('queue-full'), and deducts cost from authoritative inventory only on the
+  // success path — so no separate handler-side affordability pre-check is needed
+  // beyond payload validation + island resolution. spendToken=true waives the
+  // material cost by consuming one self_replication_module (§4.9 free-floor
+  // token); the server re-checks module availability authoritatively.
   'upgrade-building': {
     apply(game: LiveGame, payload: unknown): IntentResult {
       if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
-      const { islandId, buildingId } = payload;
+      const { islandId, buildingId, spendToken } = payload;
       if (typeof islandId !== 'string') return { ok: false, error: 'islandId must be a string' };
       if (typeof buildingId !== 'string') return { ok: false, error: 'buildingId must be a string' };
+      if (spendToken !== undefined && typeof spendToken !== 'boolean') {
+        return { ok: false, error: 'spendToken must be a boolean' };
+      }
       const island = resolveIsland(game, islandId);
       if (!island) return { ok: false, error: 'unknown island' };
-      const r = applyUpgrade(island.spec, island.state, buildingId);
+      const r = applyUpgrade(island.spec, island.state, buildingId, spendToken === true);
       if (!r.ok) return { ok: false, error: r.reason ?? 'upgrade failed' };
       return { ok: true };
     },
