@@ -1,0 +1,213 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Implementation plan — Mass Building Actions</title>
+  <style>
+    :root {
+      --ivory:#252420; --slate:#F5F3EC; --clay:#D97757; --oat:#3A352B;
+      --olive:#8FA56E; --gray-150:#2E2C27; --gray-300:#3A3833; --gray-500:#8F8D82;
+      --gray-700:#CFCCC2; --white:#252420;
+      --serif:ui-serif,Georgia,'Times New Roman',serif;
+      --sans:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+      --mono:ui-monospace,'SF Mono',Menlo,Monaco,monospace;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:var(--sans); background:#1B1A17; color:var(--gray-700); line-height:1.55; padding:56px 32px 120px; -webkit-font-smoothing:antialiased; }
+    .page { margin:0 auto; max-width:960px; }
+    header.page-head { margin-bottom:48px; max-width:840px; }
+    .eyebrow { font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--gray-500); margin-bottom:12px; }
+    h1 { font-family:var(--serif); font-weight:500; font-size:38px; line-height:1.15; color:var(--slate); margin-bottom:18px; letter-spacing:-.01em; }
+    .prompt-box { background:var(--gray-150); border:1.5px solid var(--gray-300); border-radius:12px; padding:16px 20px; font-size:14.5px; color:var(--gray-700); }
+    .prompt-box .label { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--gray-500); display:block; margin-bottom:6px; }
+    section { margin-bottom:64px; }
+    .sec-head { display:flex; align-items:baseline; gap:14px; margin-bottom:8px; }
+    .sec-head .num { font-family:var(--mono); font-size:12px; background:var(--oat); color:var(--slate); padding:3px 9px; border-radius:8px; }
+    .sec-head h2 { font-family:var(--serif); font-weight:500; font-size:26px; color:var(--slate); letter-spacing:-.01em; }
+    .sec-intro { font-size:14.5px; color:var(--gray-500); max-width:760px; margin-bottom:28px; }
+    code { font-family:var(--mono); font-size:.88em; background:var(--gray-150); border:1px solid var(--gray-300); border-radius:5px; padding:1px 5px; color:#C9B98A; }
+    .summary { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:64px; }
+    @media (max-width:900px){ .summary { grid-template-columns:repeat(2,1fr); } }
+    .summary .cell { background:var(--white); border:1.5px solid var(--gray-300); border-radius:12px; padding:18px 20px; }
+    .summary .k { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--gray-500); margin-bottom:6px; }
+    .summary .v { font-size:17px; color:var(--slate); font-weight:600; }
+    .summary .v.accent { color:var(--clay); }
+    .summary .v.ok { color:var(--olive); }
+    .milestones { display:flex; flex-direction:column; gap:0; }
+    .milestone { display:grid; grid-template-columns:54px 28px 1fr; gap:0 18px; }
+    .milestone .when { text-align:right; font-family:var(--mono); font-size:12px; color:var(--gray-500); padding-top:4px; }
+    .milestone .dot-col { display:flex; flex-direction:column; align-items:center; }
+    .milestone .dot { width:14px; height:14px; border-radius:50%; background:var(--white); border:3px solid var(--clay); margin-top:4px; flex-shrink:0; }
+    .milestone .line { width:2px; flex:1; background:var(--gray-300); margin:4px 0; }
+    .milestone:last-child .line { display:none; }
+    .milestone .body { padding-bottom:30px; }
+    .milestone .body h3 { font-family:var(--serif); font-weight:500; font-size:19px; color:var(--slate); margin-bottom:4px; }
+    .milestone .body p { font-size:14px; color:var(--gray-500); margin-bottom:10px; max-width:680px; }
+    .milestone .tags { display:flex; gap:8px; flex-wrap:wrap; }
+    .milestone .tag { font-family:var(--mono); font-size:11.5px; background:var(--gray-150); border:1px solid var(--gray-300); border-radius:6px; padding:3px 8px; color:var(--gray-700); }
+    .milestone .tag.test { color:#B6CC96; border-color:#2D3A24; }
+    .code-block { display:flex; flex-direction:column; gap:10px; margin-bottom:24px; }
+    .code-block .file-label { font-family:var(--mono); font-size:12px; color:var(--gray-500); }
+    .code { background:#121110; border-radius:12px; padding:18px 20px; overflow-x:auto; }
+    .code pre { font-family:var(--mono); font-size:12.5px; line-height:1.65; color:#F5F3EC; white-space:pre; }
+    .code .kw { color:var(--clay); } .code .cm { color:var(--gray-500); } .code .fn { color:#C9B98A; }
+    .risks { border:1.5px solid var(--gray-300); border-radius:12px; overflow:hidden; background:var(--white); }
+    .risks .row { display:grid; grid-template-columns:1.6fr 90px 1.6fr; }
+    @media (max-width:780px){ .risks .row { grid-template-columns:1fr; } }
+    .risks .row + .row { border-top:1.5px solid var(--gray-300); }
+    .risks .cell { padding:14px 18px; font-size:13.5px; }
+    .risks .cell + .cell { border-left:1.5px solid var(--gray-300); }
+    @media (max-width:780px){ .risks .cell + .cell { border-left:none; border-top:1px dashed var(--gray-300); } }
+    .risks .head { background:var(--gray-150); font-weight:600; color:var(--slate); font-size:12px; text-transform:uppercase; letter-spacing:.04em; }
+    .sev { display:inline-block; font-family:var(--mono); font-size:11px; padding:2px 8px; border-radius:6px; font-weight:600; }
+    .sev.high { background:#4A2A1C; color:#F0B79C; } .sev.med { background:var(--oat); color:var(--slate); } .sev.low { background:#2D3A24; color:#B6CC96; }
+    .open-q { display:flex; flex-direction:column; gap:14px; max-width:840px; }
+    .q { background:var(--white); border:1.5px solid var(--gray-300); border-left:4px solid var(--clay); border-radius:10px; padding:16px 20px; }
+    .q .qt { font-weight:600; font-size:15px; color:var(--slate); margin-bottom:4px; }
+    .q .qd { font-size:13.5px; color:var(--gray-500); }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Implementation plan · Robot Islands</div>
+      <h1>Mass Building Actions</h1>
+      <div class="prompt-box">
+        <span class="label">Goal</span>
+        Select many buildings on one island (shift-click + shift-drag box) and act
+        on them at once — destroy, upgrade, group-move, enable/disable, ignore-cap —
+        by batching the existing per-building gateway operations. No new gateway
+        method, no schema bump, no migration. Executed via subagent-driven
+        development on branch <code>feat/mass-building-actions</code>.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Tasks</div><div class="v accent">12</div></div>
+      <div class="cell"><div class="k">New files</div><div class="v">mass-actions · inspector-multi</div></div>
+      <div class="cell"><div class="k">Pure tests</div><div class="v ok">Tasks 1–3</div></div>
+      <div class="cell"><div class="k">Schema / migration</div><div class="v ok">None</div></div>
+    </div>
+
+    <section>
+      <div class="sec-head"><span class="num">01</span><h2>Tasks</h2></div>
+      <p class="sec-intro">Pure logic first (fully unit-tested), then the selection model, then one mass action per task, group-move, and the SPEC.md alignment. Each task ends with an independently testable deliverable and a commit.</p>
+      <div class="milestones">
+        <div class="milestone"><div class="when">T1</div><div class="dot-col"><span class="dot"></span><span class="line"></span></div><div class="body">
+          <h3>Footprint + box hit-set (pure)</h3>
+          <p><code>buildingFootprintTilesWorld</code> (ocean cell-unit vs land branch) and <code>buildingsInBox</code> — world-tile footprint intersection.</p>
+          <div class="tags"><span class="tag">mass-actions.ts</span><span class="tag test">vitest</span></div></div></div>
+        <div class="milestone"><div class="when">T2</div><div class="dot-col"><span class="dot"></span><span class="line"></span></div><div class="body">
+          <h3>Mass-upgrade planner (pure)</h3>
+          <p><code>planMassUpgrade</code>: lowest current floor first, skip-unaffordable against a running inventory copy, capped at free build+queue slots. No max-floor cap.</p>
+          <div class="tags"><span class="tag">mass-actions.ts</span><span class="tag test">vitest</span></div></div></div>
+        <div class="milestone"><div class="when">T3</div><div class="dot-col"><span class="dot"></span><span class="line"></span></div><div class="body">
+          <h3>Group-relocate validation, fee, ignore-cap union, breakdown (pure)</h3>
+          <p><code>validateGroupRelocate</code> (rigid translation, member-overlap + per-member <code>validatePlacement</code>), <code>groupRelocateFee</code>, <code>ignoreCapUnion</code>, <code>selectionBreakdown</code>.</p>
+          <div class="tags"><span class="tag">mass-actions.ts</span><span class="tag test">vitest</span></div></div></div>
+        <div class="milestone"><div class="when">T4</div><div class="dot-col"><span class="dot"></span><span class="line"></span></div><div class="body">
+          <h3>Inspector-multi panel skeleton</h3>
+          <p>Breakdown header + button shells (Destroy / Upgrade (n fit) / Move / Enable / Disable) + ignore-cap checkboxes. Injected callbacks.</p>
+          <div class="tags"><span class="tag">inspector-multi.ts</span></div></div></div>
+        <div class="milestone"><div class="when">T5</div><div class="dot-col"><span class="dot"></span><span class="line"></span></div><div class="body">
+          <h3>Selection model + shift-click + panel switch</h3>
+          <p><code>Set&lt;buildingId&gt;</code> + <code>selectionSpec</code> in main.ts; shift-click toggle; multi-outline render; size 1 → single inspector, ≥2 → multi panel. Destroy-capable usable slice.</p>
+          <div class="tags"><span class="tag">main.ts</span><span class="tag">build+smoke</span></div></div></div>
+        <div class="milestone"><div class="when">T6</div><div class="dot-col"><span class="dot"></span><span class="line"></span></div><div class="body">
+          <h3>Shift-drag box select</h3>
+          <p>Rubber-band drag mode + overlay rect (sibling to ghost/bend drags); on release add <code>buildingsInBox</code>.</p>
+          <div class="tags"><span class="tag">main.ts</span><span class="tag">build+smoke</span></div></div></div>
+        <div class="milestone"><div class="when">T7</div><div class="dot-col"><span class="dot"></span><span class="line"></span></div><div class="body">
+          <h3>Mass destroy</h3>
+          <p>One aggregate scrap+refund confirm; loop <code>gateway.demolishBuilding</code>; drain routes; one rebuild. Introduces the <code>runGateway</code> sync/Promise helper.</p>
+          <div class="tags"><span class="tag">main.ts</span></div></div></div>
+        <div class="milestone"><div class="when">T8</div><div class="dot-col"><span class="dot"></span><span class="line"></span></div><div class="body">
+          <h3>Mass upgrade</h3>
+          <p>Apply <code>planMassUpgrade</code> order; loop <code>gateway.applyUpgrade</code>; break on <code>queue-full</code>, skip other failures; refresh fit count.</p>
+          <div class="tags"><span class="tag">main.ts</span></div></div></div>
+        <div class="milestone"><div class="when">T9</div><div class="dot-col"><span class="dot"></span><span class="line"></span></div><div class="body">
+          <h3>Mass enable / disable</h3>
+          <p>Two buttons. Disable → <code>setBuildingActiveFloors(id, rawFloorLevel+1)</code> + drain routes; Enable → <code>(id, 0)</code>.</p>
+          <div class="tags"><span class="tag">main.ts</span></div></div></div>
+        <div class="milestone"><div class="when">T10</div><div class="dot-col"><span class="dot"></span><span class="line"></span></div><div class="body">
+          <h3>Mass ignore-cap</h3>
+          <p>Per-resource checkboxes (union of outputs); apply <code>setIgnoreCap</code> to every selected producer of that resource.</p>
+          <div class="tags"><span class="tag">main.ts</span></div></div></div>
+        <div class="milestone"><div class="when">T11</div><div class="dot-col"><span class="dot"></span><span class="line"></span></div><div class="body">
+          <h3>Group move (rigid cluster)</h3>
+          <p><code>beginGroupRelocate</code> in placement-ui; rigid ghost tinted by <code>validateGroupRelocate</code>; all-or-nothing commit via per-member <code>relocateBuilding</code>.</p>
+          <div class="tags"><span class="tag">placement-ui.ts</span><span class="tag">main.ts</span></div></div></div>
+        <div class="milestone"><div class="when">T12</div><div class="dot-col"><span class="dot"></span><span class="line"></span></div><div class="body">
+          <h3>SPEC.md alignment + regression</h3>
+          <p>New §4 subsection (selection model, upgrade algorithm, all-or-nothing move). Pure suite + <code>npm run build</code> green.</p>
+          <div class="tags"><span class="tag">SPEC.md</span></div></div></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">02</span><h2>Load-bearing pure logic</h2></div>
+      <p class="sec-intro">The two helpers most likely to be done wrong: the upgrade planner (slot + running-inventory math) and the group-relocate validator (sibling-position interaction).</p>
+      <div class="code-block">
+        <div class="file-label">src/mass-actions.ts — planMassUpgrade</div>
+        <div class="code"><pre><span class="kw">export function</span> <span class="fn">planMassUpgrade</span>(state, selectedIds) {
+  <span class="kw">const</span> free = (parallelBuildSlots(state) - inProgressBuildCount(state))
+    + (queuedBuildSlots(state) - queuedBuildCount(state));
+  <span class="kw">if</span> (free &lt;= 0) <span class="kw">return</span> [];
+  <span class="kw">const</span> ids = <span class="kw">new</span> Set(selectedIds);
+  <span class="kw">const</span> candidates = state.buildings
+    .filter((b) =&gt; ids.has(b.id) &amp;&amp; (b.constructionRemainingMs ?? 0) &lt;= 0 &amp;&amp; b.queued !== <span class="kw">true</span>)
+    .sort((a,b) =&gt; (a.floorLevel ?? 0) - (b.floorLevel ?? 0) || (a.id &lt; b.id ? -1 : 1));
+  <span class="kw">const</span> running = { ...state.inventory };
+  <span class="kw">const</span> plan = [];
+  <span class="kw">for</span> (<span class="kw">const</span> b <span class="kw">of</span> candidates) {
+    <span class="kw">if</span> (plan.length &gt;= free) <span class="kw">break</span>;
+    <span class="kw">const</span> cost = upgradeCost(BUILDING_DEFS[b.defId], topUpgradeLevel(state, b) + 2);
+    <span class="kw">if</span> (Object.keys(affordabilityShortfall(running, cost)).length &gt; 0) <span class="kw">continue</span>; <span class="cm">// skip</span>
+    <span class="kw">for</span> (<span class="kw">const</span> [r,n] <span class="kw">of</span> Object.entries(cost)) running[r] = (running[r] ?? 0) - n;
+    plan.push(b.id);
+  }
+  <span class="kw">return</span> plan;
+}</pre></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">03</span><h2>Risks &amp; implementer caveats</h2></div>
+      <div class="risks">
+        <div class="row"><div class="cell head">Risk</div><div class="cell head">Sev</div><div class="cell head">Mitigation</div></div>
+        <div class="row">
+          <div class="cell"><code>validatePlacement</code> with <code>ignoreBuildingId=m.id</code> still sees OTHER moving members at their OLD tiles, so a clean rigid translation into freed tiles could be falsely rejected.</div>
+          <div class="cell"><span class="sev high">HIGH</span></div>
+          <div class="cell">Validate against a spec with all moving members pre-applied/removed; do member-overlap separately on post-move footprints. Flagged in Task 3; implementer documents the chosen approach.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Plan vs execution drift: <code>planMassUpgrade</code> preview count diverges from what <code>applyUpgrade</code> actually enqueues (it self-checks slots/affordability).</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Execution loops <code>applyUpgrade</code> in plan order and trusts ITS gates — break on <code>queue-full</code>, skip other failures. Planner drives only order + the "n fit" label.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Strict-mode breakage from staged callback stubs in Task 5 (<code>noUnusedLocals/Parameters</code>).</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Implement each callback body in its own task; Task 5 ships only the Destroy path wired. Typecheck gate every task.</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">04</span><h2>Open implementer notes</h2></div>
+      <div class="open-q">
+        <div class="q"><div class="qt">Exact export sites to confirm</div><div class="qd"><code>Rotation</code>, <code>CELL_SIZE_TILES</code>, <code>shapeWidth/Height</code> (shape-mask), <code>DEFAULT_GRAPH</code> (skilltree), <code>resolveRecipe</code> (recipes). Adjust imports if they live elsewhere.</div></div>
+        <div class="q"><div class="qt">Refund/scrap preview reuse (Task 7)</div><div class="qd">The single inspector's <code>previewRefundForBuilding</code> / scrap helpers may be module-private — export the pure helper for reuse rather than duplicating the formula.</div></div>
+      </div>
+    </section>
+
+    <div style="color:var(--gray-500); font-size:13px; margin-top:64px; padding-top:22px; border-top:1px solid var(--gray-300);">
+      Implementation plan · Robot Islands · 2026-06-20 · author: claude-opus-4-8 · full code in companion <code>.md</code> · spec: <code>2026-06-20-mass-building-actions-design</code>
+    </div>
+
+  </div>
+</body>
+</html>
