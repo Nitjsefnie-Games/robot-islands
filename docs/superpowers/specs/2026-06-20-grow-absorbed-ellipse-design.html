@@ -1,0 +1,694 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Design spec — Grow absorbed ellipses via Land Reclamation</title>
+  <style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--ivory);
+      color: var(--gray-700);
+      line-height: 1.58;
+      padding: 56px 32px 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { margin: 0 auto; max-width: 980px; }
+
+    /* ---------- header ---------- */
+    header.page-head { margin-bottom: 40px; max-width: 840px; }
+    .eyebrow {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--gray-500);
+      margin-bottom: 12px;
+    }
+    h1 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 38px;
+      line-height: 1.14;
+      color: var(--slate);
+      margin-bottom: 18px;
+      letter-spacing: -0.01em;
+    }
+    .context-box {
+      background: var(--gray-150);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      font-size: 14.5px;
+      color: var(--gray-700);
+    }
+    .context-box .label {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    /* ---------- TOC ---------- */
+    .toc {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 22px;
+      margin: 28px 0 56px;
+      font-size: 13.5px;
+    }
+    .toc .label {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      margin-bottom: 10px;
+    }
+    .toc ol { list-style: none; columns: 2; column-gap: 40px; }
+    @media (max-width: 720px) { .toc ol { columns: 1; } }
+    .toc li { margin: 5px 0; }
+    .toc a { color: var(--gray-700); text-decoration: none; }
+    .toc a:hover { color: var(--clay); }
+    .toc .n { font-family: var(--mono); color: var(--gray-500); margin-right: 8px; }
+
+    /* ---------- summary strip ---------- */
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 56px;
+    }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+    }
+    .summary .k {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      margin-bottom: 6px;
+    }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent  { color: var(--clay); }
+    .summary .v.ok      { color: var(--olive); }
+
+    /* ---------- decision banner ---------- */
+    .decision {
+      background: var(--white);
+      border: var(--border);
+      border-left: 4px solid var(--clay);
+      border-radius: var(--radius);
+      padding: 22px 26px;
+      margin-bottom: 56px;
+    }
+    .decision .d-tag {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--clay);
+      margin-bottom: 8px;
+    }
+    .decision .d-head {
+      font-family: var(--serif);
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--slate);
+      margin-bottom: 10px;
+      letter-spacing: -0.01em;
+    }
+    .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 820px; }
+    .decision .d-body + .d-body { margin-top: 8px; }
+
+    /* ---------- section chrome ---------- */
+    section { margin-bottom: 60px; scroll-margin-top: 20px; }
+    .sec-head {
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+      margin-bottom: 8px;
+    }
+    .sec-head .num {
+      font-family: var(--mono);
+      font-size: 12px;
+      background: var(--oat);
+      color: var(--slate);
+      padding: 3px 9px;
+      border-radius: 8px;
+    }
+    .sec-head h2 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 26px;
+      color: var(--slate);
+      letter-spacing: -0.01em;
+    }
+    .sec-intro {
+      font-size: 14.5px;
+      color: var(--gray-500);
+      max-width: 820px;
+      margin-bottom: 24px;
+    }
+    p.body { font-size: 14.5px; max-width: 840px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+    ul.body { font-size: 14.5px; max-width: 840px; margin: 0 0 14px 22px; }
+    ul.body li { margin: 6px 0; }
+    code {
+      font-family: var(--mono);
+      font-size: 0.88em;
+      background: var(--gray-150);
+      border: 1px solid var(--gray-300);
+      border-radius: 5px;
+      padding: 1px 5px;
+      color: #C9B98A;
+    }
+    pre {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      background: var(--gray-150);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      overflow-x: auto;
+      color: var(--gray-700);
+      margin-bottom: 16px;
+      line-height: 1.5;
+      max-width: 840px;
+    }
+    pre .c { color: var(--olive); }
+    pre .k { color: var(--clay); }
+
+    /* ---------- generic data table ---------- */
+    .tbl {
+      width: 100%;
+      border: var(--border);
+      border-radius: var(--radius);
+      border-collapse: separate;
+      border-spacing: 0;
+      overflow: hidden;
+      font-size: 13.5px;
+    }
+    .tbl th, .tbl td {
+      text-align: left;
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--gray-300);
+      vertical-align: top;
+    }
+    .tbl th {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--gray-500);
+      background: var(--gray-150);
+      font-weight: 600;
+    }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+
+    /* ---------- comparison cards ---------- */
+    .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media (max-width: 820px) { .compare { grid-template-columns: 1fr; } }
+    .compare .col {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .compare .col-head {
+      padding: 12px 18px;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      border-bottom: var(--border);
+    }
+    .compare .col.bad  .col-head { background: #2E211C; color: var(--rust); }
+    .compare .col.good .col-head { background: #232A1C; color: var(--olive); }
+    .compare .col-body { padding: 16px 18px; font-size: 13.5px; }
+    .compare .col-body ul { list-style: none; }
+    .compare .col-body li { margin: 7px 0; padding-left: 18px; position: relative; }
+    .compare .col.bad  li:before { content: '\2715'; position: absolute; left: 0; color: var(--rust); }
+    .compare .col.good li:before { content: '\2713'; position: absolute; left: 0; color: var(--olive); }
+
+    /* ---------- change inventory ---------- */
+    .changes { display: flex; flex-direction: column; gap: 12px; }
+    .change {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      display: grid;
+      grid-template-columns: 250px 1fr;
+      gap: 4px 24px;
+    }
+    @media (max-width: 720px) { .change { grid-template-columns: 1fr; } }
+    .change .file {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      color: var(--clay);
+      word-break: break-all;
+    }
+    .change .what { font-size: 14px; color: var(--gray-700); }
+    .change .what .lead { color: var(--slate); font-weight: 600; }
+
+    /* ---------- checklist ---------- */
+    .checklist { display: flex; flex-direction: column; gap: 10px; max-width: 840px; }
+    .check {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      background: var(--white);
+      border: var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+    }
+    .check .box {
+      width: 18px; height: 18px;
+      border-radius: 5px;
+      border: 2px solid var(--gray-500);
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .check .ck-text { font-size: 14px; color: var(--gray-700); }
+    .check .ck-text strong { color: var(--slate); }
+
+    /* ---------- risk table ---------- */
+    .risks { border: var(--border); border-radius: var(--radius); overflow: hidden; background: var(--white); }
+    .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: var(--border); }
+    .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: var(--border); }
+    @media (max-width: 780px) { .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); } }
+    .risks .head {
+      background: var(--gray-150);
+      font-weight: 600;
+      color: var(--slate);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .sev {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-weight: 600;
+    }
+    .sev.high { background: #4A2A1C; color: #F0B79C; }
+    .sev.med  { background: var(--oat);  color: var(--slate); }
+    .sev.low  { background: #2D3A24; color: #B6CC96; }
+
+    /* ---------- deferred cards ---------- */
+    .deferred { display: flex; flex-direction: column; gap: 14px; max-width: 840px; }
+    .defer {
+      background: var(--white);
+      border: var(--border);
+      border-left: 4px solid var(--gray-500);
+      border-radius: 10px;
+      padding: 16px 20px;
+    }
+    .defer .dt { font-weight: 600; font-size: 15px; color: var(--slate); margin-bottom: 4px; }
+    .defer .dd { font-size: 13.5px; color: var(--gray-500); }
+
+    .footer {
+      color: var(--gray-500);
+      font-size: 13px;
+      margin-top: 64px;
+      padding-top: 22px;
+      border-top: 1px solid var(--gray-300);
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Design spec · robot-islands</div>
+      <h1>Grow absorbed ellipses via Land Reclamation</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        Today, Land Reclamation Hub grows only a merged island's primary
+        ellipse (<code>ellipses[0]</code>); absorbed lobes (<code>extraEllipses</code>)
+        are frozen geometry forever (SPEC §3.4 / §15.1). This spec lets the
+        player grow <em>any</em> constituent of a merged island, choosing it
+        through a per-lobe picker in the Hub inspector, with each lobe capped
+        by its own origin biome.
+      </div>
+    </header>
+
+    <nav class="toc">
+      <div class="label">Sections</div>
+      <ol>
+        <li><span class="n">01</span><a href="#s01">Background &amp; current behavior</a></li>
+        <li><span class="n">02</span><a href="#s02">Decisions</a></li>
+        <li><span class="n">03</span><a href="#s03">Data model (§15.1)</a></li>
+        <li><span class="n">04</span><a href="#s04">Engine API — constituent-indexed</a></li>
+        <li><span class="n">05</span><a href="#s05">Merge &amp; persistence migration</a></li>
+        <li><span class="n">06</span><a href="#s06">Mutation gateway / trust surface</a></li>
+        <li><span class="n">07</span><a href="#s07">UI — lobe picker &amp; badges</a></li>
+        <li><span class="n">08</span><a href="#s08">Change inventory</a></li>
+        <li><span class="n">09</span><a href="#s09">Verification</a></li>
+        <li><span class="n">10</span><a href="#s10">Risks</a></li>
+        <li><span class="n">11</span><a href="#s11">Out of scope &amp; spec edits</a></li>
+      </ol>
+    </nav>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Files touched</div><div class="v accent">~7 + tests</div></div>
+      <div class="cell"><div class="k">Schema bump</div><div class="v">v27 → v28</div></div>
+      <div class="cell"><div class="k">Risk</div><div class="v">Medium</div></div>
+      <div class="cell"><div class="k">Track</div><div class="v">Feature branch + PR</div></div>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision</div>
+      <div class="d-head">One Hub, a scrollable per-constituent picker; each lobe grows independently, capped by its own origin biome.</div>
+      <div class="d-body">A single Land Reclamation Hub controls the whole merged
+        island. Its inspector lists every constituent (primary + each absorbed
+        lobe) with <code>+MAJOR</code> / <code>+MINOR</code> buttons; numbered
+        badges drawn on the map while the panel is open identify which row maps
+        to which lobe. Each lobe's cap derives from a new per-constituent
+        <code>biome</code> field, so an absorbed Volcanic lobe caps at 14 even
+        inside a Plains island.</div>
+      <div class="d-body">Terrain generation is deliberately <em>unchanged</em>
+        — it still uses the absorber's biome for all tiles per the §3.6
+        implementation note. The new <code>biome</code> field is
+        <strong>cap-only</strong>; this spec does not introduce per-lobe
+        terrain.</div>
+    </div>
+
+    <section id="s01">
+      <div class="sec-head"><span class="num">01</span><h2>Background &amp; current behavior</h2></div>
+      <p class="sec-intro">What the geometry does today and why merged islands feel stuck.</p>
+      <p class="body">An <code>IslandSpec</code> carries a primary ellipse
+        (<code>majorRadius</code> / <code>minorRadius</code> at offset 0,0) plus
+        zero or more <code>extraEllipses</code> appended by §3.6 merges. A tile
+        belongs to the island iff inscribed in <strong>any</strong> constituent
+        (<code>islandConstituents</code> walks primary-then-extras). Geometry
+        consumers — <code>islandsOverlap</code>, <code>islandTileCount</code>,
+        <code>terrainAt</code> — already honor every constituent.</p>
+      <p class="body">But Land Reclamation only grows the primary:
+        <code>expandIsland</code> mutates <code>spec.majorRadius</code> /
+        <code>minorRadius</code> and nothing else (SPEC §15.1:
+        <em>"Land Reclamation grows ellipses[0]'s radii"</em>). Absorbed lobes
+        are frozen at their merge-time size forever. The
+        <code>landReclamationCost</code> union path already charges only tiles
+        not already covered by another constituent, so the cost math is
+        constituent-aware; only the <em>choice of which ellipse grows</em> is
+        hardcoded to the primary.</p>
+    </section>
+
+    <section id="s02">
+      <div class="sec-head"><span class="num">02</span><h2>Decisions</h2></div>
+      <p class="sec-intro">The three brainstormed choices that shape everything downstream.</p>
+      <table class="tbl">
+        <thead><tr><th>Question</th><th>Decision</th><th>Consequence</th></tr></thead>
+        <tbody>
+          <tr>
+            <td class="slate">How to choose the ellipse</td>
+            <td>Inspector lobe picker — one Hub, a scrollable row per constituent</td>
+            <td>No new map-selection state; reuses the inspector's existing "targeted building" path. List scrolls so a many-lobe island doesn't blow out inspector height.</td>
+          </tr>
+          <tr>
+            <td class="slate">What caps an absorbed lobe</td>
+            <td>Per-lobe <em>origin</em> biome cap, stored as a derived-from-biome field</td>
+            <td>Faithful (Volcanic lobe caps at 14). Requires a per-constituent <code>biome</code> field + a persistence migration + §3.4/§3.6 spec revision. Cap derives live from <code>BIOME_MAX_RADII</code> so rebalances propagate.</td>
+          </tr>
+          <tr>
+            <td class="slate">How to identify a lobe on the map</td>
+            <td>Persistent numbered badges at each constituent center while the Hub panel is open</td>
+            <td>Disambiguates two same-biome lobes that labels alone cannot. New render-layer overlay; badge <code>#N</code> ↔ picker row <code>#N</code>.</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="s03">
+      <div class="sec-head"><span class="num">03</span><h2>Data model (§15.1)</h2></div>
+      <p class="sec-intro">One new field, derived caps, no frozen numbers.</p>
+      <p class="body"><code>extraEllipses[i]</code> gains
+        <strong><code>biome: BiomeType</code></strong> — the origin biome of
+        that absorbed constituent. The cap is always <em>derived</em>
+        (<code>BIOME_MAX_RADII[biome]</code>), never stored as a number, so a
+        future change to the cap table propagates automatically — symmetric with
+        the primary, which already derives its cap from <code>spec.biome</code>.</p>
+      <p class="body">The <code>ConstituentEllipse</code> view returned by
+        <code>islandConstituents</code> also carries <code>biome</code>: the
+        primary entry's is <code>spec.biome</code>; each extra's is
+        <code>entry.biome ?? spec.biome</code> (the <code>?? spec.biome</code>
+        fallback makes legacy in-memory specs safe before migration runs).</p>
+<pre><span class="c">// world.ts — IslandSpec.extraEllipses entry</span>
+extraEllipses?: Array&lt;{
+  <span class="k">readonly biome: BiomeType;</span>   <span class="c">// NEW — origin biome, cap-only</span>
+  readonly major: number;
+  readonly minor: number;
+  readonly rotation: number;
+  readonly offsetX: number;
+  readonly offsetY: number;
+}&gt;;</pre>
+    </section>
+
+    <section id="s04">
+      <div class="sec-head"><span class="num">04</span><h2>Engine API — constituent-indexed</h2></div>
+      <p class="sec-intro">The three reclamation functions take a constituent index; index 0 reduces to today's behavior exactly.</p>
+      <ul class="body">
+        <li><code>landReclamationCost(spec, index, axis)</code> → union delta of
+          growing constituent <code>index</code> by +1: scan that constituent's
+          <em>new</em> bounding box in island-local coords (offset by its
+          <code>offsetX/Y</code>), charge only tiles inscribed in the post-grow
+          union but in <strong>no</strong> pre-grow constituent. <code>index 0</code>
+          is exactly the current primary path.</li>
+        <li><code>canExpandConstituent(spec, state, index, axis)</code> → same
+          rejection precedence (<code>no-hub</code> → <code>axis-at-max</code> →
+          <code>insufficient-resources</code>). Cap is per-constituent: primary
+          uses <code>spec.biome</code>; extra <code>i</code> uses
+          <code>extraEllipses[i].biome</code>. Current radius read from the
+          chosen constituent.</li>
+        <li><code>expandConstituent(spec, state, index, axis)</code> → index 0
+          mutates <code>spec.major/minorRadius</code> as now; extra <code>i</code>
+          <strong>rebuilds</strong> <code>extraEllipses[i]</code> with
+          <code>major</code>/<code>minor</code> +1 (entries are
+          <code>readonly</code> — same rebuild pattern <code>performMerge</code>
+          already uses for buildings). Defensive no-op on a failed re-check, as
+          today.</li>
+      </ul>
+      <p class="body">Thin <code>expandIsland</code> / <code>canExpandIsland</code>
+        wrappers (= constituent 0) may be kept to limit caller churn, or callers
+        migrate to the indexed form — implementer's call during planning.</p>
+    </section>
+
+    <section id="s05">
+      <div class="sec-head"><span class="num">05</span><h2>Merge &amp; persistence migration</h2></div>
+      <p class="sec-intro">Record origin biome on append; default legacy saves to the absorber's biome.</p>
+      <p class="body"><strong>Merge (§3.6, <code>island-merge.ts</code>).</strong>
+        <code>performMerge</code> step 1 stamps <code>biome</code> on every
+        appended constituent: the absorbed primary→extra gets
+        <code>absorbed.biome</code>; each propagated extra (recursive merge
+        history) keeps <code>e.biome ?? absorbed.biome</code>. Biomes carry
+        forward correctly through chained merges.</p>
+      <p class="body"><strong>Persistence (v27 → v28).</strong>
+        <code>extraEllipses</code> round-trips through the generic <code>...s</code>
+        island spread (only one comment-reference in <code>persistence.ts</code>;
+        no explicit field enumeration), so the migration is a focused walk:</p>
+<pre><span class="c">// migrateV27toV28: stamp biome on legacy extra ellipses</span>
+for (const isl of snapshot.world.islands)
+  for (const e of isl.extraEllipses ?? [])
+    if (e.biome === undefined) e.biome = isl.biome;  <span class="c">// = absorber's</span></pre>
+      <p class="body">Defaulting legacy extras to the island's own
+        (absorber's) biome reproduces today's behavior exactly — before this
+        change every lobe was implicitly capped by the absorber's biome. Add
+        <code>28</code> to <code>SUPPORTED_LOAD_VERSIONS</code>, add the
+        <code>SerializedSnapshotV27</code> alias, wire <code>migrateV27toV28</code>
+        into the chain (per the AGENTS.md bump=migrate checklist).</p>
+    </section>
+
+    <section id="s06">
+      <div class="sec-head"><span class="num">06</span><h2>Mutation gateway / trust surface</h2></div>
+      <p class="sec-intro">One new intent field; server re-validates with the same pure functions.</p>
+      <p class="body">The <code>expand-island</code> intent gains an optional
+        <code>constituentIndex</code> (default 0). LOCAL calls
+        <code>expandConstituent</code> directly; REMOTE sends the intent and the
+        server re-runs the <em>same</em> <code>canExpandConstituent</code> /
+        <code>expandConstituent</code> to validate, so LOCAL and REMOTE stay in
+        lockstep (SPEC Appendix C). An out-of-range or stale index fails the
+        server's re-check and is rejected — no trust placed in the client's
+        index. Legacy intents without the field validate as index 0.</p>
+    </section>
+
+    <section id="s07">
+      <div class="sec-head"><span class="num">07</span><h2>UI — lobe picker &amp; badges</h2></div>
+      <p class="sec-intro">A scrollable per-constituent list in the Hub inspector, plus map badges that identify each row.</p>
+      <p class="body">The Hub inspector's single primary <code>+MAJ/+MIN</code>
+        pair becomes a <strong>scrollable</strong> list — one row per
+        constituent in <code>islandConstituents</code> order. Each row shows its
+        badge number, biome label, both radii against their derived caps, and
+        per-axis buttons gated/labeled via <code>canExpandConstituent</code> +
+        <code>landReclamationCost</code> (now correctly passing the full
+        constituent set, building on the cost-preview fix already on master):</p>
+<pre>Land Reclamation — 3 lobes              <span class="c">&#x2913; scrolls if tall</span>
+&#x250C;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2510;
+&#x2502; #1 &#xB7; Plains    r20/28 &#xB7; r18/28  [+MAJ][+MIN] &#x2502;
+&#x2502; #2 &#xB7; Volcanic  r8/14  &#xB7; r8/14   [+MAJ][ CAP] &#x2502;  <span class="c">&#x2190; minor at cap</span>
+&#x2502; #3 &#xB7; Volcanic  r10/14 &#xB7; r9/14   [+MAJ][+MIN] &#x2502;
+&#x2514;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2518;</pre>
+      <p class="body">A new render-layer overlay
+        (<code>lobe-badge-overlay.ts</code>, per the <code>*-overlay.ts</code>
+        convention) draws a numbered badge at each constituent's center
+        (world→screen) while the Hub panel is open. Badge <code>#N</code> ↔ row
+        <code>#N</code>; display is 1-based, internal index 0-based
+        (<code>#1</code> = primary). Render code stays read-only against state
+        per the architecture split.</p>
+    </section>
+
+    <section id="s08">
+      <div class="sec-head"><span class="num">08</span><h2>Change inventory</h2></div>
+      <p class="sec-intro">Every file the implementation touches.</p>
+      <div class="changes">
+        <div class="change">
+          <div class="file">src/world.ts</div>
+          <div class="what"><span class="lead">Add <code>biome</code> to <code>extraEllipses</code> + <code>ConstituentEllipse</code>.</span> Populate biome in <code>islandConstituents</code> (primary = <code>spec.biome</code>, extra = <code>entry.biome ?? spec.biome</code>).</div>
+        </div>
+        <div class="change">
+          <div class="file">src/land-reclamation.ts</div>
+          <div class="what"><span class="lead">Constituent-index the three functions.</span> Generalize cost union-delta, per-constituent cap, and the grow mutation (rebuild extra entry / mutate primary radii).</div>
+        </div>
+        <div class="change">
+          <div class="file">src/island-merge.ts</div>
+          <div class="what"><span class="lead">Stamp origin biome on append.</span> Absorbed primary→extra gets <code>absorbed.biome</code>; propagated extras keep their own biome.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/persistence.ts</div>
+          <div class="what"><span class="lead">v27 → v28 migration.</span> <code>SerializedSnapshotV27</code> alias, <code>migrateV27toV28</code> (default extra biome to island biome), add <code>28</code> to supported set.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/mutation-gateway.ts</div>
+          <div class="what"><span class="lead">Carry <code>constituentIndex</code>.</span> Extend the <code>expandIsland</code> gateway method + intent (default 0); LOCAL and REMOTE branches both route to <code>expandConstituent</code>.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/inspector-ui.ts</div>
+          <div class="what"><span class="lead">Scrollable per-constituent picker.</span> Replace the single primary pair with a row-per-lobe list; per-row gate/cost/labels.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/lobe-badge-overlay.ts (new)</div>
+          <div class="what"><span class="lead">Numbered map badges.</span> Render-layer overlay drawing <code>#N</code> at each constituent center while the Hub panel is open.</div>
+        </div>
+        <div class="change">
+          <div class="file">SPEC.md</div>
+          <div class="what"><span class="lead">§3.4 / §3.6 / §15.1.</span> Grow any constituent; per-lobe origin-biome cap; <code>extraEllipses.biome</code> cap-only note.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="s09">
+      <div class="sec-head"><span class="num">09</span><h2>Verification</h2></div>
+      <p class="sec-intro">Pure-layer tests only; render layer (picker, badges) stays untested per the repo convention.</p>
+      <div class="checklist">
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Cost union-delta for an extra.</strong> Growing <code>extraEllipses[i]</code> charges only tiles not already in any constituent (incl. overlap with the primary / siblings).</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Per-biome cap gating.</strong> A Volcanic lobe rejects with <code>axis-at-max</code> at 14 while the Plains primary still expands toward 28.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Targeted mutation.</strong> <code>expandConstituent(i)</code> grows exactly entry <code>i</code> and leaves the primary + sibling lobes byte-identical; index 0 still grows the primary.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Merge stamps biome.</strong> Appended <em>and</em> recursively-propagated extras carry the correct origin biome after a chained merge.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Migration.</strong> A v27 fixture with biome-less extras loads into v28 defaulting each to the island biome; v28 round-trips identity.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Gateway parity.</strong> LOCAL and REMOTE produce identical state for the same <code>constituentIndex</code>; an out-of-range index is rejected server-side.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Full suite green.</strong> <code>npm test</code> (with Postgres up) and <code>npx tsc -b --force</code> clean.</div></div>
+      </div>
+    </section>
+
+    <section id="s10">
+      <div class="sec-head"><span class="num">10</span><h2>Risks</h2></div>
+      <div class="risks">
+        <div class="row">
+          <div class="cell head">Risk</div><div class="cell head">Sev</div><div class="cell head">Mitigation</div>
+        </div>
+        <div class="row">
+          <div class="cell">New <code>biome</code> field tempts future code into per-lobe terrain, contradicting the §3.6 absorber-biome terrain rule.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Document the field as <strong>cap-only</strong> in §15.1 and at the type; terrain stays absorber-biome.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Constituent-index threading touches the LOCAL/REMOTE trust surface; an index mismatch could desync.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Server re-runs the same pure validator; gateway-parity test asserts identical state and rejects bad indices.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Growing a lobe can newly overlap a third island, triggering an unexpected merge.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Intended — <code>islandsOverlap</code> already walks all constituents; this is the §3.6 mechanic working as designed.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Persistence bump is irreversible; a wrong default strands old saves.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Default reproduces prior behavior exactly (absorber biome); migration + round-trip tests gate it.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="s11">
+      <div class="sec-head"><span class="num">11</span><h2>Out of scope &amp; spec edits</h2></div>
+      <p class="sec-intro">Deliberately deferred, named so they read as considered-not-missed.</p>
+      <div class="deferred">
+        <div class="defer">
+          <div class="dt">Per-lobe terrain / biome generation</div>
+          <div class="dd">Terrain stays the absorber's biome per the §3.6 note. The new field is cap-only; per-lobe terrain is a separate, larger change.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Ellipse rotation</div>
+          <div class="dd"><code>rotation</code> remains metadata-only across all geometry; absorbed lobes still enter at rotation 0. Untouched here.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Map-click lobe selection / color-coding</div>
+          <div class="dd">Rejected in favor of the picker + numbered badges. Could be revisited if badges prove insufficient in playtest.</div>
+        </div>
+      </div>
+      <p class="body" style="margin-top:24px"><strong>Spec edits shipped with the code:</strong>
+        §3.4 (reclamation grows any constituent; per-lobe origin-biome cap;
+        union-delta cost of the chosen constituent), §3.6 (appended constituents
+        record origin biome; reaffirm terrain stays absorber-biome), §15.1
+        (<code>extraEllipses.biome</code> field, cap-only).</p>
+    </section>
+
+    <div class="footer">
+      <p>Design spec · robot-islands · generated 2026-06-20 · brainstormed via superpowers · next step: writing-plans</p>
+    </div>
+
+  </div>
+</body>
+</html>
