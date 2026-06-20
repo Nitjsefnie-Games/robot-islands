@@ -607,8 +607,12 @@ describe('generateOffer — non-stored byproduct gases', () => {
     for (const k of Object.keys(s.inventory) as ResourceId[]) s.inventory[k] = 0;
     s.storageCaps.wood = 100; s.inventory.wood = 50;
     s.everProduced.clear();
+    // P4 Phase 1 (task 2): the 6 byproducts (refinery_gas, co, …) moved out of
+    // NON_STORED_OUTPUTS into OUTPUT_CAP_EXEMPT — they are now STORED and thus
+    // tradable. co2 is the SOLE remaining non-stored output, so it is the only
+    // resource that keeps this "every ever-produced resource is non-stored ⇒
+    // no offer" guard true.
     s.everProduced.add('co2');
-    s.everProduced.add('refinery_gas');
     expect(generateOffer(s, () => 0.0, DEFAULT_TRADE_TUNING, 1000)).toBeNull();
   });
 });

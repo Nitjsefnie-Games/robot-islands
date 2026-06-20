@@ -771,7 +771,7 @@ output_kg_per_cycle = Σ(output_units × RESOURCE_META.massPerUnitKg)   // all o
 
 The areal densities are real *harvesting/processing* rates (a logger strip-mines decades of standing timber, not the ~µg·s⁻¹·m⁻² a forest regrows), so the figures are industrial nameplate, not sustainable yield. `M` is a **generation-time** constant: the resulting `cycleSec` values are baked into `recipes.ts` per recipe; `RESOURCE_META.massPerUnitKg` is the live input that survives in code. Canonical derivation + per-building sources: `docs/superpowers/specs/2026-05-29-throughput-floors-rebalance-design.md` and its companion `…-throughput-density-table.md`.
 
-**Resource-graph closure — `terminal` taxonomy.** Every resource carries `RESOURCE_META[r].terminal` ∈ `'consumed'` (≥1 recipe consumer), `'gameplay-sink'` (consumed by a non-recipe system — fuel ladder, skill crystals, orbital, **placement cost**), or `` `expansion-hook:${reason}` `` (a declared orphan, no consumer yet). `recipes.test.ts` gates it: a produced `'consumed'` resource MUST have a recipe input consumer. Closure status + the live orphan ledger + the phased plan live in `docs/reports/2026-06-19-resource-graph-closure-status.md` and `docs/superpowers/plans/2026-06-19-resource-graph-closure.md`. Landed: P0 byproduct-discard (§15.3 above), P1 tag hygiene (biofuel/aviation_kerosene/air → gameplay-sink; aviation_kerosene_crude → consumed), P2 endgame-component placement closures (`singularity_battery_unit`, `particle_accelerator_core`, `cryo_containment_unit`, `singularity_sensor`, `probability_calculator`, `aether_beacon`, `reality_engine` are each consumed by their building's `placementCost` → `gameplay-sink`), and P6 CO₂ single-atmosphere (`co2` is non-stored — out of inventory, climate value on the per-island `co2Kg` scalar, world total `Σ co2Kg` shown in the HUD → `gameplay-sink`). **P3 machine closures** (validated against the `scripts/bootstrap_planner_v3.py` reachability model): `generator`, `hydraulic_actuator`, `pneumatic_actuator` are consumed by `placementCost` → `gameplay-sink` — but only on buildings whose output is NOT upstream of the component (generator → manufactured power buildings, with primitive windmill/water_wheel left ungated; actuators → off-path consumers like `sheet_metal_mill`/plastic presses/`mass_driver`/`launch_tower`/`platform_constructor`/`kit_assembler`/`circuit_assembler`, never the mills that make their `steel_beam`/`pipe`/`wire`/`spring`/`gear`/`bearing` inputs, which would deadlock the bootstrap). `pump` + `solar_cell` were **dropped** (resource + producer building removed) rather than closed — gating their natural consumers (the water extractors / `solar`) cycles, and dropping them strands no other resource. P4 Phase-0 retagged the 7 already-consumed resources (`heavy_oil` → `consumed`; `antimatter_propellant`, `plasma_charge`, `ceramic_insulator`, `heavy_cable`, `glass_panel`, `saltwater_cell` → `gameplay-sink` via placement cost).
+**Resource-graph closure — `terminal` taxonomy.** Every resource carries `RESOURCE_META[r].terminal` ∈ `'consumed'` (≥1 recipe consumer), `'gameplay-sink'` (consumed by a non-recipe system — fuel ladder, skill crystals, orbital, **placement cost**), or `` `expansion-hook:${reason}` `` (a declared orphan, no consumer yet). `recipes.test.ts` gates it: a produced `'consumed'` resource MUST have a recipe input consumer. Closure status + the live orphan ledger + the phased plan live in `docs/reports/2026-06-19-resource-graph-closure-status.md` and `docs/superpowers/plans/2026-06-19-resource-graph-closure.md`. Landed: P0 byproduct-discard (§15.3 above — **superseded by P4 Phase 1**: the 6 byproducts are now per-output cap-exempt — stored + drawable + non-stalling + overflow-voided — rather than whole-class vented; only `co2` stays non-stored), P1 tag hygiene (biofuel/aviation_kerosene/air → gameplay-sink; aviation_kerosene_crude → consumed), P2 endgame-component placement closures (`singularity_battery_unit`, `particle_accelerator_core`, `cryo_containment_unit`, `singularity_sensor`, `probability_calculator`, `aether_beacon`, `reality_engine` are each consumed by their building's `placementCost` → `gameplay-sink`), and P6 CO₂ single-atmosphere (`co2` is non-stored — out of inventory, climate value on the per-island `co2Kg` scalar, world total `Σ co2Kg` shown in the HUD → `gameplay-sink`). **P3 machine closures** (validated against the `scripts/bootstrap_planner_v3.py` reachability model): `generator`, `hydraulic_actuator`, `pneumatic_actuator` are consumed by `placementCost` → `gameplay-sink` — but only on buildings whose output is NOT upstream of the component (generator → manufactured power buildings, with primitive windmill/water_wheel left ungated; actuators → off-path consumers like `sheet_metal_mill`/plastic presses/`mass_driver`/`launch_tower`/`platform_constructor`/`kit_assembler`/`circuit_assembler`, never the mills that make their `steel_beam`/`pipe`/`wire`/`spring`/`gear`/`bearing` inputs, which would deadlock the bootstrap). `pump` + `solar_cell` were **dropped** (resource + producer building removed) rather than closed — gating their natural consumers (the water extractors / `solar`) cycles, and dropping them strands no other resource. P4 Phase-0 retagged the 7 already-consumed resources (`heavy_oil` → `consumed`; `antimatter_propellant`, `plasma_charge`, `ceramic_insulator`, `heavy_cable`, `glass_panel`, `saltwater_cell` → `gameplay-sink` via placement cost).
 
 ### 7.1 Iron / Steel
 
@@ -2154,17 +2154,33 @@ an empty resource `r` yields a shared factor `φ[r]` over all of `r`'s consumers
 (target = the producers' realized supply) — `φ` generalizes the old
 `inputAvail`. Each building takes the **min rule**: its gate `g` is the minimum
 of 1, every `θ` over its capped outputs, and every `φ` over its emptied inputs,
-so the most-constrained stream governs the whole building (a full byproduct bin
-still chokes a multi-output building, continuously) — **except** for
-`NON_STORED_OUTPUTS` (§2.6 / §7.4). Those are never written to island inventory,
-never counted as a cap-stall, and drained to 0 each `advanceIsland` (so a
-pre-change save can't strand stock). Two kinds:
-(1) **vented byproducts** with no consumer yet (`RESOURCE_META` `expansion-hook`:
-`co`, `refinery_gas`, `wood_tar`, `water_vapor`, `cryo_coolant_vented`,
-`mill_scale`) — without a sink their capped bin would otherwise stall the
-producer on its own exhaust (a long-run/offline correctness bug); they are
-discarded until real consumer loops land (closure plan P4);
-(2) **`co2`** — the single global atmosphere (§7.4). Its climate contribution
+so the most-constrained stream governs the whole building (a full output bin
+still chokes a multi-output building, continuously) — **except** for two
+output-side exemptions that prevent a side output from throttling a valuable
+primary output:
+
+(A) **`OUTPUT_CAP_EXEMPT` — per-output cap-exemption** (P4 Phase 1). The 6
+byproducts `co`, `refinery_gas`, `wood_tar`, `water_vapor`,
+`cryo_coolant_vented`, `mill_scale` are **side** outputs of buildings whose
+**primary** output is valuable (smelter→`iron_ingot`, steel_mill→`steel`, the
+mills→`beam`/`pipe`/`wire`, …). Each is **stored up to cap** (written to
+inventory, so a future consumer recipe can draw it) and its overflow above cap
+is **voided** by `applyRates`' clamp — BUT each is **excluded from its
+producer's cap-stall** (`outputAvail`) and from the net-flow solver's
+**`capConstrained`** set (no `θ[r]`), scoped to that resource only. So a full
+byproduct bin never gates the producer down and the primary output runs
+unthrottled — without the bluntness of building-level `forceRun`/
+`ignoreOutputCap`, which would also void the primary output. The byproducts
+stay `expansion-hook` (no consumer yet) until P4 adds real consumer loops; the
+exemption is what lets them be **stored + drawable** in the meantime. (A
+byproduct at an EMPTY bin still appears in `zeroConstrained` as a consumer's
+input once a consumer lands — only the cap side is exempt.) Verified
+resource-level safe: none of the 6 is ever a sole/primary output of any recipe.
+
+(B) **`NON_STORED_OUTPUTS` — `co2` only** (§2.6 / §7.4). It is never written to
+island inventory, never counted as a cap-stall, and drained to 0 each
+`advanceIsland` (so a pre-change save can't strand stock). `co2` is the single
+global atmosphere (§7.4). Its climate contribution
 accrues to one world-level scalar `world.totalCo2Kg`: non-biogenic emission +
 exogenous fuel-combustion add to it and sinks drain it (floored at 0) **across
 all islands**, so capture on one island offsets emissions on any other; keeping

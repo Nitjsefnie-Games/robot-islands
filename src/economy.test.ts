@@ -47,10 +47,12 @@ import {
   type IslandState,
   evaluateConditionalEffectCondition,
   layerConditionalBonuses,
+  NON_STORED_OUTPUTS,
+  OUTPUT_CAP_EXEMPT,
 } from './economy.js';
 import { checkGates } from './adjacency.js';
 import { applyUpgrade, placeBuilding, validatePlacement } from './placement.js';
-import { ALL_RESOURCES, RECIPES, resolveRotatingOutput, XP_WEIGHT, type ResourceId } from './recipes.js';
+import { ALL_RESOURCES, RECIPES, resolveRotatingOutput, XP_WEIGHT, type Recipe, type ResourceId } from './recipes.js';
 import { RESOURCE_BASE_CAP, RESOURCE_STORAGE_CATEGORY, defaultCapForCategory, storageBaseFor } from './storage-categories.js';
 import { aggregateStorageCaps } from './world.js';
 import type { TerrainKind } from './island.js';
@@ -6075,15 +6077,19 @@ describe('§10 CO₂ — biogenic net-zero (#103)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// §2.6 byproduct-gas throttle guard. A byproduct gas (e.g. `co`) with no
-// consumer is a capped `liquid_gas` bin; the resource-graph-closure design
-// (2026-06-13 §1.2) claimed a producer at a full byproduct bin self-throttles
-// to net 0, stalling its PRIMARY output. This guard discovers whether that is
-// live today by comparing two identical Smelter runs that differ only in the
-// `co` bin being pinned at cap.
+// §2.6 / §15.3 per-output cap-exemption guard (P4 Phase 1, task 2).
+// A byproduct gas (e.g. `co`) is a SIDE output of a building whose PRIMARY
+// output (iron_ingot) is valuable. Under the OLD design the 6 byproducts were
+// in NON_STORED_OUTPUTS — vented to 0 each tick so they never stalled the
+// producer, but also never enterable into inventory (so undrawable by a
+// future consumer). The NEW design (OUTPUT_CAP_EXEMPT, task 2) makes the
+// byproduct STORED (clamped to cap, drawable as a recipe input), yet excluded
+// from the producer's cap-stall and the §15.3 solver's cap constraints — so a
+// full byproduct bin still never throttles the valuable primary output, and
+// overflow above cap is voided by applyRates' clamp.
 // ---------------------------------------------------------------------------
 
-describe('§2.6 byproduct-gas full-bin does not stall the producer', () => {
+describe('§2.6/§15.3 per-output cap-exemption — byproduct stored, drawable, non-stalling', () => {
   const SMELTER: PlacedBuilding = { id: 'b-smelter', defId: 'smelter', x: 0, y: 0 };
 
   // Smelter consumes power; strip it so the run is power-neutral like POWER_FREE.
@@ -6095,42 +6101,82 @@ describe('§2.6 byproduct-gas full-bin does not stall the producer', () => {
   }
   const SMELTER_POWER_FREE: DefCatalog = smelterPowerFree();
 
-  /** Run a Smelter for `ms`, returning iron_ingot produced. `coAtCap` pins the
+  /** Run a Smelter for `ms`, returning the final state. `coAtCap` pins the
    *  `co` byproduct bin full from t=0; everything else has effectively infinite
    *  headroom so the ONLY difference between runs is the full `co` bin. */
-  function ironIngotAfter(ms: number, coAtCap: boolean): number {
+  function runSmelter(ms: number, coAtCap: boolean): IslandState {
     const caps = blankCaps(1_000_000_000);
     caps.co = 5; // tiny co cap so it can be pinned at its ceiling
     const inv = { ...blankInventory(), iron_ore: 1_000_000, coal: 1_000_000 };
     if (coAtCap) inv.co = 5; // co bin AT cap from the first tick
     const state = makeState({ buildings: [SMELTER], inventory: inv, storageCaps: caps });
     advanceIsland(state, ms, { defs: SMELTER_POWER_FREE });
-    return state.inventory.iron_ingot;
+    return state;
   }
 
-  it('a full `co` bin must not reduce the Smelter`s iron_ingot output', () => {
-    const free = ironIngotAfter(100_000, false);
-    const pinned = ironIngotAfter(100_000, true);
+  it('a full exempt `co` bin must not reduce the Smelter`s iron_ingot output', () => {
+    const free = runSmelter(100_000, false).inventory.iron_ingot;
+    const pinned = runSmelter(100_000, true).inventory.iron_ingot;
     // Sanity: the free run actually produced something.
     expect(free).toBeGreaterThan(0);
     // The guard: pinning the unconsumed `co` byproduct at cap must NOT throttle
-    // the primary output. If this fails, the §1.2 throttle is live and the fix
-    // (vent the byproduct gases out of inventory) is required.
+    // the primary output — OUTPUT_CAP_EXEMPT keeps it out of the producer's
+    // cap-stall and the §15.3 solver's cap constraints.
     expect(pinned).toBeCloseTo(free, 6);
   });
 
-  it('a non-stored byproduct is drained from inventory (does not stay stuck)', () => {
-    // Start with a full `co` bin (e.g. from a pre-vent save) and run.
-    const caps = blankCaps(1_000_000_000);
-    caps.co = 5;
-    const state = makeState({
-      buildings: [SMELTER],
-      inventory: { ...blankInventory(), iron_ore: 1_000_000, coal: 1_000_000, co: 5 },
-      storageCaps: caps,
-    });
-    advanceIsland(state, 100_000, { defs: SMELTER_POWER_FREE });
-    // The Smelter keeps emitting `co`, yet the bin reads empty — it is vented,
-    // not accumulated, and the pre-existing stock was drained.
-    expect(state.inventory.co ?? 0).toBe(0);
+  it('an exempt byproduct is STORED up to cap (clamped), not drained to 0', () => {
+    // NEW task-2 semantics: the Smelter keeps emitting `co`; the bin ACCRUES
+    // (it is stored, not vented/drained to 0 as the old NON_STORED design did)
+    // and, run long enough, fills to cap and stays pinned there (overflow
+    // voided by the clamp) — it never grows past cap.
+    const short = runSmelter(100_000, false);
+    expect(short.inventory.co).toBeGreaterThan(0); // accruing, NOT drained to 0
+    // Run long enough for the slow Smelter cycle to fill the tiny co=5 cap.
+    const long = runSmelter(10_000_000, false);
+    expect(long.inventory.co).toBeCloseTo(5, 6); // pinned at cap, not 0
+    expect(long.inventory.co).toBeLessThanOrEqual(5); // overflow voided
+  });
+
+  it('`co` is OUTPUT_CAP_EXEMPT and NOT NON_STORED; co2 is the inverse', () => {
+    expect(OUTPUT_CAP_EXEMPT.has('co')).toBe(true);
+    expect(NON_STORED_OUTPUTS.has('co')).toBe(false);
+    // co2 stays the single global atmosphere — non-stored, not exempt.
+    expect(NON_STORED_OUTPUTS.has('co2')).toBe(true);
+    expect(OUTPUT_CAP_EXEMPT.has('co2')).toBe(false);
+    // All 6 byproducts migrated into the exemption.
+    for (const r of ['co', 'refinery_gas', 'wood_tar', 'water_vapor', 'cryo_coolant_vented', 'mill_scale'] as ResourceId[]) {
+      expect(OUTPUT_CAP_EXEMPT.has(r)).toBe(true);
+      expect(NON_STORED_OUTPUTS.has(r)).toBe(false);
+    }
+  });
+
+  it('a consumer can DRAW an exempt byproduct from inventory (recipe runs on byproduct stock)', () => {
+    // No real recipe consumes a byproduct yet (orphan ledger 33). To prove the
+    // byproduct is drawable as an input now that it is stored, install a
+    // temporary workshop recipe that consumes `co` → bolt, run it against a
+    // stocked `co` bin, and assert the consumer ran (co drawn down, bolt made).
+    // Restored in finally so global RECIPES is not polluted across tests.
+    const original = RECIPES.workshop;
+    const tempRecipe: Recipe = {
+      cycleSec: 1,
+      inputs: { co: 1 },
+      outputs: { bolt: 1 },
+      category: original?.category ?? 'manufacturing',
+    } as Recipe;
+    try {
+      RECIPES.workshop = tempRecipe;
+      const state = makeState({
+        buildings: [WORKSHOP],
+        inventory: { ...blankInventory(), co: 50 },
+        storageCaps: blankCaps(1_000_000),
+      });
+      advanceIsland(state, 10_000, { defs: POWER_FREE });
+      // The consumer drew `co` from inventory and produced its output.
+      expect(state.inventory.co).toBeLessThan(50);
+      expect(state.inventory.bolt).toBeGreaterThan(0);
+    } finally {
+      RECIPES.workshop = original;
+    }
   });
 });
