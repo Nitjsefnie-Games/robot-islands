@@ -598,13 +598,6 @@ export type DefCatalog = Readonly<Record<BuildingDefId, BuildingDef>>;
 /** §2.6 non-stored outputs (resource-graph-closure plans P0 + P6). These
  *  resources are produced but never sit in island inventory:
  *
- *  - The byproduct gases/solid (`co`, `refinery_gas`, `wood_tar`,
- *    `water_vapor`, `cryo_coolant_vented`, `mill_scale`) have no consumer yet
- *    (RESOURCE_META `expansion-hook`); with a capped bin and no sink the §15.3
- *    flow solver would gate the PRODUCER to net 0 — a long-run/offline emitter
- *    stalls on its own exhaust (proven by the §2.6 byproduct-throttle guard in
- *    `economy.test.ts`). They are **discarded** (vented) until real consumer
- *    loops land (closure plan P4). Remove an entry when it gains a consumer.
  *  - `co2` is the **single global atmosphere** (§7.4 / closure plan P6): its
  *    climate contribution lives in the per-island `state.co2Kg` scalar
  *    (`advanceIsland`), and the world total is `Σ co2Kg` (`sumIslandCo2`). It
@@ -613,9 +606,42 @@ export type DefCatalog = Readonly<Record<BuildingDefId, BuildingDef>>;
  *
  *  Membership means: never written to inventory (`applyRates`), never counted
  *  as a cap-stall (`outputAvail` / the solver's `capConstrained`), and drained
- *  to 0 each `advanceIsland` so a pre-change save can't strand stock. */
+ *  to 0 each `advanceIsland` so a pre-change save can't strand stock.
+ *
+ *  P4 Phase 1 (task 2): the 6 byproduct gases/solid (`co`, `refinery_gas`,
+ *  `wood_tar`, `water_vapor`, `cryo_coolant_vented`, `mill_scale`) moved OUT
+ *  of NON_STORED_OUTPUTS into `OUTPUT_CAP_EXEMPT` below — they are now STORED
+ *  (so a future consumer recipe can draw them) but per-output cap-exempt (so a
+ *  full byproduct bin never throttles its producer's valuable PRIMARY output).
+ *  Only `co2` remains non-stored. */
 export const NON_STORED_OUTPUTS: ReadonlySet<ResourceId> = new Set<ResourceId>([
-  'co', 'refinery_gas', 'wood_tar', 'water_vapor', 'cryo_coolant_vented', 'mill_scale', 'co2',
+  'co2',
+]);
+
+/**
+ * §2.6 / §15.3 per-output cap-exemption (P4 Phase 1, task 2).
+ *
+ * The 6 byproducts are SIDE outputs of buildings whose PRIMARY output is
+ * valuable (smelter→`iron_ingot`, steel_mill→`steel`, the mills→
+ * `beam`/`pipe`/`wire`, etc.). Verified resource-level safe: each of the 6 is
+ * a side output ONLY — none is ever the sole/primary output of any recipe (nor
+ * a sole `rotateOutputs` entry), so exempting the resource never wrongly
+ * exempts some building's primary stream.
+ *
+ * Membership means: the output IS written to inventory up to cap (drawable as
+ * a recipe input) and overflow above cap is voided by `applyRates`' clamp —
+ * BUT the output is excluded from the producer's cap-stall (`outputAvail`) and
+ * from the §15.3 net-flow solver's `capConstrained` set, so a full byproduct
+ * bin never gates the producer down (and thus never throttles its primary
+ * output). This is scoped to the OUTPUT/resource, unlike building-level
+ * `forceRun`/`ignoreOutputCap` which would also void the primary output.
+ *
+ * Disjoint from NON_STORED_OUTPUTS. `co2` is NOT here (it stays non-stored —
+ * the global atmosphere scalar). Remove an entry only if it ever becomes a
+ * primary output, or if a different storage policy is wanted once a consumer
+ * lands. */
+export const OUTPUT_CAP_EXEMPT: ReadonlySet<ResourceId> = new Set<ResourceId>([
+  'co', 'refinery_gas', 'wood_tar', 'water_vapor', 'cryo_coolant_vented', 'mill_scale',
 ]);
 
 function outputAvail(
@@ -629,6 +655,9 @@ function outputAvail(
   for (const [r, _yield] of Object.entries(outputs)) {
     const id = r as ResourceId;
     if (NON_STORED_OUTPUTS.has(id)) continue; // §2.6: not stored — never stalls
+    // §2.6/§15.3 (task 2): a per-output cap-exempt byproduct is stored up to
+    // cap but never stalls its producer — a full bin must not return 0 here.
+    if (OUTPUT_CAP_EXEMPT.has(id)) continue;
     if (inv(state, id) >= cap(state, id, caps, undefined, baseMult)) return 0;
   }
   return 1;
@@ -1622,14 +1651,20 @@ export function computeRates(
     for (const fb of regimeScan) {
       for (const r of [...Object.keys(fb.produces), ...Object.keys(fb.consumes)]) {
         const id = r as ResourceId;
-        // §2.6: a non-stored output (vented byproduct / co2) has no inventory
-        // bin — it must never cap-constrain (and thus throttle) its producer.
+        // §2.6: a non-stored output (vented co2) has no inventory bin — it must
+        // never cap-constrain (and thus throttle) its producer.
         if (NON_STORED_OUTPUTS.has(id)) continue;
         const stock = ctx?.inventory?.[id] ?? state.inventory[id] ?? 0;
         // Issue #112: classify with STOCK_BOUNDARY_EPS so float DUST at a
         // boundary is treated as pinned and solveFlow gates the dust-bin
         // consumer/producer (net settles toward 0). See the constant's docs.
         if (stock <= STOCK_BOUNDARY_EPS) zeroConstrained.add(r);
+        // §2.6/§15.3 (task 2): a per-output cap-exempt byproduct is stored up
+        // to cap (overflow voided by applyRates' clamp) but is excluded from
+        // the cap-constraint set — scoped to THIS resource — so a full
+        // byproduct bin never gates its producer down (it can still appear in
+        // zeroConstrained as a CONSUMER input once a consumer recipe lands).
+        if (OUTPUT_CAP_EXEMPT.has(id)) continue;
         if (stock >= cap(state, id, ctx?.caps, undefined, ctx?.baseMult) - STOCK_BOUNDARY_EPS) capConstrained.add(r);
       }
     }
