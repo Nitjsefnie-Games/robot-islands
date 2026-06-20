@@ -931,7 +931,7 @@ describe('§7.4 plastic_precursor via plastic_polymerizer_a (Task 4.2)', () => {
     expect(RECIPES.plastic_polymerizer_a).toBeDefined();
     expect(RECIPES.plastic_polymerizer_a!.inputs).toEqual({ naphtha: 1, refinery_gas: 1 });
     expect(RECIPES.plastic_polymerizer_a!.outputs).toEqual({ plastic_precursor: 2 });
-    expect(RECIPES.plastic_polymerizer_a!.cycleSec).toBe(358.3);
+    expect(RECIPES.plastic_polymerizer_a!.cycleSec).toBe(716.7); // Task-3 doubled output→2; formula: 2/(0.48·4·M)=716.7
     expect(RECIPES.plastic_polymerizer_a!.category).toBe('chemistry');
   });
 });
