@@ -462,6 +462,8 @@ When islands A and B touch:
 
 **Implementation note — per-constituent terrain after merge.** Terrain is resolved **per constituent**, not under a single island biome. For a tile, `terrainAt` finds the constituent that owns it and calls `terrainAtForBiome(constituent.biome, constituent.originId, x − offsetX, y − offsetY, …)` — the constituent's own biome and seed, evaluated in the constituent's own local frame. So an absorbed lobe's resource veins survive a merge unchanged, and **growing a constituent (Land Reclamation) pulls new terrain from that constituent's biome, not the absorber's**. The primary carries the island's own `biome`/`id`; absorbed lobes carry theirs. **Overlap precedence:** a tile inscribed in more than one constituent is owned by the earliest constituent (the primary, then merge order) — the "already-placed wins" rule, matching the `computeIslandTiles` dedup so the tile set and its terrain never disagree. `tileOverrides` (Terrain Modifier conversions, §8) still win over all biome generation. Biome-locked unique buildings already placed on the absorbed island remain in place and continue operating (placed legally; the island-ownership biome check is at placement time only).
 
+**Implementation note — per-constituent biome-locked placement after merge.** Biome-locked placement is also per-constituent on a merged island. The absorber's primary biome no longer governs the whole island for `requiredBiomes` checks — the check is tile-by-tile. `constituentBiomeAt(spec, x, y)` resolves the constituent that owns each tile and returns that constituent's biome. A biome-locked building (`requiredBiomes` set) may be placed only where **every footprint tile's constituent biome is in `requiredBiomes`**; a footprint straddling a matching and a non-matching constituent lobe is rejected. The coarse catalog/recipe-graph gate (`canPlaceOnAnyConstituent`) asks whether the building could be validly placed in at least one constituent — this governs whether the building appears as available in the catalog at all. Artificial islands remain fully blocked for biome-locked uniques regardless of constituent count (§9.5).
+
 Joining is permanent — there is no un-merge.
 
 A merged island can continue to expand. If it grows to touch a third island, the same join procedure applies, accumulating ellipses.
@@ -1271,6 +1273,8 @@ A player who colonizes one island of each biome can run the complete T4 chain. S
 
 **One biome-unique per island.** Each island can host at most one biome-locked unique building. For natural islands this is the building matching the island's biome. A player owning multiple colonies of the same biome can run multiple instances of that biome's unique in parallel — three Volcanic colonies produce three Pyroforges' worth of Exotic Alloy. Wide colonization scales the bottleneck output linearly.
 
+**Biome-locked placement on merged (multibiome) islands.** A merged island whose constituents span multiple biomes is multibiome: each lobe retains its own biome for both terrain and placement. When placing a biome-locked building, every footprint tile's constituent biome must satisfy `requiredBiomes` — a footprint that straddles a matching lobe and a non-matching lobe is rejected even if the majority of tiles land on the correct biome. (The coarse catalog availability check uses a looser test — the building appears in the catalog if it is placeable on *any* constituent.) This means a biome-locked unique can be placed on a merged island only if the footprint fits entirely within a single matching lobe. Artificial islands still cannot host biome-locked uniques regardless of how many constituents they have.
+
 **Cryogenic Hydrogen production (T4 fuel).** Cryogenic Hydrogen, the T4 fuel grade per §11.7, is produced by the Cryo Lab (T3, see §8.2) via the recipe `Hydrogen + Cryo-coolant + heavy power → Cryogenic Hydrogen`. It is not biome-locked. Arctic colonies produce T4 fuel more efficiently than other biomes because Cryo Lab benefits from cold ambient conditions, but any island with a Cryo Lab can produce it.
 
 ### 9.6 Network Consciousness Milestone
@@ -1965,8 +1969,8 @@ interface Island {
     // Initial: a single ellipse at offset (0, 0) with biome-default radii.
     // Land Reclamation grows ellipses[0]'s radii. Joining (§3.6) appends new ellipses
     // with offsets equal to the absorbed island's position relative to the absorber.
-    // Each constituent records a cap-only `biome` (origin biome of the absorbed island)
-    // that derives its Land Reclamation cap; terrain still queries the absorber's biome per §3.6.
+    // Each constituent records the `biome` (origin biome of the absorbed island)
+    // that derives its Land Reclamation cap, drives per-constituent terrain, and gates biome-locked placement per §3.6 and §9.5.
   };
   terrain: TerrainType\[]\[];
   buildings: PlacedBuilding\[];
@@ -2007,7 +2011,7 @@ interface BuildingDef {
   storage?: Record<ResourceId, number>;
   adjacencyEffects?: AdjacencyEffect\[];
   requiredTile?: TerrainType\[];
-  requiredBiomes?: BiomeType\[];
+  requiredBiomes?: BiomeType\[];  // placement gated per-tile: every footprint tile's constituent biome must be in this set (§9.5); catalog availability uses canPlaceOnAnyConstituent (at least one constituent matches)
   requiredNodes?: NodeId\[];
   artificialIslandAllowed?: boolean;
   weatherVisibilityBonus?: number;  // Weather Station: +cells of visibility
