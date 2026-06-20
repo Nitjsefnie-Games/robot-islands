@@ -412,6 +412,8 @@ Maximum natural size, via Land Reclamation Hub at T2+ (placeholders):
 
 Each Land Reclamation expansion adds 1 to either the major or the minor radius (player-chosen) at a material cost equal to the number of new inscribed tiles gained × the shared per-land-tile structural basket (`LAND_TILE_COST`, `building-defs.ts`). Rotation cannot be changed after generation.
 
+On a merged island, Land Reclamation can grow any constituent ellipse (primary or any absorbed lobe), chosen via the Hub inspector's per-lobe picker. Each constituent is capped independently by its own origin biome (`BIOME_MAX_RADII[constituent.biome]`). The cost is the union delta of growing that one constituent — tiles already covered by another constituent are not charged.
+
 **Implementation note — rotation is metadata-only.** `IslandSpec.rotation` is stored and seeded for Coast islands (see `src/world-gen.ts` `rollCoastRotation`), but no geometry consumer applies it yet. `tileInscribedInEllipse`, `tileInscribedInOffsetEllipse`, `computeIslandTiles`, and `islandsOverlap` all treat the ellipse as axis-aligned; the overlap test uses an axis-aligned Minkowski-sum approximation that becomes a conservative over-estimate once true rotation lands. When rotation is wired into the geometry layer, the tile-inscription functions will need a rotated-ellipse corner test and `islandsOverlap` will need a rotated-ellipse SAT replacement.
 
 ### 3.5 Modifiers
