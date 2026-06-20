@@ -187,6 +187,10 @@ export function advanceWorldEconomy(
       solarBoost: solarBoostByIsland.get(s.id),
       world,
       worldSeed: world.seed,
+      // §7.4 grouped lattice / shared-network members run CO₂ accrual/drain
+      // through the same `applySegmentSideEffects` as solo islands — give them
+      // the shared global pool so their emissions/capture land globally too.
+      co2Pool,
       onTerrainShotFire: (buildingId) => {
         const modifier = s.buildings.find((b) => b.id === buildingId);
         if (!modifier) return;
