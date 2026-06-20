@@ -1,6 +1,6 @@
 import { makeSeededRng } from './rng.js';
 import { XP_WEIGHT, type ResourceId } from './recipes.js';
-import { inv, cap, NON_STORED_OUTPUTS, type IslandState } from './economy.js';
+import { inv, cap, NON_STORED_OUTPUTS, OUTPUT_CAP_EXEMPT, type IslandState } from './economy.js';
 import type { PlacedBuilding } from './buildings.js';
 import type { SkillMultipliers } from './skilltree.js';
 
@@ -118,8 +118,11 @@ export function generateOffer(
   const rng = typeof rngOrSeed === 'string'
     ? makeSeededRng(`${rngOrSeed}_trade_${state.id}_${state.tradeAcceptCount}`)
     : rngOrSeed;
-  const givePool = (Object.keys(state.inventory) as ResourceId[]).filter((r) => inv(state, r) > 0 && !NON_STORED_OUTPUTS.has(r));
-  const getPool = [...state.everProduced].filter((r) => !NON_STORED_OUTPUTS.has(r));
+  // §2.6: non-stored outputs (co2) and per-output cap-exempt byproducts are
+  // excluded from trade pools — the byproducts have no consumer yet (P4 Phase 1
+  // stores them but leaves them non-tradable until real consumer loops land).
+  const givePool = (Object.keys(state.inventory) as ResourceId[]).filter((r) => inv(state, r) > 0 && !NON_STORED_OUTPUTS.has(r) && !OUTPUT_CAP_EXEMPT.has(r));
+  const getPool = [...state.everProduced].filter((r) => !NON_STORED_OUTPUTS.has(r) && !OUTPUT_CAP_EXEMPT.has(r));
   if (givePool.length === 0 || getPool.length === 0) return null;
 
   for (let attempt = 0; attempt < 12; attempt++) {
