@@ -386,24 +386,19 @@ describe('heat — proportional throttle (rev-16 §5.1)', () => {
   });
 });
 
-describe('heat — boolean fallback (pre-Phase-3 compat)', () => {
-  it('sets throttle=1.0 when source has no thermalKW', () => {
+describe('heat — boolean heat retired', () => {
+  it('a requiresHeat def with no heatDemandKW gets NO heat (demand 0, not served)', () => {
+    // Boolean-heat (adjacency-only) was retired: every heat consumer now needs a
+    // kW demand. A def lacking heatDemandKW yields demand 0 → it never enters the
+    // allocator and reads as "no heat" (this is a catalog error, guarded by the
+    // building-defs test that every requiresHeat def carries heatDemandKW).
     const buildings: PlacedBuilding[] = [
-      { id: 'src', defId: '__test_source_no_kw' as any, x: 0, y: 0 },
+      { id: 'cf', defId: 'coal_furnace', x: 0, y: 0 },
       { id: 'cons', defId: '__test_consumer_no_kw' as any, x: 1, y: 0 },
     ];
     const result = resolveHeatAssignments(buildings);
-    expect(result.heatThrottleFactor.get('cons')).toBe(1);
-    expect(result.hasHeat.get('cons')).toBe(true);
-  });
-
-  it('sets throttle=1.0 when consumer has no heatDemandKW (demand=0)', () => {
-    const buildings: PlacedBuilding[] = [
-      { id: 'src', defId: '__test_source_no_kw' as any, x: 0, y: 0 },
-      { id: 'cons', defId: '__test_consumer_no_kw' as any, x: 1, y: 0 },
-    ];
-    const result = resolveHeatAssignments(buildings);
-    expect(result.heatThrottleFactor.get('cons')).toBe(1);
+    expect(result.hasHeat.get('cons')).not.toBe(true);
+    expect(result.coalConsumersByFurnace.get('cf')).toBeUndefined();
   });
 });
 
@@ -504,36 +499,32 @@ describe('heat — floor-scaling + M:N aggregation (#114)', () => {
     expect(res.heatThrottleFactor.get('bf')).toBeCloseTo(1, 5);
     // Billing ∝ delivered: 3000 kW delivered / 830 thermalKW.
     expect(res.coalConsumersByFurnace.get('cf')).toBeCloseTo(3000 / 830, 4);
+    // Per-source delivered kW (inspector readout): the BF's full 3000 kW demand.
+    expect(res.deliveredBySource.get('cf')).toBeCloseTo(3000, 4);
   });
 
-  it('floor-scaling is symmetric: floor-4 furnace + floor-4 BF reproduce the base ratio', () => {
-    // BF demand 3000×4 = 12000; furnace supply 830×4 = 3320 → 3320/12000,
-    // identical to the fresh 830/3000 ratio. Both sides scale together.
+  it('floor-scaling is ASYMMETRIC: capacity grows 1+L, demand grows 1+0.5L', () => {
+    // Mirrors the power grid: a floorLevel-3 furnace's CAPACITY = 830×(1+3) = 3320,
+    // but a floorLevel-3 BF's DEMAND = 3000×(1+0.5×3) = 3000×2.5 = 7500 (power-draw
+    // formula, NOT 1+L). So the same-floor pair is now under-supplied —
+    // throttle 3320/7500 — whereas the old 1+L demand reproduced the base ratio.
     const buildings: PlacedBuilding[] = [
       { id: 'bf', defId: 'blast_furnace', x: 0, y: 0, floorLevel: 3 },
       { id: 'cf', defId: 'coal_furnace', x: 3, y: 1, floorLevel: 3 },
     ];
     const res = resolveHeatAssignments(buildings);
-    expect(res.heatThrottleFactor.get('bf')).toBeCloseTo(830 / 3000, 4);
+    expect(res.heatThrottleFactor.get('bf')).toBeCloseTo(3320 / 7500, 4);
     expect(res.hasHeat.get('bf')).toBe(true);
   });
 
-  it('boolean-heat consumer occupies zero capacity — does not starve a kW consumer', () => {
-    // A boolean-heat consumer (no heatDemandKW) and a blast furnace both border
-    // one floor-4 coal furnace (3320 kW). The boolean consumer bills +1 but
-    // takes NO thermal capacity, so the BF still gets its full 3000.
-    // Furnace 1×1 at (0,0). Boolean consumer 1×1 at (1,0) (east border).
-    // BF 3×3 at (-3,-1)..(-1,1): east border col 0 rows -1,0,1 → touches (0,0).
+  it('consumer demand floor-scales by 1+0.5L (power-draw formula)', () => {
+    // One fresh coal furnace (830 kW) feeding a floorLevel-2 blast furnace:
+    // demand = 3000×(1+0.5×2) = 3000×2 = 6000 → throttle 830/6000.
     const buildings: PlacedBuilding[] = [
-      { id: 'cf', defId: 'coal_furnace', x: 0, y: 0, floorLevel: 3 },
-      { id: 'bc', defId: '__test_consumer_no_kw' as any, x: 1, y: 0 },
-      { id: 'bf', defId: 'blast_furnace', x: -3, y: -1 },
+      { id: 'bf', defId: 'blast_furnace', x: 0, y: 0, floorLevel: 2 },
+      { id: 'cf', defId: 'coal_furnace', x: 3, y: 1 },
     ];
     const res = resolveHeatAssignments(buildings);
-    expect(res.hasHeat.get('bc')).toBe(true);
-    expect(res.hasHeat.get('bf')).toBe(true);
-    expect(res.heatThrottleFactor.get('bf')).toBeCloseTo(1, 5);
-    // billing = boolean +1, plus BF delivered 3000/830.
-    expect(res.coalConsumersByFurnace.get('cf')).toBeCloseTo(1 + 3000 / 830, 4);
+    expect(res.heatThrottleFactor.get('bf')).toBeCloseTo(830 / 6000, 4);
   });
 });

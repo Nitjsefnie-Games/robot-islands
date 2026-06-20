@@ -1339,6 +1339,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x3a5a7a,
     power: { consumes: 40 },
     requiresHeat: true,
+    heatDemandKW: 150, // §5.2 floor-scaled kW heat demand (retire boolean heat)
     // BOM source: Linde-BOS converter vessel — refractory-lined steel shell.
     // 1000 steel_beam vessel + 10000 concrete pad + 300 pipe tuyère + 200 gear ladle + 50 microchip control ≈ 61.6 t.
     placementCost: { steel_beam: 1000, concrete: 10000, pipe: 300, gear: 200, microchip: 50 },
@@ -1523,6 +1524,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x402010,
     power: { consumes: 80 },
     requiresHeat: true,
+    heatDemandKW: 80, // §5.2 floor-scaled kW heat demand (retire boolean heat)
     gates: [{ matchType: 'heat_source', hard: true }],
     // BOM source: Roberts, *Engineering Workshop* — intermittent ceramic kiln.
     // 5000 concrete + 4000 stone + 1200 iron_ingot + 80 gear + 2000 clay = 12.4 t.
@@ -2946,6 +2948,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x504838,
     power: { consumes: 60 },
     requiresHeat: true,
+    heatDemandKW: 60, // §5.2 floor-scaled kW heat demand (retire boolean heat)
     gates: [{ matchType: 'heat_source', hard: true }],
     // BOM source: Roberts, *Engineering Workshop* — flare kiln analog.
     // 200 kg stone firebricks + 40 kg wood fuel rack + 30 kg iron door + 50 kg clay lining = 320 kg.
@@ -2976,6 +2979,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x402010,
     power: { consumes: 50 },
     requiresHeat: true,
+    heatDemandKW: 60, // §5.2 floor-scaled kW heat demand (retire boolean heat)
     gates: [{ matchType: 'heat_source', hard: true }],
     // BOM source: Roberts, *Engineering Workshop* — clamp kiln analog.
     // 200 kg stone firebricks + 40 kg wood fuel rack + 20 kg iron door + 60 kg clay lining = 320 kg.
@@ -3006,6 +3010,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x403830,
     power: { consumes: 80 },
     requiresHeat: true,
+    heatDemandKW: 120, // §5.2 floor-scaled kW heat demand (retire boolean heat)
     gates: [{ matchType: 'heat_source', hard: true }],
     // BOM source: Roberts, *Engineering Workshop* — small ball-mill installation.
     // 200 kg stone foundation + 60 kg iron drum + 30 kg wood frame = 290 kg.
@@ -3036,6 +3041,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x080808,
     power: { consumes: 40 },
     requiresHeat: true,
+    heatDemandKW: 40, // §5.2 floor-scaled kW heat demand (retire boolean heat)
     gates: [{ matchType: 'heat_source', hard: true }],
     // BOM source: Roberts, *Engineering Workshop* — earth-mound kiln analog.
     // 150 kg stone ring + 80 kg wood structural + 20 kg iron grate = 250 kg.
@@ -3273,6 +3279,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x484840,
     power: { consumes: 250 },
     requiresHeat: true,
+    heatDemandKW: 400, // §5.2 floor-scaled kW heat demand (retire boolean heat)
     gates: [{ matchType: 'heat_source', hard: true }],
     // BOM source: AOD converter + continuous caster — refractory-lined vessel.
     // 1000 steel_beam vessel + 12000 concrete pad + 300 pipe argon-lance + 200 gear drive + 60 microchip control ≈ 63.6 t.
@@ -3320,6 +3327,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x1a2028,
     power: { consumes: 250 },
     requiresHeat: true,
+    heatDemandKW: 400, // §5.2 floor-scaled kW heat demand (retire boolean heat)
     gates: [{ matchType: 'heat_source', hard: true }],
     // BOM source: ESR remelt furnace + forging press — heavy tool-steel bay.
     // 900 steel_beam frame + 11000 concrete pad + 250 pipe cooling + 180 gear press + 50 microchip control ≈ 57.4 t.
@@ -4135,6 +4143,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x405060,
     power: { consumes: 200 },
     requiresHeat: true,
+    heatDemandKW: 250, // §5.2 floor-scaled kW heat demand (retire boolean heat)
     gates: [{ matchType: 'heat_source', hard: true }],
     // BOM source: Schott AG optical-glass melting tank — refractory + annealing lehr.
     // 400 steel_beam frame + 6000 concrete pad + 300 ceramic_insulator + 80 pipe + 60 microchip ≈ 27.6 t.
@@ -4152,6 +4161,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x304050,
     power: { consumes: 200 },
     requiresHeat: true,
+    heatDemandKW: 250, // §5.2 floor-scaled kW heat demand (retire boolean heat)
     gates: [{ matchType: 'heat_source', hard: true }],
     // BOM source: Owens Corning glass-melting furnace + fiber-forming bushing.
     // 350 steel_beam frame + 5000 concrete pad + 250 ceramic_insulator + 80 pipe + 50 microchip ≈ 23.4 t.
@@ -4168,6 +4178,7 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x405060,
     power: { consumes: 200 },
     requiresHeat: true,
+    heatDemandKW: 250, // §5.2 floor-scaled kW heat demand (retire boolean heat)
     gates: [{ matchType: 'heat_source', hard: true }],
     // BOM source: Corning fiber draw tower — preform feed + coating cup.
     // 400 steel_beam frame + 6000 concrete pad + 200 glass + 60 microchip + 80 wire ≈ 27.2 t.

@@ -59,10 +59,14 @@ export interface HeatAssignments {
   readonly assignedSource: Map<string, string>;
   /** §perf-2026-05-28: Per-consumer throttle factor ∈ [0, 1] from
    *  the rev-16 §5.1 proportional-budget resolver. Missing key reads
-   *  as 1.0 (boolean-N:1 backward-compat fallback). Below
-   *  MIN_HEAT_FACTOR the consumer brownouts (computeRates zeros baseRate
-   *  — wired in Phase 3 commit 3). */
+   *  as 1.0. Below MIN_HEAT_FACTOR the consumer brownouts (computeRates
+   *  zeros baseRate — wired in Phase 3 commit 3). */
   readonly heatThrottleFactor: Map<string, number>;
+  /** Per-SOURCE total kW currently delivered to its adjacent consumers (Σ of
+   *  this source's allocations). Drives the inspector's "produced N kW / cap
+   *  M kW" readout. A source serving nothing is absent (treat as 0). Capacity
+   *  itself is `thermalKW · (1 + L_source)` — derive from the def + floor. */
+  readonly deliveredBySource: Map<string, number>;
 }
 
 /** Empty result, used when an island has no consumers + no sources. */
@@ -71,6 +75,7 @@ export const EMPTY_HEAT_ASSIGNMENTS: HeatAssignments = {
   coalConsumersByFurnace: new Map(),
   assignedSource: new Map(),
   heatThrottleFactor: new Map(),
+  deliveredBySource: new Map(),
 };
 
 /** §perf-2026-05-28: brownout threshold per rev-16 §5.1. A consumer
@@ -172,37 +177,38 @@ export function resolveHeatAssignments(
       hasHeat.set(consumer.id, true);
       heatThrottleFactor.set(consumer.id, 1);
     }
-    return { hasHeat, coalConsumersByFurnace, assignedSource, heatThrottleFactor };
+    return { hasHeat, coalConsumersByFurnace, assignedSource, heatThrottleFactor, deliveredBySource: new Map() };
   }
 
   if (consumers.length === 0) {
-    return { hasHeat, coalConsumersByFurnace, assignedSource, heatThrottleFactor: new Map() };
+    return { hasHeat, coalConsumersByFurnace, assignedSource, heatThrottleFactor: new Map(), deliveredBySource: new Map() };
   }
 
-  // ── §5.2 (rev #114): floor-scaled, many-sources→one-consumer heat. ──
-  // Two consumer classes:
-  //   • boolean-heat (heatDemandKW == null): needs ONE adjacent source, runs at
-  //     throttle 1, bills a full coalPerCycle to that source, and occupies ZERO
-  //     thermal capacity (so it never competes with a kW consumer). Identical
-  //     to the legacy N:1 rule.
-  //   • kW-demand (heatDemandKW > 0): enters the flow allocation below — its
-  //     floor-scaled demand is met by pooling floor-scaled capacity across ALL
-  //     adjacent sources (free first, then coal cheapest-first), each source's
-  //     finite capacity split proportionally among the consumers contending for
-  //     it. Coal is billed ∝ heat actually delivered.
-  // Both sides floor-scale: capacity = thermalKW·(1+L_src),
-  // demand = heatDemandKW·(1+L_consumer); fresh building L=0 → ×1 (compat).
+  // ── §5.2: floor-scaled, many-sources→one-consumer heat. ──
+  // Every heat consumer carries a kW demand (`heatDemandKW`); boolean-heat
+  // (adjacency-only, zero-capacity) consumers were retired. Each consumer's
+  // floor-scaled demand is met by pooling floor-scaled capacity across ALL
+  // adjacent sources (free first, then coal cheapest-first), each source's
+  // finite capacity split proportionally among contending consumers. Coal is
+  // billed ∝ heat actually delivered.
+  //
+  // The two floor multipliers MIRROR the power grid (see buildings.ts):
+  //   • source capacity = thermalKW · (1 + L)        — floorEffectMul (power OUTPUT)
+  //   • consumer demand = heatDemandKW · (1 + 0.5·L) — floorPowerDrawMul (power DRAW)
+  // so upgrading a source outpaces upgrading the consumers it feeds, exactly as
+  // power production outpaces consumption. Fresh building L=0 → ×1 either way.
   const heatThrottleFactor = new Map<string, number>();
   const EPS = 1e-9;
 
-  const floorMul = (b: PlacedBuilding): number => 1 + activeFloorLevel(b);
   const sourceCapacity = (s: PlacedBuilding): number => {
     const t = BUILDING_DEFS[s.defId].heatSource?.thermalKW;
-    return t == null ? Infinity : t * floorMul(s); // null thermalKW → boolean (unbounded)
+    // floorEffectMul: thermalKW · (1 + L). (null thermalKW ⇒ unbounded source.)
+    return t == null ? Infinity : t * (1 + activeFloorLevel(s));
   };
   const consumerDemand = (c: PlacedBuilding): number => {
     const d = BUILDING_DEFS[c.defId].heatDemandKW;
-    return d == null ? 0 : d * floorMul(c); // 0 ⇒ boolean-heat
+    // floorPowerDrawMul: heatDemandKW · (1 + 0.5·L), matching regular power draw.
+    return d == null ? 0 : d * (1 + 0.5 * activeFloorLevel(c));
   };
 
   // Coal sources cheapest-first (coalPerCycle asc, id) — §5.2 "lowest
@@ -223,26 +229,11 @@ export function resolveHeatAssignments(
     adjCoal.set(c.id, sortedCoal.filter((s) => sourceTouchesBorder(s, border)));
   }
 
-  // ── Boolean-heat consumers: legacy N:1, zero capacity load. ──
-  const kwConsumers: PlacedBuilding[] = [];
-  for (const c of sortedConsumers) {
-    if (consumerDemand(c) > 0) { kwConsumers.push(c); continue; }
-    const free = adjFree.get(c.id)!;
-    const coal = adjCoal.get(c.id)!;
-    if (free.length > 0) {
-      hasHeat.set(c.id, true);
-      assignedSource.set(c.id, free[0]!.id);
-      heatThrottleFactor.set(c.id, 1);
-    } else if (coal.length > 0) {
-      const f = coal[0]!; // cheapest adjacent (sortedCoal order)
-      hasHeat.set(c.id, true);
-      assignedSource.set(c.id, f.id);
-      heatThrottleFactor.set(c.id, 1);
-      coalConsumersByFurnace.set(f.id, (coalConsumersByFurnace.get(f.id) ?? 0) + 1);
-    } else {
-      hasHeat.set(c.id, false);
-    }
-  }
+  // Every consumer is kW-demand now (boolean-heat retired). A consumer whose
+  // def lacks `heatDemandKW` yields demand 0 — a catalog error (guarded by a
+  // test that every `requiresHeat` def carries `heatDemandKW`); it simply gets
+  // no allocation and reads as "no heat" rather than crashing.
+  const kwConsumers: PlacedBuilding[] = sortedConsumers.filter((c) => consumerDemand(c) > 0);
 
   // ── kW-demand consumers: floor-scaled M:N flow allocation. ──
   const remDemand = new Map<string, number>();
@@ -337,20 +328,26 @@ export function resolveHeatAssignments(
     if (bestId !== undefined) assignedSource.set(c.id, bestId);
   }
 
-  // ── Coal billing ∝ delivered heat: burn = coalPerCycle·(delivered/thermalKW),
+  // ── Per-source delivered kW (inspector "produced N kW" readout) + coal
+  // billing ∝ delivered heat. Burn = coalPerCycle·(delivered/thermalKW),
   // returned as a fractional served-count so downstream
   // `coalPerCycle × servedCount / cycle` is unchanged. (Floor cancels: a
   // floor-L furnace at full load delivers thermalKW·(1+L) → served-count 1+L.)
-  // Boolean consumers already added their integer +1 above; stalled consumers
-  // were un-billed (alloc cleared).
+  // Stalled consumers were un-billed (alloc cleared above).
+  const deliveredBySource = new Map<string, number>();
+  for (const c of kwConsumers) {
+    for (const [sid, v] of alloc.get(c.id)!) {
+      if (v <= EPS) continue;
+      deliveredBySource.set(sid, (deliveredBySource.get(sid) ?? 0) + v);
+    }
+  }
   for (const s of sortedCoal) {
     const t = BUILDING_DEFS[s.defId].heatSource?.thermalKW;
     if (t == null || t <= 0) continue;
-    let delivered = 0;
-    for (const c of kwConsumers) delivered += alloc.get(c.id)!.get(s.id) ?? 0;
+    const delivered = deliveredBySource.get(s.id) ?? 0;
     if (delivered <= EPS) continue;
     coalConsumersByFurnace.set(s.id, (coalConsumersByFurnace.get(s.id) ?? 0) + delivered / t);
   }
 
-  return { hasHeat, coalConsumersByFurnace, assignedSource, heatThrottleFactor };
+  return { hasHeat, coalConsumersByFurnace, assignedSource, heatThrottleFactor, deliveredBySource };
 }
