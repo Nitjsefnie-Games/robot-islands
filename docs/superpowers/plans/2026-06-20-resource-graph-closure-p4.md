@@ -149,23 +149,28 @@ Co-Authored-By: Claude Opus 4.8 (1M context) <noreply@anthropic.com>"
 
 ## Phase 1 — Byproduct loops (8 orphans, planner-validated)
 
-Each byproduct currently sits in `NON_STORED_OUTPUTS` (vented). Closing it means: author a consumer, **remove the resource from `NON_STORED_OUTPUTS`** so it is stored and drawable, ensure its producers keep `forceRun` so a full bin doesn't re-stall them (the §2.6 byproduct-throttle bug), retag `'consumed'`, and update the `economy.test.ts` §2.6 guard for the now-consumed resource. The 6 prototyped loops are already proven deadlock-free in `scripts/bootstrap_test.py` (`tar`/`asphalt` ride the same batch). Run the planner once after the whole phase.
+**DESIGN DECISION (option A, approved 2026-06-20):** A byproduct gas is a *side* output of a building whose *primary* output is valuable (smelter→iron_ingot, steel_mill→steel, the mills→beam/pipe/wire). It currently sits in `NON_STORED_OUTPUTS` (never stored → never stalls the producer, but **not drawable** → can't be a recipe input). Simply removing it from that set makes it a normal capped bin, and since its producers have **no `forceRun`** — and *can't* (building-level `forceRun`/`ignoreOutputCap` would also void the valuable primary output) — a full byproduct bin would re-gate the producer (the §2.6 throttle regression). So Phase 1 first adds a **per-output cap-exemption** mechanism: a designated `(building→output)` resource is stored up to cap, **drawable**, but excluded from the producer's cap-stall/solver constraints so a full bin never throttles it; overflow above cap voids (the integrator already clamps to cap). The 6 byproducts move from `NON_STORED_OUTPUTS` into this exemption, then gain consumer recipes and tag `'consumed'`. Deadlock-freedom of the loops is already proven in `scripts/bootstrap_test.py`. Run the planner once after the whole phase.
 
-> The recipe shapes below are mass-balanced for `massPerUnitKg: 1` resources (Σ in units = Σ out units). Where a host's existing recipe is edited (recipe-input add), re-balance that whole recipe; if a clean balance is impossible and the chemistry is real, prefer adjusting coefficients over `RECIPE_SPECULATIVE`.
+> Recipe balance: most resources are `massPerUnitKg: 1`. The mass-balance gate accepts a `±5%·inputMass + 0.5 kg` band for recipes carrying an `exogenousFlow` tag (e.g. `blast_furnace`), exact (<0.001) otherwise. A recipe-input add must keep the host recipe inside its band — for `co`→`blast_furnace`, add `co` as a reductant **replacing an equal mass of `coke`** (real chemistry: CO is the reducing agent) so input mass is unchanged.
 
-### Task 2: `co` → blast-furnace reductant (recipe-input add)
+### Task 2: Per-output cap-exemption mechanism (FOUNDATION — do first)
 
 **Files:**
-- Modify: `src/recipes.ts` (`RECIPES.blast_furnace` inputs; `RESOURCE_META.co`)
-- Modify: `src/economy.ts:617` (`NON_STORED_OUTPUTS` — remove `'co'`)
-- Modify: `src/economy.test.ts` (§2.6 guard — `co` is now consumed)
-- Test: `src/recipes.test.ts`, `src/mass-balance.test.ts`
+- Modify: `src/economy.ts` (new `OUTPUT_CAP_EXEMPT` set keyed by `(BuildingDefId, ResourceId)` or a helper; `outputAvail()` skips the cap check for an exempt output; the §15.3 solver's `capConstrained` set / `_flow_specs` excludes exempt outputs — mirror the existing per-building `ignoreOutputCap` path, scoped per-output). Migrate the 6 current byproducts (`co`, `refinery_gas`, `wood_tar`, `water_vapor`, `cryo_coolant_vented`, `mill_scale`) OUT of `NON_STORED_OUTPUTS` and INTO the exemption (so they are now stored+drawable+non-stalling instead of vented). `co2` STAYS in `NON_STORED_OUTPUTS` (it is the global atmosphere scalar — do NOT move it).
+- Modify: `src/economy.test.ts` (the §2.6 byproduct-throttle guard: the 6 byproducts must NOT stall their producers when their bin is full, AND must now be readable from inventory — add an assertion that a full exempt-output bin leaves the producer's primary output running at full rate and the byproduct stock pinned at cap, not 0).
+- Modify: `SPEC.md` §2.6 / §15.3 note (document the per-output cap-exemption as the byproduct mechanism replacing whole-class venting).
+- Test: `src/economy.test.ts`, `src/mass-balance.test.ts`, `src/recipes.test.ts`.
 
 **Interfaces:**
-- Consumes: `co` produced by `smelter` (acyclic, `iron_ore`+`coal`) and `steel_mill`. `smelter` is the acyclic producer that makes `co→blast_furnace` deadlock-free (planner-confirmed).
-- Produces: `blast_furnace` gains a `co` input; `co` becomes `consumed`.
+- Produces: `OUTPUT_CAP_EXEMPT` (or equivalent) — later loop tasks reference it instead of `NON_STORED_OUTPUTS`. After this task the 6 byproducts are stored, drawable, non-stalling, with no consumer yet (still `expansion-hook` — ledger unchanged at 33).
 
-- [ ] **Step 1: Write the failing test** — assert `co` is consumed and untagged-orphan:
+This task is the foundational economy change — route to an **opus implementer with deviate-and-report authority** (cross-cutting integrator change; the implementer is the first independent check on the mechanism). TDD: write the throttle/drawable guard test first (RED), implement the per-output exemption, GREEN, commit. Do NOT retag any resource `'consumed'` here (no consumer yet) — that is the loop tasks.
+
+### Task 3: `co` → blast-furnace reductant (recipe-input add)
+
+**Files:** `src/recipes.ts` (`RECIPES.blast_furnace` inputs; `RESOURCE_META.co`), `src/recipes.test.ts`, `src/mass-balance.test.ts`.
+
+- [ ] **Step 1: Failing test** — assert `co` has a recipe consumer and is `consumed`:
 
 ```ts
 it('P4: co has a recipe consumer and is consumed', () => {
@@ -175,23 +180,18 @@ it('P4: co has a recipe consumer and is consumed', () => {
 });
 ```
 
-- [ ] **Step 2: Run to verify it fails** — `npx vitest run -t "P4: co" src/recipes.test.ts` → FAIL.
+- [ ] **Step 2: Verify it fails.**
+- [ ] **Step 3: Edit `RECIPES.blast_furnace.inputs`** from `{ iron_ore: 35, coke: 18, limestone: 10 }` to `{ iron_ore: 35, coke: 15, co: 3, limestone: 10 }` (co replaces 3 kg of coke; input mass stays 63, Δ unchanged at 2 ≤ exogenous band 3.65 — verify against `mass-balance.test.ts`). Retag `RESOURCE_META.co.terminal = 'consumed'`. (`co` is already in `OUTPUT_CAP_EXEMPT` from Task 2, so smelter/steel_mill do not stall.)
+- [ ] **Step 4: Gates** — `npx vitest run src/recipes.test.ts src/mass-balance.test.ts src/economy.test.ts` → PASS.
+- [ ] **Step 5: Commit** (`feat(p4): close co — blast-furnace reductant` + Kimi trailer).
 
-- [ ] **Step 3: Add `co` as a blast_furnace input and re-balance.** In `RECIPES.blast_furnace`, add `co` to `inputs` and adjust so input kg = output kg (all unit-mass here). Then remove `'co'` from `NON_STORED_OUTPUTS` (`src/economy.ts:618`) and retag `RESOURCE_META.co.terminal = 'consumed'`.
+### Task 4: `refinery_gas` → plastic-precursor co-feed (recipe-input add)
 
-- [ ] **Step 4: Confirm `blast_furnace` producers keep `forceRun`** so the now-stored `co` bin can't stall them (it emits `slag`/`co2` too — already force-run; verify `forceRun: true` on the def).
+Add `refinery_gas` to `RECIPES.plastic_polymerizer_a.inputs` (acyclic producer: `naphtha_cracker`), re-balance the recipe to its band, retag `consumed`. (`refinery_gas` already in `OUTPUT_CAP_EXEMPT`.) Tests + commit.
 
-- [ ] **Step 5: Update the §2.6 byproduct-throttle guard** in `src/economy.test.ts` — remove `co` from the vented-byproduct cases (it now has a consumer; the guard should assert the remaining vented set).
+> NOTE for the loop tasks below: the `NON_STORED_OUTPUTS`→`OUTPUT_CAP_EXEMPT` migration and the no-stall guarantee are done once in Task 2 — ignore any "remove from `NON_STORED_OUTPUTS`" or "producers already `forceRun`" phrasing here; each loop task only adds its consumer recipe (+ building) and retags `'consumed'`.
 
-- [ ] **Step 6: Run gates** — `npx vitest run src/recipes.test.ts src/mass-balance.test.ts src/economy.test.ts` → PASS.
-
-- [ ] **Step 7: Commit** (`feat(p4): close co — blast-furnace top-gas reductant` + co-author trailer).
-
-### Task 3: `refinery_gas` → plastic-precursor co-feed (recipe-input add)
-
-Same shape as Task 2. Add `refinery_gas` to `RECIPES.plastic_polymerizer_a.inputs` (acyclic producer: `naphtha_cracker`), re-balance, remove `'refinery_gas'` from `NON_STORED_OUTPUTS`, retag `consumed`, update §2.6 guard. Tests + commit.
-
-### Task 4: `wood_tar` + `tar` → asphalt (new `tar_refinery` building)
+### Task 5: `wood_tar` + `tar` → asphalt (new `tar_refinery` building)
 
 **Files:** `src/recipes.ts` (new `RECIPES.tar_refinery`, `RecipeId` union, `RESOURCE_META.wood_tar`/`tar`), `src/building-defs.ts` (new `tar_refinery` def + `BuildingDefId`), `src/building-defs.test.ts` (`KNOWN_DEF_IDS`), `src/recipe-density.ts` (`BUILDING_ARCHETYPE.tar_refinery`), `src/economy.ts` (remove `'wood_tar'` from `NON_STORED_OUTPUTS`).
 
@@ -212,19 +212,19 @@ it('P4: tar_refinery consumes wood_tar and tar', () => {
 - [ ] **Step 5:** Sink `asphalt` — add `asphalt` to a T3 placement cost (`platform_constructor`, off the producer critical path) and retag `RESOURCE_META.asphalt.terminal = 'gameplay-sink'`. (asphalt is produced by `crude_oil_cracker` + `tar_refinery`; placement-cost sink, planner-validated.)
 - [ ] **Step 6: Gates** + `building-defs.test.ts` + commit.
 
-### Task 5: `water_vapor` → fresh_water (new `vapor_condenser` building)
+### Task 6: `water_vapor` → fresh_water (new `vapor_condenser` building)
 
 New `vapor_condenser` (T1 chemistry): `{ inputs: { water_vapor: 1 }, outputs: { fresh_water: 1 } }`. Producers `brick_kiln`/`charcoal_kiln` already `forceRun`. Remove `'water_vapor'` from `NON_STORED_OUTPUTS`; retag `consumed`; full building wiring (`KNOWN_DEF_IDS`, `BUILDING_ARCHETYPE`); update §2.6 guard. Tests + commit.
 
-### Task 6: `cryo_coolant_vented` → cryo_coolant (new `cryo_reliquefier` building)
+### Task 7: `cryo_coolant_vented` → cryo_coolant (new `cryo_reliquefier` building)
 
 New `cryo_reliquefier` (T3 chemistry): `{ inputs: { cryo_coolant_vented: 1 }, outputs: { cryo_coolant: 1 } }`. Acyclic primary source of `cryo_coolant` is `cryo_lab` (independent); reliquefier is recovery. Remove `'cryo_coolant_vented'` from `NON_STORED_OUTPUTS`; retag `consumed`; building wiring; §2.6 guard. Tests + commit.
 
-### Task 7: `mill_scale` → iron_ore sinter (new `mill_scale_sinter` building)
+### Task 8: `mill_scale` → iron_ore sinter (new `mill_scale_sinter` building)
 
 New `mill_scale_sinter` (T2 smelting): `{ inputs: { mill_scale: 2 }, outputs: { iron_ore: 1 } }` — re-balance to unit mass (2 in = 2 out: pick `outputs: { iron_ore: 2 }` if 1:1 mass). Producers (the mills) already `forceRun`. Remove `'mill_scale'` from `NON_STORED_OUTPUTS`; retag `consumed`; building wiring; §2.6 guard. Tests + commit.
 
-### Task 8: Phase-1 deadlock + suite gate
+### Task 9: Phase-1 deadlock + suite gate
 
 - [ ] **Step 1: Run the faithful planner** — `cd /root/robot-islands && timeout 590 python3 -u scripts/bootstrap_test.py | grep -E "BLOCKED|Full target build placed"` → MUST print `Full target build placed`, never `BLOCKED`.
 - [ ] **Step 2: Full client suite** — `npx vitest run --project client` → PASS.
