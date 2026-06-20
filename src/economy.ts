@@ -45,7 +45,7 @@ import { solveFlow, type FlowBuildingSpec } from './flow-solver.js';
 import { solveBrownoutFactor, type PowerSample } from './flow-power-fixpoint.js';
 import type { CrystalId, EdgeId, Graph } from './skilltree-graph.js';
 import { networkedIslandIds } from './network-consciousness.js';
-import { OUTPUT_CAP_EXEMPT } from './output-cap.js';
+import { isOutputCapExempt } from './output-cap.js';
 export { OUTPUT_CAP_EXEMPT } from './output-cap.js';
 
 /** Returns true if any 4-neighbor of `focal` has a `defId` in `defIds`. */
@@ -623,6 +623,7 @@ export const NON_STORED_OUTPUTS: ReadonlySet<ResourceId> = new Set<ResourceId>([
 
 
 function outputAvail(
+  building: PlacedBuilding,
   state: IslandState,
   recipe: Recipe,
   nowMs: number,
@@ -633,9 +634,10 @@ function outputAvail(
   for (const [r, _yield] of Object.entries(outputs)) {
     const id = r as ResourceId;
     if (NON_STORED_OUTPUTS.has(id)) continue; // §2.6: not stored — never stalls
-    // §2.6/§15.3 (task 2): a per-output cap-exempt byproduct is stored up to
+    // §4.6 per-output Ignore Cap (task 2): a cap-exempt output is stored up to
     // cap but never stalls its producer — a full bin must not return 0 here.
-    if (OUTPUT_CAP_EXEMPT.has(id)) continue;
+    // Per-building override (`isOutputCapExempt`) wins over the global default.
+    if (isOutputCapExempt(building, id)) continue;
     if (inv(state, id) >= cap(state, id, caps, undefined, baseMult)) return 0;
   }
   return 1;
@@ -1590,7 +1592,16 @@ export function computeRates(
         const flow = ((need ?? 0) / recipeInputDiv) * te.baseRate * te.perBuildingMul * scale;
         if (flow > 0) consumes[r] = flow;
       }
-      return { produces, consumes, ignoreOutputCap: te.building.forceRun === true };
+      // §4.6 per-output Ignore Cap: build the per-resource exempt set from THIS
+      // building's effective override (per-building flag ?? global default) over
+      // its current outputs. Replaces the old whole-building `forceRun` flag —
+      // the engine no longer reads `forceRun` (orphaned until a later task).
+      const capExemptOutputs = new Set<ResourceId>();
+      for (const r of Object.keys(outs)) {
+        const id = r as ResourceId;
+        if (isOutputCapExempt(te.building, id)) capExemptOutputs.add(id);
+      }
+      return { produces, consumes, capExemptOutputs };
     });
   // §13.3 D-01: snapshot THIS island's own (nominal, pf=1) flow specs — the
   // orchestrator unions these (one island's `flowSpecs` becomes another's
@@ -1599,7 +1610,9 @@ export function computeRates(
   const ownFlowSpecs: FlowBuildingSpec[] = buildFlowBuildings(1).map((fb) => ({
     produces: { ...fb.produces },
     consumes: { ...fb.consumes },
-    ...(fb.ignoreOutputCap ? { ignoreOutputCap: true } : {}),
+    ...(fb.capExemptOutputs && fb.capExemptOutputs.size
+      ? { capExemptOutputs: new Set(fb.capExemptOutputs) }
+      : {}),
   }));
   // §5.2 synthetic coal-burn sinks: pf-INDEPENDENT (a fixed fuel sink, not a
   // power-scaled recipe). SKIPPED when coal is zero-constrained — the binary
@@ -1637,12 +1650,15 @@ export function computeRates(
         // boundary is treated as pinned and solveFlow gates the dust-bin
         // consumer/producer (net settles toward 0). See the constant's docs.
         if (stock <= STOCK_BOUNDARY_EPS) zeroConstrained.add(r);
-        // §2.6/§15.3 (task 2): a per-output cap-exempt byproduct is stored up
-        // to cap (overflow voided by applyRates' clamp) but is excluded from
-        // the cap-constraint set — scoped to THIS resource — so a full
-        // byproduct bin never gates its producer down (it can still appear in
-        // zeroConstrained as a CONSUMER input once a consumer recipe lands).
-        if (OUTPUT_CAP_EXEMPT.has(id)) continue;
+        // §4.6 per-output Ignore Cap (task 2): a resource enters capConstrained
+        // purely on `stock >= cap` — the per-building exemption is now applied
+        // INSIDE the solver (`FlowBuildingSpec.capExemptOutputs`, set from
+        // `isOutputCapExempt`), not by suppressing the constraint globally. If
+        // EVERY producer of `r` is exempt, the solver's θ entry set for `r` is
+        // empty ⇒ θ=1 (no throttle) and no building is gated by `cap:r`; if some
+        // producer is NOT exempt, it alone is throttled to the live draw. This
+        // is strictly more correct than the old global skip, which exempted
+        // even non-exempt producers of a default-exempt resource.
         if (stock >= cap(state, id, ctx?.caps, undefined, ctx?.baseMult) - STOCK_BOUNDARY_EPS) capConstrained.add(r);
       }
     }
@@ -1774,7 +1790,7 @@ export function computeRates(
           // tier gate, …) keep today's draw shape: inputAvail × outputAvail.
           const ia = idx >= 0 ? (inputAvailByIdx[idx] ?? 0) : 0;
           active = ia > 0;
-          const oa = outputAvail(state, recipe, t, ctx?.caps, ctx?.baseMult);
+          const oa = outputAvail(b, state, recipe, t, ctx?.caps, ctx?.baseMult);
           nominalThroughputFrac = gateResult.effectiveMul * ia * oa;
         }
       }

@@ -17,11 +17,12 @@ export interface FlowBuildingSpec {
   readonly produces: Readonly<Record<string, number>>;
   /** Consumption coefficients, units/sec at gate 1. */
   readonly consumes: Readonly<Record<string, number>>;
-  /** Force-run (§4.6): when true, this building's PRODUCTION is exempt from
-   *  output-cap throttling — a full output bin no longer drives its gate to 0.
-   *  Its overflow is voided downstream by `applyRates`' clamp. It is NOT
-   *  exempt from input-empty (zero) constraints or the power factor. */
-  readonly ignoreOutputCap?: boolean;
+  /** §4.6 per-output Ignore Cap: this building's production of each resource in
+   *  this set is exempt from output-cap throttling — a full bin of that
+   *  resource never drives the building's gate down. Overflow is voided
+   *  downstream by `applyRates`' clamp. NOT exempt from input-empty (zero)
+   *  constraints or the power factor. Absent/empty = no exemptions. */
+  readonly capExemptOutputs?: ReadonlySet<string>;
 }
 
 export interface FlowConstraints {
@@ -113,9 +114,13 @@ export function solveFlow(
   // of r; zero constrains CONSUMERS of r.
   const keysByBuilding: MulKey[][] = buildings.map((b) => {
     const ks: MulKey[] = [];
-    if (!b.ignoreOutputCap) {
-      for (const r of Object.keys(b.produces)) {
-        if ((b.produces[r] ?? 0) > 0 && constraints.capConstrained.has(r)) ks.push(`cap:${r}`);
+    for (const r of Object.keys(b.produces)) {
+      if (
+        (b.produces[r] ?? 0) > 0 &&
+        constraints.capConstrained.has(r) &&
+        !b.capExemptOutputs?.has(r)
+      ) {
+        ks.push(`cap:${r}`);
       }
     }
     for (const r of Object.keys(b.consumes)) {
@@ -153,7 +158,7 @@ export function solveFlow(
         const p = buildings[i]!.produces[res] ?? 0;
         const c = buildings[i]!.consumes[res] ?? 0;
         if (p > 0) {
-          if (buildings[i]!.ignoreOutputCap) continue; // force-run: outside cap throttle (overflow voided)
+          if (buildings[i]!.capExemptOutputs?.has(res)) continue; // per-output ignore-cap: outside cap throttle (overflow voided)
           const net = p - c;
           if (net > 0) {
             entries.push({ coeff: net, otherGate: gate(i, key) });

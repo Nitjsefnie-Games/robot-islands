@@ -302,11 +302,11 @@ describe('solveFlow — property test', () => {
   });
 });
 
-describe('flow-solver — ignoreOutputCap (force run)', () => {
-  it('a force-run producer keeps gate 1 at a capped output with no consumer; a normal one gates to 0', () => {
+describe('flow-solver — capExemptOutputs (per-output ignore cap)', () => {
+  it('a cap-exempt producer keeps gate 1 at a capped output with no consumer; a normal one gates to 0', () => {
     const buildings: FlowBuildingSpec[] = [
       { produces: { x: 5 }, consumes: {} },
-      { produces: { x: 5 }, consumes: {}, ignoreOutputCap: true },
+      { produces: { x: 5 }, consumes: {}, capExemptOutputs: new Set(['x']) },
     ];
     const { gates } = solveFlow(buildings, {
       capConstrained: new Set(['x']),
@@ -316,10 +316,10 @@ describe('flow-solver — ignoreOutputCap (force run)', () => {
     expect(gates[1]!).toBeCloseTo(1, 9);
   });
 
-  it('force-run producer does not absorb the consumer draw owed by normal producers', () => {
+  it('cap-exempt producer does not absorb the consumer draw owed by normal producers', () => {
     const buildings: FlowBuildingSpec[] = [
       { produces: { x: 10 }, consumes: {} },
-      { produces: { x: 10 }, consumes: {}, ignoreOutputCap: true },
+      { produces: { x: 10 }, consumes: {}, capExemptOutputs: new Set(['x']) },
       { produces: {}, consumes: { x: 5 } },
     ];
     const { gates } = solveFlow(buildings, {
@@ -331,14 +331,36 @@ describe('flow-solver — ignoreOutputCap (force run)', () => {
     expect(gates[2]!).toBeCloseTo(1, 9);
   });
 
-  it('force-run does not exempt a building from input-empty (zero) constraints', () => {
+  it('cap exemption does not exempt a building from input-empty (zero) constraints', () => {
     const buildings: FlowBuildingSpec[] = [
-      { produces: { x: 5 }, consumes: { y: 1 }, ignoreOutputCap: true },
+      { produces: { x: 5 }, consumes: { y: 1 }, capExemptOutputs: new Set(['x']) },
     ];
     const { gates } = solveFlow(buildings, {
       capConstrained: new Set(['x']),
       zeroConstrained: new Set(['y']),
     });
     expect(gates[0]!).toBeCloseTo(0, 9);
+  });
+
+  it('a producer exempt on ONE output gates on its OTHER capped output', () => {
+    // produces A (exempt, at cap) and B (not exempt, at cap); a B consumer pulls.
+    const buildings: FlowBuildingSpec[] = [
+      { produces: { A: 1, B: 1 }, consumes: {}, capExemptOutputs: new Set(['A']) },
+      { produces: {}, consumes: { B: 0.5 } },
+    ];
+    const sol = solveFlow(buildings, {
+      capConstrained: new Set(['A', 'B']),
+      zeroConstrained: new Set(),
+    });
+    // gated by B only: realized B production (1×g) must match B draw (0.5) ⇒ g=0.5
+    expect(sol.gates[0]!).toBeCloseTo(0.5, 5);
+  });
+
+  it('a fully-exempt producer keeps gate 1 at a capped output with no consumer', () => {
+    const buildings: FlowBuildingSpec[] = [
+      { produces: { A: 1 }, consumes: {}, capExemptOutputs: new Set(['A']) },
+    ];
+    const sol = solveFlow(buildings, { capConstrained: new Set(['A']), zeroConstrained: new Set() });
+    expect(sol.gates[0]!).toBeCloseTo(1, 5);
   });
 });

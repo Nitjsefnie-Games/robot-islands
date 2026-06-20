@@ -1591,13 +1591,16 @@ describe('§5.1 power scales with effective throughput (rebalance)', () => {
     expect(stalledState.buildings[0]!.operatingMs).toBe(0); // u=0 → zero wear
   });
 
-  it('force run: a capped producer earns XP, voids overflow, and wears (§4.6)', () => {
-    // Mine at a full iron_ore bin (= cap). With forceRun on it keeps running:
-    // XP accrues, inventory stays clamped at cap (overflow voided), and it
-    // wears like a running building (u > 0).
+  it('ignore-cap ON: a capped producer earns XP, voids overflow, and wears (§4.6)', () => {
+    // Mine at a full iron_ore bin (= cap). With per-output ignore-cap on
+    // iron_ore it keeps running: XP accrues, inventory stays clamped at cap
+    // (overflow voided), and it wears like a running building (u > 0).
+    // (iron_ore is NOT a default-exempt output, so the override is required.)
     const dt = 5_000;
     const state = makeState({
-      buildings: [{ ...MINE, forceRun: true, operatingMs: 0, placedAt: 0, maintainedAt: 0 }],
+      buildings: [
+        { ...MINE, ignoreCapOverrides: { iron_ore: true }, operatingMs: 0, placedAt: 0, maintainedAt: 0 },
+      ],
       inventory: { ...blankInventory(), iron_ore: 100 }, // at cap
     });
     advanceIsland(state, dt, { defs: POWER_FREE });
@@ -1606,10 +1609,11 @@ describe('§5.1 power scales with effective throughput (rebalance)', () => {
     expect(state.buildings[0]!.operatingMs).toBeGreaterThan(0); // wears like a running building
   });
 
-  it('force run OFF: the same capped producer earns no XP and no wear (§4.6)', () => {
+  it('ignore-cap OFF: the same capped producer earns no XP and no wear (§4.6)', () => {
+    // No override and iron_ore is not a default-exempt output ⇒ stalls at cap.
     const dt = 5_000;
     const state = makeState({
-      buildings: [{ ...MINE, forceRun: false, operatingMs: 0, placedAt: 0, maintainedAt: 0 }],
+      buildings: [{ ...MINE, operatingMs: 0, placedAt: 0, maintainedAt: 0 }],
       inventory: { ...blankInventory(), iron_ore: 100 }, // at cap
     });
     advanceIsland(state, dt, { defs: POWER_FREE });
@@ -4127,6 +4131,55 @@ describe('§6.7 — Steel Mill scrap substitution in advanceIsland', () => {
     expect(state.inventory.steel).toBeCloseTo(50, 6);
     expect(state.inventory.slag).toBeCloseTo(50, 6);
     expect(state.inventory.pig_iron).toBe(0); // never consumed
+  });
+
+  it('a full slag bin does NOT stall steel (slag is default cap-exempt §4.6)', () => {
+    // slag joined OUTPUT_CAP_EXEMPT (Task 1). With slag pinned at cap and no
+    // per-building override, the mill must keep producing steel from scrap;
+    // slag overflow is voided (stays at cap). Mirrors the scrap-variant run.
+    const MILL: PlacedBuilding = { id: 'sm', defId: 'steel_mill', x: 0, y: 0 };
+    const state = makeState({
+      buildings: [MILL],
+      inventory: {
+        ...blankInventory(),
+        pig_iron: 0,
+        scrap: 100,
+        slag: 10_000, // at cap — must NOT stall the mill (default-exempt)
+      },
+      storageCaps: blankCaps(10_000),
+      level: 10,
+    });
+    advanceIsland(state, 6_000_000, { defs: powerFreeSteelMillCatalog() });
+    expect(state.inventory.steel).toBeCloseTo(50, 6); // steel still produced
+    expect(state.inventory.scrap).toBeCloseTo(0, 6);  // scrap fully consumed
+    expect(state.inventory.slag).toBeCloseTo(10_000, 6); // overflow voided — pinned at cap
+  });
+
+  it('a full slag bin WITH ignore-cap overridden off stalls the mill (§4.6)', () => {
+    // Same setup, but the player turned OFF ignore-cap for slag on this mill.
+    // A full slag bin now throttles the mill: no steel, no scrap consumed.
+    const MILL: PlacedBuilding = {
+      id: 'sm',
+      defId: 'steel_mill',
+      x: 0,
+      y: 0,
+      ignoreCapOverrides: { slag: false },
+    };
+    const state = makeState({
+      buildings: [MILL],
+      inventory: {
+        ...blankInventory(),
+        pig_iron: 0,
+        scrap: 100,
+        slag: 10_000, // at cap — now stalls because override disables the exemption
+      },
+      storageCaps: blankCaps(10_000),
+      level: 10,
+    });
+    advanceIsland(state, 6_000_000, { defs: powerFreeSteelMillCatalog() });
+    expect(state.inventory.steel).toBe(0);          // stalled — no steel
+    expect(state.inventory.scrap).toBeCloseTo(100, 6); // scrap untouched
+    expect(state.inventory.slag).toBeCloseTo(10_000, 6); // unchanged
   });
 
   it.skip('with both inputs: drains pig_iron first, then switches to scrap mid-run', () => {
