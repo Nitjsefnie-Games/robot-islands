@@ -7,6 +7,7 @@ import {
   buildingUnlocked,
   canPlaceOnIsland,
   type BuildingCategory,
+  type BuildingDef,
   type BuildingDefId,
 } from './building-defs.js';
 import { hasOperationalBuilding } from './buildings.js';
@@ -14,7 +15,7 @@ import { BIOME_DEFS } from './biomes.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
 import type { IslandState } from './economy.js';
 import { RECIPES, type Recipe } from './recipes.js';
-import { tierForLevel, type Tier } from './skilltree.js';
+import { effectiveTierShift, hasBiomeBypass, tierForLevel, type Tier } from './skilltree.js';
 import type { IslandSpec } from './world.js';
 import { mountModal } from './ui-modal.js';
 import { fmtPower } from './format.js';
@@ -88,6 +89,44 @@ interface CardRef {
   readonly card: HTMLDivElement;
   readonly recipeEl: HTMLDivElement;
   readonly metaEl: HTMLDivElement;
+}
+
+export interface BuildingCardLockState {
+  /** True if the island level (with any tier-bypass keystone) unlocks the def. */
+  readonly unlocked: boolean;
+  /** True if the def can sit on this island's biome (with any biome-bypass keystone). */
+  readonly biomeOk: boolean;
+  /** Unlocked but biome-locked — placeable nowhere on this island. */
+  readonly placementLocked: boolean;
+}
+
+/** Lock state for a building catalog card. Mirrors `validatePlacement`'s skill
+ *  relaxations (`placement.ts:282-289`) so the catalog UI and the backend
+ *  validator agree: the `tierBypass` keystone (#146) unlocks a building one
+ *  tier early, and the `biomeBypass` keystone (#145) clears its biome lock.
+ *  Both skill helpers default to the standard catalog graph. */
+export function buildingCardLockState(
+  def: BuildingDef,
+  state: IslandState,
+  spec: IslandSpec,
+): BuildingCardLockState {
+  const hasSpaceport = hasOperationalBuilding(spec.buildings, 'spaceport');
+  let unlocked = buildingUnlocked(
+    state.level,
+    def.id,
+    state.aiCoreCrafted,
+    state.ascendantCoreCrafted,
+    hasSpaceport,
+  );
+  if (!unlocked) {
+    const tierShift = effectiveTierShift(state, def.id);
+    if (tierShift > 0 && def.tier <= 4) {
+      unlocked = tierForLevel(state.level) >= def.tier - tierShift;
+    }
+  }
+  const biomeOk = canPlaceOnIsland(def, spec) || hasBiomeBypass(state, def.id);
+  const placementLocked = unlocked && !biomeOk;
+  return { unlocked, biomeOk, placementLocked };
 }
 
 export function mountBuildingsUi(
@@ -195,18 +234,8 @@ export function mountBuildingsUi(
         card.addEventListener('click', () => {
           const st = getState();
           const sp = getSpec();
-          const hasSp = hasOperationalBuilding(sp.buildings, 'spaceport');
-          if (
-            !buildingUnlocked(
-              st.level,
-              defId,
-              st.aiCoreCrafted,
-              st.ascendantCoreCrafted,
-              hasSp,
-            )
-          )
-            return;
-          if (!canPlaceOnIsland(BUILDING_DEFS[defId], sp)) return;
+          const { unlocked, biomeOk } = buildingCardLockState(BUILDING_DEFS[defId], st, sp);
+          if (!unlocked || !biomeOk) return;
           options.onPlaceRequested?.(defId);
         });
 
@@ -265,16 +294,7 @@ export function mountBuildingsUi(
     const def = BUILDING_DEFS[defId];
     const state = getState();
     const spec = getSpec();
-    const hasSpaceport = hasOperationalBuilding(spec.buildings, 'spaceport');
-    const unlocked = buildingUnlocked(
-      state.level,
-      defId,
-      state.aiCoreCrafted,
-      state.ascendantCoreCrafted,
-      hasSpaceport,
-    );
-    const biomeOk = canPlaceOnIsland(def, spec);
-    const placementLocked = unlocked && !biomeOk;
+    const { unlocked, placementLocked } = buildingCardLockState(def, state, spec);
 
     const matchesFilter =
       activeFilter === null || def.category === activeFilter;
