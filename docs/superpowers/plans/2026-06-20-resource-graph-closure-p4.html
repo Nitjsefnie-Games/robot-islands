@@ -1,0 +1,380 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Implementation plan — Resource-Graph Closure P4</title>
+  <style>
+    :root {
+      --ivory:#252420; --slate:#F5F3EC; --clay:#D97757; --oat:#3A352B; --olive:#8FA56E;
+      --gray-150:#2E2C27; --gray-300:#3A3833; --gray-500:#8F8D82; --gray-700:#CFCCC2; --white:#252420;
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono: ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:var(--sans); background:#1B1A17; color:var(--gray-700); line-height:1.55; padding:56px 32px 120px; -webkit-font-smoothing:antialiased; }
+    .page { margin:0 auto; max-width:1040px; }
+    header.page-head { margin-bottom:36px; max-width:860px; }
+    .eyebrow { font-size:12px; letter-spacing:0.08em; text-transform:uppercase; color:var(--gray-500); margin-bottom:12px; }
+    h1 { font-family:var(--serif); font-weight:500; font-size:38px; line-height:1.15; color:var(--slate); margin-bottom:18px; letter-spacing:-0.01em; }
+    .prompt-box { background:var(--gray-150); border:1.5px solid var(--gray-300); border-radius:12px; padding:16px 20px; font-size:14.5px; color:var(--gray-700); }
+    .prompt-box .label { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--gray-500); display:block; margin-bottom:6px; }
+    nav.toc { display:flex; flex-wrap:wrap; gap:10px; margin:0 0 48px; }
+    nav.toc a { font-family:var(--mono); font-size:12px; color:var(--gray-700); background:var(--gray-150); border:1px solid var(--gray-300); border-radius:7px; padding:5px 11px; text-decoration:none; }
+    nav.toc a:hover { border-color:var(--clay); color:var(--slate); }
+    section { margin-bottom:64px; scroll-margin-top:20px; }
+    .sec-head { display:flex; align-items:baseline; gap:14px; margin-bottom:8px; }
+    .sec-head .num { font-family:var(--mono); font-size:12px; background:var(--oat); color:var(--slate); padding:3px 9px; border-radius:8px; }
+    .sec-head h2 { font-family:var(--serif); font-weight:500; font-size:26px; color:var(--slate); letter-spacing:-0.01em; }
+    .sec-intro { font-size:14.5px; color:var(--gray-500); max-width:760px; margin-bottom:28px; }
+    .summary { display:grid; grid-template-columns:repeat(4,1fr); gap:16px; margin-bottom:56px; }
+    @media (max-width:900px){ .summary { grid-template-columns:repeat(2,1fr); } }
+    .summary .cell { background:var(--white); border:1.5px solid var(--gray-300); border-radius:12px; padding:18px 20px; }
+    .summary .k { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--gray-500); margin-bottom:6px; }
+    .summary .v { font-size:17px; color:var(--slate); font-weight:600; }
+    .summary .v.accent { color:var(--clay); }
+    .milestones { display:flex; flex-direction:column; gap:0; }
+    .milestone { display:grid; grid-template-columns:150px 28px 1fr; gap:0 18px; position:relative; }
+    .milestone .when { text-align:right; font-family:var(--mono); font-size:12px; color:var(--gray-500); padding-top:4px; }
+    .milestone .dot-col { display:flex; flex-direction:column; align-items:center; }
+    .milestone .dot { width:14px; height:14px; border-radius:50%; background:var(--white); border:3px solid var(--clay); margin-top:4px; flex-shrink:0; }
+    .milestone .dot.done { background:var(--olive); border-color:var(--olive); }
+    .milestone .line { width:2px; flex:1; background:var(--gray-300); margin:4px 0; }
+    .milestone:last-child .line { display:none; }
+    .milestone .body { padding-bottom:36px; }
+    .milestone .body h3 { font-family:var(--serif); font-weight:500; font-size:19px; color:var(--slate); margin-bottom:4px; }
+    .milestone .body p { font-size:14px; color:var(--gray-500); margin-bottom:10px; max-width:640px; }
+    .milestone .tags { display:flex; gap:8px; flex-wrap:wrap; }
+    .milestone .tag { font-family:var(--mono); font-size:11.5px; background:var(--gray-150); border:1px solid var(--gray-300); border-radius:6px; padding:3px 8px; color:var(--gray-700); }
+    .diagram { background:var(--white); border:1.5px solid var(--gray-300); border-radius:12px; padding:28px; overflow-x:auto; }
+    .diagram svg { display:block; min-width:760px; }
+    .diagram text { font-family:var(--mono); }
+    .caption { font-size:13px; color:var(--gray-500); margin-top:12px; }
+    table.orphans { width:100%; border-collapse:collapse; font-size:13px; background:var(--white); border:1.5px solid var(--gray-300); border-radius:12px; overflow:hidden; }
+    table.orphans th, table.orphans td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--gray-300); vertical-align:top; }
+    table.orphans th { background:var(--gray-150); color:var(--slate); font-size:11px; text-transform:uppercase; letter-spacing:0.04em; font-family:var(--mono); }
+    table.orphans td code { font-family:var(--mono); font-size:12px; color:#C9B98A; }
+    table.orphans tr.phase td { background:var(--oat); color:var(--slate); font-weight:600; font-family:var(--mono); font-size:11.5px; letter-spacing:0.04em; }
+    .pill { display:inline-block; font-family:var(--mono); font-size:10.5px; padding:2px 7px; border-radius:6px; font-weight:600; }
+    .pill.consumed { background:#2D3A24; color:#B6CC96; }
+    .pill.sink { background:#3A352B; color:#E8C9A0; }
+    .pill.tagfix { background:#26343f; color:#9bc7e0; }
+    .ok { color:var(--olive); font-weight:600; }
+    .code-block { display:flex; flex-direction:column; gap:10px; margin-bottom:24px; }
+    .code-block .file-label { font-family:var(--mono); font-size:12px; color:var(--gray-500); }
+    .code { background:#121110; border-radius:12px; padding:18px 20px; overflow-x:auto; }
+    .code pre { font-family:var(--mono); font-size:12.5px; line-height:1.65; color:#F5F3EC; white-space:pre; }
+    .code .kw{color:var(--clay);} .code .str{color:var(--olive);} .code .cm{color:var(--gray-500);} .code .fn{color:#C9B98A;}
+    .risks { border:1.5px solid var(--gray-300); border-radius:12px; overflow:hidden; background:var(--white); }
+    .risks .row { display:grid; grid-template-columns:1.6fr 90px 1.7fr; gap:0; }
+    @media (max-width:780px){ .risks .row { grid-template-columns:1fr; } }
+    .risks .row + .row { border-top:1.5px solid var(--gray-300); }
+    .risks .cell { padding:14px 18px; font-size:13.5px; }
+    .risks .cell + .cell { border-left:1.5px solid var(--gray-300); }
+    @media (max-width:780px){ .risks .cell + .cell { border-left:none; border-top:1px dashed var(--gray-300); } }
+    .risks .head { background:var(--gray-150); font-weight:600; color:var(--slate); font-size:12px; text-transform:uppercase; letter-spacing:0.04em; }
+    .sev { display:inline-block; font-family:var(--mono); font-size:11px; padding:2px 8px; border-radius:6px; font-weight:600; }
+    .sev.high{ background:#4A2A1C; color:#F0B79C; } .sev.med{ background:var(--oat); color:var(--slate); } .sev.low{ background:#2D3A24; color:#B6CC96; }
+    .decided { display:flex; flex-direction:column; gap:14px; max-width:860px; }
+    .q { background:var(--white); border:1.5px solid var(--gray-300); border-left:4px solid var(--olive); border-radius:10px; padding:14px 20px; }
+    .q .qt { font-weight:600; font-size:14.5px; color:var(--slate); margin-bottom:4px; }
+    .q .qd { font-size:13.5px; color:var(--gray-500); }
+    code.inl { font-family:var(--mono); font-size:12px; color:#C9B98A; }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Implementation plan · Robot Islands · recipe-graph</div>
+      <h1>Resource-Graph Closure — Phase&nbsp;P4</h1>
+      <div class="prompt-box">
+        <span class="label">Goal</span>
+        Give each of the 40 remaining <code class="inl">expansion-hook</code> orphan resources a real sink — recipe consumer (<code class="inl">'consumed'</code>) or non-recipe sink (<code class="inl">'gameplay-sink'</code>) — closing the recipe graph so the mass-balance auditor and terminal-consistency tests stay green and the orphan ledger reaches&nbsp;0. Every new chain is validated deadlock-free before it lands.
+      </div>
+    </header>
+
+    <nav class="toc">
+      <a href="#summary">Summary</a>
+      <a href="#milestones">01 · Phases</a>
+      <a href="#flow">02 · Closure decision flow</a>
+      <a href="#ledger">03 · The 40 orphans</a>
+      <a href="#code">04 · Contract &amp; validation</a>
+      <a href="#risks">05 · Risks</a>
+      <a href="#decided">06 · Decisions locked</a>
+    </nav>
+
+    <div class="summary" id="summary">
+      <div class="cell"><div class="k">Orphan ledger</div><div class="v accent">40 → 0</div></div>
+      <div class="cell"><div class="k">Phases / tasks</div><div class="v">4 phases · 14 tasks</div></div>
+      <div class="cell"><div class="k">New buildings</div><div class="v">minimized (~4)</div></div>
+      <div class="cell"><div class="k">Deadlock gate</div><div class="v">planner + closure screen</div></div>
+    </div>
+
+    <section id="milestones">
+      <div class="sec-head"><span class="num">01</span><h2>Phases</h2></div>
+      <p class="sec-intro">Four slices on a <code class="inl">p4-resource-graph-closure</code> branch, easiest-and-safest first. Each ends with the gate tests green and a SPEC §7 update; <code class="inl">master</code> stays linear (rebase + fast-forward).</p>
+      <div class="milestones">
+        <div class="milestone">
+          <div class="when">Pre-flight</div>
+          <div class="dot-col"><span class="dot done"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Validation tooling &amp; baselines <span class="ok">✓ analysed</span></h3>
+            <p>Faithful planner copy (<code class="inl">scripts/bootstrap_test.py</code>) + recipe-closure screen made durable. Byproduct loops already prototyped &amp; proven deadlock-free in the planner; closure screen returns 0 cycles across all proposed consumers.</p>
+            <div class="tags"><span class="tag">bootstrap_test.py</span><span class="tag">recipe_closure_check.py</span></div>
+          </div>
+        </div>
+        <div class="milestone">
+          <div class="when">Phase 0 · 40→33</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Tag-only fixes (7, already consumed)</h3>
+            <p>Resources whose sink already ships — only the <code class="inl">terminal</code> tag is wrong. One <code class="inl">RESOURCE_META</code> edit, zero new content, zero deadlock risk.</p>
+            <div class="tags"><span class="tag">recipes.ts</span><span class="tag">recipes.test.ts</span></div>
+          </div>
+        </div>
+        <div class="milestone">
+          <div class="when">Phase 1 · 33→25</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Byproduct loops (8, planner-validated)</h3>
+            <p>Author consumer, remove from <code class="inl">NON_STORED_OUTPUTS</code> so it's drawable, keep producer <code class="inl">forceRun</code> so a full bin can't re-stall it, update the §2.6 throttle guard, retag <code class="inl">consumed</code>. One planner run gates the whole phase.</p>
+            <div class="tags"><span class="tag">economy.ts</span><span class="tag">building-defs.ts</span><span class="tag">planner</span></div>
+          </div>
+        </div>
+        <div class="milestone">
+          <div class="when">Phase 2 · 25→16</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Ocean concentrates (9, leaf refines)</h3>
+            <p>Each refines into a product that already has demand (<code class="inl">helium_3</code>, <code class="inl">lithium</code>, <code class="inl">manganese_ingot</code>, <code class="inl">rare_earth</code>, <code class="inl">hydrogen</code>). 6 are raw outputs (RC=0). Closure-screen each; no planner run (outside bootstrap scope).</p>
+            <div class="tags"><span class="tag">resolveRecipe</span><span class="tag">closure screen</span></div>
+          </div>
+        </div>
+        <div class="milestone">
+          <div class="when">Phase 3 · 16→0</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Mid-tier alloy / chem / build tails (16)</h3>
+            <p>Recipe-input adds, one amalgamation refine (<code class="inl">gold_ore</code>+<code class="inl">silver_ore</code>+<code class="inl">mercury</code>), and two placement-cost adds (<code class="inl">galvanized_steel</code>, <code class="inl">mortar</code>). All closure-screened <span class="ok">safe</span>.</p>
+            <div class="tags"><span class="tag">recipes.ts</span><span class="tag">SPEC §7</span></div>
+          </div>
+        </div>
+        <div class="milestone">
+          <div class="when">Integrate</div>
+          <div class="dot-col"><span class="dot"></span></div>
+          <div class="body">
+            <h3>Final sweep &amp; fast-forward</h3>
+            <p>Ledger 0, full client + server suites + both typechecks green, final planner run, SPEC §7 + status doc marked complete, rebase + <code class="inl">--ff-only</code> to master.</p>
+            <div class="tags"><span class="tag">vitest</span><span class="tag">tsc</span><span class="tag">master</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="flow">
+      <div class="sec-head"><span class="num">02</span><h2>Closure decision flow</h2></div>
+      <p class="sec-intro">How each orphan is routed to a mechanism, and which gate proves it safe.</p>
+      <div class="diagram">
+        <svg viewBox="0 0 860 360" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8F8D82"/></marker>
+          </defs>
+          <g font-size="12" fill="#F5F3EC">
+            <rect x="20" y="150" width="170" height="54" rx="10" fill="#252420" stroke="#3A3833" stroke-width="1.5"/>
+            <text x="105" y="173" text-anchor="middle" font-weight="600">orphan resource</text>
+            <text x="105" y="190" text-anchor="middle" fill="#8F8D82" font-size="10.5">expansion-hook:…</text>
+
+            <rect x="250" y="20" width="200" height="54" rx="10" fill="#252420" stroke="#3A3833" stroke-width="1.5"/>
+            <text x="350" y="40" text-anchor="middle" font-weight="600">already consumed?</text>
+            <text x="350" y="58" text-anchor="middle" fill="#8F8D82" font-size="10.5">recipe-in or placement</text>
+
+            <rect x="250" y="150" width="200" height="54" rx="10" fill="#252420" stroke="#3A3833" stroke-width="1.5"/>
+            <text x="350" y="170" text-anchor="middle" font-weight="600">recipe consumer fits?</text>
+            <text x="350" y="188" text-anchor="middle" fill="#8F8D82" font-size="10.5">refine / input-add</text>
+
+            <rect x="250" y="280" width="200" height="54" rx="10" fill="#252420" stroke="#3A3833" stroke-width="1.5"/>
+            <text x="350" y="300" text-anchor="middle" font-weight="600">non-recipe sink</text>
+            <text x="350" y="318" text-anchor="middle" fill="#8F8D82" font-size="10.5">placement / fuel</text>
+
+            <rect x="540" y="20" width="140" height="54" rx="10" fill="#26343f" stroke="#3A3833" stroke-width="1.5"/>
+            <text x="610" y="50" text-anchor="middle" font-weight="600" fill="#9bc7e0">retag only</text>
+
+            <rect x="540" y="150" width="140" height="54" rx="10" fill="#2D3A24" stroke="#3A3833" stroke-width="1.5"/>
+            <text x="610" y="173" text-anchor="middle" font-weight="600" fill="#B6CC96">'consumed'</text>
+            <text x="610" y="190" text-anchor="middle" fill="#8F8D82" font-size="10.5">+ mass-balance</text>
+
+            <rect x="540" y="280" width="140" height="54" rx="10" fill="#3A352B" stroke="#3A3833" stroke-width="1.5"/>
+            <text x="610" y="310" text-anchor="middle" font-weight="600" fill="#E8C9A0">'gameplay-sink'</text>
+
+            <rect x="720" y="150" width="120" height="54" rx="10" fill="#121110" stroke="#3A3833" stroke-width="1.5"/>
+            <text x="780" y="173" text-anchor="middle" font-weight="600" fill="#F5F3EC">deadlock</text>
+            <text x="780" y="190" text-anchor="middle" fill="#C9B98A" font-size="10.5">planner / screen</text>
+          </g>
+          <g stroke="#8F8D82" stroke-width="1.5" fill="none">
+            <path d="M105 150 L105 47 L250 47" marker-end="url(#ar)"/>
+            <path d="M190 177 L250 177" marker-end="url(#ar)"/>
+            <path d="M105 204 L105 307 L250 307" marker-end="url(#ar)"/>
+            <path d="M450 47 L540 47" marker-end="url(#ar)"/>
+            <path d="M450 177 L540 177" marker-end="url(#ar)"/>
+            <path d="M450 307 L540 307" marker-end="url(#ar)"/>
+            <path d="M610 204 L610 240 L780 240 L780 204" marker-end="url(#ar)"/>
+          </g>
+          <g font-size="10.5" fill="#8F8D82">
+            <text x="462" y="40">yes → Phase 0</text>
+            <text x="462" y="170">yes</text>
+            <text x="462" y="300">else</text>
+            <text x="690" y="232" fill="#C9B98A">every new chain</text>
+          </g>
+        </svg>
+        <p class="caption">Bootstrap-reachable chains (byproduct loops, placement-cost ordering) are gated by the faithful planner — multi-producer-correct. Non-bootstrap chains (ocean, mid-tier) are gated by the recipe-closure screen. A screen flag means "verify an acyclic producer exists / the consumer is off the producer's critical path," not an automatic reject.</p>
+      </div>
+    </section>
+
+    <section id="ledger">
+      <div class="sec-head"><span class="num">03</span><h2>The 40 orphans → sinks</h2></div>
+      <p class="sec-intro">Every orphan, its sink, the mechanism, the resulting tag, and its deadlock verdict. <span class="pill tagfix">tag-fix</span> already ships · <span class="pill consumed">consumed</span> recipe consumer · <span class="pill sink">gameplay-sink</span> non-recipe.</p>
+      <table class="orphans">
+        <thead><tr><th>Orphan</th><th>Sink</th><th>Mechanism</th><th>Tag</th><th>Deadlock</th></tr></thead>
+        <tbody>
+          <tr class="phase"><td colspan="5">PHASE 0 — tag-only fixes (already consumed in src)</td></tr>
+          <tr><td><code>heavy_oil</code></td><td>chemical_reactor / lubricant_refinery / diesel_refinery</td><td>recipe input (exists)</td><td><span class="pill consumed">consumed</span></td><td class="ok">none</td></tr>
+          <tr><td><code>antimatter_propellant</code></td><td>spaceport placement</td><td>placement (exists)</td><td><span class="pill sink">gameplay-sink</span></td><td class="ok">none</td></tr>
+          <tr><td><code>plasma_charge</code></td><td>genesis_forge / tachyonic_transmitter_lab placement</td><td>placement (exists)</td><td><span class="pill sink">gameplay-sink</span></td><td class="ok">none</td></tr>
+          <tr><td><code>ceramic_insulator</code></td><td>~50 buildings' placement</td><td>placement (exists)</td><td><span class="pill sink">gameplay-sink</span></td><td class="ok">none</td></tr>
+          <tr><td><code>heavy_cable</code></td><td>power_substation / mass_driver / … placement</td><td>placement (exists)</td><td><span class="pill sink">gameplay-sink</span></td><td class="ok">none</td></tr>
+          <tr><td><code>glass_panel</code></td><td>kit_assembler_refined placement</td><td>placement (exists)</td><td><span class="pill sink">gameplay-sink</span></td><td class="ok">none</td></tr>
+          <tr><td><code>saltwater_cell</code></td><td>battery_bank placement</td><td>placement (exists)</td><td><span class="pill sink">gameplay-sink</span></td><td class="ok">none</td></tr>
+
+          <tr class="phase"><td colspan="5">PHASE 1 — byproduct loops (planner-validated)</td></tr>
+          <tr><td><code>co</code></td><td>blast_furnace reductant</td><td>recipe-input add</td><td><span class="pill consumed">consumed</span></td><td class="ok">planner ✓</td></tr>
+          <tr><td><code>refinery_gas</code></td><td>plastic_polymerizer_a co-feed</td><td>recipe-input add</td><td><span class="pill consumed">consumed</span></td><td class="ok">planner ✓</td></tr>
+          <tr><td><code>wood_tar</code> + <code>tar</code></td><td>tar_refinery → asphalt</td><td>new building</td><td><span class="pill consumed">consumed</span></td><td class="ok">planner ✓</td></tr>
+          <tr><td><code>asphalt</code></td><td>platform_constructor paving</td><td>placement-cost add</td><td><span class="pill sink">gameplay-sink</span></td><td class="ok">planner ✓</td></tr>
+          <tr><td><code>water_vapor</code></td><td>vapor_condenser → fresh_water</td><td>new building</td><td><span class="pill consumed">consumed</span></td><td class="ok">planner ✓</td></tr>
+          <tr><td><code>cryo_coolant_vented</code></td><td>cryo_reliquefier → cryo_coolant</td><td>new building</td><td><span class="pill consumed">consumed</span></td><td class="ok">planner ✓</td></tr>
+          <tr><td><code>mill_scale</code></td><td>mill_scale_sinter → iron_ore</td><td>new building</td><td><span class="pill consumed">consumed</span></td><td class="ok">planner ✓</td></tr>
+
+          <tr class="phase"><td colspan="5">PHASE 2 — ocean concentrates (leaf refines, closure-safe)</td></tr>
+          <tr><td><code>he3_dilute</code></td><td>→ helium_3 (fusion fuel)</td><td>refine recipe</td><td><span class="pill consumed">consumed</span></td><td class="ok">RC=0</td></tr>
+          <tr><td><code>tritium_seed</code></td><td>→ tritium / fusion fuel</td><td>refine recipe</td><td><span class="pill consumed">consumed</span></td><td class="ok">safe</td></tr>
+          <tr><td><code>lithium_brine</code></td><td>→ lithium (battery)</td><td>refine recipe</td><td><span class="pill consumed">consumed</span></td><td class="ok">safe</td></tr>
+          <tr><td><code>rare_earth_concentrate</code></td><td>→ rare_earth (mag/fuel-cell)</td><td>refine recipe</td><td><span class="pill consumed">consumed</span></td><td class="ok">safe</td></tr>
+          <tr><td><code>refined_cobalt</code></td><td>battery cathode / magnetic_alloy (alt variant)</td><td>recipe-input add</td><td><span class="pill consumed">consumed</span></td><td class="ok">safe</td></tr>
+          <tr><td><code>mn_nodule</code></td><td>→ manganese_ingot</td><td>refine recipe</td><td><span class="pill consumed">consumed</span></td><td class="ok">RC=0</td></tr>
+          <tr><td><code>vent_sulfide</code></td><td>→ sulfur (+ base-metal ore)</td><td>refine recipe</td><td><span class="pill consumed">consumed</span></td><td class="ok">RC=0</td></tr>
+          <tr><td><code>methane_hydrate</code></td><td>→ natural_gas</td><td>refine recipe</td><td><span class="pill consumed">consumed</span></td><td class="ok">RC=0</td></tr>
+          <tr><td><code>natural_gas</code></td><td>→ hydrogen (steam-methane reforming)</td><td>refine recipe</td><td><span class="pill consumed">consumed</span></td><td class="ok">RC=0</td></tr>
+
+          <tr class="phase"><td colspan="5">PHASE 3 — mid-tier alloy / chem / build tails (closure-screened safe)</td></tr>
+          <tr><td><code>charcoal</code></td><td>smelter / silicon_crusher / carbon_forge reductant</td><td>recipe-input add</td><td><span class="pill consumed">consumed</span></td><td class="ok">safe</td></tr>
+          <tr><td><code>tool_steel</code></td><td>metal_rolling_mill / bearing_assembler dies</td><td>recipe-input add</td><td><span class="pill consumed">consumed</span></td><td class="ok">safe</td></tr>
+          <tr><td><code>bronze</code></td><td>bearing_assembler bushings</td><td>recipe-input add</td><td><span class="pill consumed">consumed</span></td><td class="ok">safe</td></tr>
+          <tr><td><code>brass</code></td><td>hydraulic/pneumatic/cable/motor fittings</td><td>recipe-input add</td><td><span class="pill consumed">consumed</span></td><td class="ok">safe</td></tr>
+          <tr><td><code>hydrochloric_acid</code></td><td>metal_rolling_mill / pipe_mill / silicon_crusher pickling</td><td>recipe-input add</td><td><span class="pill consumed">consumed</span></td><td class="ok">safe</td></tr>
+          <tr><td><code>bromine</code></td><td>pcb_etcher flame-retardant</td><td>recipe-input add</td><td><span class="pill consumed">consumed</span></td><td class="ok">safe</td></tr>
+          <tr><td><code>phosphor</code></td><td>lithography_lab / pcb_etcher display</td><td>recipe-input add</td><td><span class="pill consumed">consumed</span></td><td class="ok">safe</td></tr>
+          <tr><td><code>memory_module</code></td><td>cryogenic_compute_center (ai_core)</td><td>recipe-input add</td><td><span class="pill consumed">consumed</span></td><td class="ok">safe</td></tr>
+          <tr><td><code>sheet_metal</code></td><td>kit_assembler / circuit_assembler enclosures</td><td>recipe-input add</td><td><span class="pill consumed">consumed</span></td><td class="ok">safe</td></tr>
+          <tr><td><code>slaked_lime</code></td><td>mortar_mixer binder</td><td>recipe-input add</td><td><span class="pill consumed">consumed</span></td><td class="ok">safe</td></tr>
+          <tr><td><code>synthetic_rubber</code></td><td>hydraulic/pneumatic/cable seals</td><td>recipe-input add</td><td><span class="pill consumed">consumed</span></td><td class="ok">safe</td></tr>
+          <tr><td><code>gold_ore</code> + <code>silver_ore</code> + <code>mercury</code></td><td>amalgamation → refined gold/silver</td><td>new refine recipe</td><td><span class="pill consumed">consumed</span></td><td class="ok">safe</td></tr>
+          <tr><td><code>galvanized_steel</code></td><td>T2+ ocean/coastal placement</td><td>placement-cost add</td><td><span class="pill sink">gameplay-sink</span></td><td class="ok">planner ✓</td></tr>
+          <tr><td><code>mortar</code></td><td>masonry placement baskets</td><td>placement-cost add</td><td><span class="pill sink">gameplay-sink</span></td><td class="ok">planner ✓</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="code">
+      <div class="sec-head"><span class="num">04</span><h2>Contract &amp; validation</h2></div>
+      <p class="sec-intro">The terminal-tag contract, the per-orphan edit shape, and the exact gate commands. 220 of ~240 resources are 1 kg/unit, so mass-balance is usually integer unit-count balance.</p>
+      <div class="code-block">
+        <div class="file-label">src/recipes.ts — the contract (type + gate)</div>
+        <div class="code"><pre><span class="cm">// RESOURCE_META.terminal — the taxonomy gated by recipes.test.ts</span>
+<span class="kw">terminal</span>: <span class="str">'consumed'</span> | <span class="str">`expansion-hook:${string}`</span> | <span class="str">'gameplay-sink'</span>;
+
+<span class="cm">// gate: a PRODUCED 'consumed' resource MUST have ≥1 recipe INPUT consumer.</span>
+<span class="cm">// 'gameplay-sink' (placement/fuel) is NOT gate-checked.</span>
+<span class="cm">// mass-balance.test.ts: Σ(in.n·massPerUnitKg) === Σ(out.n·massPerUnitKg),</span>
+<span class="cm">//   unless the RecipeId is in RECIPE_SPECULATIVE ('fantasy chemistry').</span></pre></div>
+      </div>
+      <div class="code-block">
+        <div class="file-label">Per-orphan edit shapes</div>
+        <div class="code"><pre><span class="cm">// (a) tag-only — consumer already exists</span>
+heavy_oil: { massPerUnitKg: <span class="str">1</span>, volumePerUnitL: <span class="str">1</span>, terminal: <span class="str">'consumed'</span> },
+ceramic_insulator: { <span class="cm">/* mass */</span> terminal: <span class="str">'gameplay-sink'</span> },
+
+<span class="cm">// (b) recipe consumer — new refine recipe + retag</span>
+<span class="fn">tar_refinery</span>: { inputs: { wood_tar: <span class="str">1</span>, tar: <span class="str">1</span> }, outputs: { asphalt: <span class="str">2</span> } },
+wood_tar: { massPerUnitKg: <span class="str">1</span>, terminal: <span class="str">'consumed'</span> },
+<span class="cm">// + remove 'wood_tar' from NON_STORED_OUTPUTS (economy.ts:618)</span>
+<span class="cm">// + keep producer forceRun; update §2.6 throttle guard in economy.test.ts</span>
+
+<span class="cm">// (c) non-recipe sink — placement-cost add + retag</span>
+platform_constructor.placementCost += { asphalt: <span class="str">100</span> };
+asphalt: { <span class="cm">/* mass */</span> terminal: <span class="str">'gameplay-sink'</span> };</pre></div>
+      </div>
+      <div class="code-block">
+        <div class="file-label">Gate commands (per task / per phase)</div>
+        <div class="code"><pre><span class="cm"># ledger</span>
+grep -cE <span class="str">"terminal: '?\`?expansion-hook"</span> src/recipes.ts
+
+<span class="cm"># gate tests</span>
+npx vitest run src/recipes.test.ts src/mass-balance.test.ts src/economy.test.ts
+
+<span class="cm"># deadlock — bootstrap-reachable chains (byproduct loops, placement order)</span>
+timeout 590 python3 -u scripts/bootstrap_test.py | grep -E <span class="str">"BLOCKED|Full target build placed"</span>
+
+<span class="cm"># deadlock — non-bootstrap chains (ocean, mid-tier)</span>
+npx tsx scripts/dump_recipe_graph.ts &gt; /tmp/graph.json
+python3 scripts/recipe_closure_check.py | grep -cE <span class="str">"CYCLE"</span>   <span class="cm"># expect 0</span></pre></div>
+      </div>
+    </section>
+
+    <section id="risks">
+      <div class="sec-head"><span class="num">05</span><h2>Risks &amp; mitigations</h2></div>
+      <div class="risks">
+        <div class="row"><div class="cell head">Risk</div><div class="cell head">Sev</div><div class="cell head">Mitigation</div></div>
+        <div class="row">
+          <div class="cell">Byproduct re-stall: removing a resource from <code class="inl">NON_STORED_OUTPUTS</code> gives it a capped bin; a full bin re-gates its producer to net 0 (the original §2.6 throttle bug).</div>
+          <div class="cell"><span class="sev high">HIGH</span></div>
+          <div class="cell">Keep every byproduct producer <code class="inl">forceRun</code> so it ignores the output cap and the surplus clamps (vents); the consumer draws from the stored bin. Re-point the §2.6 guard test at the still-vented set.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Bootstrap deadlock from gating a producer behind a component upstream of its own output (the P3 lesson).</div>
+          <div class="cell"><span class="sev high">HIGH</span></div>
+          <div class="cell">Every chain-introducing task runs the faithful planner (bootstrap-reachable) or the closure screen (non-bootstrap) before commit; planner must print <code class="inl">Full target build placed</code>, screen must report 0 cycles.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Mass-balance fails on non-unit-mass resources (mercury, helium_3, heavy fuels) when authoring refine recipes.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Balance against actual <code class="inl">massPerUnitKg</code>; fall back to <code class="inl">RECIPE_SPECULATIVE</code> only for genuine fantasy chemistry (e.g. fusion-seed transmutation), never to dodge arithmetic.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Placement-cost add on an early (T1) building delays it until a late product exists, perturbing bootstrap order.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Add ocean/coastal/paving costs only to T2+ buildings off the producer's critical path; re-run the planner (costs affect affordability/order).</div>
+        </div>
+        <div class="row">
+          <div class="cell">Test-file type errors hide from <code class="inl">tsc -b</code> (it excludes <code class="inl">*.test.ts</code>), e.g. a deleted/renamed ResourceId in a literal-pinning test.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Run the full <code class="inl">vitest --project client</code> suite, not just <code class="inl">tsc</code>; grep tests for literal <code class="inl">toEqual</code> input/output assertions after editing a recipe.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="decided">
+      <div class="sec-head"><span class="num">06</span><h2>Decisions locked</h2></div>
+      <div class="decided">
+        <div class="q"><div class="qt">Minimize new buildings <span class="ok">✓</span></div><div class="qd">Prefer recipe-input adds + <code class="inl">resolveRecipe</code> variants; add a building only where no existing host fits (~4 new: tar_refinery, vapor_condenser, cryo_reliquefier, mill_scale_sinter, plus the amalgamator).</div></div>
+        <div class="q"><div class="qt">XP weight inherits producer tier <span class="ok">✓</span></div><div class="qd">New consumer recipes' produced resource gets <code class="inl">XP_WEIGHT</code> matching the producing tier (T0=1, T1=3, T2=10, …); existing products keep their weight.</div></div>
+        <div class="q"><div class="qt">Byproduct loops only if no deadlock <span class="ok">✓</span></div><div class="qd">All six prototyped in the planner and proven deadlock-free (<code class="inl">Full target build placed in 2449.58 days</code>, 258 buildings, no BLOCKED).</div></div>
+        <div class="q"><div class="qt">Endgame fuels = gameplay-sink <span class="ok">✓</span></div><div class="qd"><code class="inl">antimatter_propellant</code> and <code class="inl">plasma_charge</code> are already consumed as placement costs — retag only.</div></div>
+      </div>
+    </section>
+
+  </div>
+</body>
+</html>
