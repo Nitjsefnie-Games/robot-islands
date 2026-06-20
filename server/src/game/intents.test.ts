@@ -536,6 +536,66 @@ describe('place-building ocean validation', () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// #147 multibiome biome-locked placement (server authoritative path)
+// ---------------------------------------------------------------------------
+
+/** Build a game where `home` is forest and has absorbed a volcanic lobe. */
+async function aUserWithMergedVolcanicHomeIsland(now: number): Promise<string> {
+  return aUserWithModifiedGame(now, (world, islandStates) => {
+    const home = world.islands.find((s: any) => s.id === 'home');
+    const state = islandStates.get('home');
+    home.biome = 'forest';
+    home.majorRadius = 14;
+    home.minorRadius = 14;
+    home.extraEllipses = [
+      { major: 10, minor: 10, rotation: 0, offsetX: 12, offsetY: 0, biome: 'volcanic' },
+    ];
+    state.level = 30; // T4 unlock for pyroforge
+    state.inventory.steel_beam = 100000;
+    state.inventory.clay = 100000;
+    state.inventory.microchip = 100000;
+    state.inventory.ceramic_insulator = 100000;
+  });
+}
+
+describe('#147 multibiome place-building biome gate', () => {
+  it('accepts a volcanic unique fully on the volcanic constituent', async () => {
+    const now = Date.now();
+    const uid = await aUserWithMergedVolcanicHomeIsland(now);
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'place-building', payload: { islandId: 'home', defId: 'pyroforge', x: 16, y: 0, rotation: 0 }, seq: 1 },
+      now,
+    );
+    expect(ack.ok).toBe(true);
+    const buildings = await homeBuildings(uid);
+    expect(buildings.some((b) => b.defId === 'pyroforge')).toBe(true);
+  });
+
+  it('rejects a volcanic unique on the forest primary', async () => {
+    const now = Date.now();
+    const uid = await aUserWithMergedVolcanicHomeIsland(now);
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'place-building', payload: { islandId: 'home', defId: 'pyroforge', x: 0, y: 0, rotation: 0 }, seq: 1 },
+      now,
+    );
+    expect(ack.ok).toBe(false);
+  });
+
+  it('rejects a volcanic unique straddling forest + volcanic', async () => {
+    const now = Date.now();
+    const uid = await aUserWithMergedVolcanicHomeIsland(now);
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'place-building', payload: { islandId: 'home', defId: 'pyroforge', x: 12, y: 0, rotation: 0 }, seq: 1 },
+      now,
+    );
+    expect(ack.ok).toBe(false);
+  });
+});
+
 // A fresh game populates only `home`. Routes per §2.4 connect SETTLED
 // islands and the routes-UI only ever offers populated endpoints, so the
 // create-route handler requires BOTH endpoints populated. Build a snapshot
