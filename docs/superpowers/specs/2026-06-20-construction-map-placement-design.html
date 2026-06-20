@@ -1,0 +1,332 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Design spec — Construction map-placement UI</title>
+  <style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: var(--sans);
+      background: var(--ivory);
+      color: var(--gray-700);
+      line-height: 1.58;
+      padding: 56px 32px 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { margin: 0 auto; max-width: 920px; }
+    header.page-head { margin-bottom: 40px; max-width: 840px; }
+    .eyebrow {
+      font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--gray-500); margin-bottom: 12px;
+    }
+    h1 {
+      font-family: var(--serif); font-weight: 500; font-size: 38px;
+      line-height: 1.14; color: var(--slate); margin-bottom: 18px; letter-spacing: -0.01em;
+    }
+    .context-box {
+      background: var(--gray-150); border: var(--border); border-radius: var(--radius);
+      padding: 16px 20px; font-size: 14.5px; color: var(--gray-700);
+    }
+    .context-box .label {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); display: block; margin-bottom: 6px;
+    }
+    .summary {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 56px;
+    }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell {
+      background: var(--white); border: var(--border); border-radius: var(--radius); padding: 18px 20px;
+    }
+    .summary .k {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 6px;
+    }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent  { color: var(--clay); }
+    .summary .v.ok      { color: var(--olive); }
+    .decision {
+      background: var(--white); border: var(--border); border-left: 4px solid var(--clay);
+      border-radius: var(--radius); padding: 22px 26px; margin-bottom: 56px;
+    }
+    .decision .d-tag {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--clay); margin-bottom: 8px;
+    }
+    .decision .d-head {
+      font-family: var(--serif); font-size: 22px; font-weight: 500; color: var(--slate);
+      margin-bottom: 10px; letter-spacing: -0.01em;
+    }
+    .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 760px; }
+    .decision .d-body + .d-body { margin-top: 8px; }
+    section { margin-bottom: 60px; }
+    .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+    .sec-head .num {
+      font-family: var(--mono); font-size: 12px; background: var(--oat); color: var(--slate);
+      padding: 3px 9px; border-radius: 8px;
+    }
+    .sec-head h2 {
+      font-family: var(--serif); font-weight: 500; font-size: 26px; color: var(--slate); letter-spacing: -0.01em;
+    }
+    .sec-intro { font-size: 14.5px; color: var(--gray-500); max-width: 740px; margin-bottom: 24px; }
+    p.body { font-size: 14.5px; max-width: 760px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+    ol.flow { max-width: 760px; margin: 0 0 14px 22px; font-size: 14.5px; }
+    ol.flow li { margin: 8px 0; }
+    code {
+      font-family: var(--mono); font-size: 0.88em; background: var(--gray-150);
+      border: 1px solid var(--gray-300); border-radius: 5px; padding: 1px 5px; color: #C9B98A;
+    }
+    .tbl {
+      width: 100%; border: var(--border); border-radius: var(--radius);
+      border-collapse: separate; border-spacing: 0; overflow: hidden; font-size: 13.5px;
+    }
+    .tbl th, .tbl td { text-align: left; padding: 11px 16px; border-bottom: 1px solid var(--gray-300); vertical-align: top; }
+    .tbl th {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em;
+      color: var(--gray-500); background: var(--gray-150); font-weight: 600;
+    }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+    .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media (max-width: 820px) { .compare { grid-template-columns: 1fr; } }
+    .compare .col { background: var(--white); border: var(--border); border-radius: var(--radius); overflow: hidden; }
+    .compare .col-head {
+      padding: 12px 18px; font-family: var(--mono); font-size: 11.5px;
+      text-transform: uppercase; letter-spacing: 0.06em; border-bottom: var(--border);
+    }
+    .compare .col.bad  .col-head { background: #2E211C; color: var(--rust); }
+    .compare .col.good .col-head { background: #232A1C; color: var(--olive); }
+    .compare .col-body { padding: 16px 18px; font-size: 13.5px; }
+    .compare .col-body ul { list-style: none; }
+    .compare .col-body li { margin: 7px 0; padding-left: 18px; position: relative; }
+    .compare .col.bad  li:before { content: '\2715'; position: absolute; left: 0; color: var(--rust); }
+    .compare .col.good li:before { content: '\2713'; position: absolute; left: 0; color: var(--olive); }
+    .changes { display: flex; flex-direction: column; gap: 12px; }
+    .change {
+      background: var(--white); border: var(--border); border-radius: var(--radius);
+      padding: 16px 20px; display: grid; grid-template-columns: 240px 1fr; gap: 4px 24px;
+    }
+    @media (max-width: 720px) { .change { grid-template-columns: 1fr; } }
+    .change .file { font-family: var(--mono); font-size: 12.5px; color: var(--clay); word-break: break-all; }
+    .change .what { font-size: 14px; color: var(--gray-700); }
+    .change .what .lead { color: var(--slate); font-weight: 600; }
+    .checklist { display: flex; flex-direction: column; gap: 10px; max-width: 760px; }
+    .check {
+      display: flex; gap: 12px; align-items: flex-start; background: var(--white);
+      border: var(--border); border-radius: 10px; padding: 12px 16px;
+    }
+    .check .box { width: 18px; height: 18px; border-radius: 5px; border: 2px solid var(--gray-500); flex-shrink: 0; margin-top: 2px; }
+    .check .ck-text { font-size: 14px; color: var(--gray-700); }
+    .check .ck-text strong { color: var(--slate); }
+    .risks { border: var(--border); border-radius: var(--radius); overflow: hidden; background: var(--white); }
+    .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: var(--border); }
+    .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: var(--border); }
+    @media (max-width: 780px) { .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); } }
+    .risks .head {
+      background: var(--gray-150); font-weight: 600; color: var(--slate); font-size: 12px;
+      text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .sev { display: inline-block; font-family: var(--mono); font-size: 11px; padding: 2px 8px; border-radius: 6px; font-weight: 600; }
+    .sev.high { background: #4A2A1C; color: #F0B79C; }
+    .sev.med  { background: var(--oat);  color: var(--slate); }
+    .sev.low  { background: #2D3A24; color: #B6CC96; }
+    .deferred { display: flex; flex-direction: column; gap: 14px; max-width: 840px; }
+    .defer {
+      background: var(--white); border: var(--border); border-left: 4px solid var(--gray-500);
+      border-radius: 10px; padding: 16px 20px;
+    }
+    .defer .dt { font-weight: 600; font-size: 15px; color: var(--slate); margin-bottom: 4px; }
+    .defer .dd { font-size: 13.5px; color: var(--gray-500); }
+    .footer { color: var(--gray-500); font-size: 13px; margin-top: 64px; padding-top: 22px; border-top: 1px solid var(--gray-300); }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Design spec · Robot Islands</div>
+      <h1>Map-placement UI for artificial-island construction</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        Construction (§2.5) is a blocking modal where the target position is typed
+        as blind X/Y numbers with no map preview, while the drone panel (and every
+        other HUD panel) is a movable, resizable, persisted window. This spec makes
+        construction a drone-style panel, adds a live draggable ghost ellipse on the
+        map, and introduces a rule that the island footprint must lie entirely in
+        discovered-or-visible space.
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Approach</div><div class="v accent">Panel + ghost</div></div>
+      <div class="cell"><div class="k">New files</div><div class="v">2</div></div>
+      <div class="cell"><div class="k">Risk</div><div class="v ok">Low–Med</div></div>
+      <div class="cell"><div class="k">New rule</div><div class="v">Discovery-gated</div></div>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision</div>
+      <div class="d-head">Convert construction to a movable HUD panel and pair it with a world-space ghost ellipse the player drags and resizes.</div>
+      <div class="d-body">The blocking modal is what prevents map interaction. Swapping
+        <code>mountModal</code> for <code>mountPanel</code> + <code>window-manager.ts</code>
+        makes the window non-blocking (and draggable/resizable/persisted, matching drones),
+        which is the enabler for a live ghost. The ghost renders in the world container so it
+        scales and pans exactly like islands. Validity shows as ghost color (cyan/red) + reason;
+        the discovery rule is enforced in the pure layer so the server honors it.</div>
+      <div class="d-body">Deliberately <em>not</em>: a "drag-out to draw" gesture,
+        collision-blocked dragging, reusing the building-footprint preview, or a DOM/CSS ghost.</div>
+    </div>
+
+    <section>
+      <div class="sec-head"><span class="num">01</span><h2>Before vs. after</h2></div>
+      <div class="compare">
+        <div class="col bad">
+          <div class="col-head">Today — blocking modal</div>
+          <div class="col-body"><ul>
+            <li><code>mountModal</code> / <code>ri-modal</code> — centered, blocking backdrop.</li>
+            <li>Position typed as two blind X/Y number fields (default 100,100).</li>
+            <li>No map preview — no ghost, ring, or click-to-place.</li>
+            <li>Overlap reported as amber text only after typing.</li>
+            <li>No discovery/vision constraint — can target unseen ocean.</li>
+          </ul></div>
+        </div>
+        <div class="col good">
+          <div class="col-head">After — panel + live ghost</div>
+          <div class="col-body"><ul>
+            <li><code>mountPanel</code> / <code>ri-panel</code> — drag, resize, persisted, non-blocking.</li>
+            <li>Drag ghost body to move; handles to resize; sliders &amp; X/Y synced.</li>
+            <li>World-space ghost ellipse scales with the camera like islands.</li>
+            <li>Cyan valid / red invalid with a specific reason, live.</li>
+            <li>Footprint must be fully in <code>revealedCells</code> — enforced pure + server.</li>
+          </ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">02</span><h2>Components</h2></div>
+      <p class="sec-intro">Two new files plus targeted edits. Pure logic is isolated from DOM and Pixi so validity is unit-testable.</p>
+      <table class="tbl">
+        <thead><tr><th>Unit</th><th>Layer</th><th>Responsibility</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">construction-ui.ts <em>(rework)</em></td><td>DOM</td><td>Mount via <code>mountPanel</code> (was <code>mountModal</code>); read/write the shared placement state; panel id <code>construction-panel</code>.</td></tr>
+          <tr><td class="slate">construction-overlay.ts <em>(new)</em></td><td>Pixi</td><td>Draw ghost ellipse + resize handles in the world container; hit-test body/handle drag; color by validity. Follows <code>*-overlay.ts</code> convention.</td></tr>
+          <tr><td class="slate">construction-placement.ts <em>(new)</em></td><td>pure</td><td>Shared state <code>{founderId,biome,major,minor,cx,cy}</code> + <code>computePlacementValidity</code>. The panel↔overlay seam. Tested.</td></tr>
+          <tr><td class="slate">artificial-island.ts <em>(extend)</em></td><td>pure</td><td>Add reason <code>in-unknown-space</code>; thread discovery check through <code>validateConstruction</code>.</td></tr>
+          <tr><td class="slate">discovery.ts <em>(extend)</em></td><td>pure</td><td><code>regionDiscoveredOrVisible(world,cx,cy,major,minor)</code> — every footprint cell ∈ <code>revealedCells</code>.</td></tr>
+          <tr><td class="slate">mutation-gateway.ts / intents.ts</td><td>seam / server</td><td>LOCAL + server <code>construct-island</code> re-validate incl. discovery (snapshot already carries <code>revealedCells</code>).</td></tr>
+          <tr><td class="slate">SPEC.md §2.5</td><td>spec</td><td>Document the discovery/vision placement constraint.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">03</span><h2>Interaction flow</h2></div>
+      <ol class="flow">
+        <li>Press <strong>C</strong> / click <strong>Construct</strong> → movable panel opens at its persisted position; a ghost spawns at a default valid spot near the founder island.</li>
+        <li>Pick founder (T3+ with operational <code>platform_constructor</code>), biome chips, size sliders (max = tier cap 8/12/16). Ghost updates live.</li>
+        <li>Drag the ghost body to move; drag handles to resize (clamped to cap). Sliders and X/Y fields stay synced both ways.</li>
+        <li>Ghost is cyan when valid, red on overlap / off-map / extends-into-unknown; the panel status line gives the reason.</li>
+        <li>Cost grid shows <code>have / need</code>; Construct enables only when valid <em>and</em> affordable.</li>
+        <li>Construct → gateway (LOCAL direct / REMOTE intent) → server re-validates incl. discovery → island inserted, <code>rebuildWorldLayers()</code>. Panel stays open; ghost re-seeds.</li>
+      </ol>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">04</span><h2>Validity model</h2></div>
+      <p class="sec-intro">First failing reason, in order. Affordability is panel-only (does not redden the ghost).</p>
+      <table class="tbl">
+        <thead><tr><th>Reason</th><th>Source</th><th>Ghost</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">tier-too-low / no-platform-constructor</td><td>founder gate</td><td>gated by founder dropdown</td></tr>
+          <tr><td class="slate">radius-too-large</td><td>over tier cap</td><td>prevented — handles &amp; sliders clamp</td></tr>
+          <tr><td class="slate">position-occupied</td><td><code>positionIsFree</code> overlap</td><td>red</td></tr>
+          <tr><td class="slate">off-map</td><td>footprint outside world bounds</td><td>red</td></tr>
+          <tr><td class="slate">in-unknown-space <em>(new)</em></td><td>footprint ⊄ <code>revealedCells</code></td><td>red</td></tr>
+          <tr><td class="slate">insufficient-materials</td><td>cost &gt; inventory</td><td>cyan; Construct disabled</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">05</span><h2>Verification</h2></div>
+      <div class="checklist">
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>construction-placement.test.ts.</strong> Validity precedence + <code>regionDiscoveredOrVisible</code> false on any missing footprint cell, true when all present.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>artificial-island.test.ts.</strong> New <code>in-unknown-space</code> reason; existing reasons unchanged.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>intents.test.ts.</strong> <code>construct-island</code> rejects a footprint into unrevealed cells; accepts one fully revealed.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Manual.</strong> Build, reload islands.nitjsefni.eu: draggable/resizable/persisted panel + live ghost that reds out over islands and fog.</div></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">06</span><h2>Risks</h2></div>
+      <div class="risks">
+        <div class="row">
+          <div class="cell head">Risk</div><div class="cell head">Sev</div><div class="cell head">Mitigation</div>
+        </div>
+        <div class="row">
+          <div class="cell"><code>validateConstruction</code> signature grows (needs world/<code>revealedCells</code>) → ripples to UI, gateway, server, tests.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Enumerate every caller with <code>findReferences</code> before editing; update in one pass.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Discovery check over a 16-radius footprint is many cells; per-frame validity could be heavy.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Recompute validity only on change (debounced), not per frame; cells are coarse.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Assumed vision→<code>revealedCells</code> write-through; a transient "visible not revealed" state would slip through.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Confirm write-through in planning; if it exists, also consult computed <code>vision-source.ts</code>.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Coordination with the parallel cost-×5 session — both edit SPEC §2.5 (and maybe <code>artificial-island.ts</code>/cost tests).</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Additive edits in different §2.5 paragraphs; rebase/fast-forward per CONTRIBUTING; sequence the branches.</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">07</span><h2>Out of scope</h2></div>
+      <div class="deferred">
+        <div class="defer"><div class="dt">Drag-to-draw gesture &amp; collision-blocked drag</div><div class="dd">Considered and rejected in the brainstorm in favor of drag-body + resize handles with free drag.</div></div>
+        <div class="defer"><div class="dt">Map ghost for the Land Reclamation Hub</div><div class="dd">Separate §3.4 mechanic; the overlay could be reused later, not in this slice.</div></div>
+        <div class="defer"><div class="dt">Platform Constructor power/heat enforcement</div><div class="dd">Separately deferred (<code>building-defs.ts:1767</code>, "STILL-DEFERRED").</div></div>
+        <div class="defer"><div class="dt">Cost rebalance (×5)</div><div class="dd">Handled by the parallel session; not this spec.</div></div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <p>Design spec · generated 2026-06-20 · relates to: SPEC.md §2.5, grow-absorbed-ellipse-design, per-resource-ignore-cap-design</p>
+    </div>
+
+  </div>
+</body>
+</html>
