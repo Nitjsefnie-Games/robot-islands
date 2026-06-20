@@ -56,7 +56,7 @@ describe('makeRemoteGateway — gateway-rejection contract', () => {
     // REMOTE mode and must resolve (not reject) to the failure contract.
     const r1 = await gateway.placeBuilding('home', 'mine', 0, 0, 0);
     const r2 = await gateway.applyUpgrade('home', 'b-1');
-    const r3 = await gateway.expandIsland('home', 'major');
+    const r3 = await gateway.expandIsland('home', 0, 'major');
     for (const r of [r1, r2, r3]) {
       expect(r.ok).toBe(false);
       expect(r).toMatchObject({ error: 'Socket is not open' });
@@ -96,6 +96,22 @@ function makeTwoPopulatedIslands() {
   });
   islandStates.get('home')!.buildings = home.buildings;
   return { now, world, islandStates, home, colony };
+}
+
+function worldWithMergedIsland() {
+  const now = Date.now();
+  const { world, islandStates } = createNewGame(now);
+  const home = world.islands.find((s) => s.id === 'home')!;
+  home.buildings.push({
+    id: 'hub-1', defId: 'land_reclamation_hub', x: 0, y: 0,
+    constructionRemainingMs: 0, placedAt: now,
+  });
+  islandStates.get('home')!.buildings = home.buildings;
+  home.extraEllipses = [{ biome: 'plains', major: 3, minor: 3, rotation: 0, offsetX: 20, offsetY: 0 }];
+  const state = islandStates.get('home')!;
+  state.inventory.steel_beam = 1000;
+  state.inventory.concrete = 10000;
+  return { now, world, islandStates, home };
 }
 
 function makeDrainingRoute() {
@@ -259,8 +275,24 @@ describe('makeLocalGateway — validation parity with server intents', () => {
     });
     islandStates.get('home')!.buildings = home.buildings;
     const gateway = makeLocalGateway(world, islandStates);
-    const result = gateway.expandIsland('home', 'major');
+    const result = gateway.expandIsland('home', 0, 'major');
     expect(result).toEqual({ ok: false, error: 'axis-at-max', reason: 'axis-at-max' });
+  });
+
+  it('expandIsland grows the chosen extra-ellipse constituent', () => {
+    const { world, islandStates, home } = worldWithMergedIsland();
+    const gateway = makeLocalGateway(world, islandStates);
+    const before = home.extraEllipses![0]!.major;
+    const result = gateway.expandIsland('home', 1, 'major');
+    expect(result).toEqual({ ok: true });
+    expect(home.extraEllipses![0]!.major).toBe(before + 1);
+  });
+
+  it('expandIsland rejects an out-of-range constituent index', () => {
+    const { world, islandStates } = worldWithMergedIsland();
+    const gateway = makeLocalGateway(world, islandStates);
+    const result = unwrapGatewayResult(gateway.expandIsland('home', 9, 'major'));
+    expect(result.ok).toBe(false);
   });
 
   it('#49 dispatchDrone rejects an out-of-range selectedTier', () => {

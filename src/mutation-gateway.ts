@@ -14,7 +14,7 @@ import type { PlacedBuilding } from './buildings.js';
 import { setGenesisTarget, spendTimeLock, type IslandState } from './economy.js';
 import { dispatchDrone, firePulse, type DroneTier } from './drones.js';
 import type { TerrainKind } from './island.js';
-import { canExpandIsland, expandIsland, type Axis } from './land-reclamation.js';
+import { canExpandConstituent, expandConstituent, type Axis } from './land-reclamation.js';
 import {
   constructIsland,
   makeArtificialIdGenerator,
@@ -150,7 +150,7 @@ export interface MutationGateway {
   refreshMaintenance(islandId: string, buildingId: string): GatewayReturn;
   convertToServitor(islandId: string, buildingId: string): GatewayReturn;
   relabelCargo(islandId: string, buildingId: string, newLabel: ResourceId): GatewayReturn;
-  expandIsland(islandId: string, axis: Axis): GatewayReturn;
+  expandIsland(islandId: string, constituentIndex: number, axis: Axis): GatewayReturn;
   renameIsland(islandId: string, name: string): GatewayReturn;
   editBiome(islandId: string, biomeId: string): GatewayReturn;
   setLocation(lat: number, lon: number): GatewayReturn;
@@ -485,12 +485,12 @@ export function makeLocalGateway(
       return ok();
     },
 
-    expandIsland(islandId, axis) {
+    expandIsland(islandId, constituentIndex, axis) {
       const island = resolveIsland(islandId);
       if (!island) return err('unknown island');
-      const can = canExpandIsland(island.spec, island.state, axis);
+      const can = canExpandConstituent(island.spec, island.state, constituentIndex, axis);
       if (!can.ok) return err(can.reason ?? 'expand failed', can.reason);
-      expandIsland(island.spec, island.state, axis);
+      expandConstituent(island.spec, island.state, constituentIndex, axis);
       return ok();
     },
 
@@ -982,8 +982,8 @@ export function makeRemoteGateway(client: GameServerClient): MutationGateway {
     relabelCargo(islandId, buildingId, newLabel) {
       return send('relabel-cargo', { islandId, buildingId, newLabel });
     },
-    expandIsland(islandId, axis) {
-      return send('expand-island', { islandId, axis });
+    expandIsland(islandId, constituentIndex, axis) {
+      return send('expand-island', { islandId, constituentIndex, axis });
     },
     renameIsland(islandId, name) {
       return send('rename-island', { islandId, name });

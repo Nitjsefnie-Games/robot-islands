@@ -77,7 +77,7 @@ import {
   dispatchRepairDrone,
   type SatelliteVariant,
 } from '../../../src/orbital.js';
-import { expandIsland, canExpandIsland, type Axis } from '../../../src/land-reclamation.js';
+import { expandConstituent, canExpandConstituent, type Axis } from '../../../src/land-reclamation.js';
 import { convertToServitor } from '../../../src/servitor.js';
 import { BIOME_DEFS } from '../../../src/biomes.js';
 import { tryRefreshMaintenance } from '../../../src/maintenance.js';
@@ -750,15 +750,20 @@ export const INTENTS: Record<string, IntentHandler> = {
     apply(game: LiveGame, payload: unknown): IntentResult {
       if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
       const { islandId, axis } = payload;
+      const constituentIndex = (payload as { constituentIndex?: unknown }).constituentIndex ?? 0;
       if (typeof islandId !== 'string') return { ok: false, error: 'islandId must be a string' };
       if (axis !== 'major' && axis !== 'minor') return { ok: false, error: 'axis must be major or minor' };
+      if (typeof constituentIndex !== 'number' || !Number.isInteger(constituentIndex) || constituentIndex < 0) {
+        return { ok: false, error: 'constituentIndex must be a non-negative integer' };
+      }
       const island = resolveIsland(game, islandId);
       if (!island) return { ok: false, error: 'unknown island' };
-      // Authoritative gate mirror: expandIsland is a no-op when canExpandIsland
-      // fails, but we surface the reason instead of silently succeeding.
-      const can = canExpandIsland(island.spec, island.state, axis as Axis);
+      // Authoritative gate mirror: expandConstituent is a no-op when
+      // canExpandConstituent fails, but we surface the reason instead of
+      // silently succeeding.
+      const can = canExpandConstituent(island.spec, island.state, constituentIndex, axis as Axis);
       if (!can.ok) return { ok: false, error: can.reason ?? 'expand failed' };
-      expandIsland(island.spec, island.state, axis as Axis);
+      expandConstituent(island.spec, island.state, constituentIndex, axis as Axis);
       return { ok: true };
     },
   },

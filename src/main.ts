@@ -1787,7 +1787,7 @@ async function main(): Promise<void> {
     // the Hub itself doesn't move — the inspector stays open on the
     // same building with refreshed numbers.
     onExpandIsland: (target: InspectorTarget, axis: Axis) => {
-      const gatewayResult = gateway.expandIsland(target.spec.id, axis);
+      const gatewayResult = gateway.expandIsland(target.spec.id, 0, axis);
       function finish(): void {
         rebuildWorldLayers();
         inspector.refresh();
