@@ -642,6 +642,19 @@ export const NON_STORED_OUTPUTS: ReadonlySet<ResourceId> = new Set<ResourceId>([
  * lands. */
 export const OUTPUT_CAP_EXEMPT: ReadonlySet<ResourceId> = new Set<ResourceId>([
   'co', 'refinery_gas', 'wood_tar', 'water_vapor', 'cryo_coolant_vented', 'mill_scale',
+  // P4 Phase 1 (task 4): `tar` and `asphalt` are SIDE outputs of
+  // crude_oil_cracker (primary = `heavy_oil`). Closing the tar→asphalt loop
+  // (tar_refinery) gives `tar` a consumer and makes `asphalt` a gameplay-sink
+  // (platform_constructor placement), but neither sink continuously drains the
+  // full crude_oil_cracker output — a placement cost is intermittent and the
+  // refinery may lag. PROVEN (economy.test.ts guard): a full `tar` OR `asphalt`
+  // bin zeroes crude_oil_cracker's `heavy_oil` via `outputAvail`. Exempting
+  // both keeps them stored+drawable yet non-stalling, protecting heavy_oil —
+  // identical rationale to the gas byproducts. `tar` is never a sole output;
+  // `asphalt` is tar_refinery's sole output, so tar_refinery acts as a
+  // pure overflow-voiding sink (acceptable: it's a byproduct-disposal building,
+  // not on any primary chain).
+  'tar', 'asphalt',
 ]);
 
 function outputAvail(

@@ -6145,11 +6145,57 @@ describe('§2.6/§15.3 per-output cap-exemption — byproduct stored, drawable, 
     // co2 stays the single global atmosphere — non-stored, not exempt.
     expect(NON_STORED_OUTPUTS.has('co2')).toBe(true);
     expect(OUTPUT_CAP_EXEMPT.has('co2')).toBe(false);
-    // All 6 byproducts migrated into the exemption.
-    for (const r of ['co', 'refinery_gas', 'wood_tar', 'water_vapor', 'cryo_coolant_vented', 'mill_scale'] as ResourceId[]) {
+    // The 6 gas/solid byproducts + the 2 crude_oil_cracker side-outputs
+    // (tar, asphalt; task 4) are all exempt.
+    for (const r of ['co', 'refinery_gas', 'wood_tar', 'water_vapor', 'cryo_coolant_vented', 'mill_scale', 'tar', 'asphalt'] as ResourceId[]) {
       expect(OUTPUT_CAP_EXEMPT.has(r)).toBe(true);
       expect(NON_STORED_OUTPUTS.has(r)).toBe(false);
     }
+  });
+
+  // P4 Phase 1 (task 4): `tar` and `asphalt` are SIDE outputs of
+  // crude_oil_cracker whose valuable PRIMARY is `heavy_oil`. Closing the
+  // tar→asphalt loop made `tar` consumed and `asphalt` a gameplay-sink, but
+  // neither sink continuously drains the full cracker output, so without the
+  // exemption a full tar/asphalt bin would zero heavy_oil (proven during
+  // investigation). This guard locks in that the exemption keeps heavy_oil
+  // production immune to a full tar OR asphalt bin.
+  describe('crude_oil_cracker heavy_oil is immune to a full tar/asphalt bin', () => {
+    const CRACKER: PlacedBuilding = { id: 'b-cracker', defId: 'crude_oil_cracker', x: 0, y: 0 };
+
+    function crackerPowerFree(): DefCatalog {
+      const base = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
+      const { power: _p, ...rest } = base['crude_oil_cracker'];
+      base['crude_oil_cracker'] = rest as BuildingDef;
+      return base;
+    }
+    const CRACKER_POWER_FREE: DefCatalog = crackerPowerFree();
+
+    function runCracker(ms: number, pin: 'tar' | 'asphalt' | null): number {
+      const caps = blankCaps(1_000_000_000);
+      caps.tar = 5; // tiny side-output caps so they pin quickly
+      caps.asphalt = 5;
+      const inv = { ...blankInventory(), crude_oil: 1_000_000_000 };
+      if (pin === 'tar') inv.tar = 5; // tar bin AT cap from t=0
+      if (pin === 'asphalt') inv.asphalt = 5; // asphalt bin AT cap from t=0
+      const state = makeState({ buildings: [CRACKER], inventory: inv, storageCaps: caps });
+      advanceIsland(state, ms, { defs: CRACKER_POWER_FREE });
+      return state.inventory.heavy_oil;
+    }
+
+    it('a full `tar` bin must not reduce heavy_oil output', () => {
+      const free = runCracker(1_000_000, null);
+      const pinned = runCracker(1_000_000, 'tar');
+      expect(free).toBeGreaterThan(0);
+      expect(pinned).toBeCloseTo(free, 6);
+    });
+
+    it('a full `asphalt` bin must not reduce heavy_oil output', () => {
+      const free = runCracker(1_000_000, null);
+      const pinned = runCracker(1_000_000, 'asphalt');
+      expect(free).toBeGreaterThan(0);
+      expect(pinned).toBeCloseTo(free, 6);
+    });
   });
 
   it('a consumer can DRAW an exempt byproduct from inventory (recipe runs on byproduct stock)', () => {
