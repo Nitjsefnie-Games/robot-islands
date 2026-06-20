@@ -1614,12 +1614,12 @@ export function mountInspectorUi(
     const label = axis === 'major' ? '+1 MAJOR' : '+1 MINOR';
     const current = axis === 'major' ? spec.majorRadius : spec.minorRadius;
     if (gate.ok) {
-      const cost = landReclamationCost(spec.majorRadius, spec.minorRadius, axis);
+      const cost = landReclamationCost(spec.majorRadius, spec.minorRadius, axis, spec.extraEllipses);
       return `${label} · ${formatShortfall(cost)} (r ${current} → ${current + 1})`;
     }
     if (gate.reason === 'axis-at-max') return `${label} · AT CAP`;
     if (gate.reason === 'insufficient-resources') {
-      const cost = landReclamationCost(spec.majorRadius, spec.minorRadius, axis);
+      const cost = landReclamationCost(spec.majorRadius, spec.minorRadius, axis, spec.extraEllipses);
       return `${label} · NEED ${formatShortfall(cost)}`;
     }
     // no-hub shouldn't reach here (section is only shown for the Hub
