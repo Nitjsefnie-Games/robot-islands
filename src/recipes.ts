@@ -2868,7 +2868,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   // Phase 4 — T2 plastic precursor polymerizer (§7.4)
   plastic_polymerizer_a: {
-    cycleSec: 358.3, // auto-derived (gen-cyclesec): density × footprint × M
+    cycleSec: 716.7, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: { naphtha: 1, refinery_gas: 1 },
     outputs: { plastic_precursor: 2 },
     category: 'chemistry',
