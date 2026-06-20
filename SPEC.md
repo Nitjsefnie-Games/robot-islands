@@ -217,6 +217,8 @@ Artificial islands:
 * Can have any starting layout because terrain is artificial
 * Cannot have rare-biome modifiers or unique-feature tiles (those are natural-only)
 
+**Placement constraint.** An artificial island may only be constructed where its entire inscribed footprint lies in discovered-or-visible space — every stratification cell the island would occupy must already be present in `revealedCells` (vision and discovery both write through to that set). Placement whose footprint extends into unknown ocean is rejected with reason `in-unknown-space`. The constraint is a pure predicate (`regionDiscoveredOrVisible`, `construction-gate.ts`) checked by the construction UI, the LOCAL mutation gateway, and the authoritative server `construct-island` intent. The construction UI is a movable HUD panel with a live, draggable ghost-ellipse preview (cyan valid / red invalid); position is set on the map, not by typed coordinates alone.
+
 ### 2.6 Weather System
 
 The world has a dynamic weather system. Weather is partitioned into zones matching the stratification cell grid; each cell holds a weather state that evolves deterministically as a function `weather(seed, cx, cy, t) -> state`. The function is pure — no persistent state, no desync risk, replayable for offline simulation.

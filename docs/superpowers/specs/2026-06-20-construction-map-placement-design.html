@@ -238,9 +238,9 @@
           <tr><td class="slate">construction-ui.ts <em>(rework)</em></td><td>DOM</td><td>Mount via <code>mountPanel</code> (was <code>mountModal</code>); read/write the shared placement state; panel id <code>construction-panel</code>.</td></tr>
           <tr><td class="slate">construction-overlay.ts <em>(new)</em></td><td>Pixi</td><td>Draw ghost ellipse + resize handles in the world container; hit-test body/handle drag; color by validity. Follows <code>*-overlay.ts</code> convention.</td></tr>
           <tr><td class="slate">construction-placement.ts <em>(new)</em></td><td>pure</td><td>Shared state <code>{founderId,biome,major,minor,cx,cy}</code> + <code>computePlacementValidity</code>. The panel↔overlay seam. Tested.</td></tr>
-          <tr><td class="slate">artificial-island.ts <em>(extend)</em></td><td>pure</td><td>Add reason <code>in-unknown-space</code>; thread discovery check through <code>validateConstruction</code>.</td></tr>
-          <tr><td class="slate">discovery.ts <em>(extend)</em></td><td>pure</td><td><code>regionDiscoveredOrVisible(world,cx,cy,major,minor)</code> — every footprint cell ∈ <code>revealedCells</code>.</td></tr>
-          <tr><td class="slate">mutation-gateway.ts / intents.ts</td><td>seam / server</td><td>LOCAL + server <code>construct-island</code> re-validate incl. discovery (snapshot already carries <code>revealedCells</code>).</td></tr>
+          <tr><td class="slate">artificial-island.ts <em>(extend)</em></td><td>pure</td><td>Add reason <code>in-unknown-space</code>. Discovery check is <strong>not</strong> threaded through <code>validateConstruction</code> — the signature was not changed.</td></tr>
+          <tr><td class="slate">regionDiscoveredOrVisible <em>(in construction-gate.ts)</em></td><td>pure</td><td><code>regionDiscoveredOrVisible(world,cx,cy,major,minor)</code> — every footprint cell ∈ <code>revealedCells</code>. Added as a <strong>sibling gate</strong> next to <code>positionIsFree</code>, not threaded through <code>validateConstruction</code>.</td></tr>
+          <tr><td class="slate">mutation-gateway.ts / intents.ts</td><td>seam / server</td><td>LOCAL + server <code>construct-island</code> call spatial gates (<code>positionIsFree</code> + <code>regionDiscoveredOrVisible</code>) directly; discovery is a separate gate, not a <code>validateConstruction</code> parameter.</td></tr>
           <tr><td class="slate">SPEC.md §2.5</td><td>spec</td><td>Document the discovery/vision placement constraint.</td></tr>
         </tbody>
       </table>
@@ -291,9 +291,9 @@
           <div class="cell head">Risk</div><div class="cell head">Sev</div><div class="cell head">Mitigation</div>
         </div>
         <div class="row">
-          <div class="cell"><code>validateConstruction</code> signature grows (needs world/<code>revealedCells</code>) → ripples to UI, gateway, server, tests.</div>
-          <div class="cell"><span class="sev med">MED</span></div>
-          <div class="cell">Enumerate every caller with <code>findReferences</code> before editing; update in one pass.</div>
+          <div class="cell"><s><code>validateConstruction</code> signature grows (needs world/<code>revealedCells</code>) → ripples to UI, gateway, server, tests.</s></div>
+          <div class="cell"><span class="sev low">RESOLVED</span></div>
+          <div class="cell"><code>validateConstruction</code> signature was <strong>not changed</strong>. <code>regionDiscoveredOrVisible</code> was added as a sibling gate in <code>construction-gate.ts</code> next to <code>positionIsFree</code>; <code>computePlacementValidity</code> in <code>construction-placement.ts</code> combines both gates without touching <code>validateConstruction</code>.</div>
         </div>
         <div class="row">
           <div class="cell">Discovery check over a 16-radius footprint is many cells; per-frame validity could be heavy.</div>

@@ -59,10 +59,10 @@ ellipse; a DOM/CSS ghost over the canvas (fights the camera transform); a
 | `construction-ui.ts` (rework) | DOM | Mount via `mountPanel` (was `mountModal`); push biome/size/coord edits into the shared placement state; render from it. Panel id `construction-panel`. |
 | `construction-overlay.ts` (**new**) | Pixi render | Draw the ghost ellipse + resize handles in the **world** container; hit-test body-drag and handle-drag; color by validity. Follows the `*-overlay.ts` convention (cf. `lobe-badge-overlay.ts`). |
 | `construction-placement.ts` (**new**) | **pure** | Shared placement state `{founderId, biome, major, minor, cx, cy}` + `computePlacementValidity(world, states, state)` → `{ok, reason}`. The seam both panel and overlay read/write. Unit-tested. |
-| `artificial-island.ts` (extend) | pure | Add `ValidationReason: 'in-unknown-space'`; thread the discovery check through `validateConstruction`. |
-| discovery predicate (in `discovery.ts`) | pure | `regionDiscoveredOrVisible(world, cx, cy, major, minor)` → true iff **every** cell the inscribed footprint occupies is in `world.revealedCells`. |
-| `mutation-gateway.ts` (touch) | seam | LOCAL `constructIsland` re-validates incl. discovery; REMOTE already routes the `construct-island` intent. |
-| `server/src/game/intents.ts` (touch) | server | `construct-island` re-runs `validateConstruction` authoritatively — gets the discovery rule for free once the predicate reads `snapshot.world.revealedCells`. |
+| `artificial-island.ts` (extend) | pure | Add `ValidationReason: 'in-unknown-space'`. Discovery check is NOT threaded through `validateConstruction` — the signature was not changed. |
+| `regionDiscoveredOrVisible` (in `construction-gate.ts`) | pure | `regionDiscoveredOrVisible(world, cx, cy, major, minor)` → true iff **every** cell the inscribed footprint occupies is in `world.revealedCells`. Added as a **sibling gate** next to `positionIsFree`, NOT threaded through `validateConstruction`. |
+| `mutation-gateway.ts` (touch) | seam | LOCAL `constructIsland` calls the spatial gates (`positionIsFree` + `regionDiscoveredOrVisible`) directly; REMOTE already routes the `construct-island` intent. |
+| `server/src/game/intents.ts` (touch) | server | `construct-island` re-runs `validateConstruction` + calls spatial gates directly — discovery check is a separate gate call, not a `validateConstruction` parameter. |
 | `SPEC.md` §2.5 | spec | Document the discovery/vision placement constraint. |
 
 ### Why the discovery rule is one predicate
@@ -141,7 +141,7 @@ mechanism is descriptive).
 
 | Risk | Sev | Mitigation |
 |---|---|---|
-| `validateConstruction` signature grows (needs `world`/`revealedCells`) → ripples to UI, gateway, server intent, tests | MED | Enumerate every caller with `findReferences` before editing; update all in one pass. |
+| ~~`validateConstruction` signature grows (needs `world`/`revealedCells`) → ripples to UI, gateway, server intent, tests~~ | ~~MED~~ | **RESOLVED** — `validateConstruction` signature was NOT changed. `regionDiscoveredOrVisible` was added as a sibling gate in `construction-gate.ts` next to `positionIsFree`; the new `construction-placement.ts` (`computePlacementValidity`) combines both gates without touching `validateConstruction`. |
 | Discovery check over a 16-radius footprint is many cells; per-frame validity could be heavy | LOW/MED | Recompute validity only on state change (debounced), not per frame; cells are coarse (`CELL_SIZE_TILES`). |
 | Assumed vision→`revealedCells` write-through; a transient "visible but not revealed" state would slip through | LOW | Confirm write-through in planning; if it exists, also consult computed `vision-source.ts`. |
 | Coordination with the parallel cost-×5 session — both edit SPEC §2.5 (and possibly `artificial-island.ts`/cost tests) | MED | Additive edits in different §2.5 paragraphs; rebase/fast-forward per CONTRIBUTING; sequence the two branches. |
