@@ -1148,8 +1148,8 @@ export const RESOURCE_META: Readonly<Record<ResourceId, ResourceMeta>> = {
   wire: { massPerUnitKg: 0.5, terminal: 'consumed' },
   saltwater_cell: { massPerUnitKg: 2.5, energyPerUnitKWh: 0.5, terminal: 'gameplay-sink' },
   heavy_oil: { massPerUnitKg: 1, volumePerUnitL: 1, terminal: 'consumed' },
-  tar: { massPerUnitKg: 1, volumePerUnitL: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
-  asphalt: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
+  tar: { massPerUnitKg: 1, volumePerUnitL: 1, terminal: 'consumed' },
+  asphalt: { massPerUnitKg: 1, terminal: 'gameplay-sink' },
   plastic_precursor: { massPerUnitKg: 1, volumePerUnitL: 1, terminal: 'consumed' },
   rigid_plastic: { massPerUnitKg: 1, terminal: 'consumed' },
   flexible_plastic: { massPerUnitKg: 1, terminal: 'consumed' },
@@ -1328,13 +1328,13 @@ export const RESOURCE_META: Readonly<Record<ResourceId, ResourceMeta>> = {
   co: { massPerUnitKg: 1, terminal: 'consumed' },
   co2: { massPerUnitKg: 1, terminal: 'gameplay-sink' }, // global atmosphere scalar (co2Kg) — weather + capture, non-recipe sink
   refinery_gas: { massPerUnitKg: 1, terminal: 'consumed' },
-  wood_tar: { massPerUnitKg: 1, terminal: 'expansion-hook:creosote / wood-preservative chain' },
-  water_vapor: { massPerUnitKg: 1, terminal: 'expansion-hook:condensing-loop / humidity / fresh-water reclamation' },
+  wood_tar: { massPerUnitKg: 1, terminal: 'consumed' },
+  water_vapor: { massPerUnitKg: 1, terminal: 'consumed' },
   aviation_kerosene_crude: { massPerUnitKg: 1, terminal: 'consumed' }, // → aviation_kerosene (hydrotreater recipe)
-  mill_scale: { massPerUnitKg: 1, terminal: 'expansion-hook:scrap remelt / cement kiln aggregate / brick pigment' },
+  mill_scale: { massPerUnitKg: 1, terminal: 'consumed' },
   calcium_sulfonate: { massPerUnitKg: 1, terminal: 'consumed' },
   air: { massPerUnitKg: 1, terminal: 'gameplay-sink' }, // atmospheric intake (exogenousFlow 'atmosphere'), not stored
-  cryo_coolant_vented: { massPerUnitKg: 1, terminal: 'expansion-hook:re-liquefaction loop / closed-cycle recovery' },
+  cryo_coolant_vented: { massPerUnitKg: 1, terminal: 'consumed' },
 };
 
 export const RECIPE_SPECULATIVE: Readonly<Partial<Record<RecipeId, 'fantasy chemistry' | 'narrative cost' | true>>> = {
@@ -2828,6 +2828,43 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     inputs: { crude_oil: 3 },
     outputs: { heavy_oil: 1, tar: 1, asphalt: 1 },
     category: 'chemistry',
+  },
+  // P4 Phase 1 — close the tar/wood_tar byproduct loop. wood_tar (1 kg) + tar
+  // (1 kg) → asphalt (2 kg): mass-balanced 2 in / 2 out. asphalt is sunk as a
+  // placement cost (platform_constructor). crude_refining archetype like the
+  // crude_oil_cracker that feeds the tar.
+  tar_refinery: {
+    cycleSec: 122.9, // auto-derived (gen-cyclesec): density × footprint × M
+    inputs: { wood_tar: 1, tar: 1 },
+    outputs: { asphalt: 2 },
+    category: 'chemistry',
+  },
+  // P4 Phase 1 — close the water_vapor loop. Condenses 1 kg water_vapor back
+  // to 1 kg fresh_water (1:1, mass-balanced). air_separation archetype (like
+  // the brine distillation / cryo condensation family).
+  vapor_condenser: {
+    cycleSec: 44.1, // auto-derived (gen-cyclesec): density × footprint × M
+    inputs: { water_vapor: 1 },
+    outputs: { fresh_water: 1 },
+    category: 'chemistry',
+  },
+  // P4 Phase 1 — close the cryo_coolant_vented loop. Re-liquefies 1 kg vented
+  // coolant back to 1 kg cryo_coolant (1:1, mass-balanced). air_separation
+  // archetype (cryo family).
+  cryo_reliquefier: {
+    cycleSec: 44.1, // auto-derived (gen-cyclesec): density × footprint × M
+    inputs: { cryo_coolant_vented: 1 },
+    outputs: { cryo_coolant: 1 },
+    category: 'chemistry',
+  },
+  // P4 Phase 1 — close the mill_scale loop. Sinters 2 kg mill_scale (iron-oxide
+  // rolling-mill scrap) back to 2 kg iron_ore (1:1, mass-balanced).
+  // blast_furnace archetype (ferrous remelt).
+  mill_scale_sinter: {
+    cycleSec: 458.7, // auto-derived (gen-cyclesec): density × footprint × M
+    inputs: { mill_scale: 2 },
+    outputs: { iron_ore: 2 },
+    category: 'smelting',
   },
   // Phase 4 — T2 plastic precursor polymerizer (§7.4)
   plastic_polymerizer_a: {

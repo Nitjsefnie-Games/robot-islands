@@ -231,6 +231,10 @@ export type BuildingDefId =
   | 'gas_extractor'
   | 'naphtha_cracker'
   | 'crude_oil_cracker'
+  | 'tar_refinery'
+  | 'vapor_condenser'
+  | 'cryo_reliquefier'
+  | 'mill_scale_sinter'
   | 'plastic_polymerizer_a'
   | 'rigid_plastic_press'
   | 'flexible_plastic_press'
@@ -1769,7 +1773,9 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     power: { consumes: 200 },
     // BOM source: offshore jack-up platform leg + deck segment.
     // 2000 steel_beam truss + 25000 concrete pad + 500 stone ballast + 150 microchip + 300 wire ≈ 125.7 t.
-    placementCost: { steel_beam: 2000, concrete: 25000, stone: 500, microchip: 150, wire: 300, hydraulic_actuator: 2 },
+    // P4 Phase 1: + 100 asphalt deck-sealant — the gameplay sink for asphalt
+    // (off the crude_oil_cracker / tar_refinery critical path).
+    placementCost: { steel_beam: 2000, concrete: 25000, stone: 500, microchip: 150, wire: 300, hydraulic_actuator: 2, asphalt: 100 },
     glyph: '⬢',
   },
   // §8.5 T3 power: Nuclear Reactor (4x4, any tile). Consumes uranium fuel
@@ -3461,6 +3467,85 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // 25000 concrete + 15000 stone + 10000 iron_ingot + 500 gear + 6000 clay + 600 copper_ingot = 57.6 t.
     placementCost: { concrete: 25000, stone: 15000, iron_ingot: 10000, gear: 500, clay: 6000, copper_ingot: 600 },
     glyph: '◇',
+  },
+  // P4 Phase 1 — T2 tar refinery. Consumes wood_tar + tar → asphalt, closing
+  // both the wood_tar (charcoal_kiln/coke_oven byproduct) and tar
+  // (crude_oil_cracker byproduct) loops. Mirrors crude_oil_cracker's chemistry
+  // shape at a smaller (square2) footprint.
+  tar_refinery: {
+    id: 'tar_refinery',
+    displayName: 'Tar Refinery',
+    category: 'chemistry',
+    tier: 2,
+    footprint: SHAPES.square2,
+    fill: 0x1a1410, // tar black
+    stroke: 0x0a0604,
+    power: { consumes: 120 },
+    // BOM source: small batch asphalt blending plant.
+    // 8000 concrete + 5000 stone + 2000 iron_ingot + 150 gear + 1500 clay + 300 copper_ingot = 17.1 t.
+    placementCost: { concrete: 8000, stone: 5000, iron_ingot: 2000, gear: 150, clay: 1500, copper_ingot: 300 },
+    glyph: '◇',
+  },
+  // P4 Phase 1 — T1 vapor condenser. Condenses water_vapor → fresh_water,
+  // closing the water_vapor byproduct loop (charcoal_kiln / evaporation
+  // exogenous flows).
+  vapor_condenser: {
+    id: 'vapor_condenser',
+    displayName: 'Vapor Condenser',
+    category: 'chemistry',
+    tier: 1,
+    footprint: SHAPES.square2,
+    fill: 0x9ad0e0, // pale condensate blue
+    stroke: 0x305060,
+    power: { consumes: 60 },
+    // BOM source: small condensing-coil heat exchanger skid.
+    // 2000 concrete + 1000 stone + 500 iron_ingot + 50 gear + 100 copper_ingot = 3.65 t.
+    placementCost: { concrete: 2000, stone: 1000, iron_ingot: 500, gear: 50, copper_ingot: 100 },
+    glyph: '◇',
+  },
+  // P4 Phase 1 — T3 cryo re-liquefier. Re-liquefies cryo_coolant_vented →
+  // cryo_coolant, closing the vented-coolant loop. Cryo family (air_separation
+  // archetype) at T3 like the rest of the cryo chain.
+  cryo_reliquefier: {
+    id: 'cryo_reliquefier',
+    displayName: 'Cryo Re-liquefier',
+    category: 'chemistry',
+    tier: 3,
+    footprint: SHAPES.square2,
+    fill: 0x6080c0, // cold cryo blue
+    stroke: 0x203060,
+    power: { consumes: 200 },
+    // Cycle-break (circular-deps detector): the vented↔coolant recipe loop
+    // (cryogenic_generator vents cryo_coolant_vented; this re-liquefies it to
+    // cryo_coolant) would otherwise form an ESSENTIAL placement deadlock with
+    // cryogenic_generator — once both cryo_lab and this re-liquefier are
+    // "blocked" (need a deep-tech item from raws), cryo_coolant has no
+    // raw-reachable producer and the SCC closes. So this placement cost is kept
+    // raw-reachable (NO microchip): concrete/stone/iron/gear/copper are all
+    // bootstrappable, making the building placeable from the base economy and
+    // the loop routable. Same spirit as the cycle-break note on cryo_lab; a
+    // re-liquefaction skid needs no compute anyway.
+    // BOM source: closed-cycle cryogenic re-liquefaction skid.
+    // 8000 concrete + 5000 stone + 2000 iron_ingot + 150 gear + 300 copper_ingot = 15.45 t.
+    placementCost: { concrete: 8000, stone: 5000, iron_ingot: 2000, gear: 150, copper_ingot: 300 },
+    glyph: '◇',
+  },
+  // P4 Phase 1 — T2 mill-scale sinter. Sinters mill_scale (rolling-mill
+  // iron-oxide scrap) back to iron_ore, closing the mill_scale loop. Ferrous
+  // remelt (blast_furnace archetype).
+  mill_scale_sinter: {
+    id: 'mill_scale_sinter',
+    displayName: 'Mill-Scale Sinter',
+    category: 'smelting',
+    tier: 2,
+    footprint: SHAPES.square2,
+    fill: 0x4a3a30, // scale red-brown
+    stroke: 0x2a1a10,
+    power: { consumes: 120 },
+    // BOM source: small sinter-strand plant.
+    // 8000 concrete + 5000 stone + 2000 iron_ingot + 150 gear + 1500 clay = 16.65 t.
+    placementCost: { concrete: 8000, stone: 5000, iron_ingot: 2000, gear: 150, clay: 1500 },
+    glyph: '◆',
   },
   // Phase 4 — T2 plastic precursor polymerizer (§7.4)
   plastic_polymerizer_a: {

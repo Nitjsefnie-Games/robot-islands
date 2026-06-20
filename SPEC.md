@@ -2159,23 +2159,31 @@ still chokes a multi-output building, continuously) — **except** for two
 output-side exemptions that prevent a side output from throttling a valuable
 primary output:
 
-(A) **`OUTPUT_CAP_EXEMPT` — per-output cap-exemption** (P4 Phase 1). The 6
+(A) **`OUTPUT_CAP_EXEMPT` — per-output cap-exemption** (P4 Phase 1). The 8
 byproducts `co`, `refinery_gas`, `wood_tar`, `water_vapor`,
-`cryo_coolant_vented`, `mill_scale` are **side** outputs of buildings whose
-**primary** output is valuable (smelter→`iron_ingot`, steel_mill→`steel`, the
-mills→`beam`/`pipe`/`wire`, …). Each is **stored up to cap** (written to
-inventory, so a future consumer recipe can draw it) and its overflow above cap
-is **voided** by `applyRates`' clamp — BUT each is **excluded from its
-producer's cap-stall** (`outputAvail`) and from the net-flow solver's
-**`capConstrained`** set (no `θ[r]`), scoped to that resource only. So a full
-byproduct bin never gates the producer down and the primary output runs
-unthrottled — without the bluntness of building-level `forceRun`/
-`ignoreOutputCap`, which would also void the primary output. The byproducts
-stay `expansion-hook` (no consumer yet) until P4 adds real consumer loops; the
-exemption is what lets them be **stored + drawable** in the meantime. (A
-byproduct at an EMPTY bin still appears in `zeroConstrained` as a consumer's
-input once a consumer lands — only the cap side is exempt.) Verified
-resource-level safe: none of the 6 is ever a sole/primary output of any recipe.
+`cryo_coolant_vented`, `mill_scale`, `tar`, `asphalt` are **side** outputs of
+buildings whose **primary** output is valuable (smelter→`iron_ingot`,
+steel_mill→`steel`, the mills→`beam`/`pipe`/`wire`,
+crude_oil_cracker→`heavy_oil`, …). Each is **stored up to cap** (written to
+inventory, so a consumer recipe can draw it) and its overflow above cap is
+**voided** by `applyRates`' clamp — BUT each is **excluded from its producer's
+cap-stall** (`outputAvail`) and from the net-flow solver's **`capConstrained`**
+set (no `θ[r]`), scoped to that resource only. So a full byproduct bin never
+gates the producer down and the primary output runs unthrottled — without the
+bluntness of building-level `forceRun`/`ignoreOutputCap`, which would also void
+the primary output. (A byproduct at an EMPTY bin still appears in
+`zeroConstrained` as a consumer's input — only the cap side is exempt.) Each of
+the 6 gas/solid byproducts is `'consumed'` by a P4 Phase-1 consumer loop
+(`tar_refinery`, `vapor_condenser`, `cryo_reliquefier`, `mill_scale_sinter`,
+plus the `co`/`refinery_gas` loops); `tar` is `'consumed'` (tar_refinery) and
+`asphalt` is a `'gameplay-sink'` (platform_constructor placement). `tar` and
+`asphalt` are exempt because neither sink continuously drains the full
+crude_oil_cracker output (asphalt's only sink is an intermittent placement cost,
+tar_refinery can lag), so a full tar/asphalt bin would otherwise throttle the
+valuable `heavy_oil` primary — same rationale as the gas byproducts. Verified
+safe: `tar` and the 6 gas/solid byproducts are never a sole/primary output;
+`asphalt` is tar_refinery's sole output, so tar_refinery runs as a pure
+overflow-voiding disposal sink (off any primary chain).
 
 (B) **`NON_STORED_OUTPUTS` — `co2` only** (§2.6 / §7.4). It is never written to
 island inventory, never counted as a cap-stall, and drained to 0 each

@@ -610,7 +610,7 @@ export const TUTORIAL_STEPS: ReadonlyArray<TutorialStep> = [
     id: '47_pig_iron',
     mechanic: 'Pig iron',
     triggerCondition: (w) => hasBuilding(w, ['air_separator']) && !hasBuilding(w, ['blast_furnace']),
-    hint: '35 iron ore + 18 coke + 10 limestone → 20 pig iron. Needs adjacent heat.',
+    hint: '35 iron ore + 15 coke + 3 co + 10 limestone → 20 pig iron. Needs adjacent heat.',
     expectedAction: 'Place a Blast Furnace (30000 steel beam / 25000 clay / 2000 stone) next to a heat source.',
     dismissalCondition: (w) => hasBuilding(w, ['blast_furnace']),
     priority: 'critical',

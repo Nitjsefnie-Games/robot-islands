@@ -2165,3 +2165,14 @@ describe('availableRecipes', () => {
     expect(availableRecipes('mine', state, graphB)).toHaveLength(1);
   });
 });
+
+describe('P4 Phase-1: new-building byproduct loops', () => {
+  it('wood_tar/tar/water_vapor/cryo_coolant_vented/mill_scale are consumed; asphalt is a gameplay-sink', () => {
+    for (const r of ['wood_tar', 'tar', 'water_vapor', 'cryo_coolant_vented', 'mill_scale'] as ResourceId[]) {
+      const consumers = Object.values(RECIPES).filter((rc) => rc && r in rc.inputs);
+      expect(consumers.length, `${r} consumer`).toBeGreaterThan(0);
+      expect(RESOURCE_META[r].terminal, r).toBe('consumed');
+    }
+    expect(RESOURCE_META.asphalt.terminal).toBe('gameplay-sink');
+  });
+});
