@@ -55,6 +55,7 @@ import { _seedVehicleIdCounter } from './settlement.js';
 
 import type { NodeId } from './skilltree.js';
 import type { ResourceId } from './recipes.js';
+import { RECIPES, type RecipeId } from './recipes.js';
 import { cumulativeSkillPointsForLevel } from './skilltree.js';
 import type { CrystalId, EdgeId } from './skilltree-graph.js';
 import type { OceanCellSpec } from './ocean-cell.js';
@@ -74,7 +75,7 @@ export const STORAGE_KEY_DISPLAY = 'robot-islands:save';
 
 /** Current schema version. `loadWorld` rejects (returns null) any
  *  snapshot whose `v` is not strictly equal to this. */
-export const SCHEMA_VERSION = 29 as const;
+export const SCHEMA_VERSION = 30 as const;
 
 /** Versions that loadWorld accepts. The walker (loadWorld) chains
  *  migrateV<N>toV<N+1> functions from the lowest known version up to
@@ -82,7 +83,7 @@ export const SCHEMA_VERSION = 29 as const;
  *
  *  See AGENTS.md → "Persistence migrations" for the full "bump = migrate"
  *  policy from v7 onward. */
-export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29]);
+export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]);
 
 // ---------------------------------------------------------------------------
 // Serialized shapes
@@ -554,6 +555,42 @@ export function migrateV28toV29(s: SerializedSnapshotV28): SaveSnapshot {
       ...s.world,
       islands: s.world.islands.map((isl) =>
         isl.id === 'home' ? { ...isl, baseLayoutRadius: 16 } : isl),
+    },
+  } as unknown as SaveSnapshot;
+}
+
+/** v29 top-level snapshot shape — structurally identical to v30 (SaveSnapshot)
+ *  except the v literal and that buildings carry `forceRun?: boolean` instead of
+ *  `ignoreCapOverrides`. */
+export type SerializedSnapshotV29 = Omit<SaveSnapshot, 'v'> & { readonly v: 29 };
+
+/** v29 → v30: replace the per-building `forceRun` boolean with per-output
+ *  `ignoreCapOverrides`. A force-run building exempts ALL its outputs, so set
+ *  every output resource of its def's recipe (incl. rotateOutputs) to `true`;
+ *  this reproduces the old all-outputs exemption exactly. A non-force-run
+ *  building gets no overrides (the global OUTPUT_CAP_EXEMPT defaults apply,
+ *  now incl. slag). `forceRun` is dropped from every building. */
+export function migrateV29toV30(s: SerializedSnapshotV29): SaveSnapshot {
+  return {
+    ...s,
+    v: 30 as const,
+    world: {
+      ...s.world,
+      islands: s.world.islands.map((isl) => ({
+        ...isl,
+        buildings: isl.buildings.map((b) => {
+          const { forceRun, ...rest } = b as typeof b & { forceRun?: boolean };
+          if (forceRun !== true) return rest;
+          const recipe = RECIPES[rest.defId as RecipeId];
+          const outs = recipe
+            ? Object.keys(recipe.outputs).concat(
+                (recipe.rotateOutputs ?? []).flatMap((o) => Object.keys(o)))
+            : [];
+          const ignoreCapOverrides: Record<string, boolean> = {};
+          for (const r of outs) ignoreCapOverrides[r] = true;
+          return Object.keys(ignoreCapOverrides).length ? { ...rest, ignoreCapOverrides } : rest;
+        }),
+      })),
     },
   } as unknown as SaveSnapshot;
 }
@@ -1050,6 +1087,9 @@ export function deserializeWorld(
   }
   if ((snapshot as unknown as { v: number }).v === 28) {
     snapshot = migrateV28toV29(snapshot as unknown as SerializedSnapshotV28);
+  }
+  if ((snapshot as unknown as { v: number }).v === 29) {
+    snapshot = migrateV29toV30(snapshot as unknown as SerializedSnapshotV29);
   }
 
   if (snapshot.v !== SCHEMA_VERSION) {
