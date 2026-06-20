@@ -74,7 +74,7 @@ export const STORAGE_KEY_DISPLAY = 'robot-islands:save';
 
 /** Current schema version. `loadWorld` rejects (returns null) any
  *  snapshot whose `v` is not strictly equal to this. */
-export const SCHEMA_VERSION = 27 as const;
+export const SCHEMA_VERSION = 28 as const;
 
 /** Versions that loadWorld accepts. The walker (loadWorld) chains
  *  migrateV<N>toV<N+1> functions from the lowest known version up to
@@ -82,7 +82,7 @@ export const SCHEMA_VERSION = 27 as const;
  *
  *  See AGENTS.md → "Persistence migrations" for the full "bump = migrate"
  *  policy from v7 onward. */
-export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27]);
+export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28]);
 
 // ---------------------------------------------------------------------------
 // Serialized shapes
@@ -503,6 +503,34 @@ export function migrateV26toV27(s: SerializedSnapshotV26): SaveSnapshot {
     ...s,
     v: 27 as const,
     world: { ...s.world, totalCo2Kg: (s.world.totalCo2Kg ?? 0) + sumCo2 },
+  } as unknown as SaveSnapshot;
+}
+
+/** v27 top-level snapshot shape — structurally identical to v28 (SaveSnapshot)
+ *  except the v literal. v27 → v28 stamps a cap-only `biome` onto every
+ *  extraEllipses entry that lacks one, defaulting to the island's own biome
+ *  (the absorber's, which is what implicitly capped every lobe before
+ *  per-lobe caps existed). */
+export type SerializedSnapshotV27 = Omit<SaveSnapshot, 'v'> & { readonly v: 27 };
+
+/** v27 → v28: stamp an explicit origin biome onto every legacy extraEllipses
+ *  entry that doesn't already carry one. Defaults to the host island's biome,
+ *  preserving the pre-feature behavior where each lobe used the absorber's cap. */
+export function migrateV27toV28(s: SerializedSnapshotV27): SaveSnapshot {
+  return {
+    ...s,
+    v: 28 as const,
+    world: {
+      ...s.world,
+      islands: s.world.islands.map((isl) =>
+        isl.extraEllipses && isl.extraEllipses.length > 0
+          ? {
+              ...isl,
+              extraEllipses: isl.extraEllipses.map((e) =>
+                e.biome === undefined ? { ...e, biome: isl.biome } : e),
+            }
+          : isl),
+    },
   } as unknown as SaveSnapshot;
 }
 
@@ -992,6 +1020,9 @@ export function deserializeWorld(
   }
   if ((snapshot as unknown as { v: number }).v === 26) {
     snapshot = migrateV26toV27(snapshot as unknown as SerializedSnapshotV26);
+  }
+  if ((snapshot as unknown as { v: number }).v === 27) {
+    snapshot = migrateV27toV28(snapshot as unknown as SerializedSnapshotV27);
   }
 
   if (snapshot.v !== SCHEMA_VERSION) {
