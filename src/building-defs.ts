@@ -1753,8 +1753,11 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x1a1830,
     storage: { category: 'rare', capacity: 1000 },
     // BOM source: UL-rated bank vault enclosure — reinforced concrete + steel liner per rev-16 §13.3.
-    // 1200 steel_beam liner + 15000 concrete vault wall + 500 stone footing + 200 microchip biometric lock + 400 wire alarm mesh = 75.72 t.
-    placementCost: { steel_beam: 1200, concrete: 15000, stone: 500, microchip: 200, wire: 400 },
+    // 1200 steel_beam liner + 15000 concrete vault wall + 500 stone footing + 200 microchip biometric lock + 400 wire alarm mesh
+    // + 800 mortar masonry binder (P4 Phase-3b sink — the vault is a T3 land
+    // resilience building whose reinforced-concrete/stone wall is bound by mortar;
+    // tier 3 ≥ mortar_mixer tier 1 and home-reachable) = 76.52 t.
+    placementCost: { steel_beam: 1200, concrete: 15000, stone: 500, microchip: 200, wire: 400, mortar: 800 },
     glyph: '▦',
   },
   // §8.9: Platform Constructor (a.k.a. Foundry of Lands). T3 special building
@@ -4804,8 +4807,11 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     stroke: 0x103040,
     power: { consumes: 50 },
     // BOM source: USCG Aids to Navigation Manual — ocean sensor buoy (scaled).
-    // 40 steel_beam + 1000 concrete + 200 iron_ingot + 50 wire + 20 microchip = 3.2 t.
-    placementCost: { steel_beam: 40, concrete: 1000, iron_ingot: 200, wire: 50, microchip: 20 },
+    // 40 steel_beam + 1000 concrete + 200 iron_ingot + 50 wire + 20 microchip
+    // + 30 galvanized_steel marine corrosion layer (P4 Phase-3b sink — this is a
+    // genuine ocean-placed building, so a galvanized anti-corrosion skin is the
+    // faithful sink for galvanized_steel) = 3.23 t.
+    placementCost: { steel_beam: 40, concrete: 1000, iron_ingot: 200, wire: 50, microchip: 20, galvanized_steel: 30 },
     oceanPlacement: true,
     terrainReqs: ['shallows', 'deep', 'trench', 'hydrothermal_vent', 'nodule_field'],
     glyph: '◌',

@@ -1101,7 +1101,7 @@ export const RESOURCE_META: Readonly<Record<ResourceId, ResourceMeta>> = {
   carbon_steel: { massPerUnitKg: 1, terminal: 'consumed' },
   zinc_ore: { massPerUnitKg: 1, terminal: 'consumed' },
   zinc_ingot: { massPerUnitKg: 1, terminal: 'consumed' },
-  galvanized_steel: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
+  galvanized_steel: { massPerUnitKg: 1, terminal: 'gameplay-sink' }, // P4 Phase-3b: corrosion layer in sonar_buoy placementCost (ocean building)
   chromium_ore: { massPerUnitKg: 1, terminal: 'consumed' },
   chromium_ingot: { massPerUnitKg: 1, terminal: 'consumed' },
   nickel_ore: { massPerUnitKg: 1, terminal: 'consumed' },
@@ -1113,7 +1113,7 @@ export const RESOURCE_META: Readonly<Record<ResourceId, ResourceMeta>> = {
   quicklime: { massPerUnitKg: 1, terminal: 'consumed' },
   slaked_lime: { massPerUnitKg: 1, terminal: 'consumed' },
   brick: { massPerUnitKg: 1, terminal: 'consumed' },
-  mortar: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
+  mortar: { massPerUnitKg: 1, terminal: 'gameplay-sink' }, // P4 Phase-3b: masonry binder in vault placementCost (T3 reinforced-concrete resilience building)
   cement: { massPerUnitKg: 1, terminal: 'consumed' },
   concrete: { massPerUnitKg: 1, terminal: 'consumed' },
   charcoal: { massPerUnitKg: 1, terminal: 'consumed' },
@@ -1179,8 +1179,8 @@ export const RESOURCE_META: Readonly<Record<ResourceId, ResourceMeta>> = {
   cryo_coolant: { massPerUnitKg: 1, volumePerUnitL: 1, terminal: 'consumed' },
   aviation_kerosene: { massPerUnitKg: 1, volumePerUnitL: 1, terminal: 'gameplay-sink' }, // fuelForTier(3) — fuel ladder
   microchip: { massPerUnitKg: 0.1, terminal: 'consumed' },
-  gold_ore: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
-  silver_ore: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
+  gold_ore: { massPerUnitKg: 1, terminal: 'consumed' }, // P4 Phase-3b: lithography_lab_gold (electrical contacts → microchip)
+  silver_ore: { massPerUnitKg: 1, terminal: 'consumed' }, // P4 Phase-3b: circuit_assembler_silver (conductive paste → circuit_board)
   rare_earth: { massPerUnitKg: 1, terminal: 'consumed' },
   uranium_ore: { massPerUnitKg: 1, terminal: 'consumed' },
   memetic_core: { massPerUnitKg: 1, terminal: 'consumed' },
@@ -1233,7 +1233,7 @@ export const RESOURCE_META: Readonly<Record<ResourceId, ResourceMeta>> = {
   cryo_containment_unit: { massPerUnitKg: 1, terminal: 'gameplay-sink' }, // cryogenic_compute_center placement cost (P2)
   particle_accelerator_core: { massPerUnitKg: 1, terminal: 'gameplay-sink' }, // particle_accelerator placement cost (P2)
   self_replication_module: { massPerUnitKg: 1, terminal: 'gameplay-sink' },
-  mercury: { massPerUnitKg: 1, terminal: 'expansion-hook:amalgamation chemistry / chlor-alkali Hg-cell variant' },
+  mercury: { massPerUnitKg: 1, terminal: 'consumed' }, // P4 Phase-3b: chlor_alkali_plant_mercury (mercury-cell cathode → cell-grade caustic)
   diamond_ore: { massPerUnitKg: 1, terminal: 'consumed' },
   cryogenic_compound: { massPerUnitKg: 1, terminal: 'consumed' },
   magnetic_alloy: { massPerUnitKg: 1, terminal: 'consumed' },
@@ -1364,6 +1364,10 @@ export const RECIPE_SPECULATIVE: Readonly<Partial<Record<RecipeId, 'fantasy chem
   // stoichiometry (fusion fuel; empty outputs, power via def.power.produces).
   fusion_core_he3_dilute: 'fantasy chemistry',
   fusion_core_tritium_seed: 'fantasy chemistry',
+  // P4 Phase-3b (Task 6 review fold-in): the cryogenic_compute_center host is
+  // already speculative; tag its RAM alt-input variant the same so the
+  // mass-balance skip reason is consistent.
+  cryogenic_compute_center_ram: 'fantasy chemistry',
 };
 
 /**
@@ -1549,6 +1553,10 @@ export type RecipeId =
   | 'kit_assembler_sheet_metal'
   | 'mortar_mixer_slaked_lime'
   | 'hydraulic_assembly_rubber'
+  // P4 Phase-3b — final orphan alt-input variants.
+  | 'lithography_lab_gold'
+  | 'circuit_assembler_silver'
+  | 'chlor_alkali_plant_mercury'
   | 'sheet_mill'
   // Task 6: synthetic recipe ids for Skill Forge crystal variants.
   | 'skill_forge_mining_t2'
@@ -3874,6 +3882,50 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     outputs: { hydraulic_actuator: 1 },
     category: 'manufacturing',
   },
+  // P4 Phase-3b — final orphan closures (§7 closure → ledger 0). Same
+  // resolveRecipe ALT-input pattern as Phase-2/3a: each variant is kept out of
+  // BASE_RECIPES, routed only when the orphan is on hand, so the host keeps its
+  // base recipe and nothing is ever hard-gated on the orphan. gold_ore /
+  // silver_ore (home resources from slag_reprocessor) close on land electronics
+  // hosts INDEPENDENTLY of mercury — mercury_well needs the cross-island
+  // `mercury_pit` tile (absent from defaultTerrainAt; rareTerrain only), so an
+  // amalgamation that hard-required mercury would gate the two home ores on a
+  // cross-island resource. mercury closes separately on its own consumer.
+
+  // gold_ore (1 kg) → electrical-contact alt-input on lithography_lab, replacing
+  // silicon (1↔1). Gold is the real bond-wire / contact metal in chip packaging.
+  // Same masses as the base (silicon:1 + wire:1 → microchip:1) → same Δ, so the
+  // variant tracks the host's pre-existing (out-of-binding-gate) balance status.
+  lithography_lab_gold: {
+    cycleSec: 67187, // matches lithography_lab base cycle
+    inputs: { gold_ore: 1, wire: 1 },
+    outputs: { microchip: 1 },
+    category: 'electronics',
+  },
+  // silver_ore (1 kg) → conductive-paste alt-input on circuit_assembler,
+  // replacing 1 steel (1↔1). Silver is the real solar/electronics paste metal.
+  // Same masses as the base (pcb:1 + microchip:2 + steel:1 → circuit_board:1) →
+  // same Δ, tracking the host's pre-existing balance status. Independent of
+  // gold_ore and mercury — closes silver_ore on its own.
+  circuit_assembler_silver: {
+    cycleSec: 143.3, // matches circuit_assembler base cycle
+    inputs: { pcb: 1, microchip: 2, silver_ore: 1 },
+    outputs: { circuit_board: 1 },
+    category: 'electronics',
+  },
+  // mercury (1 kg) → mercury-cell alt-input on chlor_alkali_plant. The historic
+  // chlor-alkali mercury-cell process runs a mercury cathode (sodium amalgam);
+  // the cell's makeup mercury exits embodied in the cell-grade caustic
+  // (sodium_hydroxide) — mercury-cell NaOH carried trace mercury — so the added
+  // 1 kg leaves as +1 sodium_hydroxide. Balances EXACTLY (in 154 = out 154),
+  // same additive-output-scale shape as pipe_mill_hcl. Independent of the home
+  // ores; mercury (cross-island, from mercury_well on mercury_pit) closes here.
+  chlor_alkali_plant_mercury: {
+    cycleSec: 882926.3, // auto-derived (gen-cyclesec): density × footprint × M (output 154 kg > base's 153 kg by the +1 mercury embodied in cell-grade caustic)
+    inputs: { salt: 117, fresh_water: 36, mercury: 1 },
+    outputs: { chlorine: 71, sodium_hydroxide: 81, hydrogen: 2 },
+    category: 'chemistry',
+  },
   // §si-units rev-16 §7.4 — synthetic no-op recipe for CO₂ sink.
   plant_a_tree: {
     cycleSec: 60,
@@ -3941,6 +3993,12 @@ const SPECIAL_RECIPE_IDS = new Set<RecipeId>([
   'kit_assembler_sheet_metal',
   'mortar_mixer_slaked_lime',
   'hydraulic_assembly_rubber',
+  // P4 Phase-3b — final orphan alt-input variants. Kept out of BASE_RECIPES so
+  // each host runs its base recipe by default; resolveRecipe swaps in the
+  // variant only when the orphan is on hand (mirrors Phase-2/3a).
+  'lithography_lab_gold',
+  'circuit_assembler_silver',
+  'chlor_alkali_plant_mercury',
 ]);
 export const BASE_RECIPES: Partial<Record<BuildingDefId, Recipe[]>> = {};
 for (const [id, recipe] of Object.entries(RECIPES)) {
@@ -4118,6 +4176,21 @@ export function resolveRecipe(
     }
     if (def.id === 'hydraulic_assembly' && (inventory.synthetic_rubber ?? 0) > 0) {
       return RECIPES.hydraulic_assembly_rubber;
+    }
+    // P4 Phase-3b — final orphan alt-input variants. Each host runs its base
+    // recipe unless the orphan is on hand. gold_ore / silver_ore close on land
+    // electronics hosts independently of cross-island mercury; mercury closes on
+    // its own chlor-alkali mercury-cell variant. All optional — hard-gate
+    // nothing. (lithography_lab's gold branch is checked before its phosphor
+    // branch above only by position; either alone closes its own orphan.)
+    if (def.id === 'lithography_lab' && (inventory.gold_ore ?? 0) > 0) {
+      return RECIPES.lithography_lab_gold;
+    }
+    if (def.id === 'circuit_assembler' && (inventory.silver_ore ?? 0) > 0) {
+      return RECIPES.circuit_assembler_silver;
+    }
+    if (def.id === 'chlor_alkali_plant' && (inventory.mercury ?? 0) > 0) {
+      return RECIPES.chlor_alkali_plant_mercury;
     }
     // Fusion Core burns the dilute He-3 / tritium seeds as alternative fuel
     // only when its primary helium_3 fuel is exhausted (mirrors steel_mill's

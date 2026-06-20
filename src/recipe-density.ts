@@ -148,6 +148,11 @@ export function buildingForRecipe(recipeId: string): BuildingDefId {
     kit_assembler_sheet_metal: 'kit_assembler',
     mortar_mixer_slaked_lime: 'mortar_mixer',
     hydraulic_assembly_rubber: 'hydraulic_assembly',
+    // P4 Phase-3b — final orphan alt-input variants resolve to the existing
+    // CONSUMER building they're hosted on (no new buildings).
+    lithography_lab_gold: 'lithography_lab',
+    circuit_assembler_silver: 'circuit_assembler',
+    chlor_alkali_plant_mercury: 'chlor_alkali_plant',
   };
   if (recipeId.startsWith('skill_forge_')) return 'skill_forge';
   return (variant[recipeId] ?? recipeId) as BuildingDefId;
