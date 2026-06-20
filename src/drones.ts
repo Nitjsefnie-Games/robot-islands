@@ -994,6 +994,29 @@ export function droneCurrentPosition(d: Drone, nowMs: number): { x: number; y: n
   };
 }
 
+/** Finite-difference window for the instantaneous-heading estimate (ms). */
+const HEADING_EPS_MS = 50;
+
+/**
+ * §11 — instantaneous travel heading (radians) of a drone at `nowMs`, derived
+ * from the motion itself via a small backward finite difference of
+ * `droneCurrentPosition`. This rotates correctly on the straight-line return
+ * leg (where motion is `−dir`) and at every path-drawn waypoint bend, unlike
+ * the static launch heading `(dirX, dirY)`. Falls back to the launch heading
+ * when there is no motion yet (at/just after launch, or once the drone has
+ * stopped at its terminus).
+ */
+export function droneHeadingAt(d: Drone, nowMs: number): number {
+  const p1 = droneCurrentPosition(d, nowMs);
+  const p0 = droneCurrentPosition(d, nowMs - HEADING_EPS_MS);
+  const dx = p1.x - p0.x;
+  const dy = p1.y - p0.y;
+  if (dx * dx + dy * dy < 1e-12) {
+    return Math.atan2(d.dirY, d.dirX);
+  }
+  return Math.atan2(dy, dx);
+}
+
 function positionAlongPolyline(
   waypoints: ReadonlyArray<{ x: number; y: number }>,
   distance: number,

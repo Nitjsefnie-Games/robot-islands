@@ -21,6 +21,7 @@ import {
   T4_PULSE_FUEL_COST,
   dispatchDrone,
   droneCurrentPosition,
+  droneHeadingAt,
   firePulse,
   isTerminalDroneStatus,
   type Drone,
@@ -973,15 +974,17 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     c.addChild(trailG);
 
     // Drone marker — a small heading-aligned triangle. 12px world-pixel
-    // long-axis (≈ half a tile). The triangle points along (dirX, dirY),
-    // which the dispatch layer normalised at launch time.
+    // long-axis (≈ half a tile). The triangle points in the drone's CURRENT
+    // travel direction (#144) — derived from motion via droneHeadingAt — so it
+    // reverses on the straight-line return leg and rotates at every path bend,
+    // rather than freezing at the launch heading.
     //
     // Geometry: tip at (+L, 0) along the heading, base at (−L/2, ±L/2).
     // We build the polygon in local (heading-aligned) coords, rotate by
     // the heading angle, and translate to (wpx, wpy).
     const L = 12; // long-axis length in world pixels
     const w = 8;  // base width
-    const ang = Math.atan2(d.dirY, d.dirX);
+    const ang = droneHeadingAt(d, nowMs);
     const cos = Math.cos(ang);
     const sin = Math.sin(ang);
     // Rotated, translated polygon points.
