@@ -487,6 +487,7 @@ describe('place-building ocean validation', () => {
       state.inventory.iron_ingot = 1000;
       state.inventory.wire = 1000;
       state.inventory.microchip = 1000;
+      state.inventory.galvanized_steel = 1000;
     });
     const ack = await applyIntent(
       pool, uid,
@@ -515,6 +516,7 @@ describe('place-building ocean validation', () => {
       state.inventory.iron_ingot = 1000;
       state.inventory.wire = 1000;
       state.inventory.microchip = 1000;
+      state.inventory.galvanized_steel = 1000;
     });
     const ack = await applyIntent(
       pool, uid,
