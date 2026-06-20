@@ -211,6 +211,14 @@ describe('produced resources have terminal classification (rev-16 §3.5.4)', () 
       expect(RESOURCE_META[r].terminal, r).toBe('gameplay-sink');
     }
   });
+
+  it('P4 Phase-1: co and refinery_gas have recipe consumers and are consumed', () => {
+    for (const r of ['co', 'refinery_gas'] as ResourceId[]) {
+      const consumers = Object.values(RECIPES).filter(rc => rc && r in rc.inputs);
+      expect(consumers.length, `${r} has no recipe consumer`).toBeGreaterThan(0);
+      expect(RESOURCE_META[r].terminal, r).toBe('consumed');
+    }
+  });
 });
 
 describe('step-18 producer coverage (§7 chain closures)', () => {
@@ -919,10 +927,10 @@ describe('§7.4 plastic_precursor via plastic_polymerizer_a (Task 4.2)', () => {
     expect(ALL_RESOURCES).toContain('plastic_precursor' as ResourceId);
     expect(XP_WEIGHT.plastic_precursor).toBe(10);
   });
-  it('plastic_polymerizer_a recipe: 1 naphtha → 1 plastic_precursor', () => {
+  it('plastic_polymerizer_a recipe: 1 naphtha + 1 refinery_gas → 2 plastic_precursor', () => {
     expect(RECIPES.plastic_polymerizer_a).toBeDefined();
-    expect(RECIPES.plastic_polymerizer_a!.inputs).toEqual({ naphtha: 1 });
-    expect(RECIPES.plastic_polymerizer_a!.outputs).toEqual({ plastic_precursor: 1 });
+    expect(RECIPES.plastic_polymerizer_a!.inputs).toEqual({ naphtha: 1, refinery_gas: 1 });
+    expect(RECIPES.plastic_polymerizer_a!.outputs).toEqual({ plastic_precursor: 2 });
     expect(RECIPES.plastic_polymerizer_a!.cycleSec).toBe(358.3);
     expect(RECIPES.plastic_polymerizer_a!.category).toBe('chemistry');
   });

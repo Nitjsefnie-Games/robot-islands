@@ -1325,9 +1325,9 @@ export const RESOURCE_META: Readonly<Record<ResourceId, ResourceMeta>> = {
   oceanography_crystal_t2: { massPerUnitKg: 1, terminal: 'gameplay-sink' },
   oceanography_crystal_t3: { massPerUnitKg: 1, terminal: 'gameplay-sink' },
   // Phase 2 — SI-units rework new resources (§08)
-  co: { massPerUnitKg: 1, terminal: 'expansion-hook:CO afterburn / oxidation chain' },
+  co: { massPerUnitKg: 1, terminal: 'consumed' },
   co2: { massPerUnitKg: 1, terminal: 'gameplay-sink' }, // global atmosphere scalar (co2Kg) — weather + capture, non-recipe sink
-  refinery_gas: { massPerUnitKg: 1, terminal: 'expansion-hook:residential heating / petrochem feedstock' },
+  refinery_gas: { massPerUnitKg: 1, terminal: 'consumed' },
   wood_tar: { massPerUnitKg: 1, terminal: 'expansion-hook:creosote / wood-preservative chain' },
   water_vapor: { massPerUnitKg: 1, terminal: 'expansion-hook:condensing-loop / humidity / fresh-water reclamation' },
   aviation_kerosene_crude: { massPerUnitKg: 1, terminal: 'consumed' }, // → aviation_kerosene (hydrotreater recipe)
@@ -1762,7 +1762,7 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   },
   blast_furnace: {
     cycleSec: 6217.4, // auto-derived (gen-cyclesec): density × footprint × M
-    inputs: { iron_ore: 35, coke: 18, limestone: 10 },
+    inputs: { iron_ore: 35, coke: 15, co: 3, limestone: 10 },
     outputs: { pig_iron: 20, slag: 6, co2: 35 },
     category: 'smelting',
     exogenousFlow: 'BF-top-gas-trace',
@@ -2832,8 +2832,8 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
   // Phase 4 — T2 plastic precursor polymerizer (§7.4)
   plastic_polymerizer_a: {
     cycleSec: 358.3, // auto-derived (gen-cyclesec): density × footprint × M
-    inputs: { naphtha: 1 },
-    outputs: { plastic_precursor: 1 },
+    inputs: { naphtha: 1, refinery_gas: 1 },
+    outputs: { plastic_precursor: 2 },
     category: 'chemistry',
   },
   // Phase 4 — T2 split plastic presses (§7.4)

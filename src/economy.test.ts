@@ -2606,6 +2606,7 @@ describe('§5.2 — heat adjacency in computeRates/advanceIsland', () => {
           ...blankInventory(),
           iron_ore: 1000,
           coke: 1000,
+          co: 1000,
           limestone: 1000,
           coal,
         },
