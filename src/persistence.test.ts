@@ -10,7 +10,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { terrainAtForBiome } from './biomes.js';
-import { floorLevel } from './buildings.js';
+import { floorLevel, type PlacedBuilding } from './buildings.js';
 import { islandInscribedAny } from './island.js';
 import type { IslandState } from './economy.js';
 import {
@@ -378,8 +378,8 @@ describe('schema v29 → v30 — forceRun to ignoreCapOverrides (§4.6)', () => 
     const v29 = v29Snapshot((w) => {
       const home = w.islands.find((s) => s.id === 'home')!;
       home.buildings.push(
-        { id: 'b-forced', defId: 'smelter', x: 0, y: 0, forceRun: true },
-        { id: 'b-plain', defId: 'smelter', x: 1, y: 0 },
+        { id: 'b-forced', defId: 'smelter', x: 0, y: 0, forceRun: true } as PlacedBuilding & { forceRun?: boolean },
+        { id: 'b-plain', defId: 'smelter', x: 1, y: 0 } as PlacedBuilding & { forceRun?: boolean },
       );
     });
     const out = migrateV29toV30(v29);
@@ -397,8 +397,8 @@ describe('schema v29 → v30 — forceRun to ignoreCapOverrides (§4.6)', () => 
     const v29 = v29Snapshot((w) => {
       const home = w.islands.find((s) => s.id === 'home')!;
       home.buildings.push(
-        { id: 'b-forced', defId: 'smelter', x: 0, y: 0, forceRun: true },
-        { id: 'b-plain', defId: 'smelter', x: 1, y: 0 },
+        { id: 'b-forced', defId: 'smelter', x: 0, y: 0, forceRun: true } as PlacedBuilding & { forceRun?: boolean },
+        { id: 'b-plain', defId: 'smelter', x: 1, y: 0 } as PlacedBuilding & { forceRun?: boolean },
       );
     });
     const json = JSON.parse(JSON.stringify(v29)) as SaveSnapshot;
@@ -687,12 +687,12 @@ describe('serialize → JSON → deserialize round-trip', () => {
     }
   });
 
-  it('round-trips the §4.6 forceRun flag; absent stays absent (off)', () => {
+  it('round-trips the §4.6 ignoreCapOverrides map; absent stays absent (defaults)', () => {
     const world = makeInitialWorld(0);
     const homeSpec = world.islands.find((s) => s.id === 'home')!;
     homeSpec.buildings.push(
-      { id: 'b-forced', defId: 'mine', x: 0, y: 0, forceRun: true },
-      { id: 'b-plain', defId: 'mine', x: 1, y: 0 }, // no forceRun → stays off
+      { id: 'b-forced', defId: 'mine', x: 0, y: 0, ignoreCapOverrides: { iron_ore: true } },
+      { id: 'b-plain', defId: 'mine', x: 1, y: 0 }, // no overrides → defaults apply
     );
     const snap = serializeWorld(world, new Map(), 0);
     const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
@@ -700,8 +700,8 @@ describe('serialize → JSON → deserialize round-trip', () => {
     const rHome = restored.islands.find((s) => s.id === 'home')!;
     const forced = rHome.buildings.find((b) => b.id === 'b-forced')!;
     const plain = rHome.buildings.find((b) => b.id === 'b-plain')!;
-    expect(forced.forceRun).toBe(true);
-    expect(plain.forceRun).toBeUndefined(); // absent ≡ off
+    expect(forced.ignoreCapOverrides).toEqual({ iron_ore: true });
+    expect(plain.ignoreCapOverrides).toBeUndefined(); // absent ≡ defaults
   });
 
   it('preserves a grown island radius (§3.4 Land Reclamation Hub mutation)', () => {

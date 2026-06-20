@@ -151,17 +151,11 @@ export interface PlacedBuilding {
    *  power / storage capacity / §4.5 cluster contribution by the ACTIVE floor
    *  count (via the forthcoming `activeFloorLevel` helper). */
   disabledFloors?: number;
-  /** Force-run (§4.6): keep producing for XP even when an output bin is at
-   *  cap. Absent / false = default (throttle to consumer draw at a full bin).
-   *  The building still consumes inputs + power and accrues maintenance wear;
-   *  the overflow output is voided at the cap. Free + instantly reversible via
-   *  the inspector toggle. */
-  forceRun?: boolean;
   /** §4.6 per-output Ignore Cap overrides. Maps an output resource to an
    *  explicit on/off that overrides the global OUTPUT_CAP_EXEMPT default for
    *  THIS building. Absent resource ⇒ use the global default. Absent field ⇒
    *  all outputs at their global default (byproducts on, everything else off).
-   *  Replaces `forceRun` (removed in the final task); set by the inspector. */
+   *  Set by the inspector. */
   ignoreCapOverrides?: Partial<Record<ResourceId, boolean>>;
 }
 

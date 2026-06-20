@@ -25,6 +25,8 @@ import { constructionProgress } from './construction.js';
 import { activeFloors, displayedFloorLevel, rawFloorLevel } from './buildings.js';
 import { TILE_PX } from './island.js';
 import { maintenanceFactor } from './maintenance.js';
+import { OUTPUT_CAP_EXEMPT } from './output-cap.js';
+import type { ResourceId } from './recipes.js';
 import { SHOT_DURATION_MS } from './terrain-modifier.js';
 import { effectiveSkillMultipliers } from './skilltree.js';
 import { footprintTiles, type Rotation } from './shape-mask.js';
@@ -224,8 +226,12 @@ export function mountBuildingAlertsOverlay(
           const inset = r; // badge centre sits one radius from the corner edge
           const cx = brPx - inset;
           const cy = brPy - inset;
-          // §4.6 Force Run: green badge when force-running (produce-at-cap).
-          const forced = b.forceRun === true;
+          // §4.6 Ignore Cap: green badge when the building forces a NON-default
+          // output (a primary/valuable resource it normally wouldn't overflow).
+          // Default byproduct exemptions (slag, co, ...) do not light it.
+          const forced = Object.entries(b.ignoreCapOverrides ?? {}).some(
+            ([r, v]) => v === true && !OUTPUT_CAP_EXEMPT.has(r as ResourceId),
+          );
           // Outline disc for contrast on any building colour.
           gfx.circle(cx, cy, r + 1).fill({ color: 0x000000, alpha: 0.65 });
           gfx.circle(cx, cy, r).fill({ color: forced ? LEVEL_BADGE_BG_FORCERUN : LEVEL_BADGE_BG });

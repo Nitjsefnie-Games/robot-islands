@@ -1594,8 +1594,7 @@ export function computeRates(
       }
       // §4.6 per-output Ignore Cap: build the per-resource exempt set from THIS
       // building's effective override (per-building flag ?? global default) over
-      // its current outputs. Replaces the old whole-building `forceRun` flag —
-      // the engine no longer reads `forceRun` (orphaned until a later task).
+      // its current outputs.
       const capExemptOutputs = new Set<ResourceId>();
       for (const r of Object.keys(outs)) {
         const id = r as ResourceId;
