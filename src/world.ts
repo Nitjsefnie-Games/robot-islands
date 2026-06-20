@@ -402,50 +402,85 @@ export function findPopulatedIslandAt(
  *
  * Pure. Returns `true` on tangent contact (≤, not <).
  */
+/**
+ * §3.6 merge trigger: do the two islands' inscribed-TILE footprints touch?
+ *
+ * Returns true iff some buildable tile of `a` shares a cell with, or is
+ * ORTHOGONALLY adjacent (shares an edge — N/E/S/W) to, a buildable tile of `b`.
+ * Diagonal (corner-only) contact does NOT count: two tiles touching at a single
+ * point still have ocean on both flanks, so the land masses are not connected —
+ *     [a][ ]
+ *     [ ][b]
+ * must not merge. Merge fires only when there is no ocean tile between them along
+ * a shared edge ("touching land").
+ *
+ * This deliberately replaces the old continuous ellipse-overlap test. A tile
+ * only counts as land when ALL FOUR of its corners are STRICTLY inside the
+ * ellipse (§3.4), so the discrete footprint is ~1–2 tiles smaller than the
+ * mathematical ellipse. Two ellipses could therefore overlap in a thin boundary
+ * band that holds no buildable tile of either island — and the old test merged
+ * islands that still had visible ocean between them. Comparing the rasterized
+ * footprints fixes that: merge fires exactly when the land masses actually meet.
+ *
+ * Broad phase: reject pairs whose world bounding boxes are more than one tile
+ * apart — O(constituents), rejects every distant pair before any rasterization.
+ * Narrow phase: an overlap-or-edge-adjacent membership test of every `b` tile
+ * against `a`'s memoized world tile set. Offline catch-up never mutates geometry,
+ * so the memoized sets build once and serve cheap lookups across thousands of
+ * `findNextMerge` steps.
+ */
+// Self (overlap) + the four orthogonal neighbours. Diagonals are intentionally
+// excluded — see the corner-touch note above.
+const TOUCH_OFFSETS: ReadonlyArray<readonly [number, number]> = [
+  [0, 0], [1, 0], [-1, 0], [0, 1], [0, -1],
+];
+
 export function islandsOverlap(a: IslandSpec, b: IslandSpec): boolean {
-  const ac = islandConstituents(a);
-  const bc = islandConstituents(b);
-  for (const ca of ac) {
-    const ax = a.cx + ca.offsetX;
-    const ay = a.cy + ca.offsetY;
-    for (const cb of bc) {
-      const bx = b.cx + cb.offsetX;
-      const by = b.cy + cb.offsetY;
-      const dx = ax - bx;
-      const dy = ay - by;
-      const sumA = ca.major + cb.major;
-      const sumB = ca.minor + cb.minor;
-      if ((dx * dx) / (sumA * sumA) + (dy * dy) / (sumB * sumB) <= 1) {
-        return true;
-      }
+  const ba = islandWorldAabb(a);
+  const bb = islandWorldAabb(b);
+  if (
+    ba.maxX + 1 < bb.minX || bb.maxX + 1 < ba.minX ||
+    ba.maxY + 1 < bb.minY || bb.maxY + 1 < ba.minY
+  ) {
+    return false;
+  }
+  const aSet = islandWorldTileSet(a);
+  for (const [lx, ly] of islandLocalTiles(b)) {
+    const wx = b.cx + lx;
+    const wy = b.cy + ly;
+    for (const [ox, oy] of TOUCH_OFFSETS) {
+      if (aSet.has(`${wx + ox},${wy + oy}`)) return true;
     }
   }
   return false;
 }
 
-// PERF: islandTileCount rasterizes every constituent ellipse's bounding box —
-// O(major×minor), allocating a Set<string> of "x,y" keys per call. It is called
-// once per populated island both PER world-systems catch-up step (≈3600× for a
-// 1h offline gap, via findNextMerge) AND once per server push/intent (the merge
-// check on a freshly deserialized world). A CPU profile showed it as >50% of
-// catch-up CPU and ~5% of every push.
+// PERF: rasterizing a constituent's bounding box is O(major×minor) and
+// allocates a Set<string> of "x,y" keys. islandTileCount AND islandsOverlap are
+// called once per populated island PER world-systems catch-up step (≈3600× for a
+// 1h offline gap, via findNextMerge) AND once per server push/intent. A CPU
+// profile showed the rasterization as >50% of catch-up CPU and ~5% of every push.
 //
-// The count is a pure function of the spec's ellipse GEOMETRY only — majorRadius,
-// minorRadius, and each extraEllipses entry's major/minor/offsetX/offsetY
-// (rotation is intentionally NOT read below; cx/cy are NOT read either — the
-// count is position-independent). We memoize on a CONTENT key, not object
-// identity, for two reasons: (1) every deserialize builds fresh spec objects, so
-// an identity key would miss on every push; a content key hits across pushes of
-// the same geometry. (2) A §3.6 merge mutates extraEllipses (and §3.4 mutates the
-// radii) IN PLACE on the same spec object (attachTerrainAt's by-reference
-// contract), so a changed geometry yields a new key ⇒ recompute — an identity
-// key would have returned a STALE count. Exact string key ⇒ zero collision risk:
-// equal key ⇒ equal geometry ⇒ provably equal count. Capped + cleared wholesale
-// when full (a few hundred live island geometries, as with the weather cache).
+// The buildable-tile set is a pure function of the spec's ellipse GEOMETRY only
+// — majorRadius, minorRadius, and each extraEllipses entry's major/minor/offsetX/
+// offsetY (rotation is NOT read; cx/cy are NOT read — the LOCAL tiles are
+// position-independent). We memoize on a CONTENT key, not object identity, for
+// two reasons: (1) every deserialize builds fresh spec objects, so an identity
+// key would miss on every push; a content key hits across pushes of the same
+// geometry. (2) A §3.6 merge mutates extraEllipses (and §3.4 mutates the radii)
+// IN PLACE on the same spec object (attachTerrainAt's by-reference contract), so
+// a changed geometry yields a new key ⇒ recompute; an identity key would return
+// a STALE result. Exact string key ⇒ zero collision risk: equal key ⇒ equal
+// geometry ⇒ provably equal tiles. Both caches are capped + cleared wholesale.
 //
-// Readable equivalent: delete the cache and call computeIslandTileCount directly.
-const tileCountCache = new Map<string, number>();
-const TILE_COUNT_CACHE_CAP = 4096;
+// Two derived caches: the LOCAL tile list (geometry-keyed, used by islandTileCount
+// and as the source for world translation) and the WORLD tile-key Set (geometry @
+// position keyed, used by islandsOverlap's narrow phase). Offline catch-up never
+// mutates geometry, so a near-touching pair's world sets build once then serve
+// cheap membership lookups across every subsequent findNextMerge step.
+const tileListCache = new Map<string, ReadonlyArray<readonly [number, number]>>();
+const worldTileSetCache = new Map<string, ReadonlySet<string>>();
+const TILE_CACHE_CAP = 4096;
 
 function tileCountCacheKey(spec: IslandSpec): string {
   let key = `${spec.majorRadius}|${spec.minorRadius}`;
@@ -455,9 +490,12 @@ function tileCountCacheKey(spec: IslandSpec): string {
   return key;
 }
 
-/** The actual rasterization — see islandTileCount for the cached public entry. */
-function computeIslandTileCount(spec: IslandSpec): number {
+/** Rasterize the deduplicated set of LOCAL inscribed tiles (island-local coords,
+ *  relative to cx/cy). Each constituent's tiles are the unit squares whose four
+ *  corners all lie strictly inside that constituent's ellipse (§3.4). */
+function computeIslandLocalTiles(spec: IslandSpec): Array<readonly [number, number]> {
   const seen = new Set<string>();
+  const tiles: Array<readonly [number, number]> = [];
   for (const c of islandConstituents(spec)) {
     // Bounding box for this constituent in island-local coords.
     const xMin = Math.floor(c.offsetX - c.major);
@@ -484,11 +522,57 @@ function computeIslandTileCount(spec: IslandSpec): number {
             break;
           }
         }
-        if (inside) seen.add(`${x},${y}`);
+        if (inside) {
+          const k = `${x},${y}`;
+          if (!seen.has(k)) {
+            seen.add(k);
+            tiles.push([x, y]);
+          }
+        }
       }
     }
   }
-  return seen.size;
+  return tiles;
+}
+
+/** Memoized LOCAL inscribed-tile list, deduplicated across constituents. */
+function islandLocalTiles(spec: IslandSpec): ReadonlyArray<readonly [number, number]> {
+  const key = tileCountCacheKey(spec);
+  const cached = tileListCache.get(key);
+  if (cached !== undefined) return cached;
+  const tiles = computeIslandLocalTiles(spec);
+  if (tileListCache.size >= TILE_CACHE_CAP) tileListCache.clear();
+  tileListCache.set(key, tiles);
+  return tiles;
+}
+
+/** Memoized WORLD-coords tile-key Set, keyed by geometry AND position. */
+function islandWorldTileSet(spec: IslandSpec): ReadonlySet<string> {
+  const key = `${tileCountCacheKey(spec)}@${spec.cx},${spec.cy}`;
+  const cached = worldTileSetCache.get(key);
+  if (cached !== undefined) return cached;
+  const set = new Set<string>();
+  for (const [lx, ly] of islandLocalTiles(spec)) set.add(`${spec.cx + lx},${spec.cy + ly}`);
+  if (worldTileSetCache.size >= TILE_CACHE_CAP) worldTileSetCache.clear();
+  worldTileSetCache.set(key, set);
+  return set;
+}
+
+/** Conservative world-space bounding box over every constituent ellipse — the
+ *  cheap broad-phase reject for islandsOverlap (no rasterization). */
+function islandWorldAabb(
+  spec: IslandSpec,
+): { minX: number; maxX: number; minY: number; maxY: number } {
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  for (const c of islandConstituents(spec)) {
+    const cx = spec.cx + c.offsetX;
+    const cy = spec.cy + c.offsetY;
+    if (cx - c.major < minX) minX = cx - c.major;
+    if (cx + c.major > maxX) maxX = cx + c.major;
+    if (cy - c.minor < minY) minY = cy - c.minor;
+    if (cy + c.minor > maxY) maxY = cy + c.minor;
+  }
+  return { minX, maxX, minY, maxY };
 }
 
 /**
@@ -501,13 +585,7 @@ function computeIslandTileCount(spec: IslandSpec): number {
  * combined tile count.
  */
 export function islandTileCount(spec: IslandSpec): number {
-  const key = tileCountCacheKey(spec);
-  const cached = tileCountCache.get(key);
-  if (cached !== undefined) return cached;
-  const count = computeIslandTileCount(spec);
-  if (tileCountCache.size >= TILE_COUNT_CACHE_CAP) tileCountCache.clear();
-  tileCountCache.set(key, count);
-  return count;
+  return islandLocalTiles(spec).length;
 }
 
 /**

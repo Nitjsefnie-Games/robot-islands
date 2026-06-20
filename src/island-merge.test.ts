@@ -122,34 +122,82 @@ beforeEach(() => {
   _resetVehicleIdCounter();
 });
 
-describe('islandsOverlap', () => {
-  it('returns false for two well-separated single-ellipse islands', () => {
+describe('islandsOverlap — tile-footprint touch (§3.6)', () => {
+  // An r=2 circle inscribes exactly the 2×2 tile block at columns/rows {-1, 0}
+  // (tile (x,y) needs all four corners strictly inside, so x ∈ {-1,0}). That
+  // makes the touch/gap arithmetic exact and hand-verifiable below.
+  it('returns false for two well-separated islands', () => {
     const a = makeSpec({ id: 'a', cx: 0, cy: 0, majorRadius: 10, minorRadius: 10 });
     const b = makeSpec({ id: 'b', cx: 100, cy: 0, majorRadius: 10, minorRadius: 10 });
     expect(islandsOverlap(a, b)).toBe(false);
   });
 
-  it('returns true for two single-ellipse islands that touch (sum-of-radii distance)', () => {
-    // Two r=10 circles whose centres are 20 apart touch tangentially.
-    const a = makeSpec({ id: 'a', cx: 0, cy: 0, majorRadius: 10, minorRadius: 10 });
-    const b = makeSpec({ id: 'b', cx: 20, cy: 0, majorRadius: 10, minorRadius: 10 });
+  it('returns FALSE when the ellipses overlap but the tile footprints have an ocean gap', () => {
+    // THE BUG: two r=2 circles 3 apart. Continuous ellipses overlap (centre
+    // distance 3 < sum-of-radii 4 ⇒ the old test merged them), but a's tiles
+    // occupy columns {-1,0} and b's occupy {2,3} — column 1 is open ocean
+    // between them, so the land masses are NOT connected.
+    const a = makeSpec({ id: 'a', cx: 0, cy: 0, majorRadius: 2, minorRadius: 2 });
+    const b = makeSpec({ id: 'b', cx: 3, cy: 0, majorRadius: 2, minorRadius: 2 });
+    expect(islandsOverlap(a, b)).toBe(false);
+  });
+
+  it('returns true when tile footprints are edge-adjacent (no ocean between)', () => {
+    // r=2 circles 2 apart: a's tiles columns {-1,0}, b's columns {1,2}. a's
+    // column 0 is orthogonally adjacent to b's column 1 — touching land.
+    const a = makeSpec({ id: 'a', cx: 0, cy: 0, majorRadius: 2, minorRadius: 2 });
+    const b = makeSpec({ id: 'b', cx: 2, cy: 0, majorRadius: 2, minorRadius: 2 });
     expect(islandsOverlap(a, b)).toBe(true);
   });
 
-  it('returns true when overlap is via an extra constituent only (post-merge case)', () => {
-    // Absorber primary at (0,0) r=5; extra at offset (30, 0) r=5.
-    // Test target at (40, 0) r=5 — separated from primary (distance 40 >>
-    // sum of radii 10) but overlaps the extra (distance 10 = sum 5+5).
+  it('returns true when tile footprints overlap (share a tile)', () => {
+    const a = makeSpec({ id: 'a', cx: 0, cy: 0, majorRadius: 2, minorRadius: 2 });
+    const b = makeSpec({ id: 'b', cx: 1, cy: 0, majorRadius: 2, minorRadius: 2 });
+    expect(islandsOverlap(a, b)).toBe(true);
+  });
+
+  it('returns FALSE for diagonal corner-only contact (ocean on both flanks)', () => {
+    //   [a][ ]
+    //   [ ][b]
+    // a's tiles occupy cols/rows {-1,0}; shifting b by (+2,+2) puts b's tiles at
+    // cols/rows {1,2}. a's corner tile (0,0) meets b's corner tile (1,1) only
+    // diagonally — the cells (1,0) and (0,1) between them are open ocean, so the
+    // land masses are not connected and must NOT merge.
+    const a = makeSpec({ id: 'a', cx: 0, cy: 0, majorRadius: 2, minorRadius: 2 });
+    const b = makeSpec({ id: 'b', cx: 2, cy: 2, majorRadius: 2, minorRadius: 2 });
+    expect(islandsOverlap(a, b)).toBe(false);
+  });
+
+  it('returns true when only an extra constituent touches (post-merge case)', () => {
+    // a: primary r=2 at (0,0) [cols {-1,0}] + extra r=2 at offset (4,0)
+    // [cols {3,4}]. b: r=2 at (6,0) [cols {5,6}]. The primary is far from b,
+    // but the extra's column 4 is edge-adjacent to b's column 5 ⇒ touch.
     const a = makeSpec({
       id: 'a',
       cx: 0,
       cy: 0,
-      majorRadius: 5,
-      minorRadius: 5,
-      extraEllipses: [{ major: 5, minor: 5, rotation: 0, offsetX: 30, offsetY: 0 }],
+      majorRadius: 2,
+      minorRadius: 2,
+      extraEllipses: [{ major: 2, minor: 2, rotation: 0, offsetX: 4, offsetY: 0 }],
     });
-    const b = makeSpec({ id: 'b', cx: 40, cy: 0, majorRadius: 5, minorRadius: 5 });
+    const b = makeSpec({ id: 'b', cx: 6, cy: 0, majorRadius: 2, minorRadius: 2 });
     expect(islandsOverlap(a, b)).toBe(true);
+  });
+
+  it('returns false when an extra constituent overlaps the ellipse but not the tiles', () => {
+    // Same as above but b at (7,0) [cols {6,7}]: the extra (cols {3,4}) is two
+    // columns short of b (col 5 is ocean) even though the r=2 ellipses at (4,0)
+    // and (7,0) still overlap (distance 3 < sum 4).
+    const a = makeSpec({
+      id: 'a',
+      cx: 0,
+      cy: 0,
+      majorRadius: 2,
+      minorRadius: 2,
+      extraEllipses: [{ major: 2, minor: 2, rotation: 0, offsetX: 4, offsetY: 0 }],
+    });
+    const b = makeSpec({ id: 'b', cx: 7, cy: 0, majorRadius: 2, minorRadius: 2 });
+    expect(islandsOverlap(a, b)).toBe(false);
   });
 });
 
@@ -699,8 +747,8 @@ describe('findNextMerge', () => {
     // identity disambiguates: {a,b} vs {a,c} → 'a' < 'a' is false, then
     // 'b' < 'c' so {a,b} wins. We test the deterministic outcome.
     const a = makeSpec({ id: 'a', cx: 0, cy: 0, majorRadius: 5, minorRadius: 5 });
-    const b = makeSpec({ id: 'b', cx: 9, cy: 0, majorRadius: 5, minorRadius: 5 });
-    const c = makeSpec({ id: 'c', cx: 0, cy: 9, majorRadius: 5, minorRadius: 5 });
+    const b = makeSpec({ id: 'b', cx: 7, cy: 0, majorRadius: 5, minorRadius: 5 });
+    const c = makeSpec({ id: 'c', cx: 0, cy: 7, majorRadius: 5, minorRadius: 5 });
     const world = makeWorld([a, b, c]);
     const states = new Map<string, IslandState>([
       ['a', makeState({ id: 'a' })],
@@ -741,30 +789,29 @@ describe('findPopulatedIslandAt post-merge', () => {
 
 describe('multi-merge sequence (A absorbs B, then C)', () => {
   it('after two merges, A carries two extras and overlaps the next neighbor', () => {
-    // Linear chain: A at 0, B at 20, C at 40. A is r=14 (~600 tiles), B and
-    // C are r=5 (~80 tiles each). A absorbs B first (largest combined pair).
-    // After that merge, A's union footprint reaches further along the +x
-    // axis via the extra at offset 20; that extra plus C overlap.
+    // Linear chain: A at 0, B at 16, C at 22. A is r=14 (~600 tiles), B and
+    // C are r=5 (~80 tiles each). A's primary tile footprint touches B but not
+    // C, so A absorbs B first (largest combined pair). After that merge, A's
+    // union footprint reaches further along the +x axis via the extra at offset
+    // 16; that extra's tiles then touch C, enabling the second merge.
     const a = makeSpec({ id: 'a', cx: 0, cy: 0, majorRadius: 14, minorRadius: 14 });
     const b = makeSpec({ id: 'b', cx: 16, cy: 0, majorRadius: 5, minorRadius: 5 });
-    const c = makeSpec({ id: 'c', cx: 26, cy: 0, majorRadius: 5, minorRadius: 5 });
+    const c = makeSpec({ id: 'c', cx: 22, cy: 0, majorRadius: 5, minorRadius: 5 });
     const world = makeWorld([a, b, c]);
     const states = new Map<string, IslandState>([
       ['a', makeState({ id: 'a' })],
       ['b', makeState({ id: 'b' })],
       ['c', makeState({ id: 'c' })],
     ]);
-    // First merge: A and B (combined ≈ 600+80) beats A↔C (no overlap with
-    // primary at distance 26 > 14+5).
+    // First merge: A and B (combined ≈ 600+80) beats B↔C — A's r=14 primary
+    // footprint touches B but not C (C's tiles are an ocean gap beyond A's).
     const pair1 = findNextMerge(world, states);
     expect(pair1).not.toBeNull();
     expect([pair1!.absorber.id, pair1!.absorbed.id].sort()).toEqual(['a', 'b']);
     performMerge(world, states, pair1!.absorber, pair1!.absorbed);
     expect(a.extraEllipses?.length).toBe(1);
-    // Second merge: A (now with its extra at offset 16) and C at primary
-    // distance 26 from A's centre — A's primary doesn't reach C (26 > 14+5)
-    // but A's extra at (16, 0) reaches C at (26, 0); distance 10 = 5+5,
-    // tangent overlap.
+    // Second merge: A's primary still doesn't reach C, but A's extra at offset
+    // (16, 0) now has tile footprint touching C at (22, 0).
     const pair2 = findNextMerge(world, states);
     expect(pair2).not.toBeNull();
     expect([pair2!.absorber.id, pair2!.absorbed.id].sort()).toEqual(['a', 'c']);
