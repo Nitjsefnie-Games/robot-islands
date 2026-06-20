@@ -116,7 +116,7 @@ describe('mountInspectorUi', () => {
       onDemolish: vi.fn(),
       onMove: vi.fn(),
       onSetActiveFloors: vi.fn(),
-      onSetForceRun: vi.fn(),
+      onSetIgnoreCap: vi.fn(),
       onRefreshMaintenance: vi.fn(),
       onUpgradeFloor: vi.fn(),
       onExpandIsland: vi.fn(),
@@ -186,6 +186,59 @@ describe('mountInspectorUi', () => {
     expect(inspector.isVisible()).toBe(false);
     expect(inspector.getSelectedBuildingId()).toBeNull();
     expect(inspector.getSelectedIslandId()).toBeNull();
+  });
+
+  it('renders one Ignore Cap checkbox per output resource and dispatches on toggle', () => {
+    const smelter = makeBuilding({ id: 'smelter1', defId: 'smelter' });
+    const spec = makeSpec({ buildings: [smelter] });
+    const state = makeInitialIslandState(spec, 0);
+    const islandStates = new Map([[spec.id, state]]);
+    const world: WorldState = {
+      seed: 'test',
+      islands: [spec],
+      drones: [],
+      routes: [],
+      vehicles: [],
+      revealedCells: new Set(),
+      islandStates,
+      satellites: [],
+      repairDrones: [],
+      debrisFields: [],
+    } as unknown as WorldState;
+    const onSetIgnoreCap = vi.fn();
+    const deps: InspectorDeps = {
+      world,
+      onDemolish: vi.fn(),
+      onMove: vi.fn(),
+      onSetActiveFloors: vi.fn(),
+      onSetIgnoreCap,
+      onRefreshMaintenance: vi.fn(),
+      onUpgradeFloor: vi.fn(),
+      onExpandIsland: vi.fn(),
+      onRenameIsland: vi.fn(),
+      onSetBankingEnabled: vi.fn(),
+      onSpendTimeLock: vi.fn(),
+      onSetGenesisTarget: vi.fn(),
+    };
+    const reg = makeRegistry();
+    const inspector = mountInspectorUi(reg, container, deps);
+    inspector.open({ spec, state, building: smelter });
+
+    const boxes = container.querySelectorAll('[data-ignore-cap-resource]');
+    expect(boxes.length).toBe(3);
+
+    const ironBox = container.querySelector('[data-ignore-cap-resource="iron_ingot"]') as HTMLInputElement;
+    const slagBox = container.querySelector('[data-ignore-cap-resource="slag"]') as HTMLInputElement;
+    const coBox = container.querySelector('[data-ignore-cap-resource="co"]') as HTMLInputElement;
+    expect(ironBox).toBeTruthy();
+    expect(slagBox).toBeTruthy();
+    expect(coBox).toBeTruthy();
+    expect(ironBox.checked).toBe(false);
+    expect(slagBox.checked).toBe(true);
+    expect(coBox.checked).toBe(true);
+
+    ironBox.click();
+    expect(onSetIgnoreCap).toHaveBeenCalledWith(expect.anything(), 'iron_ingot', true);
   });
 
   it('keeps reclamation expand-button DOM identity across a repaint', () => {
