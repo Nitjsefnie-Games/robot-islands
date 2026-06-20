@@ -1109,21 +1109,21 @@ export const RESOURCE_META: Readonly<Record<ResourceId, ResourceMeta>> = {
   stainless_steel: { massPerUnitKg: 1, terminal: 'consumed' },
   tungsten_ore: { massPerUnitKg: 1, terminal: 'consumed' },
   tungsten_ingot: { massPerUnitKg: 1, terminal: 'consumed' },
-  tool_steel: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
+  tool_steel: { massPerUnitKg: 1, terminal: 'consumed' },
   quicklime: { massPerUnitKg: 1, terminal: 'consumed' },
-  slaked_lime: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
+  slaked_lime: { massPerUnitKg: 1, terminal: 'consumed' },
   brick: { massPerUnitKg: 1, terminal: 'consumed' },
   mortar: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
   cement: { massPerUnitKg: 1, terminal: 'consumed' },
   concrete: { massPerUnitKg: 1, terminal: 'consumed' },
-  charcoal: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
+  charcoal: { massPerUnitKg: 1, terminal: 'consumed' },
   plank: { massPerUnitKg: 1, terminal: 'consumed' },
   copper_ingot: { massPerUnitKg: 1, terminal: 'consumed' },
   tin_ingot: { massPerUnitKg: 1, terminal: 'consumed' },
   lead_ingot: { massPerUnitKg: 1, terminal: 'consumed' },
   solder: { massPerUnitKg: 1, terminal: 'consumed' },
-  bronze: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
-  brass: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
+  bronze: { massPerUnitKg: 1, terminal: 'consumed' },
+  brass: { massPerUnitKg: 1, terminal: 'consumed' },
   alumina: { massPerUnitKg: 1, terminal: 'consumed' },
   aluminum: { massPerUnitKg: 1, terminal: 'consumed' },
   oxygen: { massPerUnitKg: 1, terminal: 'consumed' },
@@ -1153,8 +1153,8 @@ export const RESOURCE_META: Readonly<Record<ResourceId, ResourceMeta>> = {
   plastic_precursor: { massPerUnitKg: 1, volumePerUnitL: 1, terminal: 'consumed' },
   rigid_plastic: { massPerUnitKg: 1, terminal: 'consumed' },
   flexible_plastic: { massPerUnitKg: 1, terminal: 'consumed' },
-  synthetic_rubber: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
-  sheet_metal: { massPerUnitKg: 5, terminal: 'expansion-hook:Phase 2 supplies consumer' },
+  synthetic_rubber: { massPerUnitKg: 1, terminal: 'consumed' },
+  sheet_metal: { massPerUnitKg: 5, terminal: 'consumed' },
   pipe: { massPerUnitKg: 4, terminal: 'consumed' },
   steel_beam: { massPerUnitKg: 50, terminal: 'consumed' },
   bearing: { massPerUnitKg: 0.3, terminal: 'consumed' },
@@ -1165,16 +1165,16 @@ export const RESOURCE_META: Readonly<Record<ResourceId, ResourceMeta>> = {
   coolant: { massPerUnitKg: 1, terminal: 'consumed' },
   ceramic_insulator: { massPerUnitKg: 1, terminal: 'gameplay-sink' },
   sulfuric_acid: { massPerUnitKg: 1.84, volumePerUnitL: 1, terminal: 'consumed' },
-  hydrochloric_acid: { massPerUnitKg: 1.19, volumePerUnitL: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
+  hydrochloric_acid: { massPerUnitKg: 1.19, volumePerUnitL: 1, terminal: 'consumed' },
   sodium_hydroxide: { massPerUnitKg: 1, volumePerUnitL: 1, terminal: 'consumed' },
-  phosphor: { massPerUnitKg: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
+  phosphor: { massPerUnitKg: 1, terminal: 'consumed' },
   liquid_nitrogen: { massPerUnitKg: 1, volumePerUnitL: 1, terminal: 'consumed' },
   silicon: { massPerUnitKg: 1, terminal: 'consumed' },
   silicon_wafer: { massPerUnitKg: 0.13, terminal: 'consumed' },
   transistor: { massPerUnitKg: 0.001, terminal: 'consumed' },
   capacitor: { massPerUnitKg: 0.005, energyPerUnitKWh: 0.1, terminal: 'consumed' },
   resistor: { massPerUnitKg: 0.001, terminal: 'consumed' },
-  memory_module: { massPerUnitKg: 0.05, terminal: 'expansion-hook:Phase 2 supplies consumer' },
+  memory_module: { massPerUnitKg: 0.05, terminal: 'consumed' },
   nitrogen: { massPerUnitKg: 1, terminal: 'consumed' },
   cryo_coolant: { massPerUnitKg: 1, volumePerUnitL: 1, terminal: 'consumed' },
   aviation_kerosene: { massPerUnitKg: 1, volumePerUnitL: 1, terminal: 'gameplay-sink' }, // fuelForTier(3) — fuel ladder
@@ -1258,7 +1258,7 @@ export const RESOURCE_META: Readonly<Record<ResourceId, ResourceMeta>> = {
   vent_sulfide: { massPerUnitKg: 1, volumePerUnitL: 1, terminal: 'consumed' }, // P4 Phase-2: sulfur_mine_vent → sulfur
   vent_exotic: { massPerUnitKg: 1, terminal: 'consumed' },
   lithium_brine: { massPerUnitKg: 1, volumePerUnitL: 1, terminal: 'consumed' }, // P4 Phase-2: lithium_extractor_brine → lithium
-  bromine: { massPerUnitKg: 1, volumePerUnitL: 1, terminal: 'expansion-hook:Phase 2 supplies consumer' },
+  bromine: { massPerUnitKg: 1, volumePerUnitL: 1, terminal: 'consumed' },
   rare_earth_concentrate: { massPerUnitKg: 1, terminal: 'consumed' }, // P4 Phase-2: slag_reprocessor_re_concentrate → rare_earth
   refined_cobalt: { massPerUnitKg: 1, terminal: 'consumed' }, // P4 Phase-2: mag_alloyer_cobalt → magnetic_alloy
   exotic_alloy_seed: { massPerUnitKg: 1, terminal: 'consumed' },
@@ -1535,6 +1535,20 @@ export type RecipeId =
   | 'electrolyzer_smr'
   | 'fusion_core_he3_dilute'
   | 'fusion_core_tritium_seed'
+  // P4 Phase-3a: mid-tier alloy/chem orphan closures — resolveRecipe-routed
+  // alt-input variants on existing CONSUMER buildings (the orphan replaces an
+  // equivalent input, or is added on a host already out of the balance gate).
+  | 'smelter_charcoal'
+  | 'metal_rolling_mill_tool_steel'
+  | 'bearing_assembler_bronze'
+  | 'cable_mill_brass'
+  | 'pipe_mill_hcl'
+  | 'pcb_etcher_bromine'
+  | 'lithography_lab_phosphor'
+  | 'cryogenic_compute_center_ram'
+  | 'kit_assembler_sheet_metal'
+  | 'mortar_mixer_slaked_lime'
+  | 'hydraulic_assembly_rubber'
   | 'sheet_mill'
   // Task 6: synthetic recipe ids for Skill Forge crystal variants.
   | 'skill_forge_mining_t2'
@@ -2821,9 +2835,10 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     outputs: { natural_gas: 1 },
     exogenousFlow: 'terrain',
     category: 'extraction',
-    // Orphan output: no current consumer (§7.3 ammonia/syngas variants
-    // STILL-DEFERRED). Producer ships so the resource isn't a permanent
-    // sink-without-source if a consumer recipe lands later.
+    // natural_gas is consumed (P4 Phase-2): the electrolyzer_smr variant runs
+    // steam-methane reforming (natural_gas + fresh_water → hydrogen + co2) when
+    // natural_gas is on hand. gas_extractor also hosts the methane_hydrate refine
+    // (gas_extractor_hydrate). Producer + consumer both ship.
   },
 
   // T2 petrochemical / refining — rebalanced for idle-game scale, step #19 (×40).
@@ -3751,6 +3766,114 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
     exogenousFlow: 'fuel-combustion-energy',
     category: 'power',
   },
+  // P4 Phase-3a — mid-tier alloy/chem orphan closures (§7 closure). Each is a
+  // resolveRecipe ALT-input variant on an existing CONSUMER building: the orphan
+  // replaces an equivalent existing input (charcoal→coal reductant,
+  // tool_steel/bronze/brass→steel, slaked_lime→quicklime, synthetic_rubber→
+  // lubricant, sheet_metal→iron_ingot, phosphor→silicon, bromine→glass) so the
+  // variant mass-balances IDENTICALLY to the building's base recipe — zero
+  // re-balancing, no new building. hcl + memory_module can't swap a same-mass
+  // input on their host (acid 1.19 kg / RAM additive); they balance exactly
+  // (hcl: pickling acid mass exits as mill_scale) or stay within the host's
+  // pre-existing balance status (memory_module on the cryo center, base already
+  // out of the exact-balance gate). Each variant is in SPECIAL_RECIPE_IDS (kept
+  // out of BASE_RECIPES) and routed only when the orphan is on hand → OPTIONAL,
+  // hard-gates nothing. None of the host buildings is ocean-locked, so the
+  // cross-island producers (bromine ← brine_distillation_rig) only ever supply
+  // the variant; the base recipe runs on home inputs. Deadlock-safe: every host
+  // keeps its base recipe, and no orphan depends on its own consumer's product.
+
+  // charcoal (1 kg) → reductant on smelter, replacing coal (3↔3, identical Δ).
+  smelter_charcoal: {
+    cycleSec: 2981.3, // matches smelter base cycle
+    inputs: { iron_ore: 10, charcoal: 3 },
+    outputs: { iron_ingot: 6, slag: 2, co: 5 },
+    category: 'smelting',
+  },
+  // tool_steel (1 kg) → rolling-die alt-input on metal_rolling_mill, replacing
+  // 1 steel (11 kg in either way).
+  metal_rolling_mill_tool_steel: {
+    cycleSec: 3784, // matches metal_rolling_mill base cycle
+    inputs: { steel: 10, tool_steel: 1 },
+    outputs: { wire: 20, mill_scale: 1 },
+    category: 'manufacturing',
+  },
+  // bronze (1 kg) → bushing alt-input on bearing_assembler, replacing 1 steel
+  // (28+3 → 27+1+3, identical 31 kg).
+  bearing_assembler_bronze: {
+    cycleSec: 2665978.7, // matches bearing_assembler base cycle
+    inputs: { steel: 27, bronze: 1, lubricant: 3 },
+    outputs: { bearing: 100, mill_scale: 1 },
+    category: 'manufacturing',
+  },
+  // brass (1 kg) → fitting alt-input on cable_mill, replacing 1 steel (42 kg).
+  cable_mill_brass: {
+    cycleSec: 14447.9, // matches cable_mill base cycle
+    inputs: { steel: 41, brass: 1 },
+    outputs: { heavy_cable: 5, mill_scale: 2 },
+    category: 'manufacturing',
+  },
+  // hydrochloric_acid (1.19 kg) → pickling alt-input on pipe_mill. The acid is
+  // ADDED (no same-mass input to swap) and descales the pipe stock — its mass
+  // exits embodied in the pickle-liquor scale (mill_scale 2 → 3.19), so the
+  // variant balances exactly: 42 + 1.19 = 40 + 3.19.
+  pipe_mill_hcl: {
+    cycleSec: 14857.2, // auto-derived (gen-cyclesec): density × footprint × M (output mass 43.19 kg > base's 42 kg by the pickle-liquor scale)
+    inputs: { steel: 42, hydrochloric_acid: 1 },
+    outputs: { pipe: 10, mill_scale: 3.19 },
+    category: 'manufacturing',
+  },
+  // bromine (1 kg) → flame-retardant alt-input on pcb_etcher, replacing glass
+  // (1↔1, identical Δ to the base — pcb_etcher base is itself out of the
+  // exact-balance gate, so the swap variant tracks it).
+  pcb_etcher_bromine: {
+    cycleSec: 49142.5, // matches pcb_etcher base cycle
+    inputs: { wire: 1, bromine: 1 },
+    outputs: { pcb: 1 },
+    category: 'electronics',
+  },
+  // phosphor (1 kg) → display-coating alt-input on lithography_lab, replacing
+  // silicon (1↔1, identical Δ to the base recipe).
+  lithography_lab_phosphor: {
+    cycleSec: 67187, // matches lithography_lab base cycle
+    inputs: { phosphor: 1, wire: 1 },
+    outputs: { microchip: 1 },
+    category: 'electronics',
+  },
+  // memory_module (0.05 kg) → RAM alt-input on cryogenic_compute_center. Added
+  // (additive, no same-mass swap) as the AI core's onboard memory. The base
+  // recipe (5 kg in → ai_core 1 kg out) is already out of the exact-balance
+  // gate, so the additive variant tracks the host's pre-existing balance status.
+  cryogenic_compute_center_ram: {
+    cycleSec: 7166609.3, // matches cryogenic_compute_center base cycle
+    inputs: { steel: 3, quantum_chip: 1, argon: 1, memory_module: 4 },
+    outputs: { ai_core: 1 },
+    category: 'electronics',
+  },
+  // sheet_metal (5 kg) → enclosure alt-input on kit_assembler, replacing the
+  // 5 iron_ingot (5 kg) with 1 sheet_metal (5 kg) — identical Δ to the base.
+  kit_assembler_sheet_metal: {
+    cycleSec: 28666.4, // matches kit_assembler base cycle
+    inputs: { sheet_metal: 1, wood: 10, bolt: 5 },
+    outputs: { foundation_kit: 1 },
+    category: 'manufacturing',
+  },
+  // slaked_lime (1 kg) → binder alt-input on mortar_mixer, replacing quicklime
+  // (1↔1, identical Δ to the base recipe).
+  mortar_mixer_slaked_lime: {
+    cycleSec: 905.3, // matches mortar_mixer base cycle
+    inputs: { sand: 1, slaked_lime: 1 },
+    outputs: { mortar: 1 },
+    category: 'chemistry',
+  },
+  // synthetic_rubber (1 kg) → seal alt-input on hydraulic_assembly, replacing
+  // 1 lubricant (1↔1, identical Δ to the base recipe).
+  hydraulic_assembly_rubber: {
+    cycleSec: 4300, // matches hydraulic_assembly base cycle
+    inputs: { pipe: 2, lubricant: 1, synthetic_rubber: 1, bearing: 1, spring: 1 },
+    outputs: { hydraulic_actuator: 1 },
+    category: 'manufacturing',
+  },
   // §si-units rev-16 §7.4 — synthetic no-op recipe for CO₂ sink.
   plant_a_tree: {
     cycleSec: 60,
@@ -3804,6 +3927,20 @@ const SPECIAL_RECIPE_IDS = new Set<RecipeId>([
   'electrolyzer_smr',
   'fusion_core_he3_dilute',
   'fusion_core_tritium_seed',
+  // P4 Phase-3a — mid-tier alloy/chem orphan alt-input variants. Kept out of
+  // BASE_RECIPES so each host runs its base recipe by default; resolveRecipe
+  // swaps in the variant only when the orphan is on hand (mirrors Phase-2).
+  'smelter_charcoal',
+  'metal_rolling_mill_tool_steel',
+  'bearing_assembler_bronze',
+  'cable_mill_brass',
+  'pipe_mill_hcl',
+  'pcb_etcher_bromine',
+  'lithography_lab_phosphor',
+  'cryogenic_compute_center_ram',
+  'kit_assembler_sheet_metal',
+  'mortar_mixer_slaked_lime',
+  'hydraulic_assembly_rubber',
 ]);
 export const BASE_RECIPES: Partial<Record<BuildingDefId, Recipe[]>> = {};
 for (const [id, recipe] of Object.entries(RECIPES)) {
@@ -3943,6 +4080,44 @@ export function resolveRecipe(
     }
     if (def.id === 'electrolyzer' && (inventory.natural_gas ?? 0) > 0) {
       return RECIPES.electrolyzer_smr;
+    }
+    // P4 Phase-3a — mid-tier alloy/chem orphan alt-input variants. Each host
+    // runs its base recipe unless the corresponding orphan is on hand, in which
+    // case it swaps the orphan in for the equivalent base input (mirrors the
+    // Phase-2 pattern: variant only when the alt feedstock is present). The
+    // variant is optional, so no consumer is ever hard-gated on the orphan.
+    if (def.id === 'smelter' && (inventory.charcoal ?? 0) > 0) {
+      return RECIPES.smelter_charcoal;
+    }
+    if (def.id === 'metal_rolling_mill' && (inventory.tool_steel ?? 0) > 0) {
+      return RECIPES.metal_rolling_mill_tool_steel;
+    }
+    if (def.id === 'bearing_assembler' && (inventory.bronze ?? 0) > 0) {
+      return RECIPES.bearing_assembler_bronze;
+    }
+    if (def.id === 'cable_mill' && (inventory.brass ?? 0) > 0) {
+      return RECIPES.cable_mill_brass;
+    }
+    if (def.id === 'pipe_mill' && (inventory.hydrochloric_acid ?? 0) > 0) {
+      return RECIPES.pipe_mill_hcl;
+    }
+    if (def.id === 'pcb_etcher' && (inventory.bromine ?? 0) > 0) {
+      return RECIPES.pcb_etcher_bromine;
+    }
+    if (def.id === 'lithography_lab' && (inventory.phosphor ?? 0) > 0) {
+      return RECIPES.lithography_lab_phosphor;
+    }
+    if (def.id === 'cryogenic_compute_center' && (inventory.memory_module ?? 0) > 0) {
+      return RECIPES.cryogenic_compute_center_ram;
+    }
+    if (def.id === 'kit_assembler' && (inventory.sheet_metal ?? 0) > 0) {
+      return RECIPES.kit_assembler_sheet_metal;
+    }
+    if (def.id === 'mortar_mixer' && (inventory.slaked_lime ?? 0) > 0) {
+      return RECIPES.mortar_mixer_slaked_lime;
+    }
+    if (def.id === 'hydraulic_assembly' && (inventory.synthetic_rubber ?? 0) > 0) {
+      return RECIPES.hydraulic_assembly_rubber;
     }
     // Fusion Core burns the dilute He-3 / tritium seeds as alternative fuel
     // only when its primary helium_3 fuel is exhausted (mirrors steel_mill's

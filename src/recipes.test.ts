@@ -2189,3 +2189,14 @@ describe('P4 Phase-2: ocean concentrate orphans', () => {
     }
   });
 });
+
+describe('P4 Phase-3a: mid-tier alloy/chem orphans', () => {
+  it('mid-tier alloy/chem orphans are consumed', () => {
+    for (const r of ['charcoal', 'tool_steel', 'bronze', 'brass', 'hydrochloric_acid', 'bromine',
+      'phosphor', 'memory_module', 'sheet_metal', 'slaked_lime', 'synthetic_rubber'] as ResourceId[]) {
+      const consumers = Object.values(RECIPES).filter((rc) => rc && r in rc.inputs);
+      expect(consumers.length, `${r} consumer`).toBeGreaterThan(0);
+      expect(RESOURCE_META[r].terminal, r).toBe('consumed');
+    }
+  });
+});
