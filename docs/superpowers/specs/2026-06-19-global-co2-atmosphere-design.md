@@ -72,13 +72,14 @@ const pool = ctx?.co2Pool;
 passes it via `ctx.co2Pool` on every per-island `advanceIsland` call, then writes
 `world.totalCo2Kg = co2Pool.kg` once the loop completes. Production is therefore always global.
 
-**Scope note — grouped advance paths stay CO₂-inert.** The grouped lattice (`advanceLatticeGroup`)
-and shared-network (`advanceSharedNetworkGroup`) paths reimplement the integration loop inline and
-**do not accrue or drain CO₂ at all today** — verified by grep (`co2`/`exogenousFlow`/`biogenic`/
-`CaptureKg` absent from both files). That is pre-existing behavior, not introduced here. This change
-threads the global pool only into the per-island `advanceIsland` path; islands advancing under a
-lattice or cross-island shared network remain CO₂-inert exactly as before. Wiring CO₂ into the
-grouped loops is a separate follow-up, out of scope.
+**Grouped advance paths.** The grouped lattice (`advanceLatticeGroup`) and shared-network
+(`advanceSharedNetworkGroup`, a re-export of `advanceSharedGroup`) paths call the **same**
+`applySegmentSideEffects` (lattice-advance.ts) per member, so they already accrue/drain CO₂ — they
+are NOT inert. The shared `co2Pool` is therefore threaded into `groupedMemberBaseCtx` too (the ctx
+those members run under), not just the per-island `advanceIsland` ctx. Omitting it would silently
+route a lattice/shared-network island's CO₂ to the now-dead per-island `state.co2Kg` — a regression
+this change explicitly guards against (`lattice-advance.test.ts`: a grouped forest member drains the
+shared pool, leaving its `co2Kg` at 0).
 
 ### 3. Sinks eat from global (plant_a_tree included)
 

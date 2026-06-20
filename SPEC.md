@@ -326,7 +326,7 @@ A solar-dependent island must plan for night-time stockpile via Battery (T2) or 
 
 **Weather modulation by phase:** severe-storm and catastrophic-event formation rates both increase by ~25% during Night and Dawn (placeholder). Other states unchanged.
 
-**Implementation note — CO₂-driven storm amplification (§2.6 extension).** Each island accumulates `co2Kg` as fossil-fuel buildings run; `sumIslandCo2` totals it across the world. `co2WeatherMultiplier(totalCo2Kg)` returns a band multiplier applied to storm/severe_storm/catastrophic weights inside `weather()`: <100 kg → ×1.0 (baseline); <10 t → ×1.1; <100 t → ×1.3; ≥100 t → ×1.6 (crisis). A companion `rollHeatwave(seed, day, totalCo2Kg)` function (threshold ≥10 t, ~5 % per day) exists as a stub but is not yet wired into `WeatherState` or any game path; its integration is deferred.
+**Implementation note — CO₂-driven storm amplification (§2.6 extension).** The world maintains a single global atmosphere scalar `world.totalCo2Kg` (§7.4): fossil-fuel buildings add emissions to it and sinks (trees, scrubbers) drain it, floored at 0, **across all islands** — capture on one island offsets emissions on any other. `sumIslandCo2(world)` returns this global total. The per-island integration accrues/drains it through a shared `ctx.co2Pool` holder that `advanceWorldEconomy` seeds from and writes back to `world.totalCo2Kg` once per tick; the per-island `state.co2Kg` field is retained only for the standalone `advanceIsland` fallback and is inert in production. Grouped lattice / shared-network members run the same `applySegmentSideEffects`, so they too accrue/drain the shared `ctx.co2Pool` and contribute to the global total. `co2WeatherMultiplier(totalCo2Kg)` returns a band multiplier applied to storm/severe_storm/catastrophic weights inside `weather()`: <100 kg → ×1.0 (baseline); <10 t → ×1.1; <100 t → ×1.3; ≥100 t → ×1.6 (crisis). A companion `rollHeatwave(seed, day, totalCo2Kg)` function (threshold ≥10 t, ~5 % per day) exists as a stub but is not yet wired into `WeatherState` or any game path; its integration is deferred.
 
 The day-night cycle is global, so the player can plan around it: dispatch fuel-hungry tasks on solar-heavy islands during Day, schedule sensitive launches during Day or Dusk if solar power is the launch infrastructure's input. The cycle is purely time-driven and does not depend on the player's session — at offline resolution, day/night is just `phase(t)` evaluated at the relevant tick.
 
@@ -2158,9 +2158,16 @@ pre-change save can't strand stock). Two kinds:
 producer on its own exhaust (a long-run/offline correctness bug); they are
 discarded until real consumer loops land (closure plan P4);
 (2) **`co2`** — the single global atmosphere (§7.4). Its climate contribution
-accrues only to the per-island `co2Kg` scalar (non-biogenic emission + exogenous
-fuel-combustion; capture drains it); keeping `co2` out of inventory removes the
-old double-booking. The world total is `Σ co2Kg` (`sumIslandCo2`), surfaced in
+accrues to one world-level scalar `world.totalCo2Kg`: non-biogenic emission +
+exogenous fuel-combustion add to it and sinks drain it (floored at 0) **across
+all islands**, so capture on one island offsets emissions on any other; keeping
+`co2` out of inventory removes the old double-booking. The per-island integration
+threads this pool through a shared `ctx.co2Pool` holder seeded from / written back
+to `world.totalCo2Kg` once per `advanceWorldEconomy` tick; the per-island `co2Kg`
+field survives only for the standalone `advanceIsland` fallback and is inert in
+production (grouped lattice / shared-network members run the same
+`applySegmentSideEffects` and contribute to the shared pool too). The world total
+is `world.totalCo2Kg` (`sumIslandCo2`), surfaced in
 the bottom-right HUD as the climate-pressure readout (`☁ ATMOSPHERE CO₂`).
 The factors are solved
 *exactly* via an active-set / piecewise-linear method (a constraint binds only
