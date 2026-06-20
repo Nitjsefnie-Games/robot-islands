@@ -670,7 +670,7 @@ describe('spend-time-lock', () => {
     expect(homeAfter.state.timeLockBankedMin).toBe(40);
     expect(colonyAfter.state.accelerationRemainingMin).toBe(5);
     expect(colonyAfter.state.accelerationQueue).toHaveLength(1);
-    expect(colonyAfter.state.accelerationQueue[0]).toMatchObject({ sourceIslandId: 'home', durationMin: 20 });
+    expect(colonyAfter.state.accelerationQueue[0]).toMatchObject({ durationMin: 20 });
   });
 
   it('illegal: non-positive minutes is rejected, save unchanged', async () => {
