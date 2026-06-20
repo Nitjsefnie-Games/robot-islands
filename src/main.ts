@@ -345,7 +345,10 @@ async function main(): Promise<void> {
     // Fresh-game path is the pure `createNewGame` module (shared with the
     // authoritative server). Build it ONCE so the world + per-island states are
     // the same objects (createNewGame already wires world.islandStates).
-    fresh = restored ? null : createNewGame(performance.now());
+    // LOCAL fresh game: seed the procedural world from the wall-clock creation
+    // time so a Clear Save → reboot mints a NEW world (mirrors the server's
+    // reset-timestamp seed); REMOTE doesn't reach here.
+    fresh = restored ? null : createNewGame(performance.now(), String(Date.now()));
     worldState = restored ? restored.world : fresh!.world;
     islandStates = restored ? restored.islandStates : fresh!.islandStates;
   }

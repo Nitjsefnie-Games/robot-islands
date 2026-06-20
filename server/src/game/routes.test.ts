@@ -64,6 +64,35 @@ describe('game routes', () => {
     expect(res.json().islands.find((i: { id: string }) => i.id === 'home')).toBeDefined();
   });
 
+  it('createInitialSnapshot seeds the world from the creation timestamp', () => {
+    const snap = createInitialSnapshot(1_234_567);
+    expect((snap.world as { seed: string }).seed).toBe('1234567');
+    // A different creation time yields a different world seed.
+    const other = createInitialSnapshot(7_654_321);
+    expect((other.world as { seed: string }).seed).toBe('7654321');
+  });
+
+  describe('POST /api/game/reset', () => {
+    it('overwrites an existing save (no 409) and re-mints home', async () => {
+      const cookie = await authedCookie();
+      expect((await app.inject({ method: 'POST', url: '/api/game/new', headers: { cookie } })).statusCode).toBe(201);
+      const res = await app.inject({ method: 'POST', url: '/api/game/reset', headers: { cookie } });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().islands.find((i: { id: string }) => i.id === 'home')).toBeDefined();
+    });
+
+    it('works with no prior save (mints a fresh world)', async () => {
+      const cookie = await authedCookie();
+      const res = await app.inject({ method: 'POST', url: '/api/game/reset', headers: { cookie } });
+      expect(res.statusCode).toBe(200);
+      expect(res.json().islands.find((i: { id: string }) => i.id === 'home')).toBeDefined();
+    });
+
+    it('requires auth', async () => {
+      expect((await app.inject({ method: 'POST', url: '/api/game/reset' })).statusCode).toBe(401);
+    });
+  });
+
   describe('POST /api/game/import', () => {
     it('imports a valid snapshot -> 201 + saved', async () => {
       const cookie = await authedCookie();
