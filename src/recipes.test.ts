@@ -2176,3 +2176,16 @@ describe('P4 Phase-1: new-building byproduct loops', () => {
     expect(RESOURCE_META.asphalt.terminal).toBe('gameplay-sink');
   });
 });
+
+describe('P4 Phase-2: ocean concentrate orphans', () => {
+  it('the 9 ocean concentrates are consumed', () => {
+    for (const r of [
+      'he3_dilute', 'tritium_seed', 'lithium_brine', 'rare_earth_concentrate',
+      'refined_cobalt', 'mn_nodule', 'vent_sulfide', 'methane_hydrate', 'natural_gas',
+    ] as ResourceId[]) {
+      const consumers = Object.values(RECIPES).filter((rc) => rc && r in rc.inputs);
+      expect(consumers.length, `${r} consumer`).toBeGreaterThan(0);
+      expect(RESOURCE_META[r].terminal, r).toBe('consumed');
+    }
+  });
+});

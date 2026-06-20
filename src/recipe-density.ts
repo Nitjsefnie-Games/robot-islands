@@ -124,6 +124,17 @@ export function buildingForRecipe(recipeId: string): BuildingDefId {
     nodule_concentrator_co: 'nodule_concentrator',
     vent_mineral_refinery_exotic: 'vent_mineral_refinery',
     vent_mineral_refinery_tritium: 'vent_mineral_refinery',
+    // P4 Phase-2 — ocean-concentrate leaf-refine variants resolve to the
+    // producer building they're hosted on (no new buildings).
+    lithium_extractor_brine: 'lithium_extractor',
+    manganese_smelter_nodule: 'manganese_smelter',
+    slag_reprocessor_re_concentrate: 'slag_reprocessor',
+    mag_alloyer_cobalt: 'mag_alloyer',
+    sulfur_mine_vent: 'sulfur_mine',
+    gas_extractor_hydrate: 'gas_extractor',
+    electrolyzer_smr: 'electrolyzer',
+    fusion_core_he3_dilute: 'fusion_core',
+    fusion_core_tritium_seed: 'fusion_core',
   };
   if (recipeId.startsWith('skill_forge_')) return 'skill_forge';
   return (variant[recipeId] ?? recipeId) as BuildingDefId;
