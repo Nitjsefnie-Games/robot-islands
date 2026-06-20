@@ -57,6 +57,18 @@ describe('Catalog additions (§6.4 T3 raws + §6.6 T5 memetic_core)', () => {
   });
 });
 
+describe('P4 Phase-3b — final orphan closure (ledger → 0)', () => {
+  it('P4 Phase-3b: final orphans closed', () => {
+    for (const r of ['gold_ore', 'silver_ore', 'mercury'] as ResourceId[]) {
+      const consumers = Object.values(RECIPES).filter((rc) => rc && r in rc.inputs);
+      expect(consumers.length, `${r} consumer`).toBeGreaterThan(0);
+      expect(RESOURCE_META[r].terminal, r).toBe('consumed');
+    }
+    expect(RESOURCE_META.galvanized_steel.terminal).toBe('gameplay-sink');
+    expect(RESOURCE_META.mortar.terminal).toBe('gameplay-sink');
+  });
+});
+
 describe('recipe graph completeness (step 18)', () => {
   // All resources that appear as a recipe output. T0 raws emit themselves,
   // so they land in this set naturally.
