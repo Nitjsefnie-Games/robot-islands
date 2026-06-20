@@ -254,7 +254,7 @@ describe('performMerge', () => {
     ]);
     performMerge(world, states, a, b);
     expect(a.extraEllipses).toEqual([
-      { biome: 'plains', major: 5, minor: 5, rotation: 0, offsetX: 20, offsetY: -5 },
+      { biome: 'plains', originId: 'b', major: 5, minor: 5, rotation: 0, offsetX: 20, offsetY: -5 },
     ]);
   });
 
@@ -846,10 +846,35 @@ describe('performMerge with absorbed island carrying its own extras', () => {
     ]);
     performMerge(world, states, a, b);
     expect(a.extraEllipses).toEqual([
-      // First: B's primary as a new extra.
-      { biome: 'plains', major: 5, minor: 5, rotation: 0, offsetX: 20, offsetY: 0 },
-      // Second: B's pre-existing extra, re-based.
-      { biome: 'plains', major: 7, minor: 4, rotation: 0, offsetX: 30, offsetY: 0 },
+      // First: B's primary as a new extra — terrain-seeded by B's id.
+      { biome: 'plains', originId: 'b', major: 5, minor: 5, rotation: 0, offsetX: 20, offsetY: 0 },
+      // Second: B's pre-existing extra, re-based — it had no originId of its own,
+      // so it falls back to the absorbed primary's id ('b').
+      { biome: 'plains', originId: 'b', major: 7, minor: 4, rotation: 0, offsetX: 30, offsetY: 0 },
+    ]);
+  });
+
+  it("preserves an absorbed extra's own originId through propagation", () => {
+    const a = makeSpec({ id: 'a', cx: 0, cy: 0 });
+    const b = makeSpec({
+      id: 'b',
+      cx: 20,
+      cy: 0,
+      majorRadius: 5,
+      minorRadius: 5,
+      // B itself previously absorbed island 'deep' (recorded biome + originId).
+      extraEllipses: [{ biome: 'desert', originId: 'deep', major: 7, minor: 4, rotation: 0, offsetX: 10, offsetY: 0 }],
+    });
+    const world = makeWorld([a, b]);
+    const states = new Map<string, IslandState>([
+      ['a', makeState({ id: 'a' })],
+      ['b', makeState({ id: 'b' })],
+    ]);
+    performMerge(world, states, a, b);
+    expect(a.extraEllipses).toEqual([
+      { biome: 'plains', originId: 'b', major: 5, minor: 5, rotation: 0, offsetX: 20, offsetY: 0 },
+      // 'deep' keeps its own seed AND biome, only its offset re-bases.
+      { biome: 'desert', originId: 'deep', major: 7, minor: 4, rotation: 0, offsetX: 30, offsetY: 0 },
     ]);
   });
 });

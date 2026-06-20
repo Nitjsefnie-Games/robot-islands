@@ -453,34 +453,15 @@ describe('terrainAtForBiome', () => {
     }
   });
 
-  it('terrainAt observes live spec mutations (by-reference closure invariant)', () => {
-    // Pins the load-bearing invariant of `attachTerrainAt`: the rehydrated
-    // closure captures the spec BY REFERENCE, not by value. A future refactor
-    // that switches the helper body to `{ ...spec, terrainAt: ... }` (e.g.
-    // as part of an immutability pass) would freeze `extraEllipses` at
-    // attach-time and silently reintroduce the boundary-fragment defect for
-    // §3.6 merges. The assertions below FAIL under that regression.
-    //
-    // Probe coordinate (24, 0) was chosen empirically. It satisfies three
-    // constraints simultaneously (verified by direct calculation against
-    // `tileHash01` — see the script in the I3 review):
-    //
-    //   1. Geometry — cluster cell origin (24, 0) (covering tiles
-    //      (24..26, 0..2)) is FULLY OUTSIDE the primary r=14 ellipse — its
-    //      nearest corner sits at radius 24 > 14, so every cell tile fails
-    //      `tileInscribedInEllipse(_, _, 14, 14)`.
-    //   2. Geometry — the same cell is FULLY INSIDE an extra ellipse with
-    //      semi-axes (8, 8) at offset (22, 0): the farthest corner (27, 3)
-    //      from extra centre (22, 0) is at squared-radius 25 + 9 = 34, well
-    //      under the boundary 64. So `inscribed` flips false → true on the
-    //      mutation.
-    //   3. Hash — `tileHash01('closure-ref-test', 8, 0) ≈ 0.0053 < 0.12`, so
-    //      the cluster cell IS a rare-roll cell. This is what makes the test
-    //      DISCRIMINATIVE: if the cell weren't rare, both by-reference and
-    //      by-value implementations would return `defaultTerrain` and the
-    //      test would pass vacuously. The pre-condition `expectedUnclipped
-    //      !== 'grass'` below guards against future seed or hash drift
-    //      silently breaking the discrimination.
+  it('terrainAt observes live spec mutations AND routes per-constituent (§3.6)', () => {
+    // Pins TWO invariants of `attachTerrainAt`:
+    //   (a) BY-REFERENCE closure — it reads `spec.extraEllipses` live, so a §3.6
+    //       merge that mutates the array is observed on the next call. A refactor
+    //       to `{ ...spec, terrainAt }` would freeze the snapshot and fail here.
+    //   (b) PER-CONSTITUENT terrain — a tile inside an absorbed lobe is generated
+    //       under the LOBE's own biome + seed in the LOBE's local frame, NOT the
+    //       absorber's. Discriminated by giving the lobe a DESERT biome over a
+    //       PLAINS primary: desert never yields plains' 'grass' default.
     const spec = attachTerrainAt({
       id: 'closure-ref-test',
       name: 'closure-ref-test',
@@ -494,40 +475,123 @@ describe('terrainAtForBiome', () => {
       buildings: [],
       modifiers: [],
     });
+    // Probe (24, 0) is fully outside the primary r=14 ellipse (radius 24 > 14)
+    // and fully inside an r=8 extra at offset (22, 0) (probe-local (2, 0)).
     const probeX = 24;
     const probeY = 0;
-    // Pre-mutation: the cluster cell sits entirely outside the primary
-    // ellipse, so the inscription predicate fails on all 9 tiles and the
-    // cell is demoted to defaultTerrain.
+    // Pre-mutation: outside every constituent → primary plains fallback, the
+    // boundary cluster cell is demoted to the default 'grass'.
     expect(spec.terrainAt!(probeX, probeY)).toBe('grass');
-    // What the SAME hash would produce if the cell were treated as fully
-    // inscribed — this is the value the by-reference closure MUST return
-    // after we push the extra ellipse that covers the cell.
-    const expectedUnclipped = terrainAtForBiome(
-      'plains',
-      spec.id,
-      probeX,
-      probeY,
-      () => true,
-    );
-    // Discrimination guard: if this hash ever stops rolling rare, the test
-    // becomes vacuous (both by-ref and by-value return 'grass'). Fail
-    // explicitly so a future maintainer fixes the probe instead of
-    // silently losing the invariant.
-    expect(
-      expectedUnclipped,
-      'I3 probe cell must hash rare or the test is vacuous',
-    ).not.toBe('grass');
-    // §3.6-style mutation: push an extra ellipse that fully covers the
-    // probe's 3×3 cluster cell.
+    // §3.6-style mutation: push a DESERT lobe (own biome + seed) covering the
+    // probe's cluster cell.
     spec.extraEllipses = [
-      { major: 8, minor: 8, rotation: 0, offsetX: 22, offsetY: 0 },
+      { biome: 'desert', originId: 'lobe-seed', major: 8, minor: 8, rotation: 0, offsetX: 22, offsetY: 0 },
     ];
-    // Post-mutation: a by-REFERENCE closure observes the new extra and the
-    // cell now passes inscription, so terrainAt yields the unclipped rare.
-    // A by-VALUE closure would still see the old (no-extras) snapshot,
-    // demote to 'grass', and fail this assertion.
-    expect(spec.terrainAt!(probeX, probeY)).toBe(expectedUnclipped);
+    // What the lobe generates at its OWN local coords, under its OWN biome+seed,
+    // with its OWN inscription predicate (r=8). The by-reference + per-constituent
+    // closure MUST return exactly this.
+    const expected = terrainAtForBiome('desert', 'lobe-seed', probeX - 22, probeY - 0, (px, py) =>
+      tileInscribedInEllipse(px, py, 8, 8),
+    );
+    // Discrimination guard: desert terrain can never be plains' 'grass'. If this
+    // ever became 'grass' the test would be vacuous (pre == post).
+    expect(expected, 'desert lobe must not yield plains grass').not.toBe('grass');
+    expect(spec.terrainAt!(probeX, probeY)).toBe(expected);
+  });
+
+  describe('per-constituent terrain after §3.6 merge', () => {
+    function build(over: Partial<Parameters<typeof attachTerrainAt>[0]> & { id: string }) {
+      return attachTerrainAt({
+        name: over.id,
+        biome: 'plains',
+        cx: 0,
+        cy: 0,
+        majorRadius: 14,
+        minorRadius: 14,
+        populated: true,
+        discovered: true,
+        buildings: [],
+        modifiers: [],
+        ...over,
+      });
+    }
+
+    it('an absorbed lobe reproduces its standalone terrain tile-for-tile (veins kept)', () => {
+      // The lobe sits clear of the primary (centre dist ≈ 44 > 28 + 12), so there
+      // is no overlap to muddy the comparison.
+      const OX = 27;
+      const OY = -35;
+      const standalone = build({ id: 'gen', biome: 'desert', majorRadius: 12, minorRadius: 12 });
+      const merged = build({
+        id: 'home',
+        biome: 'plains',
+        majorRadius: 28,
+        minorRadius: 28,
+        extraEllipses: [{ biome: 'desert', originId: 'gen', major: 12, minor: 12, rotation: 0, offsetX: OX, offsetY: OY }],
+      });
+      let checked = 0;
+      let veins = 0;
+      for (let ly = -12; ly <= 12; ly++) {
+        for (let lx = -12; lx <= 12; lx++) {
+          if (!tileInscribedInEllipse(lx, ly, 12, 12)) continue;
+          checked++;
+          const got = merged.terrainAt!(lx + OX, ly + OY);
+          expect(got).toBe(standalone.terrainAt!(lx, ly));
+          if (got !== 'sand') veins++;
+        }
+      }
+      expect(checked).toBeGreaterThan(100);
+      // The lobe genuinely carries non-default (vein) terrain — otherwise the
+      // tile-for-tile match would be a vacuous all-'sand' comparison.
+      expect(veins).toBeGreaterThan(0);
+    });
+
+    it('the lobe seed matters — a different originId yields different terrain', () => {
+      const OX = 27;
+      const OY = -35;
+      const a = build({
+        id: 'home',
+        biome: 'plains',
+        majorRadius: 28,
+        minorRadius: 28,
+        extraEllipses: [{ biome: 'desert', originId: 'seed-A', major: 12, minor: 12, rotation: 0, offsetX: OX, offsetY: OY }],
+      });
+      const b = build({
+        id: 'home',
+        biome: 'plains',
+        majorRadius: 28,
+        minorRadius: 28,
+        extraEllipses: [{ biome: 'desert', originId: 'seed-B', major: 12, minor: 12, rotation: 0, offsetX: OX, offsetY: OY }],
+      });
+      let diff = 0;
+      for (let ly = -12; ly <= 12; ly++) {
+        for (let lx = -12; lx <= 12; lx++) {
+          if (!tileInscribedInEllipse(lx, ly, 12, 12)) continue;
+          if (a.terrainAt!(lx + OX, ly + OY) !== b.terrainAt!(lx + OX, ly + OY)) diff++;
+        }
+      }
+      expect(diff).toBeGreaterThan(0);
+    });
+
+    it('overlap resolves to the earliest constituent (primary wins a shared tile)', () => {
+      // A lobe whose ellipse overlaps the primary: a tile inside BOTH must take
+      // the PRIMARY's biome (plains), not the lobe's (desert) — "already placed"
+      // / earliest-constituent precedence, matching the computeIslandTiles dedup.
+      const merged = build({
+        id: 'home',
+        biome: 'plains',
+        majorRadius: 14,
+        minorRadius: 14,
+        extraEllipses: [{ biome: 'desert', originId: 'gen', major: 14, minor: 14, rotation: 0, offsetX: 4, offsetY: 0 }],
+      });
+      // (0,0) is inside both the primary (r14 @ origin) and the lobe (r14 @ (4,0)).
+      expect(tileInscribedInEllipse(0, 0, 14, 14)).toBe(true);
+      expect(tileInscribedInEllipse(0 - 4, 0, 14, 14)).toBe(true);
+      const primaryHere = terrainAtForBiome('plains', 'home', 0, 0, (px, py) =>
+        tileInscribedInEllipse(px, py, 14, 14),
+      );
+      expect(merged.terrainAt!(0, 0)).toBe(primaryHere);
+    });
   });
 });
 
