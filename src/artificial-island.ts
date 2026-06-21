@@ -23,7 +23,7 @@ import type { Biome, IslandSpec, WorldState } from './world.js';
 import { BIOME_DEFS, rollModifiersArtificial } from './biomes.js';
 import { tierForLevel } from './skilltree.js';
 import type { IslandState } from './economy.js';
-import { attachTerrainAt, makeInitialIslandState } from './world.js';
+import { attachTerrainAt, makeInitialIslandState, BIOME_MAX_RADII } from './world.js';
 import { canPlaceOnIsland, LAND_TILE_COST, type BuildingDef } from './building-defs.js';
 import { hasOperationalBuilding } from './buildings.js';
 import type { ResourceId } from './recipes.js';
@@ -120,11 +120,13 @@ export function validateConstruction(
 
   if (!(req.biome in BIOME_DEFS)) return { ok: false, reason: 'invalid-biome' };
 
-  // Radii cap per §2.5: T3 = 8, T4 = 12, T5 = 16. Tiers below 3 fall back
-  // to the T3 cap — they're already rejected above by the tier gate, but
-  // the lookup needs a default to satisfy TypeScript.
-  const cap = MAX_RADIUS_BY_TIER[tier as 3 | 4 | 5] ?? MAX_RADIUS_BY_TIER[3];
-  if (req.majorRadius > cap || req.minorRadius > cap) {
+  // Radii cap per §2.5: per axis, the SMALLER of the founder-tier cap
+  // (T3 = 8, T4 = 12, T5 = 16) and the biome's reclamation cap
+  // (`BIOME_MAX_RADII` — the same max Land Reclamation enforces). Without the
+  // biome cap a high-tier founder could construct a biome bigger than that
+  // biome could ever grow to (e.g. a radius-16 Volcanic island vs its 14 cap).
+  const caps = maxRadiiForConstruction(founderState.level, req.biome);
+  if (req.majorRadius > caps.major || req.minorRadius > caps.minor) {
     return { ok: false, reason: 'radius-too-large' };
   }
   // Negative or zero radii are also "too large" semantically — a 0-radius
@@ -247,6 +249,21 @@ export function maxRadiusForFounderLevel(level: number): number {
   const tier = tierForLevel(level);
   if (tier < 3) return 0;
   return MAX_RADIUS_BY_TIER[tier as 3 | 4 | 5] ?? MAX_RADIUS_BY_TIER[3];
+}
+
+/** Per-axis maximum construction radii for a founder building the given biome:
+ *  the SMALLER of the founder-tier cap (`maxRadiusForFounderLevel`) and the
+ *  biome's reclamation cap (`BIOME_MAX_RADII`). This is the authoritative size
+ *  bound — `validateConstruction` enforces it, and the construction UI clamps
+ *  the ghost / sliders to it so a build can't be sized past what the biome (or
+ *  the tier) allows. Returns `{0,0}` for founders below T3. */
+export function maxRadiiForConstruction(
+  level: number,
+  biome: Biome,
+): { readonly major: number; readonly minor: number } {
+  const tierCap = maxRadiusForFounderLevel(level);
+  const b = BIOME_MAX_RADII[biome];
+  return { major: Math.min(tierCap, b.major), minor: Math.min(tierCap, b.minor) };
 }
 
 // Step-12: biome-locked-unique placement gate (§9.5).

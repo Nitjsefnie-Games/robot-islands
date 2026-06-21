@@ -70,7 +70,7 @@ import {
   placementBlocksGhost,
   type ConstructionCandidate,
 } from './construction-placement.js';
-import { maxRadiusForFounderLevel } from './artificial-island.js';
+import { maxRadiiForConstruction } from './artificial-island.js';
 import { mountInspectorUi, type InspectorTarget } from './inspector-ui.js';
 import { mountInspectorMulti, type MultiTarget } from './inspector-multi.js';
 import { planMassUpgrade, buildingsInBox, type TileBox } from './mass-actions.js';
@@ -1262,9 +1262,11 @@ async function main(): Promise<void> {
         constructionCandidate.cy = Math.round(wt.y);
       } else {
         const st = islandStates.get(constructionCandidate.founderId);
-        const cap = st ? maxRadiusForFounderLevel(st.level) : 8;
-        constructionCandidate.major = Math.min(cap, Math.max(1, Math.round(Math.abs(wt.x - constructionCandidate.cx))));
-        constructionCandidate.minor = Math.min(cap, Math.max(1, Math.round(Math.abs(wt.y - constructionCandidate.cy))));
+        const caps = st
+          ? maxRadiiForConstruction(st.level, constructionCandidate.biome)
+          : { major: 8, minor: 8 };
+        constructionCandidate.major = Math.min(caps.major, Math.max(1, Math.round(Math.abs(wt.x - constructionCandidate.cx))));
+        constructionCandidate.minor = Math.min(caps.minor, Math.max(1, Math.round(Math.abs(wt.y - constructionCandidate.cy))));
       }
       constructionUi.refreshFromCandidate();
       redrawGhost();
