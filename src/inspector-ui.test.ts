@@ -188,6 +188,43 @@ describe('mountInspectorUi', () => {
     expect(inspector.getSelectedIslandId()).toBeNull();
   });
 
+  it('shows the alt-input recipe variant when its input is on hand', () => {
+    // chlor_alkali_plant runs the mercury-cell variant (chlor_alkali_plant_mercury,
+    // which lists `mercury` as an input) when mercury is on hand — resolveRecipe
+    // selects it from the inventory snapshot. The inspector must pass the live
+    // inventory so its Recipe section reflects the variant, not the base recipe.
+    const plant = makeBuilding({ id: 'cap1', defId: 'chlor_alkali_plant' });
+    const spec = makeSpec({ buildings: [plant] });
+    const state = makeInitialIslandState(spec, 0);
+    state.inventory.mercury = 5;
+    const islandStates = new Map([[spec.id, state]]);
+    const world: WorldState = {
+      seed: 'test',
+      islands: [spec],
+      drones: [],
+      routes: [],
+      vehicles: [],
+      revealedCells: new Set(),
+      islandStates,
+      satellites: [],
+      repairDrones: [],
+      debrisFields: [],
+    } as unknown as WorldState;
+    const deps = makeDeps({ world });
+    const reg = makeRegistry();
+    const inspector = mountInspectorUi(reg, container, deps);
+    inspector.open({ spec, state, building: plant });
+
+    const headers = Array.from(inspector.el.querySelectorAll('span'));
+    const recipeHeader = headers.find((el) => el.textContent === 'Recipe');
+    expect(recipeHeader).toBeTruthy();
+    const recipeBody = recipeHeader!.nextElementSibling as HTMLElement | null;
+    expect(recipeBody).toBeTruthy();
+    // Base recipe inputs are salt + fresh_water; only the mercury variant adds a
+    // `mercury` input line. Its presence proves the inspector resolved the variant.
+    expect((recipeBody!.textContent ?? '').toLowerCase()).toContain('mercury');
+  });
+
   it('renders one Ignore Cap checkbox per output resource and dispatches on toggle', () => {
     const smelter = makeBuilding({ id: 'smelter1', defId: 'smelter' });
     const spec = makeSpec({ buildings: [smelter] });

@@ -1890,8 +1890,17 @@ export function mountInspectorUi(
     // (e.g. headless tests that don't tick).
     const ratesCtx: RatesContext = deps.getRatesContext?.(spec.id) ?? { terrainAt: spec.terrainAt };
 
-    // Recipe (resolveRecipe for Mine tile-aware variant — see §8.1).
-    const recipe = resolveRecipe(BUILDING_DEFS[building.defId], building, spec.terrainAt);
+    // Recipe (resolveRecipe for Mine tile-aware variant — see §8.1, and §8.x
+    // alt-input variants like chlor_alkali_plant_mercury / mortar_mixer_slaked_lime,
+    // which resolveRecipe selects only when given the live inventory). Mirror the
+    // economy's `ctx?.inventory ?? state.inventory` so the inspector shows the same
+    // recipe the engine is actually running.
+    const recipe = resolveRecipe(
+      BUILDING_DEFS[building.defId],
+      building,
+      spec.terrainAt,
+      ratesCtx.inventory ?? state.inventory,
+    );
     const skillMul: SkillMultipliers = effectiveSkillMultipliers(state);
     // §4.5/#35: include under-construction buildings (they bridge the cluster
     // and contribute their completed-floor capacity); exclude only invalid/disabled.
