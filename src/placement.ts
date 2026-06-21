@@ -20,7 +20,7 @@
 // is pure: takes a spec + state + def id + anchor + rotation, returns a
 // validation verdict, optionally appends a new PlacedBuilding.
 
-import { BUILDING_DEFS, buildingUnlocked, type BuildingDef, type BuildingDefId } from './building-defs.js';
+import { BUILDING_DEFS, buildingUnlocked, SCRAP_RECOVERY_FRACTION, type BuildingDef, type BuildingDefId } from './building-defs.js';
 import {
   rotateShape,
   shapeWidth,
@@ -1133,7 +1133,7 @@ export function demolishBuilding(
   const def = BUILDING_DEFS[b.defId];
   const cost = totalInvestedCost(b, def);
   const costSum = Object.values(cost).reduce((sum, n) => sum + n, 0);
-  const scrapReturned = Math.floor(costSum * 0.3);
+  const scrapReturned = Math.floor(costSum * SCRAP_RECOVERY_FRACTION);
   // Splice out the building. `spec.buildings` and `state.buildings` are the
   // same array reference (see `makeInitialIslandState`), so this mutation
   // is visible to the next economy tick without an explicit sync.
