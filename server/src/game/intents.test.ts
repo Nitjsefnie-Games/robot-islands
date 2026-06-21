@@ -1365,6 +1365,90 @@ describe('relabel-cargo', () => {
   });
 });
 
+describe('set-scrap-target', () => {
+  it('legal: sets scrapTarget on a demolition_yard', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
+      const home = world.islands.find((s: any) => s.id === 'home');
+      const state = islandStates.get('home');
+      home.buildings.push({
+        id: 'dy-1', defId: 'demolition_yard', x: 0, y: 0,
+        constructionRemainingMs: 0, placedAt: now,
+      });
+      state.buildings = home.buildings;
+    });
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'set-scrap-target', payload: { islandId: 'home', buildingId: 'dy-1', target: 'iron_mine' }, seq: 2 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 2 });
+
+    const b = (await homeBuildings(uid)).find((bb) => bb.id === 'dy-1')!;
+    expect(b.scrapTarget).toBe('iron_mine');
+  });
+
+  it('legal: clears scrapTarget with null', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
+      const home = world.islands.find((s: any) => s.id === 'home');
+      const state = islandStates.get('home');
+      home.buildings.push({
+        id: 'dy-1', defId: 'demolition_yard', x: 0, y: 0,
+        constructionRemainingMs: 0, placedAt: now, scrapTarget: 'iron_mine',
+      });
+      state.buildings = home.buildings;
+    });
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'set-scrap-target', payload: { islandId: 'home', buildingId: 'dy-1', target: null }, seq: 2 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 2 });
+
+    const b = (await homeBuildings(uid)).find((bb) => bb.id === 'dy-1')!;
+    expect(b.scrapTarget).toBeUndefined();
+  });
+
+  it('illegal: invalid target id is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
+      const home = world.islands.find((s: any) => s.id === 'home');
+      const state = islandStates.get('home');
+      home.buildings.push({
+        id: 'dy-1', defId: 'demolition_yard', x: 0, y: 0,
+        constructionRemainingMs: 0, placedAt: now,
+      });
+      state.buildings = home.buildings;
+    });
+    await expectRejectNoChange(
+      uid,
+      { type: 'set-scrap-target', payload: { islandId: 'home', buildingId: 'dy-1', target: 'not-a-building' }, seq: 9 },
+      now,
+    );
+  });
+
+  it('illegal: non-demolition_yard building is rejected, save unchanged', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
+      const home = world.islands.find((s: any) => s.id === 'home');
+      const state = islandStates.get('home');
+      home.buildings.push({
+        id: 'workshop-1', defId: 'workshop', x: 0, y: 0,
+        constructionRemainingMs: 0, placedAt: now,
+      });
+      state.buildings = home.buildings;
+    });
+    await expectRejectNoChange(
+      uid,
+      { type: 'set-scrap-target', payload: { islandId: 'home', buildingId: 'workshop-1', target: 'iron_mine' }, seq: 9 },
+      now,
+    );
+  });
+});
+
 describe('expand-island', () => {
   it('legal: expands the primary radius and deducts cost', async () => {
     const now = Date.now();
