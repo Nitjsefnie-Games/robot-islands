@@ -17,19 +17,19 @@ function b(id: string, defId: string, x: number, y: number): PlacedBuilding {
 
 describe('buildingFootprintTilesWorld', () => {
   it('offsets a land 1x1 footprint by the island centre', () => {
-    const tiles = buildingFootprintTilesWorld(spec([]), b('a', 'mine', 3, -4));
+    const tiles = buildingFootprintTilesWorld(spec([]), b('a', 'iron_mine', 3, -4));
     expect(tiles).toContainEqual({ x: 103, y: 196 });
   });
 });
 
 describe('buildingsInBox', () => {
   it('includes a building whose tile falls inside the box, excludes others', () => {
-    const s = spec([b('a', 'mine', 0, 0), b('b', 'mine', 20, 20)]);
+    const s = spec([b('a', 'iron_mine', 0, 0), b('b', 'iron_mine', 20, 20)]);
     const hit = buildingsInBox(s, { x0: 99, y0: 199, x1: 105, y1: 205 });
     expect(hit).toEqual(['a']);
   });
   it('normalizes a box dragged up-left', () => {
-    const s = spec([b('a', 'mine', 0, 0)]);
+    const s = spec([b('a', 'iron_mine', 0, 0)]);
     expect(buildingsInBox(s, { x0: 105, y0: 205, x1: 99, y1: 199 })).toEqual(['a']);
   });
 });
@@ -43,7 +43,7 @@ describe('buildingsInBox', () => {
 // { stone: 200, wood: 80 }; each floor upgrade (target ≤ 10, factor 0.8) costs
 // ceil(200*0.8)=160 stone + ceil(80*0.8)=64 wood, independent of floor.
 function mine(id: string, floorLevel: number): PlacedBuilding {
-  return { id, defId: 'mine', x: 0, y: 0, floorLevel } as unknown as PlacedBuilding;
+  return { id, defId: 'iron_mine', x: 0, y: 0, floorLevel } as unknown as PlacedBuilding;
 }
 
 function upgState(buildings: PlacedBuilding[], stone: number, wood: number): IslandState {
@@ -218,13 +218,13 @@ describe('selectionBreakdown', () => {
   it('counts per defId descending by count', () => {
     const out = selectionBreakdown([
       cp('a', 0, 0),
-      { id: 'm', defId: 'mine', x: 0, y: 0, floorLevel: 0 } as unknown as PlacedBuilding,
+      { id: 'm', defId: 'iron_mine', x: 0, y: 0, floorLevel: 0 } as unknown as PlacedBuilding,
       cp('b', 1, 0),
       cp('c', 2, 0),
     ]);
     expect(out).toEqual([
       { defId: 'cell_press', count: 3 },
-      { defId: 'mine', count: 1 },
+      { defId: 'iron_mine', count: 1 },
     ]);
   });
 });
