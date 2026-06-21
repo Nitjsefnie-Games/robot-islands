@@ -38,6 +38,7 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   'logger',
   'smelter',
   'crate',
+  'demolition_yard',
   'silo',
   'biomass_plant',
   'coke_oven',
@@ -352,6 +353,16 @@ describe('BUILDING_DEFS catalog', () => {
     expect(BUILDING_DEFS.iron_mine.storage).toBeUndefined();
     expect(BUILDING_DEFS.workshop.storage).toBeUndefined();
     expect(BUILDING_DEFS.solar.storage).toBeUndefined();
+  });
+
+  it('demolition_yard is a T1 special building with a 2x2 footprint and power draw', () => {
+    const d = BUILDING_DEFS.demolition_yard;
+    expect(d.category).toBe('special');
+    expect(d.tier).toBe(1);
+    expect(d.footprint.tiles).toHaveLength(4); // square2
+    expect(d.power?.consumes).toBe(20);
+    expect(d.placementCost).toEqual({ stone: 100, wood: 60, iron_ingot: 20 });
+    expect(d.requiredBiomes).toBeUndefined();
   });
 
   describe('§6.4 mercury_well (T3 mercury extractor)', () => {

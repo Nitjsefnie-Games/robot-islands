@@ -74,6 +74,10 @@ export type BuildingDefId =
   | 'silo'
   | 'biomass_plant'
   | 'plant_a_tree'
+  // §6.7 Demolition Yard — T1 special building that automates the
+  // place-then-demolish scrap loop. Recipe is derived per-instance from
+  // `PlacedBuilding.scrapTarget` via `scrapRecipeForTarget`.
+  | 'demolition_yard'
   // T1 manufacturing — Foundation Kit Assembler (§12.3 / §12 settlement)
   | 'kit_assembler'
   // Task 13.2 — Foundation Kit Enriched (T3) + Refined (T4) variants.
@@ -1032,6 +1036,24 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // 50 kg stone hearth + 20 kg iron firebox + 30 kg wood fuel rack = 100 kg.
     placementCost: { stone: 50, iron_ingot: 20, wood: 30 },
     glyph: '♨',
+  },
+  // §6.7: automates the place-then-demolish loop. Recipe is DERIVED per
+  // instance from the selected target's placementCost (see demolition-yard.ts);
+  // no static RECIPES entry. Placement cost is a small early-game outlay —
+  // bootstrap scrap is the purpose. Tune in Appendix A.
+  demolition_yard: {
+    id: 'demolition_yard',
+    displayName: 'Demolition Yard',
+    category: 'special',
+    tier: 1,
+    footprint: SHAPES.square2,
+    fill: 0x5a4632, // scrap-heap brown
+    stroke: 0x241b11,
+    power: { consumes: 20 },
+    // BOM source: rough heuristic — a small fenced scrap yard with a hydraulic
+    // shear and sorting tables (approximate, Appendix A).
+    placementCost: { stone: 100, wood: 60, iron_ingot: 20 },
+    glyph: '♻',
   },
   // §5.2 / §8.6 / §3.5: Geothermal Vent — Volcanic-only T1 free heat source.
   // Doubles as a power producer per §8.5 — the spec lists it under both
