@@ -44,7 +44,7 @@ import {
 } from './placement.js';
 import type { PlacedBuilding } from './buildings.js';
 import { DEFAULT_GRAPH } from './skilltree.js';
-import { candidateAnchors, type AnchorCandidate } from './anchor-picker.js';
+import { ANCHOR_MAX_RANGE_CELLS, type AnchorCandidate } from './anchor-picker.js';
 import { footprintTiles, type Rotation } from './shape-mask.js';
 import type { ResourceId } from './recipes.js';
 import { VISION_BLUE, tileToWorldPx, type IslandSpec, type WorldState } from './world.js';
@@ -632,26 +632,21 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
       if (!ov.ok) {
         reason = ov.reason ?? 'terrain-mismatch';
       } else {
-        // §14 affordability: whichever anchor the player picks pays the cost, so
-        // the placement is affordable iff at least one in-range anchor affords
-        // it. Otherwise surface the shortfall like the land path does (the
-        // commit re-checks per-anchor server-side). Headless (no getStateById)
-        // skips the check so tests that only assert geometry still pass.
-        const anchors = deps.getStateById ? candidateAnchors(world, cellX, cellY) : [];
-        let anyAfford = anchors.length === 0;
-        let best: Partial<Record<ResourceId, number>> | null = null;
-        for (const a of anchors) {
-          const st = deps.getStateById?.(a.islandId);
-          if (!st) continue;
-          const sf = affordabilityShortfall(st.inventory, cost);
-          if (Object.keys(sf).length === 0) {
-            anyAfford = true;
-            break;
-          }
-          if (best === null || Object.keys(sf).length < Object.keys(best).length) best = sf;
+        // §4 the platform anchors to the CURRENTLY-SELECTED island (it pays the
+        // cost + supplies power — no picker). Placeable iff that island is in
+        // range of the cell AND affords the cost.
+        const anchorSpec = deps.getTargetSpec();
+        const anchorState = deps.getTargetState();
+        const distCells =
+          Math.hypot(anchorSpec.cx - cellX * CELL_SIZE_TILES, anchorSpec.cy - cellY * CELL_SIZE_TILES) /
+          CELL_SIZE_TILES;
+        if (distCells > ANCHOR_MAX_RANGE_CELLS) {
+          reason = 'no-anchor-in-range';
+        } else {
+          const sf = affordabilityShortfall(anchorState.inventory, cost);
+          if (Object.keys(sf).length === 0) ok = true;
+          else unaffordableShortfall = sf;
         }
-        if (anyAfford) ok = true;
-        else unaffordableShortfall = best ?? {};
       }
     }
     const color = ok ? OK_COLOR : WARN_COLOR;
@@ -942,7 +937,7 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
       const cellX = Math.floor(wt.x / CELL_SIZE_TILES);
       const cellY = Math.floor(wt.y / CELL_SIZE_TILES);
       const world = deps.getWorld?.();
-      if (!world || !deps.pickAnchor || !deps.getStateById) {
+      if (!world || !deps.getStateById) {
         // Headless / mis-wired deps: surface a generic "ocean def can't be
         // routed" signal. The land-side `def-is-ocean` label is the
         // closest existing reason and IS semantically right HERE — the
@@ -1003,96 +998,53 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
           oceanReason: ov.reason ?? 'terrain-mismatch',
         };
       }
-      const cands = candidateAnchors(world, cellX, cellY);
-      // Validator guarantees cands.length > 0 (else `no-anchor-in-range`),
-      // but defense-in-depth: bail if it's empty here too.
-      if (cands.length === 0) {
+      // §4 anchor to the CURRENTLY-SELECTED island (placement is armed from it)
+      // — no picker. It pays the cost + supplies power, and must be in range.
+      const anchorSpec = deps.getTargetSpec();
+      const anchorState = deps.getTargetState();
+      const anchorDistCells =
+        Math.hypot(anchorSpec.cx - cellX * CELL_SIZE_TILES, anchorSpec.cy - cellY * CELL_SIZE_TILES) /
+        CELL_SIZE_TILES;
+      if (!anchorSpec.populated || anchorDistCells > ANCHOR_MAX_RANGE_CELLS) {
         recordRejection();
         return { ok: false, oceanReason: 'no-anchor-in-range' };
       }
-      // §14 affordability parity with the land path: the anchor the player
-      // picks pays, so block BEFORE opening the picker if NO in-range anchor can
-      // afford the cost (the preview surfaces the same). If at least one can,
-      // the picker opens and the server re-checks the chosen anchor's inventory.
       const oceanCost = placementCostFor(def);
-      const anyAfford = cands.some((c) => {
-        const st = deps.getStateById?.(c.islandId);
-        return st !== undefined && Object.keys(affordabilityShortfall(st.inventory, oceanCost)).length === 0;
-      });
-      if (!anyAfford) {
+      if (Object.keys(affordabilityShortfall(anchorState.inventory, oceanCost)).length > 0) {
         recordRejection();
         return { ok: false, reason: 'insufficient-resources' };
       }
-      // Kick off the anchor picker. The commit completes asynchronously
-      // when the picker resolves — mirrors the cargo-label `pickCargoLabel`
-      // → `begin()` async pattern. attemptCommit returns {ok:false} here
-      // (synchronous contract); the picker-resolution callback drives the
-      // actual mutation and calls `deps.onPlaced()`.
-      const defId = activeDefId; // capture for the async closure
-      const cellAnchorCoordX = cellX * CELL_SIZE_TILES;
-      const cellAnchorCoordY = cellY * CELL_SIZE_TILES;
-      // Bump the epoch so a stale picker resolution gets dropped — same
-      // pre-increment pattern `begin()` uses. Without the bump, a player
-      // double-clicking commit while the first picker is open would have
-      // BOTH `.then` callbacks share the same captured epoch, and neither
-      // stale-check would fire. The cargo-label `begin()` path already
-      // uses `++beginEpoch`; this mirrors it.
-      const epoch = ++beginEpoch;
-      // In-flight guard: block a second commit while the picker is open and the
-      // gateway round-trip is pending. Cleared on every resolution branch below.
+      const oceanDefId = activeDefId;
+      const oceanLocalX = cellX * CELL_SIZE_TILES - anchorSpec.cx;
+      const oceanLocalY = cellY * CELL_SIZE_TILES - anchorSpec.cy;
       commitPending = true;
-      deps.pickAnchor(cands).then(async (picked) => {
-        if (epoch !== beginEpoch) {
-          commitPending = false;
-          return; // stale
-        }
-        if (picked === null) {
-          // Cancel — abort placement entirely (mirrors cargo-label cancel).
-          commitPending = false;
-          cancel();
-          return;
-        }
-        const anchorState = deps.getStateById?.(picked);
-        const anchorSpec = world.islands.find((i) => i.id === picked);
-        if (!anchorState || !anchorSpec) {
-          // Anchor disappeared between picker open and resolve — defensive.
-          commitPending = false;
-          cancel();
-          return;
-        }
-        // Convert world-tile cell-anchor coords to anchor-local tile coords
-        // (matching the per-building convention: b.x, b.y are island-local).
-        const localX = cellAnchorCoordX - anchorSpec.cx;
-        const localY = cellAnchorCoordY - anchorSpec.cy;
+      void (async () => {
         const result = deps.gateway
-          ? await deps.gateway.placeBuilding(anchorSpec.id, defId, localX, localY, 0, {
-              anchorIslandId: picked,
+          ? await deps.gateway.placeBuilding(anchorSpec.id, oceanDefId, oceanLocalX, oceanLocalY, 0, {
+              anchorIslandId: anchorSpec.id,
             })
           : placeBuilding(
               anchorSpec,
               anchorState,
-              defId,
-              localX,
-              localY,
-              0, // ocean defs ignore rotation (square footprints in initial scope)
-              () => placedIdFor(anchorSpec.id, localX, localY),
-              undefined, // nowMs — keep the default (state.lastTick)
-              undefined, // cargoLabelOverride — ocean defs aren't generic-storage
-              picked, // anchorIslandId
+              oceanDefId,
+              oceanLocalX,
+              oceanLocalY,
+              0,
+              () => placedIdFor(anchorSpec.id, oceanLocalX, oceanLocalY),
+              undefined,
+              undefined,
+              anchorSpec.id,
             );
         commitPending = false;
         if (result.ok) {
           cancel();
           deps.onPlaced();
         } else {
-          // Insufficient resources / queue-full on the anchor — surface
-          // through the cancel path; the player can re-arm with different
-          // inventory.
           recordRejection();
           cancel();
         }
-      });
-      return { ok: false }; // pending; success arrives via the async callback
+      })();
+      return { ok: true };
     }
     // Land path (existing).
     const targetSpec = deps.getTargetSpec();

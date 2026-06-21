@@ -187,106 +187,39 @@ function shallowsAtCell00(): Map<string, OceanCellSpec> {
 }
 
 describe('§4 placement-ui ocean branch', () => {
-  it('routes ocean def through validateOceanPlacement + picker, places with anchorIslandId', async () => {
+
+  it('places an ocean def on the CURRENTLY-SELECTED island (no picker)', async () => {
     const anchor = makeAnchorSpec('anchor-1');
     const anchorState = makeInitialIslandState(anchor, 0);
     anchorState.level = 5;
-    // Seed plenty of placement-cost resources on the anchor. Open-Water
-    // Extractor costs carbon_steel:80, wire:30, microchip:15 — overshoot
-    // each so the §14 cost gate passes.
-    anchorState.inventory.carbon_steel = 10000;
-    anchorState.inventory.wire = 10000;
-    anchorState.inventory.microchip = 10000;
     anchorState.inventory.steel_beam = 10000;
     anchorState.inventory.concrete = 10000;
     anchorState.inventory.gear = 10000;
     anchorState.inventory.pipe = 10000;
-    // Dummy target spec/state for the land path's getTargetSpec/getTargetState
-    // calls (the ocean branch never reads them, but the deps require them).
-    const dummySpec = makeSpec();
-    const dummyState = makeState(dummySpec);
+    anchorState.inventory.wire = 10000;
+    anchorState.inventory.microchip = 10000;
     const world = makeOceanWorld([anchor], shallowsAtCell00());
     let placedCalled = 0;
-    let pickerCandidates: Array<{ islandId: string }> = [];
     const ui = mountPlacementUi({
-      getTargetSpec: () => dummySpec,
-      getTargetState: () => dummyState,
+      getTargetSpec: () => anchor,
+      getTargetState: () => anchorState,
       screenToWorldTile: (x, y) => ({ x, y }),
       onPlaced: () => {
         placedCalled++;
       },
       getWorld: () => world,
       getStateById: (id) => (id === anchor.id ? anchorState : undefined),
-      pickAnchor: (cands) => {
-        pickerCandidates = cands.map((c) => ({ islandId: c.islandId }));
-        return Promise.resolve(anchor.id);
-      },
     });
     ui.begin('open_water_extractor');
     expect(ui.isActive()).toBe(true);
-    const r = ui.attemptCommit();
-    // Synchronous return is {ok: false} — commit completes via the async
-    // picker resolution. The actual success signal is the post-await state.
-    expect(r.ok).toBe(false);
-    expect(r.reason).toBeUndefined();
-    expect(r.oceanReason).toBeUndefined();
-    // Flush microtasks so the picker resolution + placeBuilding mutation lands.
+    expect(ui.attemptCommit().ok).toBe(true);
     await Promise.resolve();
     await Promise.resolve();
     await Promise.resolve();
-    expect(pickerCandidates.length).toBe(1);
-    expect(pickerCandidates[0]!.islandId).toBe(anchor.id);
     expect(placedCalled).toBe(1);
     expect(anchor.buildings).toHaveLength(1);
     expect(anchor.buildings[0]!.anchorIslandId).toBe(anchor.id);
     expect(anchor.buildings[0]!.defId).toBe('open_water_extractor');
-    // Dummy target was never touched — ocean placement lives on the anchor.
-    expect(dummySpec.buildings).toHaveLength(0);
-  });
-
-  it('aborts placement on picker cancel (null resolution)', async () => {
-    const anchor = makeAnchorSpec('anchor-1');
-    const anchorState = makeInitialIslandState(anchor, 0);
-    anchorState.level = 5;
-    anchorState.inventory.carbon_steel = 10000;
-    anchorState.inventory.wire = 10000;
-    anchorState.inventory.microchip = 10000;
-    // Fund the open_water_extractor cost basket so the §14 affordability gate
-    // lets the anchor picker open — this test exercises the picker CANCEL path.
-    anchorState.inventory.steel_beam = 10000;
-    anchorState.inventory.concrete = 10000;
-    anchorState.inventory.gear = 10000;
-    anchorState.inventory.pipe = 10000;
-    const dummySpec = makeSpec();
-    const dummyState = makeState(dummySpec);
-    const world = makeOceanWorld([anchor], shallowsAtCell00());
-    let placedCalled = 0;
-    const ui = mountPlacementUi({
-      getTargetSpec: () => dummySpec,
-      getTargetState: () => dummyState,
-      screenToWorldTile: (x, y) => ({ x, y }),
-      onPlaced: () => {
-        placedCalled++;
-      },
-      getWorld: () => world,
-      getStateById: (id) => (id === anchor.id ? anchorState : undefined),
-      // Picker resolves null → cancel. Placement must abort entirely; no
-      // mutation to anchor.buildings, no deduction from anchorState.inventory,
-      // no onPlaced() fire.
-      pickAnchor: () => Promise.resolve(null),
-    });
-    ui.begin('open_water_extractor');
-    ui.attemptCommit();
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
-    expect(anchor.buildings).toHaveLength(0);
-    expect(placedCalled).toBe(0);
-    // After cancel, isActive must drop — the inner cancel() path matches the
-    // cargo-label cancel contract.
-    expect(ui.isActive()).toBe(false);
-    // Anchor inventory untouched.
-    expect(anchorState.inventory.carbon_steel).toBe(10000);
   });
 
   it('rejects ocean def commit with insufficient-resources when no in-range anchor can afford it', () => {
