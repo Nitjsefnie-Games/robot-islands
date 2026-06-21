@@ -64,7 +64,7 @@ describe('battery ladder integration', () => {
       buildings: [
         { id: 'b1', defId: 'battery_bank', x: 0, y: 0 },
         { id: 'f1', defId: 'coal_gen', x: 1, y: 0 },
-        { id: 'm1', defId: 'mine', x: 2, y: 0 },
+        { id: 'm1', defId: 'iron_mine', x: 2, y: 0 },
       ],
       inventory: { ...blankInventory(), coal: 10_000 },
     });

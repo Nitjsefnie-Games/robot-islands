@@ -210,7 +210,7 @@ describe('validatePlacement', () => {
     const spec = makeSpec();
     const state = makeState(spec);
     // Mine (2×2) at (0,0) — all four corners inside r=14 ellipse.
-    const v = validatePlacement(spec, state, 'mine', 0, 0, 0);
+    const v = validatePlacement(spec, state, 'iron_mine', 0, 0, 0);
     expect(v.ok).toBe(true);
   });
 
@@ -219,18 +219,18 @@ describe('validatePlacement', () => {
     const state = makeState(spec);
     // 2×2 anchor at (4,4): tile (5,5) is outside the r=5 disk (corners go
     // up to (6,6), which violates tileInscribedInEllipse).
-    const v = validatePlacement(spec, state, 'mine', 4, 4, 0);
+    const v = validatePlacement(spec, state, 'iron_mine', 4, 4, 0);
     expect(v.ok).toBe(false);
     expect(v.reason).toBe('out-of-bounds');
   });
 
   it('returns overlap when a tile is already covered by an existing building', () => {
-    const existing: PlacedBuilding = { id: 'b1', defId: 'mine', x: 0, y: 0 };
+    const existing: PlacedBuilding = { id: 'b1', defId: 'iron_mine', x: 0, y: 0 };
     const spec = makeSpec({ buildings: [existing] });
     const state = makeState(spec);
     // Try to place another Mine at (1, 1) — its top-left tile (1,1) lies
     // inside the existing Mine's 2×2 footprint (0..1, 0..1).
-    const v = validatePlacement(spec, state, 'mine', 1, 1, 0);
+    const v = validatePlacement(spec, state, 'iron_mine', 1, 1, 0);
     expect(v.ok).toBe(false);
     expect(v.reason).toBe('overlap');
   });
@@ -337,32 +337,30 @@ describe('validatePlacement', () => {
   it('returns ok=true for a Mine on a homogeneous ore footprint', () => {
     const spec = makeSpec({ terrainAt: () => 'ore' });
     const state = makeState(spec);
-    const v = validatePlacement(spec, state, 'mine', 0, 0, 0);
+    const v = validatePlacement(spec, state, 'iron_mine', 0, 0, 0);
     expect(v.ok).toBe(true);
   });
 
-  it('returns ok=true for a Mine on a homogeneous coal footprint', () => {
+  it('returns ok=true for a Coal Mine on a homogeneous coal footprint', () => {
     const spec = makeSpec({ terrainAt: () => 'coal' });
     const state = makeState(spec);
-    const v = validatePlacement(spec, state, 'mine', 0, 0, 0);
+    const v = validatePlacement(spec, state, 'coal_mine', 0, 0, 0);
     expect(v.ok).toBe(true);
   });
 
-  it('returns ok=true for a Mine on a mixed ore+coal footprint (both in requiredTile)', () => {
-    // Half ore, half coal under the 2×2 footprint at (0,0). Every tile is in
-    // the allowed set, so the gate passes even though the cells are mixed.
-    const spec = makeSpec({
-      terrainAt: (x, _y) => (x === 0 ? 'ore' : 'coal'),
-    });
+  it('rejects an Iron Mine on a coal footprint (§8.1 split — ore only)', () => {
+    // The split made each mine single-terrain: an Iron Mine requires every
+    // footprint tile to be ore, so a coal tile fails the requiredTile gate.
+    const spec = makeSpec({ terrainAt: () => 'coal' });
     const state = makeState(spec);
-    const v = validatePlacement(spec, state, 'mine', 0, 0, 0);
-    expect(v.ok).toBe(true);
+    const v = validatePlacement(spec, state, 'iron_mine', 0, 0, 0);
+    expect(v.ok).toBe(false);
   });
 
   it('returns tile-requirement-not-met for a Mine on all-grass terrain', () => {
     const spec = makeSpec({ terrainAt: () => 'grass' });
     const state = makeState(spec);
-    const v = validatePlacement(spec, state, 'mine', 0, 0, 0);
+    const v = validatePlacement(spec, state, 'iron_mine', 0, 0, 0);
     expect(v.ok).toBe(false);
     expect(v.reason).toBe('tile-requirement-not-met');
   });
@@ -374,7 +372,7 @@ describe('validatePlacement', () => {
       terrainAt: (x, y) => (x === 1 && y === 1 ? 'grass' : 'ore'),
     });
     const state = makeState(spec);
-    const v = validatePlacement(spec, state, 'mine', 0, 0, 0);
+    const v = validatePlacement(spec, state, 'iron_mine', 0, 0, 0);
     expect(v.ok).toBe(false);
     expect(v.reason).toBe('tile-requirement-not-met');
   });
@@ -408,22 +406,22 @@ describe('validatePlacement', () => {
 
   describe('validatePlacement — ignoreBuildingId + skipCostGate', () => {
     it('ignoreBuildingId excludes that building from the overlap check', () => {
-      const existing = { id: 'e1', defId: 'mine', x: 0, y: 0 } as PlacedBuilding;
+      const existing = { id: 'e1', defId: 'iron_mine', x: 0, y: 0 } as PlacedBuilding;
       const spec = makeSpec({ buildings: [existing] });
       const state = makeState(spec);
       // Same tiles as the existing mine → overlap without the ignore.
-      expect(validatePlacement(spec, state, 'mine', 0, 0, 0).reason).toBe('overlap');
+      expect(validatePlacement(spec, state, 'iron_mine', 0, 0, 0).reason).toBe('overlap');
       // Excluding the existing building's own footprint → geometry passes.
-      expect(validatePlacement(spec, state, 'mine', 0, 0, 0, DEFAULT_GRAPH, 'e1').ok).toBe(true);
+      expect(validatePlacement(spec, state, 'iron_mine', 0, 0, 0, DEFAULT_GRAPH, 'e1').ok).toBe(true);
     });
 
     it('ignoreBuildingId still rejects overlap with a DIFFERENT building', () => {
-      const a = { id: 'a', defId: 'mine', x: 0, y: 0 } as PlacedBuilding;
-      const b = { id: 'b', defId: 'mine', x: 4, y: 0 } as PlacedBuilding;
+      const a = { id: 'a', defId: 'iron_mine', x: 0, y: 0 } as PlacedBuilding;
+      const b = { id: 'b', defId: 'iron_mine', x: 4, y: 0 } as PlacedBuilding;
       const spec = makeSpec({ buildings: [a, b] });
       const state = makeState(spec);
       // Ignoring 'a', but placing onto 'b' at (4,0) still overlaps b.
-      expect(validatePlacement(spec, state, 'mine', 4, 0, 0, DEFAULT_GRAPH, 'a').reason).toBe('overlap');
+      expect(validatePlacement(spec, state, 'iron_mine', 4, 0, 0, DEFAULT_GRAPH, 'a').reason).toBe('overlap');
     });
 
     it('skipCostGate bypasses the affordability gate', () => {
@@ -432,9 +430,9 @@ describe('validatePlacement', () => {
       state.inventory.stone = 0;
       state.inventory.wood = 0;
       // mine costs stone+wood → without skip, insufficient-resources.
-      expect(validatePlacement(spec, state, 'mine', 0, 0, 0).reason).toBe('insufficient-resources');
+      expect(validatePlacement(spec, state, 'iron_mine', 0, 0, 0).reason).toBe('insufficient-resources');
       // skipCostGate true (8th arg) → geometry-only validation passes.
-      expect(validatePlacement(spec, state, 'mine', 0, 0, 0, DEFAULT_GRAPH, undefined, true).ok).toBe(true);
+      expect(validatePlacement(spec, state, 'iron_mine', 0, 0, 0, DEFAULT_GRAPH, undefined, true).ok).toBe(true);
     });
 
     it('accepts placement on absorbed-constituent land (extraEllipse) per SPEC §4.3', () => {
@@ -482,8 +480,8 @@ describe('placeBuilding', () => {
   it('appends a PlacedBuilding to spec.buildings (which state.buildings shares)', () => {
     const spec = makeSpec();
     const state = makeState(spec);
-    const placed = expectPlaced(placeBuilding(spec, state, 'mine', 0, 0, 0, () => 'p-1'));
-    expect(placed).toMatchObject({ id: 'p-1', defId: 'mine', x: 0, y: 0, rotation: 0 });
+    const placed = expectPlaced(placeBuilding(spec, state, 'iron_mine', 0, 0, 0, () => 'p-1'));
+    expect(placed).toMatchObject({ id: 'p-1', defId: 'iron_mine', x: 0, y: 0, rotation: 0 });
     // §4.7 maintenance seeds: placedAt/maintainedAt default to state.lastTick;
     // operatingMs starts at 0. Test only asserts presence (the exact stamp
     // depends on state.lastTick, which the makeState helper picks).
@@ -573,7 +571,7 @@ describe('placeBuilding', () => {
       placeBuilding(
         spec,
         state,
-        'mine',
+        'iron_mine',
         0,
         0,
         0,
@@ -631,7 +629,7 @@ describe('placeBuilding', () => {
     const spec = makeSpec();
     const state = makeState(spec);
     const before = { ...state.storageCaps };
-    expectPlaced(placeBuilding(spec, state, 'mine', 0, 0, 0, () => 'p-mine'));
+    expectPlaced(placeBuilding(spec, state, 'iron_mine', 0, 0, 0, () => 'p-mine'));
     for (const r of ALL_RESOURCES as ReadonlyArray<ResourceId>) {
       expect(state.storageCaps[r]).toBe(before[r]);
     }
@@ -661,7 +659,7 @@ describe('placeBuilding', () => {
     // it can differ from the unmultiplied base.
     const spec = makeSpec();
     const state = makeState(spec);
-    const placed = expectPlaced(placeBuilding(spec, state, 'mine', 0, 0, 0, () => 'p-total'));
+    const placed = expectPlaced(placeBuilding(spec, state, 'iron_mine', 0, 0, 0, () => 'p-total'));
     expect(placed.constructionRemainingMs).toBeGreaterThan(0);
     expect(placed.constructionTotalMs).toBe(placed.constructionRemainingMs);
   });
@@ -676,7 +674,7 @@ describe('placeBuilding', () => {
     const state = makeState(spec);
     state.inventory.stone = 300;
     state.inventory.wood = 200;
-    expectPlaced(placeBuilding(spec, state, 'mine', 0, 0, 0, () => 'p-cost-1'));
+    expectPlaced(placeBuilding(spec, state, 'iron_mine', 0, 0, 0, () => 'p-cost-1'));
     expect(state.inventory.stone).toBe(100);
     expect(state.inventory.wood).toBe(120);
   });
@@ -687,7 +685,7 @@ describe('placeBuilding', () => {
     const state = makeState(spec);
     state.inventory.stone = 0;
     state.inventory.wood = 0;
-    const result = placeBuilding(spec, state, 'mine', 0, 0, 0, () => 'p-fail-1');
+    const result = placeBuilding(spec, state, 'iron_mine', 0, 0, 0, () => 'p-fail-1');
     expect(result.ok).toBe(false);
     if (!result.ok && result.reason === 'insufficient-resources') {
       expect(result.missing).toEqual({ stone: 200, wood: 80 });
@@ -729,7 +727,7 @@ describe('placeBuilding', () => {
     const state = makeState(spec);
     state.inventory.stone = 0;
     state.inventory.wood = 0;
-    const v = validatePlacement(spec, state, 'mine', 0, 0, 0);
+    const v = validatePlacement(spec, state, 'iron_mine', 0, 0, 0);
     expect(v.ok).toBe(false);
     expect(v.reason).toBe('insufficient-resources');
     expect(v.missing).toEqual({ stone: 200, wood: 80 });
@@ -759,7 +757,7 @@ describe('placeBuilding', () => {
 // ---------------------------------------------------------------------------
 describe('buildingAtTile', () => {
   it('returns the building when the tile lies inside its footprint', () => {
-    const b: PlacedBuilding = { id: 'm1', defId: 'mine', x: 0, y: 0, rotation: 0 };
+    const b: PlacedBuilding = { id: 'm1', defId: 'iron_mine', x: 0, y: 0, rotation: 0 };
     const spec = makeSpec({ buildings: [b] });
     // Mine is 2×2 at (0,0). All four tiles should hit.
     expect(buildingAtTile(spec, 0, 0)).toBe(b);
@@ -769,7 +767,7 @@ describe('buildingAtTile', () => {
   });
 
   it('returns null when the tile is outside every footprint', () => {
-    const b: PlacedBuilding = { id: 'm1', defId: 'mine', x: 0, y: 0, rotation: 0 };
+    const b: PlacedBuilding = { id: 'm1', defId: 'iron_mine', x: 0, y: 0, rotation: 0 };
     const spec = makeSpec({ buildings: [b] });
     expect(buildingAtTile(spec, 2, 0)).toBeNull();
     expect(buildingAtTile(spec, 0, 2)).toBeNull();
@@ -777,7 +775,7 @@ describe('buildingAtTile', () => {
   });
 
   it('snaps fractional tile coords to the nearest tile (round, centred-tile convention)', () => {
-    const b: PlacedBuilding = { id: 'm1', defId: 'mine', x: 0, y: 0, rotation: 0 };
+    const b: PlacedBuilding = { id: 'm1', defId: 'iron_mine', x: 0, y: 0, rotation: 0 };
     const spec = makeSpec({ buildings: [b] });
     // 0.3 and 0.7 both round to the nearest integer within the 2×2 footprint.
     expect(buildingAtTile(spec, 0.7, 0.3)).toBe(b);
@@ -791,7 +789,7 @@ describe('buildingAtTile', () => {
     // In fractional-tile coords, tile (n) spans [n - 0.5, n + 0.5).
     // A 2×2 Mine at (0,0) covers tiles {0,1} × {0,1}, so its visual footprint
     // spans fractional coords [-0.5, 1.5) in both axes.
-    const b: PlacedBuilding = { id: 'm1', defId: 'mine', x: 0, y: 0, rotation: 0 };
+    const b: PlacedBuilding = { id: 'm1', defId: 'iron_mine', x: 0, y: 0, rotation: 0 };
     const spec = makeSpec({ buildings: [b] });
     // Visual top-left corner: fractional (-0.49, -0.49) — inside the building.
     expect(buildingAtTile(spec, -0.49, -0.49)).toBe(b);
@@ -824,8 +822,8 @@ describe('buildingAtTile', () => {
     // Synthetic fixture — placement would normally reject overlap. Build two
     // entries at the same anchor and confirm first-match wins so behaviour
     // is predictable if a test or save fixture ever ships an overlap.
-    const a: PlacedBuilding = { id: 'a', defId: 'mine', x: 0, y: 0, rotation: 0 };
-    const b: PlacedBuilding = { id: 'b', defId: 'mine', x: 0, y: 0, rotation: 0 };
+    const a: PlacedBuilding = { id: 'a', defId: 'iron_mine', x: 0, y: 0, rotation: 0 };
+    const b: PlacedBuilding = { id: 'b', defId: 'iron_mine', x: 0, y: 0, rotation: 0 };
     const spec = makeSpec({ buildings: [a, b] });
     expect(buildingAtTile(spec, 0, 0)).toBe(a);
   });
@@ -847,7 +845,7 @@ describe('demolishBuilding', () => {
   it('removes the building from spec.buildings on the happy path', () => {
     const spec = makeSpec();
     const state = makeState(spec);
-    placeBuilding(spec, state, 'mine', 0, 0, 0, () => 'p-mine');
+    placeBuilding(spec, state, 'iron_mine', 0, 0, 0, () => 'p-mine');
     expect(spec.buildings).toHaveLength(1);
     const r = demolishBuilding(spec, state, 'p-mine');
     expect(r.ok).toBe(true);
@@ -859,9 +857,9 @@ describe('demolishBuilding', () => {
 
   it('credits scrap = floor(sum(placementCost) * 0.3) on success', () => {
     // solar 11 → 3; mine 280 → 84; blast_furnace 57000 → 17100.
-    const cases: Array<{ defId: 'solar' | 'mine' | 'blast_furnace'; level: number; expected: number }> = [
+    const cases: Array<{ defId: 'solar' | 'iron_mine' | 'blast_furnace'; level: number; expected: number }> = [
       { defId: 'solar', level: 1, expected: 3 },
-      { defId: 'mine', level: 1, expected: 84 },
+      { defId: 'iron_mine', level: 1, expected: 84 },
       { defId: 'blast_furnace', level: 5, expected: 17100 },
     ];
     for (const c of cases) {
@@ -1020,7 +1018,7 @@ describe('demolishBuilding', () => {
   it('leaves storage caps untouched when a non-storage def is demolished', () => {
     const spec = makeSpec();
     const state = makeState(spec);
-    placeBuilding(spec, state, 'mine', 0, 0, 0, () => 'p-mine');
+    placeBuilding(spec, state, 'iron_mine', 0, 0, 0, () => 'p-mine');
     const beforeCaps = { ...state.storageCaps };
     demolishBuilding(spec, state, 'p-mine');
     for (const r of ALL_RESOURCES as ReadonlyArray<ResourceId>) {
@@ -1056,7 +1054,7 @@ describe('demolishBuilding', () => {
     state.storageCaps.scrap = 5;
     state.inventory.scrap = 0;
     // Mine costs 280 total → 84 scrap; the cap of 5 should clip it.
-    placeBuilding(spec, state, 'mine', 0, 0, 0, () => 'p-mine');
+    placeBuilding(spec, state, 'iron_mine', 0, 0, 0, () => 'p-mine');
     const r = demolishBuilding(spec, state, 'p-mine');
     expect(r.ok).toBe(true);
     // Reported credit reflects the raw scrap returned per §6.7 formula —
@@ -1080,7 +1078,7 @@ describe('demolishBuilding', () => {
     state.storageCaps.wood = 1000;
     state.inventory.stone = 300;
     state.inventory.wood = 200;
-    placeBuilding(spec, state, 'mine', 0, 0, 0, () => 'p-mine-refund');
+    placeBuilding(spec, state, 'iron_mine', 0, 0, 0, () => 'p-mine-refund');
     // After place: 300 - 200 = 100 stone, 200 - 80 = 120 wood.
     expect(state.inventory.stone).toBe(100);
     expect(state.inventory.wood).toBe(120);
@@ -1099,7 +1097,7 @@ describe('demolishBuilding', () => {
     const state = makeState(spec);
     state.inventory.stone = 300;
     state.inventory.wood = 200;
-    placeBuilding(spec, state, 'mine', 0, 0, 0, () => 'p-mine-cap');
+    placeBuilding(spec, state, 'iron_mine', 0, 0, 0, () => 'p-mine-cap');
     // Force stone cap low — anything past cap is lost on refund.
     state.storageCaps.stone = 75;
     state.inventory.stone = 70;
@@ -1112,7 +1110,7 @@ describe('demolishBuilding', () => {
   });
 
   it('refund and scrap scale with floor level', () => {
-    const m1 = { id: 'm1', defId: 'mine', x: 0, y: 0, floorLevel: 2 } as PlacedBuilding;
+    const m1 = { id: 'm1', defId: 'iron_mine', x: 0, y: 0, floorLevel: 2 } as PlacedBuilding;
     const spec = makeSpec({ buildings: [m1] });
     const state = makeState(spec);
     // Ensure headroom so refund/scrap aren't cap-clamped, and empty stockpiles.
@@ -1131,7 +1129,7 @@ describe('demolishBuilding', () => {
   });
 
   it('floor 0 matches the base-cost refund/scrap values', () => {
-    const m1 = { id: 'm1', defId: 'mine', x: 0, y: 0 } as PlacedBuilding; // floor 0
+    const m1 = { id: 'm1', defId: 'iron_mine', x: 0, y: 0 } as PlacedBuilding; // floor 0
     const spec = makeSpec({ buildings: [m1] });
     const state = makeState(spec);
     state.storageCaps.scrap = 50000;
@@ -1176,8 +1174,8 @@ describe('§6.7 scrap recovery', () => {
   it('returns scrap proportional to build cost, not footprint area', () => {
     const spec = makeSpec();
     const state = makeState(spec);
-    placeBuilding(spec, state, 'mine', 0, 0, 0, () => 'p-mine');
-    const mineDef = BUILDING_DEFS.mine;
+    placeBuilding(spec, state, 'iron_mine', 0, 0, 0, () => 'p-mine');
+    const mineDef = BUILDING_DEFS.iron_mine;
     const costSum = Object.values(placementCostFor(mineDef)).reduce((a, b) => a + b, 0);
     const expectedScrap = Math.floor(costSum * 0.3);
     const result = demolishBuilding(spec, state, state.buildings[state.buildings.length - 1]!.id);
@@ -1246,28 +1244,28 @@ function nearbyPopulatedIsland(): IslandSpec {
 }
 
 describe('totalInvestedCost', () => {
-  const mineDef = BUILDING_DEFS.mine; // placementCost { stone: 200, wood: 80 }
+  const mineDef = BUILDING_DEFS.iron_mine; // placementCost { stone: 200, wood: 80 }
 
   it('floor 0 (explicit) → base placement cost', () => {
-    const b = { id: 'm', defId: 'mine', x: 0, y: 0, floorLevel: 0 } as never;
+    const b = { id: 'm', defId: 'iron_mine', x: 0, y: 0, floorLevel: 0 } as never;
     expect(totalInvestedCost(b, mineDef)).toEqual({ stone: 200, wood: 80 });
   });
 
   it('floor 3 → base + 3 × ceil(0.8 × base) per resource', () => {
     // per-floor upgrade = ceil(0.8×200)=160 stone, ceil(0.8×80)=64 wood.
     // floor 3: stone 200+3×160=680; wood 80+3×64=272.
-    const b = { id: 'm', defId: 'mine', x: 0, y: 0, floorLevel: 3 } as never;
+    const b = { id: 'm', defId: 'iron_mine', x: 0, y: 0, floorLevel: 3 } as never;
     expect(totalInvestedCost(b, mineDef)).toEqual({ stone: 680, wood: 272 });
   });
 
   it('undefined floorLevel is treated as 0', () => {
-    const b = { id: 'm', defId: 'mine', x: 0, y: 0 } as never;
+    const b = { id: 'm', defId: 'iron_mine', x: 0, y: 0 } as never;
     expect(totalInvestedCost(b, mineDef)).toEqual({ stone: 200, wood: 80 });
   });
 
   it('sums the exponential curve for floors beyond 10', () => {
     // floorLevel 10 → displayed 11; 9 legacy upgrades (floors 2..10) plus one exponential upgrade (floor 11).
-    const b = { id: 'm', defId: 'mine', x: 0, y: 0, floorLevel: 10 } as never;
+    const b = { id: 'm', defId: 'iron_mine', x: 0, y: 0, floorLevel: 10 } as never;
     const expected = {
       stone: 200 + 9 * 160 + upgradeCost(mineDef, 11).stone!,
       wood: 80 + 9 * 64 + upgradeCost(mineDef, 11).wood!,
@@ -1364,7 +1362,7 @@ describe('§3 ocean building footprint validation', () => {
     // ocean validator with it returns `def-not-ocean` rather than silently
     // accepting — surfaces test-side routing bugs fast.
     const world = makeOceanWorld(new Map(), [nearbyPopulatedIsland()]);
-    const v = validateOceanPlacement(world, 'mine', 0, 0);
+    const v = validateOceanPlacement(world, 'iron_mine', 0, 0);
     expect(v.ok).toBe(false);
     expect(v.reason).toBe('def-not-ocean');
   });
@@ -1819,32 +1817,32 @@ describe('tierBypass in validatePlacement', () => {
 describe('upgradeCost', () => {
   it('returns each placementCost entry × 0.8', () => {
     // Mine: { stone: 200, wood: 80 } → ×0.8
-    const mine = BUILDING_DEFS.mine;
+    const mine = BUILDING_DEFS.iron_mine;
     expect(upgradeCost(mine)).toEqual({ stone: 160, wood: 64 });
   });
 
   it('returns empty record for a def with no placementCost', () => {
     // Some legacy / free defs may lack placementCost.
-    const def = { ...BUILDING_DEFS.mine, placementCost: undefined };
+    const def = { ...BUILDING_DEFS.iron_mine, placementCost: undefined };
     expect(upgradeCost(def)).toEqual({});
   });
 
   it('rounds upgradeCost up to whole units', () => {
     // Real defs all have costs that are multiples of 5, so ×0.8 is integral.
     // Use a synthetic def with a non-÷5 entry to genuinely exercise the ceil.
-    const def = { ...BUILDING_DEFS.mine, placementCost: { wood: 2 } };
+    const def = { ...BUILDING_DEFS.iron_mine, placementCost: { wood: 2 } };
     expect(upgradeCost(def)).toEqual({ wood: 2 }); // Math.ceil(2 * 0.8) = Math.ceil(1.6) = 2
   });
 
   it('keeps floors 2..10 priced at the legacy 0.8× rate', () => {
-    const mine = BUILDING_DEFS.mine;
+    const mine = BUILDING_DEFS.iron_mine;
     for (let L = 2; L <= 10; L++) {
       expect(upgradeCost(mine, L)).toEqual({ stone: 160, wood: 64 });
     }
   });
 
   it('prices floor 11, 12, 15 with the exponential formula', () => {
-    const mine = BUILDING_DEFS.mine; // { stone: 200, wood: 80 }
+    const mine = BUILDING_DEFS.iron_mine; // { stone: 200, wood: 80 }
     const factor = (L: number) => 0.8 * (1.15 ** (L - 10));
     const expected = (L: number) => ({
       stone: Math.ceil(200 * factor(L)),
@@ -1862,7 +1860,7 @@ describe('upgradeCost', () => {
   });
 
   it('cost keeps growing without a cap', () => {
-    const mine = BUILDING_DEFS.mine;
+    const mine = BUILDING_DEFS.iron_mine;
     const costs: number[] = [];
     for (let L = 11; L <= 100; L++) {
       costs.push(upgradeCost(mine, L).stone!);
@@ -1877,8 +1875,8 @@ describe('upgradeCost', () => {
 describe('upgradeConstructionMs', () => {
   it('returns base × (level + 1) for a T1 def', () => {
     const base = BASE_CONSTRUCTION_MS_BY_TIER[1];
-    expect(upgradeConstructionMs(BUILDING_DEFS.mine, 1)).toBe(base * 2);
-    expect(upgradeConstructionMs(BUILDING_DEFS.mine, 9)).toBe(base * 10);
+    expect(upgradeConstructionMs(BUILDING_DEFS.iron_mine, 1)).toBe(base * 2);
+    expect(upgradeConstructionMs(BUILDING_DEFS.iron_mine, 9)).toBe(base * 10);
   });
 
   it('returns base × (level + 1) for a T3 def', () => {
@@ -1892,7 +1890,7 @@ describe('applyUpgrade', () => {
   it('allows upgrading past floor 9 with no hard cap', () => {
     const spec = makeSpec();
     const state = makeState(spec);
-    const b: PlacedBuilding = { id: 'b1', defId: 'mine', x: 0, y: 0, floorLevel: 9 };
+    const b: PlacedBuilding = { id: 'b1', defId: 'iron_mine', x: 0, y: 0, floorLevel: 9 };
     spec.buildings.push(b);
     const r = applyUpgrade(spec, state, 'b1');
     expect(r.ok).toBe(true);
@@ -1904,13 +1902,13 @@ describe('applyUpgrade', () => {
     const state = makeState(spec);
     state.inventory.stone = 10000;
     state.inventory.wood = 10000;
-    const b: PlacedBuilding = { id: 'b1', defId: 'mine', x: 0, y: 0, floorLevel: 9 };
+    const b: PlacedBuilding = { id: 'b1', defId: 'iron_mine', x: 0, y: 0, floorLevel: 9 };
     spec.buildings.push(b);
     const before = { ...state.inventory };
     const r = applyUpgrade(spec, state, 'b1');
     expect(r.ok).toBe(true);
     expect(b.floorLevel).toBe(10);
-    const expectedCost = upgradeCost(BUILDING_DEFS.mine, 11);
+    const expectedCost = upgradeCost(BUILDING_DEFS.iron_mine, 11);
     expect(before.stone - state.inventory.stone).toBe(expectedCost.stone!);
     expect(before.wood - state.inventory.wood).toBe(expectedCost.wood!);
   });
@@ -1930,7 +1928,7 @@ describe('applyUpgrade', () => {
     // floorLevel; that happens when it promotes to running.
     const spec = makeSpec();
     const state = makeState(spec);
-    const b: PlacedBuilding = { id: 'b1', defId: 'mine', x: 0, y: 0, constructionRemainingMs: 5000 };
+    const b: PlacedBuilding = { id: 'b1', defId: 'iron_mine', x: 0, y: 0, constructionRemainingMs: 5000 };
     spec.buildings.push(b);
     const r = applyUpgrade(spec, state, 'b1');
     expect(r.ok).toBe(true);
@@ -1945,8 +1943,8 @@ describe('applyUpgrade', () => {
     const spec = makeSpec();
     const state = makeState(spec);
     // One OTHER building occupies the island's single (no-skill) build slot.
-    spec.buildings.push({ id: 'busy', defId: 'mine', x: 5, y: 5, constructionRemainingMs: 5000 });
-    const target: PlacedBuilding = { id: 'b1', defId: 'mine', x: 0, y: 0 };
+    spec.buildings.push({ id: 'busy', defId: 'iron_mine', x: 5, y: 5, constructionRemainingMs: 5000 });
+    const target: PlacedBuilding = { id: 'b1', defId: 'iron_mine', x: 0, y: 0 };
     spec.buildings.push(target);
     const r = applyUpgrade(spec, state, 'b1');
     expect(r.ok).toBe(true);
@@ -1962,13 +1960,13 @@ describe('applyUpgrade', () => {
     const spec = makeSpec();
     const state = makeState(spec);
     // Occupy the running slot.
-    spec.buildings.push({ id: 'busy', defId: 'mine', x: 5, y: 5, constructionRemainingMs: 5000 });
+    spec.buildings.push({ id: 'busy', defId: 'iron_mine', x: 5, y: 5, constructionRemainingMs: 5000 });
     // Fill the queue (base capacity 2) with queued builds.
     const qSlots = queuedBuildSlots(state);
     for (let i = 0; i < qSlots; i++) {
-      spec.buildings.push({ id: `qb${i}`, defId: 'mine', x: i * 3, y: 10, constructionRemainingMs: 1, queued: true });
+      spec.buildings.push({ id: `qb${i}`, defId: 'iron_mine', x: i * 3, y: 10, constructionRemainingMs: 1, queued: true });
     }
-    const target: PlacedBuilding = { id: 'b1', defId: 'mine', x: 0, y: 0 };
+    const target: PlacedBuilding = { id: 'b1', defId: 'iron_mine', x: 0, y: 0 };
     spec.buildings.push(target);
     const r = applyUpgrade(spec, state, 'b1');
     expect(r.ok).toBe(false);
@@ -1981,7 +1979,7 @@ describe('applyUpgrade', () => {
     const state = makeState(spec);
     state.inventory.stone = 0;
     state.inventory.wood = 0;
-    const b: PlacedBuilding = { id: 'b1', defId: 'mine', x: 0, y: 0 };
+    const b: PlacedBuilding = { id: 'b1', defId: 'iron_mine', x: 0, y: 0 };
     spec.buildings.push(b);
     const r = applyUpgrade(spec, state, 'b1');
     expect(r.ok).toBe(false);
@@ -2001,7 +1999,7 @@ describe('applyUpgrade', () => {
     const state = makeState(spec);
     state.inventory.stone = 300;
     state.inventory.wood = 200;
-    const b: PlacedBuilding = { id: 'b1', defId: 'mine', x: 0, y: 0 };
+    const b: PlacedBuilding = { id: 'b1', defId: 'iron_mine', x: 0, y: 0 };
     spec.buildings.push(b);
     const r = applyUpgrade(spec, state, 'b1');
     expect(r.ok).toBe(true);
@@ -2013,7 +2011,7 @@ describe('applyUpgrade', () => {
   it('sets constructionRemainingMs > 0 so isOperational becomes false', () => {
     const spec = makeSpec();
     const state = makeState(spec);
-    const b: PlacedBuilding = { id: 'b1', defId: 'mine', x: 0, y: 0 };
+    const b: PlacedBuilding = { id: 'b1', defId: 'iron_mine', x: 0, y: 0 };
     spec.buildings.push(b);
     // Pre-condition: no construction, so operational.
     expect((b.constructionRemainingMs ?? 0)).toBe(0);
@@ -2025,7 +2023,7 @@ describe('applyUpgrade', () => {
   it('stores constructionTotalMs equal to constructionRemainingMs on an upgrade', () => {
     const spec = makeSpec();
     const state = makeState(spec);
-    const b: PlacedBuilding = { id: 'b1', defId: 'mine', x: 0, y: 0 };
+    const b: PlacedBuilding = { id: 'b1', defId: 'iron_mine', x: 0, y: 0 };
     spec.buildings.push(b);
     const r = applyUpgrade(spec, state, 'b1');
     expect(r.ok).toBe(true);
@@ -2085,7 +2083,7 @@ describe('applyUpgrade', () => {
   it('leaves storageCaps unchanged for a non-storage def', () => {
     const spec = makeSpec();
     const state = makeState(spec);
-    const b: PlacedBuilding = { id: 'b1', defId: 'mine', x: 0, y: 0 };
+    const b: PlacedBuilding = { id: 'b1', defId: 'iron_mine', x: 0, y: 0 };
     spec.buildings.push(b);
     const before = { ...state.storageCaps };
     const r = applyUpgrade(spec, state, 'b1');
@@ -2100,7 +2098,7 @@ describe('applyUpgrade', () => {
     const state = makeState(spec);
     state.inventory.stone = 1000;
     state.inventory.wood = 1000;
-    const b: PlacedBuilding = { id: 'b1', defId: 'mine', x: 0, y: 0 };
+    const b: PlacedBuilding = { id: 'b1', defId: 'iron_mine', x: 0, y: 0 };
     spec.buildings.push(b);
     const r1 = applyUpgrade(spec, state, 'b1');
     expect(r1.ok).toBe(true);
@@ -2121,7 +2119,7 @@ describe('applyUpgrade', () => {
     state.inventory.stone = 0;
     state.inventory.wood = 0;
     state.inventory.self_replication_module = 3;
-    const b: PlacedBuilding = { id: 'b1', defId: 'mine', x: 0, y: 0 };
+    const b: PlacedBuilding = { id: 'b1', defId: 'iron_mine', x: 0, y: 0 };
     spec.buildings.push(b);
     const r = applyUpgrade(spec, state, 'b1', true);
     expect(r.ok).toBe(true);
@@ -2138,7 +2136,7 @@ describe('applyUpgrade', () => {
     state.inventory.stone = 300;
     state.inventory.wood = 200;
     state.inventory.self_replication_module = 0;
-    const b: PlacedBuilding = { id: 'b1', defId: 'mine', x: 0, y: 0 };
+    const b: PlacedBuilding = { id: 'b1', defId: 'iron_mine', x: 0, y: 0 };
     spec.buildings.push(b);
     const before = { ...state.inventory };
     const r = applyUpgrade(spec, state, 'b1', true);
@@ -2160,7 +2158,7 @@ describe('applyUpgrade stacking (#31)', () => {
   function makeStackScene(floorLevel = 8): { spec: IslandSpec; state: IslandState; target: PlacedBuilding } {
     const spec = makeSpec();
     const state = makeState(spec);
-    const target: PlacedBuilding = { id: 'b1', defId: 'mine', x: 0, y: 0, floorLevel };
+    const target: PlacedBuilding = { id: 'b1', defId: 'iron_mine', x: 0, y: 0, floorLevel };
     spec.buildings.push(target);
     return { spec, state, target };
   }
@@ -2201,9 +2199,9 @@ describe('applyUpgrade stacking (#31)', () => {
   it('4) each enqueue charges upgradeCost for its ascending displayed target', () => {
     const { spec, state } = makeStackScene();
     // Expected ascending displayed targets: running=10, queued1=11, queued2=12.
-    const c10 = upgradeCost(BUILDING_DEFS.mine, 10);
-    const c11 = upgradeCost(BUILDING_DEFS.mine, 11);
-    const c12 = upgradeCost(BUILDING_DEFS.mine, 12);
+    const c10 = upgradeCost(BUILDING_DEFS.iron_mine, 10);
+    const c11 = upgradeCost(BUILDING_DEFS.iron_mine, 11);
+    const c12 = upgradeCost(BUILDING_DEFS.iron_mine, 12);
     // Costs differ per ascending target (exponential past floor 10).
     expect(c11.stone).not.toBe(c10.stone);
     expect(c12.stone).not.toBe(c11.stone);
@@ -2294,7 +2292,7 @@ describe('applyUpgrade stacking (#31)', () => {
       expect(runningRemaining).toBeGreaterThan(0);
 
       // The queued upgrade's displayed target is 11.
-      const c11 = upgradeCost(BUILDING_DEFS.mine, 11);
+      const c11 = upgradeCost(BUILDING_DEFS.iron_mine, 11);
       // Drop inventory below cap so the refund has headroom (creditRefund
       // clamps to storageCaps); raise caps so the full basket fits.
       state.storageCaps.stone = 100000;
@@ -2370,7 +2368,7 @@ describe('formatShortfall', () => {
 
 describe('relocateBuilding', () => {
   it('moves the building, charges floor(0.5 × total), preserves state', () => {
-    const m1 = { id: 'm1', defId: 'mine', x: 0, y: 0, constructionRemainingMs: 5000, disabledFloors: 1 } as PlacedBuilding;
+    const m1 = { id: 'm1', defId: 'iron_mine', x: 0, y: 0, constructionRemainingMs: 5000, disabledFloors: 1 } as PlacedBuilding;
     const spec = makeSpec({ buildings: [m1] });
     const state = makeState(spec);
     const stone0 = state.inventory.stone;
@@ -2386,11 +2384,11 @@ describe('relocateBuilding', () => {
     // "just teleport": all other state preserved
     expect(m1.constructionRemainingMs).toBe(5000);
     expect(m1.disabledFloors).toBe(1);
-    expect(m1.defId).toBe('mine');
+    expect(m1.defId).toBe('iron_mine');
   });
 
   it('allows a 1-tile shift overlapping its own current footprint', () => {
-    const m1 = { id: 'm1', defId: 'mine', x: 0, y: 0 } as PlacedBuilding;
+    const m1 = { id: 'm1', defId: 'iron_mine', x: 0, y: 0 } as PlacedBuilding;
     const spec = makeSpec({ buildings: [m1] });
     const state = makeState(spec);
     const r = relocateBuilding(spec, state, 'm1', 1, 0);
@@ -2399,8 +2397,8 @@ describe('relocateBuilding', () => {
   });
 
   it('rejects overlap with another building (inventory + position unchanged)', () => {
-    const m1 = { id: 'm1', defId: 'mine', x: 0, y: 0 } as PlacedBuilding;
-    const m2 = { id: 'm2', defId: 'mine', x: 4, y: 0 } as PlacedBuilding;
+    const m1 = { id: 'm1', defId: 'iron_mine', x: 0, y: 0 } as PlacedBuilding;
+    const m2 = { id: 'm2', defId: 'iron_mine', x: 4, y: 0 } as PlacedBuilding;
     const spec = makeSpec({ buildings: [m1, m2] });
     const state = makeState(spec);
     const stone0 = state.inventory.stone;
@@ -2412,7 +2410,7 @@ describe('relocateBuilding', () => {
   });
 
   it('rejects when destination fails the terrain requiredTile', () => {
-    const m1 = { id: 'm1', defId: 'mine', x: 0, y: 0 } as PlacedBuilding;
+    const m1 = { id: 'm1', defId: 'iron_mine', x: 0, y: 0 } as PlacedBuilding;
     const spec = makeSpec({ buildings: [m1], terrainAt: () => 'grass' });
     const state = makeState(spec);
     const r = relocateBuilding(spec, state, 'm1', 2, 0);
@@ -2422,7 +2420,7 @@ describe('relocateBuilding', () => {
   });
 
   it('rejects insufficient-resources for the fee and does not move', () => {
-    const m1 = { id: 'm1', defId: 'mine', x: 0, y: 0 } as PlacedBuilding;
+    const m1 = { id: 'm1', defId: 'iron_mine', x: 0, y: 0 } as PlacedBuilding;
     const spec = makeSpec({ buildings: [m1] });
     const state = makeState(spec);
     state.inventory.stone = 0;
@@ -2505,8 +2503,8 @@ describe('queue capacities', () => {
     const spec = makeSpec();
     const s = makeState(spec);
     s.buildings.push(
-      { id: 'a', defId: 'mine', x: 0, y: 0, rotation: 0, constructionRemainingMs: 1000 },
-      { id: 'b', defId: 'mine', x: 1, y: 0, rotation: 0, constructionRemainingMs: 1000, queued: true },
+      { id: 'a', defId: 'iron_mine', x: 0, y: 0, rotation: 0, constructionRemainingMs: 1000 },
+      { id: 'b', defId: 'iron_mine', x: 1, y: 0, rotation: 0, constructionRemainingMs: 1000, queued: true },
     );
     expect(inProgressBuildCount(s)).toBe(1);
     expect(queuedBuildCount(s)).toBe(1);
@@ -2521,11 +2519,11 @@ describe('enqueue when slots full', () => {
     const spec = makeSpec();
     const state = makeState(spec);
     // Occupy the single base parallel-build slot with an in-progress build.
-    spec.buildings.push({ id: 'busy', defId: 'mine', x: 5, y: 5, constructionRemainingMs: 5000 });
+    spec.buildings.push({ id: 'busy', defId: 'iron_mine', x: 5, y: 5, constructionRemainingMs: 5000 });
     const stoneBefore = state.inventory.stone;
     const woodBefore = state.inventory.wood;
     // Mine costs 200 stone + 80 wood; seed is already plentiful.
-    const r = placeBuilding(spec, state, 'mine', 0, 0, 0, () => 'q-1');
+    const r = placeBuilding(spec, state, 'iron_mine', 0, 0, 0, () => 'q-1');
     expect(r.ok).toBe(true);
     if (!r.ok) throw new Error('expected ok');
     expect(r.placed.queued).toBe(true);
@@ -2539,9 +2537,9 @@ describe('enqueue when slots full', () => {
     const spec = makeSpec();
     const state = makeState(spec);
     // Occupy the single base slot.
-    spec.buildings.push({ id: 'busy', defId: 'mine', x: 5, y: 5, constructionRemainingMs: 5000 });
-    const r1 = placeBuilding(spec, state, 'mine', 0, 0, 0, () => 'q-2a');
-    const r2 = placeBuilding(spec, state, 'mine', 10, 0, 0, () => 'q-2b');
+    spec.buildings.push({ id: 'busy', defId: 'iron_mine', x: 5, y: 5, constructionRemainingMs: 5000 });
+    const r1 = placeBuilding(spec, state, 'iron_mine', 0, 0, 0, () => 'q-2a');
+    const r2 = placeBuilding(spec, state, 'iron_mine', 10, 0, 0, () => 'q-2b');
     expect(r1.ok).toBe(true);
     expect(r2.ok).toBe(true);
     if (!r1.ok || !r2.ok) throw new Error('expected both ok');
@@ -2554,13 +2552,13 @@ describe('enqueue when slots full', () => {
     const spec = makeSpec();
     const state = makeState(spec);
     // Occupy the single base running slot.
-    spec.buildings.push({ id: 'busy', defId: 'mine', x: 5, y: 5, constructionRemainingMs: 5000 });
+    spec.buildings.push({ id: 'busy', defId: 'iron_mine', x: 5, y: 5, constructionRemainingMs: 5000 });
     // Fill the queue (base capacity 2) with 2 queued builds.
     const qSlots = queuedBuildSlots(state);
     for (let i = 0; i < qSlots; i++) {
-      spec.buildings.push({ id: `q${i}`, defId: 'mine', x: i * 3, y: 10, constructionRemainingMs: 1, queued: true });
+      spec.buildings.push({ id: `q${i}`, defId: 'iron_mine', x: i * 3, y: 10, constructionRemainingMs: 1, queued: true });
     }
-    const r = placeBuilding(spec, state, 'mine', 0, 0, 0, () => 'q-overflow');
+    const r = placeBuilding(spec, state, 'iron_mine', 0, 0, 0, () => 'q-overflow');
     expect(r.ok).toBe(false);
     if (!r.ok) {
       expect(r.reason).toBe('queue-full');
@@ -2573,9 +2571,9 @@ describe('enqueue when slots full', () => {
     state.inventory.stone = 10000;
     state.inventory.wood = 10000;
     // Occupy the single base running slot.
-    spec.buildings.push({ id: 'busy', defId: 'mine', x: 5, y: 5, constructionRemainingMs: 5000 });
+    spec.buildings.push({ id: 'busy', defId: 'iron_mine', x: 5, y: 5, constructionRemainingMs: 5000 });
     // The target building is NOT under construction itself.
-    const target: PlacedBuilding = { id: 'b1', defId: 'mine', x: 0, y: 0 };
+    const target: PlacedBuilding = { id: 'b1', defId: 'iron_mine', x: 0, y: 0 };
     spec.buildings.push(target);
     const r = applyUpgrade(spec, state, 'b1');
     expect(r.ok).toBe(true);
@@ -2596,7 +2594,7 @@ describe('enqueue when slots full', () => {
     // floorLevel is pre-bumped to the running upgrade's target.
     const target: PlacedBuilding = {
       id: 'b1',
-      defId: 'mine',
+      defId: 'iron_mine',
       x: 0,
       y: 0,
       floorLevel: 1,
@@ -2631,7 +2629,7 @@ describe('cancelConstruction full refund', () => {
     const stoneBefore = state.inventory.stone;
     const woodBefore = state.inventory.wood;
 
-    const r = placeBuilding(spec, state, 'mine', 0, 0, 0, () => 'cancel-fresh-1');
+    const r = placeBuilding(spec, state, 'iron_mine', 0, 0, 0, () => 'cancel-fresh-1');
     expect(r.ok).toBe(true);
     if (!r.ok) throw new Error('expected ok');
     const b = r.placed;
@@ -2660,7 +2658,7 @@ describe('cancelConstruction full refund', () => {
     state.inventory.wood = 500;
 
     // Plant a pre-built operational mine (floorLevel 0, no constructionRemainingMs).
-    const target: PlacedBuilding = { id: 'upg-mine', defId: 'mine', x: 0, y: 0 };
+    const target: PlacedBuilding = { id: 'upg-mine', defId: 'iron_mine', x: 0, y: 0 };
     spec.buildings.push(target);
 
     // Record inventory before upgrade.
@@ -2766,10 +2764,10 @@ describe('cancelConstruction full refund', () => {
     const state = makeState(spec);
     state.storageCaps.stone = 50000;
     state.storageCaps.wood = 50000;
-    spec.buildings.push({ id: 'busy', defId: 'mine', x: 5, y: 5, constructionRemainingMs: 5000 });
+    spec.buildings.push({ id: 'busy', defId: 'iron_mine', x: 5, y: 5, constructionRemainingMs: 5000 });
 
     const before = queuedBuildCount(state);
-    const r = placeBuilding(spec, state, 'mine', 0, 0, 0, () => 'q-cancel');
+    const r = placeBuilding(spec, state, 'iron_mine', 0, 0, 0, () => 'q-cancel');
     expect(r.ok).toBe(true);
     if (!r.ok) throw new Error('expected ok');
     expect(r.placed.queued).toBe(true);
@@ -2785,7 +2783,7 @@ describe('cancelConstruction full refund', () => {
     // A building with no constructionRemainingMs is operational — cancel must reject.
     const spec = makeSpec();
     const state = makeState(spec);
-    spec.buildings.push({ id: 'done', defId: 'mine', x: 0, y: 0 });
+    spec.buildings.push({ id: 'done', defId: 'iron_mine', x: 0, y: 0 });
 
     const cr = cancelConstruction(spec, state, 'done');
     expect(cr.ok).toBe(false);

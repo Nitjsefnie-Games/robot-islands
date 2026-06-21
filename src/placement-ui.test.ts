@@ -118,7 +118,7 @@ describe('§4.6 placement-ui cancel-from-picker', () => {
         return Promise.resolve(null);
       },
     });
-    ui.begin('mine');
+    ui.begin('iron_mine');
     // Non-generic defs arm synchronously — no await needed for isActive.
     expect(ui.isActive()).toBe(true);
     expect(pickerInvoked).toBe(0);
@@ -357,7 +357,7 @@ describe('§15.4 island-qualified building ids', () => {
       screenToWorldTile: (x, y) => ({ x, y }),
       onPlaced: () => {},
     });
-    ui.begin('mine');
+    ui.begin('iron_mine');
     expect(ui.isActive()).toBe(true);
     const r = ui.attemptCommit();
     expect(r.ok).toBe(true);
@@ -388,9 +388,9 @@ describe('§15.4 island-qualified building ids', () => {
       screenToWorldTile: (x, y) => ({ x, y }),
       onPlaced: () => {},
     });
-    uiA.begin('mine');
+    uiA.begin('iron_mine');
     uiA.attemptCommit();
-    uiB.begin('mine');
+    uiB.begin('iron_mine');
     uiB.attemptCommit();
 
     expect(specA.buildings).toHaveLength(1);
@@ -453,7 +453,7 @@ describe('placement-ui REMOTE in-flight commit guard', () => {
       },
       gateway: dg.gateway,
     });
-    ui.begin('mine');
+    ui.begin('iron_mine');
     expect(ui.isActive()).toBe(true);
 
     // First click dispatches the (pending) gateway intent.
@@ -486,7 +486,7 @@ describe('placement-ui REMOTE in-flight commit guard', () => {
       onPlaced: () => {},
       gateway: dg.gateway,
     });
-    ui.begin('mine');
+    ui.begin('iron_mine');
     ui.attemptCommit();
     expect(dg.placeCalls()).toBe(1);
 

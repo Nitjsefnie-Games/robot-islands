@@ -850,7 +850,7 @@ export interface PowerBalance {
  *  share the 'mine' family. Extracted from pass 4 so pass 1 can fold the
  *  same factor into the tentative supply pool (fix 3.7). */
 function buildingYieldBonus(defId: BuildingDefId, skillMul: SkillMultipliers): number {
-  if (defId === 'mine' || defId === 'deep_mine' || defId === 'copper_mine'
+  if (defId === 'iron_mine' || defId === 'coal_mine' || defId === 'deep_mine' || defId === 'copper_mine'
       || defId === 'tin_mine' || defId === 'lead_mine' || defId === 'bauxite_mine'
       || defId === 'quartz_mine' || defId === 'sulfur_mine' || defId === 'phosphate_mine'
       || defId === 'graphite_mine' || defId === 'limestone_quarry'
@@ -1988,7 +1988,7 @@ export function computeRates(
   if (skillMul.mineRareTrickleRate > 0) {
     let mines = 0;
     for (const b of validBuildings) {
-      if (b.defId === 'mine' || b.defId === 'deep_mine') mines++;
+      if (b.defId === 'iron_mine' || b.defId === 'coal_mine' || b.defId === 'deep_mine') mines++;
     }
     const rare = mines * skillMul.mineRareTrickleRate * modifierMul.rareFindMul;
     if (rare > 0 && trickleHeadroom('helium_3') > 0) {

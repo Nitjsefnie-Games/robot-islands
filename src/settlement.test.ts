@@ -195,7 +195,7 @@ describe('per-tier vehicle stats', () => {
     tickVehicles(world, islandStates, r.vehicle.expectedArrivalTime + 1);
     expect(targetSpec.buildings.some((b) => b.defId === 'solar')).toBe(true);
     expect(targetSpec.buildings.some((b) => b.defId === 'workshop')).toBe(true);
-    expect(targetSpec.buildings.some((b) => b.defId === 'mine')).toBe(true);
+    expect(targetSpec.buildings.some((b) => b.defId === 'iron_mine')).toBe(true);
   });
 
   it('T3 ship starter Mine lands on an ore tile and produces', () => {
@@ -232,9 +232,9 @@ describe('per-tier vehicle stats', () => {
     if (!r.ok) return;
     tickVehicles(world, islandStates, r.vehicle.expectedArrivalTime + 1);
 
-    const mine = target.buildings.find((b) => b.id.startsWith('target-starter-mine'));
+    const mine = target.buildings.find((b) => b.id.startsWith('target-starter-iron_mine'));
     expect(mine).toBeDefined();
-    for (const t of footprintTiles(BUILDING_DEFS.mine.footprint, mine!.x, mine!.y, 0)) {
+    for (const t of footprintTiles(BUILDING_DEFS.iron_mine.footprint, mine!.x, mine!.y, 0)) {
       expect(target.terrainAt!(t.x, t.y)).toBe('ore');
     }
 

@@ -16,13 +16,13 @@ describe('coal loop energy-return is physically sane (§ rebalance: EROI grounde
   // NOT chosen to hug 20×: >1 means coal is worth mining at all; <150 catches a regression back
   // toward the historical 360×.
   const gen = BUILDING_DEFS.coal_gen as any;
-  const mine = BUILDING_DEFS[buildingForRecipe('mine_on_coal') as keyof typeof BUILDING_DEFS] as any;
+  const mine = BUILDING_DEFS[buildingForRecipe('coal_mine') as keyof typeof BUILDING_DEFS] as any;
   const genR = (RECIPES as any).coal_gen;
-  const mineR = (RECIPES as any).mine_on_coal;
+  const mineR = (RECIPES as any).coal_mine;
 
   // kW·s of electricity delivered per unit coal burned.
   const energyOutPerCoal = (gen.power.produces * genR.cycleSec) / genR.inputs.coal;
-  // kW·s spent mining one unit coal (mine power draw over the mine_on_coal cycle).
+  // kW·s spent mining one unit coal (mine power draw over the coal_mine cycle).
   const energyInPerCoal = (mine.power.consumes * mineR.cycleSec) / mineR.outputs.coal;
   const eroi = energyOutPerCoal / energyInPerCoal;
 

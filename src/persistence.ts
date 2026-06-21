@@ -62,6 +62,7 @@ import type { OceanCellSpec } from './ocean-cell.js';
 
 import { ACTIVE_DECAY_RATIO } from './active-bonus.js';
 import { attachTerrainAt, WORLD_SEED, type IslandSpec, type WorldState } from './world.js';
+import { footprintTiles, SHAPES, type Rotation } from './shape-mask.js';
 
 /** IndexedDB key. Bumping the trailing version (`:v2` later) is the
  *  intended break-from-stale-saves entry point — `loadWorld` keys on this
@@ -75,7 +76,7 @@ export const STORAGE_KEY_DISPLAY = 'robot-islands:save';
 
 /** Current schema version. `loadWorld` rejects (returns null) any
  *  snapshot whose `v` is not strictly equal to this. */
-export const SCHEMA_VERSION = 30 as const;
+export const SCHEMA_VERSION = 31 as const;
 
 /** Versions that loadWorld accepts. The walker (loadWorld) chains
  *  migrateV<N>toV<N+1> functions from the lowest known version up to
@@ -83,7 +84,7 @@ export const SCHEMA_VERSION = 30 as const;
  *
  *  See AGENTS.md → "Persistence migrations" for the full "bump = migrate"
  *  policy from v7 onward. */
-export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30]);
+export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31]);
 
 // ---------------------------------------------------------------------------
 // Serialized shapes
@@ -595,6 +596,49 @@ export function migrateV29toV30(s: SerializedSnapshotV29): SaveSnapshot {
   } as unknown as SaveSnapshot;
 }
 
+export type SerializedSnapshotV30 = Omit<SaveSnapshot, 'v'> & { readonly v: 30 };
+
+/** v30 → v31: split the terrain-discriminated `mine` building into dedicated
+ *  `iron_mine` (ore vein) / `coal_mine` (coal vein) buildings. Each placed mine
+ *  is reclassified by its footprint terrain — any coal tile → coal_mine, else
+ *  iron_mine — mirroring the old `resolveRecipe` "coal wins the tile" rule.
+ *  Terrain is reconstructed via `attachTerrainAt` (the same closure the loader
+ *  binds: tileOverrides → biome → extra-ellipse inscription). The defId swap is
+ *  applied to BOTH the island-spec buildings (canonical) and the per-state
+ *  buildings copy so no stale `mine` defId survives the load. */
+export function migrateV30toV31(s: SerializedSnapshotV30): SaveSnapshot {
+  const decisions = new Map<string, Map<string, 'iron_mine' | 'coal_mine'>>();
+  const islands = s.world.islands.map((isl) => {
+    const terrainAt = attachTerrainAt(isl as Omit<IslandSpec, 'terrainAt'>).terrainAt!;
+    const islDecisions = new Map<string, 'iron_mine' | 'coal_mine'>();
+    const buildings = isl.buildings.map((b) => {
+      if ((b.defId as string) !== 'mine') return b;
+      let coal = false;
+      for (const t of footprintTiles(SHAPES.square2, b.x, b.y, (b.rotation ?? 0) as Rotation)) {
+        if (terrainAt(t.x, t.y) === 'coal') { coal = true; break; }
+      }
+      const newDef: 'iron_mine' | 'coal_mine' = coal ? 'coal_mine' : 'iron_mine';
+      islDecisions.set(b.id, newDef);
+      return { ...b, defId: newDef };
+    });
+    if (islDecisions.size) decisions.set(isl.id, islDecisions);
+    return { ...isl, buildings };
+  });
+  const islandStates = s.islandStates.map((entry) => {
+    const d = decisions.get(entry.id);
+    if (!d) return entry;
+    return {
+      ...entry,
+      state: {
+        ...entry.state,
+        buildings: entry.state.buildings.map((b) =>
+          d.has(b.id) ? { ...b, defId: d.get(b.id)! } : b),
+      },
+    };
+  });
+  return { ...s, v: 31 as const, world: { ...s.world, islands }, islandStates } as unknown as SaveSnapshot;
+}
+
 /** v16 top-level snapshot shape. Structurally identical to v17 (SaveSnapshot)
  *  except the v literal. The v16 → v17 migration is a skill-tree ladder reset:
  *  the de-noding rebalance removed/renamed node ids, so persisted progression
@@ -1090,6 +1134,9 @@ export function deserializeWorld(
   }
   if ((snapshot as unknown as { v: number }).v === 29) {
     snapshot = migrateV29toV30(snapshot as unknown as SerializedSnapshotV29);
+  }
+  if ((snapshot as unknown as { v: number }).v === 30) {
+    snapshot = migrateV30toV31(snapshot as unknown as SerializedSnapshotV30);
   }
 
   if (snapshot.v !== SCHEMA_VERSION) {

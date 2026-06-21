@@ -61,7 +61,7 @@ describe('runtime loadAndCatchUp', () => {
     // The ore tile at (-7, 2) is deterministic from the home terrain seed.
     home['buildings'] = [
       { id: 'gen', defId: 'coal_gen', x: 0, y: 0 },
-      { id: 'm1', defId: 'mine', x: -7, y: 2 },
+      { id: 'm1', defId: 'iron_mine', x: -7, y: 2 },
     ];
     const st = s.islandStates.find((e) => e.id === 'home')!.state as {
       inventory: Record<string, number>;

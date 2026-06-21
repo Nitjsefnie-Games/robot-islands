@@ -992,9 +992,9 @@ describe('computeCableNetworkBalance (§5.3 binary-gated unified pool)', () => {
     count: number,
   ): Array<{ id: string; defId: 'solar'; x: number; y: number }> =>
     Array.from({ length: count }, (_, i) => solar(`${idSuffix}-${i}`, i * 2, 0));
-  const mine = (idSuffix: string, x = 0, y = 0): { id: string; defId: 'mine'; x: number; y: number } => ({
+  const mine = (idSuffix: string, x = 0, y = 0): { id: string; defId: 'iron_mine'; x: number; y: number } => ({
     id: `mn-${idSuffix}`,
-    defId: 'mine',
+    defId: 'iron_mine',
     x,
     y,
   });
@@ -1234,7 +1234,7 @@ describe('§5.3 unified cable component — shared brownout co-solved with membe
     // (iron_ore at cap=100) that 4 non-power Workshops drain. Nominal draw is
     // small (Mines throttled to the Workshop drain) but rises sharply as pf
     // falls. Coal stocked so Workshops aren't fuel-starved.
-    const qMines = Array.from({ length: 4 }, (_, i) => ({ id: `qmn${i}`, defId: 'mine' as const, x: i * 2, y: 0 }));
+    const qMines = Array.from({ length: 4 }, (_, i) => ({ id: `qmn${i}`, defId: 'iron_mine' as const, x: i * 2, y: 0 }));
     const qWorkshops = Array.from({ length: 4 }, (_, i) => ({ id: `qws${i}`, defId: 'workshop' as const, x: i * 2, y: 4 }));
     const q = makeState('q', {
       buildings: [...qMines, ...qWorkshops],
@@ -1625,9 +1625,9 @@ describe('§4 submarine_cable RouteType', () => {
     count: number,
   ): Array<{ id: string; defId: 'solar'; x: number; y: number }> =>
     Array.from({ length: count }, (_, i) => solar(`${idSuffix}-${i}`, i * 2, 0));
-  const mine = (idSuffix: string, x = 0, y = 0): { id: string; defId: 'mine'; x: number; y: number } => ({
+  const mine = (idSuffix: string, x = 0, y = 0): { id: string; defId: 'iron_mine'; x: number; y: number } => ({
     id: `mn-${idSuffix}`,
-    defId: 'mine',
+    defId: 'iron_mine',
     x,
     y,
   });

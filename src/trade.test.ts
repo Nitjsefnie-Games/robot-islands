@@ -17,7 +17,7 @@ function powerFree(...ids: BuildingDefId[]): DefCatalog {
   }
   return base;
 }
-const POWER_FREE_MINE = powerFree('mine');
+const POWER_FREE_MINE = powerFree('iron_mine');
 const POWER_FREE_WORKSHOP = powerFree('workshop');
 
 function homeState(nowMs = 0): IslandState {
@@ -25,7 +25,7 @@ function homeState(nowMs = 0): IslandState {
     attachTerrainAt({
       id: 'home', name: 'home', biome: 'plains', cx: 0, cy: 0,
       majorRadius: 16, minorRadius: 16, populated: true, discovered: true,
-      buildings: [{ id: 'b-mine', defId: 'mine', x: 0, y: 0 }],
+      buildings: [{ id: 'b-mine', defId: 'iron_mine', x: 0, y: 0 }],
       modifiers: ['stable'],
     }),
     nowMs,

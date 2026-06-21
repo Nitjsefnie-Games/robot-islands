@@ -28,7 +28,7 @@ import type { IslandSpec } from './world.js';
 // BuildingDefId, both this list AND BUILDING_DEFS must grow together —
 // the completeness test below catches drift.
 const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
-  'mine',
+  'iron_mine',
   'workshop',
   'solar',
   'coal_gen',
@@ -349,7 +349,7 @@ describe('BUILDING_DEFS catalog', () => {
     expect(BUILDING_DEFS.vault.storage).toEqual({ category: 'rare', capacity: 1000 });
     // Non-storage defs must not declare `storage` (would silently
     // contribute to aggregateStorageCaps otherwise).
-    expect(BUILDING_DEFS.mine.storage).toBeUndefined();
+    expect(BUILDING_DEFS.iron_mine.storage).toBeUndefined();
     expect(BUILDING_DEFS.workshop.storage).toBeUndefined();
     expect(BUILDING_DEFS.solar.storage).toBeUndefined();
   });
@@ -570,7 +570,7 @@ describe('BUILDING_DEFS catalog', () => {
 
 describe('buildingUnlocked / tier gating (§9.2)', () => {
   it('T1 buildings unlock at level 1', () => {
-    expect(buildingUnlocked(1, 'mine')).toBe(true);
+    expect(buildingUnlocked(1, 'iron_mine')).toBe(true);
     expect(buildingUnlocked(1, 'workshop')).toBe(true);
     expect(buildingUnlocked(1, 'logger')).toBe(true);
     expect(buildingUnlocked(1, 'smelter')).toBe(true);
@@ -599,8 +599,8 @@ describe('buildingUnlocked / tier gating (§9.2)', () => {
   });
 
   it('T1 buildings remain unlocked at higher tiers', () => {
-    expect(buildingUnlocked(15, 'mine')).toBe(true);
-    expect(buildingUnlocked(30, 'mine')).toBe(true);
+    expect(buildingUnlocked(15, 'iron_mine')).toBe(true);
+    expect(buildingUnlocked(30, 'iron_mine')).toBe(true);
     expect(buildingUnlocked(50, 'smelter')).toBe(true);
   });
 });
@@ -676,7 +676,7 @@ describe('canPlaceOnIsland (§9.5 / step 12)', () => {
     expect(canPlaceOnIsland(BUILDING_DEFS.fusion_core, fakeSpec('arctic'))).toBe(true);
     expect(canPlaceOnIsland(BUILDING_DEFS.particle_accelerator, fakeSpec('desert'))).toBe(true);
     expect(canPlaceOnIsland(BUILDING_DEFS.launch_tower, fakeSpec('coast'))).toBe(true);
-    expect(canPlaceOnIsland(BUILDING_DEFS.mine, fakeSpec('plains'))).toBe(true);
+    expect(canPlaceOnIsland(BUILDING_DEFS.iron_mine, fakeSpec('plains'))).toBe(true);
   });
 
   it('unrestricted defs ALSO place on artificial islands', () => {
@@ -684,7 +684,7 @@ describe('canPlaceOnIsland (§9.5 / step 12)', () => {
     // islands. Unrestricted defs (Fusion Core, Mine, etc.) are fine.
     expect(canPlaceOnIsland(BUILDING_DEFS.fusion_core, fakeSpec('plains', true))).toBe(true);
     expect(canPlaceOnIsland(BUILDING_DEFS.particle_accelerator, fakeSpec('plains', true))).toBe(true);
-    expect(canPlaceOnIsland(BUILDING_DEFS.mine, fakeSpec('plains', true))).toBe(true);
+    expect(canPlaceOnIsland(BUILDING_DEFS.iron_mine, fakeSpec('plains', true))).toBe(true);
   });
 
   it('Pyroforge: places on natural Volcanic, rejects other biomes', () => {
@@ -798,7 +798,7 @@ describe('unlockedDefs', () => {
     const list = unlockedDefs(1);
     // T1 defs in the catalog: mine, workshop, solar, coal_gen, dock,
     // logger, smelter, crate, silo, biomass_plant.
-    expect(list).toContain('mine');
+    expect(list).toContain('iron_mine');
     expect(list).toContain('workshop');
     expect(list).toContain('logger');
     expect(list).toContain('smelter');
@@ -810,7 +810,7 @@ describe('unlockedDefs', () => {
 
   it('returns T1 + T2 ids at level 5', () => {
     const list = unlockedDefs(5);
-    expect(list).toContain('mine');
+    expect(list).toContain('iron_mine');
     expect(list).toContain('coke_oven');
     expect(list).toContain('blast_furnace');
     expect(list).toContain('steel_mill');
@@ -824,7 +824,7 @@ describe('unlockedDefs', () => {
     const list = unlockedDefs(15);
     expect(list).toContain('electric_arc_furnace');
     expect(list).toContain('blast_furnace');
-    expect(list).toContain('mine');
+    expect(list).toContain('iron_mine');
     // T4 should NOT yet be unlocked at level 15.
     expect(list).not.toContain('fusion_core');
     expect(list).not.toContain('pyroforge');
@@ -841,7 +841,7 @@ describe('unlockedDefs', () => {
     expect(list).toContain('launch_tower');
     // T3 / T2 / T1 still present.
     expect(list).toContain('electric_arc_furnace');
-    expect(list).toContain('mine');
+    expect(list).toContain('iron_mine');
     // T5 still locked (no aiCoreCrafted flag, and level 30 < 50 anyway).
     expect(list).not.toContain('casimir_tap');
     expect(list).not.toContain('reality_forge');
@@ -859,7 +859,7 @@ describe('unlockedDefs', () => {
     expect(list).not.toContain('lattice_node');
     // T1-T4 still listed.
     expect(list).toContain('fusion_core');
-    expect(list).toContain('mine');
+    expect(list).toContain('iron_mine');
   });
 
   it('returns T1..T5 ids at level 50 + aiCoreCrafted', () => {
@@ -874,7 +874,7 @@ describe('unlockedDefs', () => {
     expect(list).toContain('lattice_node');
     // T1-T4 still listed.
     expect(list).toContain('fusion_core');
-    expect(list).toContain('mine');
+    expect(list).toContain('iron_mine');
   });
 });
 
@@ -1020,8 +1020,8 @@ describe('step-13 T5 catalog (§13.2 / §8.4 / §8.5 / §8.9)', () => {
 
   it('buildingUnlocked: lower-tier defs unaffected by aiCoreCrafted flag', () => {
     // T1/T2/T3/T4 defs only consult level → tier; aiCoreCrafted has no effect.
-    expect(buildingUnlocked(1, 'mine', false)).toBe(true);
-    expect(buildingUnlocked(1, 'mine', true)).toBe(true);
+    expect(buildingUnlocked(1, 'iron_mine', false)).toBe(true);
+    expect(buildingUnlocked(1, 'iron_mine', true)).toBe(true);
     expect(buildingUnlocked(5, 'coke_oven', false)).toBe(true);
     expect(buildingUnlocked(5, 'coke_oven', true)).toBe(true);
     expect(buildingUnlocked(15, 'electric_arc_furnace', false)).toBe(true);
@@ -1960,8 +1960,8 @@ describe('step-20 T6 Orbital catalog (§14 / step 20)', () => {
 
   it('lower-tier defs unaffected by ascendantCoreCrafted / hasSpaceport flags', () => {
     // T1/T2/T3/T4 defs only consult level → tier; T6 flags have no effect.
-    expect(buildingUnlocked(1, 'mine', false, false, false)).toBe(true);
-    expect(buildingUnlocked(1, 'mine', true, true, true)).toBe(true);
+    expect(buildingUnlocked(1, 'iron_mine', false, false, false)).toBe(true);
+    expect(buildingUnlocked(1, 'iron_mine', true, true, true)).toBe(true);
     expect(buildingUnlocked(30, 'fusion_core', false, false, false)).toBe(true);
     expect(buildingUnlocked(30, 'fusion_core', true, true, true)).toBe(true);
   });

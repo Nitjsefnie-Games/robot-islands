@@ -188,7 +188,7 @@ describe('TUTORIAL_STEPS — ordering', () => {
           w.playerLat = 40;
           break;
         case '07_mine':
-          placeOnHome('mine', 1, 0); // 2nd mine → hasAdjacentSameType for 12_adjacency
+          placeOnHome('iron_mine', 1, 0); // 2nd mine → hasAdjacentSameType for 12_adjacency
           homeState.inventory.iron_ore = 100; // → 10_smelter trigger
           homeState.inventory.coal = 100;
           break;

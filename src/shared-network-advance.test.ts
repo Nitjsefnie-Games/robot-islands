@@ -35,7 +35,7 @@ function strippedCatalog(): DefCatalog {
     const { power: _power, ...rest } = def;
     base[id] = rest as BuildingDef;
   };
-  strip('mine');
+  strip('iron_mine');
   strip('workshop');
   return base;
 }
@@ -92,7 +92,7 @@ function makeState(id: string, over: Partial<IslandState> = {}): IslandState {
   };
 }
 
-const MINE = (id: string): PlacedBuilding => ({ id, defId: 'mine', x: 0, y: 0 });
+const MINE = (id: string): PlacedBuilding => ({ id, defId: 'iron_mine', x: 0, y: 0 });
 const WORKSHOP = (id: string): PlacedBuilding => ({ id, defId: 'workshop', x: 0, y: 0 });
 
 function pooled(states: IslandState[], r: ResourceId): number {

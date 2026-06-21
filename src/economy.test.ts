@@ -65,7 +65,7 @@ import { resolveShot, SHOT_DURATION_MS } from './terrain-modifier.js';
 import { TOXICITY_DURATION_MS } from './reactor-toxicity.js';
 import { islandInscribedAny } from './island.js';
 
-const MINE: PlacedBuilding = { id: 'b-mine', defId: 'mine', x: 0, y: 0 };
+const MINE: PlacedBuilding = { id: 'b-iron_mine', defId: 'iron_mine', x: 0, y: 0 };
 const WORKSHOP: PlacedBuilding = { id: 'b-workshop', defId: 'workshop', x: 0, y: 0 };
 const LUBRICANT_REFINERY: PlacedBuilding = { id: 'b-lube', defId: 'lubricant_refinery', x: 0, y: 0 };
 
@@ -101,7 +101,8 @@ function powerFreeCatalog(): DefCatalog {
     const { power: _power, ...rest } = def;
     base[id] = rest as BuildingDef;
   };
-  strip('mine');
+  strip('iron_mine');
+  strip('coal_mine');
   strip('workshop');
   strip('lubricant_refinery');
   return base;
@@ -215,7 +216,7 @@ describe('advanceIsland — event-driven piecewise integration', () => {
   it('back-propagates input depletion: Workshop stops eating iron_ore when coal hits 0', () => {
     // Mine: +0.05 iron_ore/s. Workshop: -1/4300 iron_ore/s, -1/4300 coal/s, +1/4300 bolt/s.
     // Net iron_ore: +0.04977/s. Net coal: -1/4300/s. Coal starts at 50, hits 0 at t=215000s.
-    // (generator: mine 20s, workshop 4300s)
+    // (generator: iron_mine 20s, workshop 4300s)
     //
     // §15.3 net-flow rework (spec rule 1, cap throttle): from the cap event
     // at t=2009.35s the Mine no longer stalls binary — it throttles to
@@ -335,7 +336,7 @@ describe('advanceIsland — event-driven piecewise integration', () => {
 describe('XP accrual', () => {
   it('accrues XP proportional to production × xp_weight × time', () => {
     // Mine produces 0.02 iron_ore/s. iron_ore xp_weight = 1.
-    // Over 100s: 0.02 * 1 * 100 = 2 XP. (rebalanced step #19: mine 1/50s)
+    // Over 100s: 0.02 * 1 * 100 = 2 XP. (rebalanced step #19: iron_mine 1/50s)
     const state = makeState({
       buildings: [MINE],
       inventory: blankInventory(),
@@ -345,7 +346,7 @@ describe('XP accrual', () => {
   });
 
   it('weights bolt production at 10× iron_ore (xp_weight: bolt=10, iron_ore=1)', () => {
-    // Mine + Workshop, plenty of coal. Over 100s: (generator: mine 20s, workshop 4300s)
+    // Mine + Workshop, plenty of coal. Over 100s: (generator: iron_mine 20s, workshop 4300s)
     //   gross iron_ore production: 0.05/s × 100 = 5 units, xp_weight 1 → 5 XP
     //   gross bolt production: 1/4300/s × 100 ≈ 0.0233 units, xp_weight 10 → 0.233 XP
     //   total ≈ 5.233 XP
@@ -396,7 +397,7 @@ describe('Level up', () => {
     // xp_for_level_2 = 25 * 2^2.2 ≈ 114.87 (rebalanced for idle-game scale, step #19).
     const threshold = xpForLevel(2);
     expect(threshold).toBeCloseTo(114.87, 0);
-    // Mine alone earns 0.02 XP/s. (rebalanced step #19: mine 1/50s)
+    // Mine alone earns 0.02 XP/s. (rebalanced step #19: iron_mine 1/50s)
     // Use fast hack: start xp just under threshold and advance 50s with the Mine.
     // Mine gain: 0.02 × 50 = 1 XP → push over threshold.
     const state = makeState({
@@ -468,17 +469,17 @@ describe('computeRates', () => {
   });
 
   it('disabling floors scales throughput by active floor count (floor-disable)', () => {
-    // mine built to floor 3 (floorLevel 2 → ×3) with 2 floors disabled → active 1 → ×1 (base 0.05 iron_ore/s)
-    const mine: PlacedBuilding = { id: 'm', defId: 'mine', x: 0, y: 0, floorLevel: 2, disabledFloors: 2 };
-    const state = makeState({ buildings: [mine], inventory: blankInventory() });
+    // iron_mine built to floor 3 (floorLevel 2 → ×3) with 2 floors disabled → active 1 → ×1 (base 0.05 iron_ore/s)
+    const iron_mine: PlacedBuilding = { id: 'm', defId: 'iron_mine', x: 0, y: 0, floorLevel: 2, disabledFloors: 2 };
+    const state = makeState({ buildings: [iron_mine], inventory: blankInventory() });
     const { byBuilding } = computeRates(state, { defs: POWER_FREE });
-    expect(byBuilding.find((r) => r.building === mine)?.effectiveRate).toBeCloseTo(0.05, 9);
+    expect(byBuilding.find((r) => r.building === iron_mine)?.effectiveRate).toBeCloseTo(0.05, 9);
   });
   it('fully disabling all floors stops production (floor-disable)', () => {
-    const mine: PlacedBuilding = { id: 'm', defId: 'mine', x: 0, y: 0, floorLevel: 2, disabledFloors: 3 };
-    const state = makeState({ buildings: [mine], inventory: blankInventory() });
+    const iron_mine: PlacedBuilding = { id: 'm', defId: 'iron_mine', x: 0, y: 0, floorLevel: 2, disabledFloors: 3 };
+    const state = makeState({ buildings: [iron_mine], inventory: blankInventory() });
     const { byBuilding } = computeRates(state, { defs: POWER_FREE });
-    expect(byBuilding.some((r) => r.building === mine)).toBe(false); // non-operational
+    expect(byBuilding.some((r) => r.building === iron_mine)).toBe(false); // non-operational
   });
 
   it('recipeInput divisor reduces consumption but not production (magic lever)', () => {
@@ -523,8 +524,8 @@ describe('computeRates', () => {
     const mineGate = (0.5 * (1 / 4300)) / (1 / 20);
     const defs: DefCatalog = {
       ...POWER_FREE,
-      mine: {
-        ...POWER_FREE.mine,
+      iron_mine: {
+        ...POWER_FREE.iron_mine,
         gates: [{ matchType: 'def_id', defId: 'workshop', hard: false, degradeMul: mineGate }],
       },
     };
@@ -565,7 +566,7 @@ describe('computeRates', () => {
   });
 
   it('skips invalid buildings entirely', () => {
-    const mineInvalid: PlacedBuilding = { id: 'b-mine', defId: 'mine', x: 0, y: 0, invalid: true };
+    const mineInvalid: PlacedBuilding = { id: 'b-iron_mine', defId: 'iron_mine', x: 0, y: 0, invalid: true };
     const state = makeState({
       buildings: [mineInvalid],
       inventory: blankInventory(),
@@ -577,21 +578,21 @@ describe('computeRates', () => {
   });
 
   it('hard gate failure zeros production and consumption', () => {
-    // Use a catalog where mine has a hard def_id gate requiring coal_furnace.
+    // Use a catalog where iron_mine has a hard def_id gate requiring coal_furnace.
     const defs: DefCatalog = {
       ...BUILDING_DEFS,
-      mine: {
-        ...BUILDING_DEFS.mine,
+      iron_mine: {
+        ...BUILDING_DEFS.iron_mine,
         gates: [{ matchType: 'def_id', defId: 'coal_furnace', hard: true }],
       },
     };
-    const mine: PlacedBuilding = { id: 'b-mine', defId: 'mine', x: 0, y: 0 };
+    const iron_mine: PlacedBuilding = { id: 'b-iron_mine', defId: 'iron_mine', x: 0, y: 0 };
     const state = makeState({
-      buildings: [mine],
+      buildings: [iron_mine],
       inventory: blankInventory(),
     });
     const { byBuilding, net, power } = computeRates(state, { defs });
-    const mineRate = byBuilding.find((b) => b.building.id === 'b-mine');
+    const mineRate = byBuilding.find((b) => b.building.id === 'b-iron_mine');
     expect(mineRate?.effectiveRate).toBe(0);
     expect(net.iron_ore ?? 0).toBe(0);
     expect(power.consumed).toBe(0);
@@ -600,18 +601,18 @@ describe('computeRates', () => {
   it('soft gate failure degrades production', () => {
     const defs: DefCatalog = {
       ...POWER_FREE,
-      mine: {
-        ...POWER_FREE.mine,
+      iron_mine: {
+        ...POWER_FREE.iron_mine,
         gates: [{ matchType: 'def_id', defId: 'coal_furnace', hard: false, degradeMul: 0.5 }],
       },
     };
-    const mine: PlacedBuilding = { id: 'b-mine', defId: 'mine', x: 0, y: 0 };
+    const iron_mine: PlacedBuilding = { id: 'b-iron_mine', defId: 'iron_mine', x: 0, y: 0 };
     const state = makeState({
-      buildings: [mine],
+      buildings: [iron_mine],
       inventory: blankInventory(),
     });
     const { byBuilding, net } = computeRates(state, { defs });
-    const mineRate = byBuilding.find((b) => b.building.id === 'b-mine');
+    const mineRate = byBuilding.find((b) => b.building.id === 'b-iron_mine');
     // Base rate 1/50 = 0.02, degraded by 0.5 → 0.01
     expect(mineRate?.effectiveRate).toBeCloseTo(0.025, 9);
     expect(net.iron_ore ?? 0).toBeCloseTo(0.025, 9);
@@ -634,8 +635,8 @@ describe('computeRates', () => {
     //           inputAvail = min(1, 0.02/0.000116) = 1.0 → effectiveRate ≈ 0.000116/s.
     const defs: DefCatalog = {
       ...POWER_FREE,
-      mine: {
-        ...POWER_FREE.mine,
+      iron_mine: {
+        ...POWER_FREE.iron_mine,
         gates: [{ matchType: 'def_id', defId: 'coal_furnace', hard: false, degradeMul: 0.4 }],
       },
       workshop: {
@@ -780,17 +781,17 @@ describe('advanceIsland — magic recipeInputMul reduces input drawdown (real sk
 describe('§4.5 — buff adjacency in computeRates / advanceIsland', () => {
   it('two adjacent mines each gain +5% category adjacency (1 same-category neighbour)', () => {
     // Mine is category 'extraction', rate 0.05 per same-category neighbour. Two mines
-    // sharing a footprint border (2x2 at (0,0) and (2,0) → mine-A's east
-    // border at column 2 intersects mine-B's western column) → each has
+    // sharing a footprint border (2x2 at (0,0) and (2,0) → iron_mine-A's east
+    // border at column 2 intersects iron_mine-B's western column) → each has
     // one same-category neighbour → rate × 1.05. Base rate 1/20s = 0.05.
-    const mineA: PlacedBuilding = { id: 'b-mine-a', defId: 'mine', x: 0, y: 0 };
-    const mineB: PlacedBuilding = { id: 'b-mine-b', defId: 'mine', x: 2, y: 0 };
+    const mineA: PlacedBuilding = { id: 'b-iron_mine-a', defId: 'iron_mine', x: 0, y: 0 };
+    const mineB: PlacedBuilding = { id: 'b-iron_mine-b', defId: 'iron_mine', x: 2, y: 0 };
     const state = makeState({
       buildings: [mineA, mineB],
       inventory: blankInventory(),
     });
     const { production, byBuilding } = computeRates(state, { defs: POWER_FREE });
-    // Each mine at 0.05 × 1.05 = 0.0525; aggregate iron_ore = 0.105.
+    // Each iron_mine at 0.05 × 1.05 = 0.0525; aggregate iron_ore = 0.105.
     expect(production.iron_ore).toBeCloseTo(0.105, 9);
     for (const r of byBuilding) {
       expect(r.effectiveRate).toBeCloseTo(0.0525, 9);
@@ -802,9 +803,9 @@ describe('§4.5 — buff adjacency in computeRates / advanceIsland', () => {
     // 4-connected cluster of size 3. Per §4.5 the bonus is uniform across the
     // cluster: 1 + (3 − 1) × 0.05 = ×1.10 for EVERY member (the middle and both
     // ends alike) — not the old positional centre-1.20 / ends-1.10 split.
-    const west: PlacedBuilding = { id: 'b-w', defId: 'mine', x: -2, y: 0 };
-    const mid: PlacedBuilding = { id: 'b-m', defId: 'mine', x: 0, y: 0 };
-    const east: PlacedBuilding = { id: 'b-e', defId: 'mine', x: 2, y: 0 };
+    const west: PlacedBuilding = { id: 'b-w', defId: 'iron_mine', x: -2, y: 0 };
+    const mid: PlacedBuilding = { id: 'b-m', defId: 'iron_mine', x: 0, y: 0 };
+    const east: PlacedBuilding = { id: 'b-e', defId: 'iron_mine', x: 2, y: 0 };
     const state = makeState({
       buildings: [west, mid, east],
       inventory: blankInventory(),
@@ -821,8 +822,8 @@ describe('§4.5 — buff adjacency in computeRates / advanceIsland', () => {
   it('buff stack is observable in actual production over time', () => {
     // Two adjacent mines, 100s. Each at 0.0525/s → 2 × 0.0525 × 100 = 10.5
     // iron_ore. Without the buff the same setup yields 10.0.
-    const mineA: PlacedBuilding = { id: 'b-mine-a', defId: 'mine', x: 0, y: 0 };
-    const mineB: PlacedBuilding = { id: 'b-mine-b', defId: 'mine', x: 2, y: 0 };
+    const mineA: PlacedBuilding = { id: 'b-iron_mine-a', defId: 'iron_mine', x: 0, y: 0 };
+    const mineB: PlacedBuilding = { id: 'b-iron_mine-b', defId: 'iron_mine', x: 2, y: 0 };
     const state = makeState({
       buildings: [mineA, mineB],
       inventory: blankInventory(),
@@ -837,9 +838,9 @@ describe('§4.5 — buff adjacency in computeRates / advanceIsland', () => {
     // mineA effectiveRate = 0.05 × (1 + 0.05×(2−1)) = 0.0525. Before #35 the
     // in-progress sibling was filtered out of the cluster set → mineA stayed 0.05.
     // mineB is still under construction → it does NOT appear in byBuilding.
-    const mineA: PlacedBuilding = { id: 'b-mine-a', defId: 'mine', x: 0, y: 0 };
+    const mineA: PlacedBuilding = { id: 'b-iron_mine-a', defId: 'iron_mine', x: 0, y: 0 };
     const mineB: PlacedBuilding = {
-      id: 'b-mine-b', defId: 'mine', x: 2, y: 0, floorLevel: 1, constructionRemainingMs: 5000,
+      id: 'b-iron_mine-b', defId: 'iron_mine', x: 2, y: 0, floorLevel: 1, constructionRemainingMs: 5000,
     };
     const state = makeState({ buildings: [mineA, mineB], inventory: blankInventory() });
     const { byBuilding } = computeRates(state, { defs: POWER_FREE });
@@ -861,18 +862,18 @@ describe('§4.5 — buff adjacency in computeRates / advanceIsland', () => {
 // Building fixtures with §5.1 power fields. SOLAR and COAL_GEN inherit
 // their power values from BUILDING_DEFS. Mine and Workshop pick up the
 // production defs' 25W / 60W consumes via the production catalog. The
-// heavier-draw MINE_PWR_80 needs a one-off catalog where mine consumes 80W.
+// heavier-draw MINE_PWR_80 needs a one-off catalog where iron_mine consumes 80W.
 const SOLAR: PlacedBuilding = { id: 'b-solar', defId: 'solar', x: 0, y: 0 };
 // Kept off SOLAR's tile (0,0) so the §4.5 power-category cluster bonus doesn't form between them — the tests using both assert power balance, not adjacency.
 const COAL_GEN: PlacedBuilding = { id: 'b-coal-gen', defId: 'coal_gen', x: 10, y: 10 };
-const MINE_PWR: PlacedBuilding = MINE; // mine def already consumes 25W
+const MINE_PWR: PlacedBuilding = MINE; // iron_mine def already consumes 25W
 const WORKSHOP_PWR: PlacedBuilding = WORKSHOP; // workshop def already consumes 60W
-const MINE_PWR_80: PlacedBuilding = { id: 'b-mine-80', defId: 'mine', x: 0, y: 0 };
+const MINE_PWR_80: PlacedBuilding = { id: 'b-iron_mine-80', defId: 'iron_mine', x: 0, y: 0 };
 
 /** Catalog with a heavier Mine (80W) for the partial-brownout fixture. */
 function mineHeavyCatalog(): DefCatalog {
   const base = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
-  base.mine = { ...base.mine, power: { consumes: 80 } };
+  base.iron_mine = { ...base.iron_mine, power: { consumes: 80 } };
   return base;
 }
 const MINE_HEAVY: DefCatalog = mineHeavyCatalog();
@@ -881,7 +882,7 @@ const MINE_HEAVY: DefCatalog = mineHeavyCatalog();
  *  for the surplus-power Coal Gen + Mine + Workshop scene — the no-brownout
  *  common path. The co-solve change must reproduce these exactly. */
 const SNAPSHOT_NO_BROWNOUT = {
-  mine: 1 / 20,     // 0.05 iron_ore/s
+  iron_mine: 1 / 20,     // 0.05 iron_ore/s
   workshop: 1 / 4300, // ~0.0002326 bolt/s
 } as const;
 
@@ -973,11 +974,11 @@ describe('§5.3 cable network — computeRates honours cableComponent.unified', 
         { id: 'bb1', defId: 'battery_bank', x: 0, y: 0 },
         { id: 'wt1', defId: 'wind_turbine', x: 10, y: 0 }, // 100 kW local
         // 5 × 25 kW Mines ⇒ 125 kW local demand ⇒ 25 kW LOCAL deficit.
-        { id: 'm1', defId: 'mine', x: 20, y: 0 },
-        { id: 'm2', defId: 'mine', x: 30, y: 0 },
-        { id: 'm3', defId: 'mine', x: 40, y: 0 },
-        { id: 'm4', defId: 'mine', x: 50, y: 0 },
-        { id: 'm5', defId: 'mine', x: 60, y: 0 },
+        { id: 'm1', defId: 'iron_mine', x: 20, y: 0 },
+        { id: 'm2', defId: 'iron_mine', x: 30, y: 0 },
+        { id: 'm3', defId: 'iron_mine', x: 40, y: 0 },
+        { id: 'm4', defId: 'iron_mine', x: 50, y: 0 },
+        { id: 'm5', defId: 'iron_mine', x: 60, y: 0 },
       ],
       batteryStoredWs: 1_000_000,
       storageCaps: blankCaps(100_000),
@@ -1022,7 +1023,7 @@ describe('§5.3 cable network — computeRates honours cableComponent.unified', 
 
 describe('power (§5.1)', () => {
   it('powerFactor = 1 when there are no power consumers', () => {
-    // Bare mine, no power field → unchanged behaviour.
+    // Bare iron_mine, no power field → unchanged behaviour.
     const state = makeState({
       buildings: [MINE],
       inventory: blankInventory(),
@@ -1031,7 +1032,7 @@ describe('power (§5.1)', () => {
     expect(power.produced).toBe(0);
     expect(power.consumed).toBe(0);
     expect(power.factor).toBe(1);
-    expect(byBuilding[0]?.effectiveRate).toBeCloseTo(0.05, 9); // mine 1/20s (rebalanced step #19)
+    expect(byBuilding[0]?.effectiveRate).toBeCloseTo(0.05, 9); // iron_mine 1/20s (rebalanced step #19)
   });
 
   it('powerFactor = 1 when supply meets demand (Solar + Coal Gen feed Mine + Workshop)', () => {
@@ -1068,7 +1069,7 @@ describe('power (§5.1)', () => {
     expect(power.factor).toBe(1);
     const mineRate = byBuilding.find((r) => r.building === MINE_PWR_80)?.effectiveRate;
     const wsRate = byBuilding.find((r) => r.building === WORKSHOP_PWR)?.effectiveRate;
-    expect(mineRate).toBeCloseTo(1 / 20, 9); // mine 20s; full rate (no brownout)
+    expect(mineRate).toBeCloseTo(1 / 20, 9); // iron_mine 20s; full rate (no brownout)
     expect(wsRate).toBeCloseTo(1 / 4300, 9); // workshop 4300s; full rate (no brownout)
   });
 
@@ -1095,7 +1096,7 @@ describe('power (§5.1)', () => {
     expect(power.factor).toBeCloseTo(expectedFactor, 4);
     const mineRate = byBuilding.find((r) => r.building === MINE_PWR)?.effectiveRate;
     const wsRate = byBuilding.find((r) => r.building === WORKSHOP_PWR)?.effectiveRate;
-    expect(mineRate).toBeCloseTo((1 / 20) * expectedFactor, 9); // mine full rate 1/20, derated
+    expect(mineRate).toBeCloseTo((1 / 20) * expectedFactor, 9); // iron_mine full rate 1/20, derated
     expect(wsRate).toBeCloseTo((1 / 4300) * expectedFactor, 9); // workshop full rate 1/4300, derated
   });
 
@@ -1115,7 +1116,7 @@ describe('power (§5.1)', () => {
     expect(power.consumed).toBe(25);
     expect(power.factor).toBe(0); // 0/25 = 0
     const mineRate = byBuilding.find((r) => r.building === MINE_PWR)?.effectiveRate;
-    expect(mineRate).toBe(0); // mine throttled to zero by powerFactor
+    expect(mineRate).toBe(0); // iron_mine throttled to zero by powerFactor
   });
 
   it('Solar alone (50W) vs Mine + Workshop (85W) → factor ≈ 0.588', () => {
@@ -1132,7 +1133,7 @@ describe('power (§5.1)', () => {
     expect(power.factor).toBeCloseTo(50 / 85, 2);
     const mineRate = byBuilding.find((r) => r.building === MINE_PWR)?.effectiveRate;
     const wsRate = byBuilding.find((r) => r.building === WORKSHOP_PWR)?.effectiveRate;
-    expect(mineRate).toBeCloseTo((1 / 20) * (50 / 85), 2); // mine 20s
+    expect(mineRate).toBeCloseTo((1 / 20) * (50 / 85), 2); // iron_mine 20s
     expect(wsRate).toBeCloseTo((1 / 4300) * (50 / 85), 2); // workshop 4300s
   });
 
@@ -1145,12 +1146,12 @@ describe('power (§5.1)', () => {
     // has stockpiled inputs, so it draws its full 60W.
     //
     // (Previous incarnations: full 100W draw + factor 0.5 pre-rebalance,
-    // then binary-zero mine draw under the binary outputAvail stall.)
+    // then binary-zero iron_mine draw under the binary outputAvail stall.)
     const state = makeState({
       buildings: [SOLAR, MINE_PWR, WORKSHOP_PWR],
       inventory: {
         ...blankInventory(),
-        iron_ore: 100, // mine at cap → throttled to the workshop's draw
+        iron_ore: 100, // iron_mine at cap → throttled to the workshop's draw
         coal: 50,
       },
       lastTick: EQUINOX_NOON,
@@ -1158,7 +1159,7 @@ describe('power (§5.1)', () => {
     const { power, byBuilding } = computeRates(state, { world: dayWorld() });
     const thetaIron = (1 / 4300) / (1 / 20); // consumer draw / producer nominal rate = 1/215
     expect(power.produced).toBeCloseTo(50, 0);
-    expect(power.consumed).toBeCloseTo(60 + 25 * thetaIron, 9); // mine 25W × θ; workshop full 60W
+    expect(power.consumed).toBeCloseTo(60 + 25 * thetaIron, 9); // iron_mine 25W × θ; workshop full 60W
     expect(power.factor).toBeCloseTo(50 / (60 + 25 * thetaIron), 2);
     const mineRate = byBuilding.find((r) => r.building === MINE_PWR)?.effectiveRate;
     const wsRate = byBuilding.find((r) => r.building === WORKSHOP_PWR)?.effectiveRate;
@@ -1177,7 +1178,7 @@ describe('power (§5.1)', () => {
     // to the pre-rework ia × oa probe). Minimal fixture: a Mine def that
     // PRODUCES 100W instead of drawing 25W.
     const base = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
-    base.mine = { ...base.mine, power: { produces: 100 } };
+    base.iron_mine = { ...base.iron_mine, power: { produces: 100 } };
     const state = makeState({
       buildings: [MINE],
       inventory: { ...blankInventory(), iron_ore: 100 }, // at cap, no consumer
@@ -1187,9 +1188,9 @@ describe('power (§5.1)', () => {
     // floorEffectMul (1) × solar/wind factor (1 — untagged) × clusterMul (1).
     expect(power.produced).toBe(100);
     expect(power.consumed).toBe(0);
-    const mine = byBuilding.find((r) => r.building === MINE)!;
-    expect(mine.effectiveRate).toBe(0); // resource side fully throttled (θ = 0, no consumer)
-    expect(mine.utilization).toBe(0);
+    const iron_mine = byBuilding.find((r) => r.building === MINE)!;
+    expect(iron_mine.effectiveRate).toBe(0); // resource side fully throttled (θ = 0, no consumer)
+    expect(iron_mine.utilization).toBe(0);
   });
 
   it('power_systems.notable.turbineStaging unlocked: Coal Gen produces more than 5000 kW', () => {
@@ -1281,8 +1282,8 @@ describe('power (§5.1)', () => {
     // Two adjacent mines (real defs, 25 W each). Recipe rate is buffed ×1.10
     // by category adjacency, but power CONSUMPTION is unaffected: 25 + 25 = 50,
     // not 55.
-    const mineA: PlacedBuilding = { id: 'b-mine-a', defId: 'mine', x: 0, y: 0 };
-    const mineB: PlacedBuilding = { id: 'b-mine-b', defId: 'mine', x: 2, y: 0 };
+    const mineA: PlacedBuilding = { id: 'b-iron_mine-a', defId: 'iron_mine', x: 0, y: 0 };
+    const mineB: PlacedBuilding = { id: 'b-iron_mine-b', defId: 'iron_mine', x: 2, y: 0 };
     const state = makeState({ buildings: [mineA, mineB], inventory: blankInventory() });
     expect(computeRates(state).power.consumed).toBe(50);
   });
@@ -1309,15 +1310,15 @@ describe('§15.3 × §5.1 — pinned bins net to 0 under asymmetric-power browno
   it('zero-pinned input under brownout does not conjure (producer draws power, consumer does not)', () => {
     // iron_ore zero-pinned (inv 0). Mine PRODUCES iron_ore and CONSUMES 25 kW.
     // Workshop CONSUMES iron_ore (+ coal) and draws NO power. Generator makes
-    // 0.05 kW ⇒ pf = 0.05/25 = 0.002, deep enough that pf·(mine output 0.05/s)
+    // 0.05 kW ⇒ pf = 0.05/25 = 0.002, deep enough that pf·(iron_mine output 0.05/s)
     // = 0.0001/s < the workshop's nominal iron_ore draw 1/4300 ≈ 0.000233/s.
     //
-    // Pre-fix: solver gates on nominal coeffs (mine 0.05 ≫ workshop 0.000233 ⇒
-    // both run full), then pf scales ONLY the mine in Pass 4 ⇒ realized mine
+    // Pre-fix: solver gates on nominal coeffs (iron_mine 0.05 ≫ workshop 0.000233 ⇒
+    // both run full), then pf scales ONLY the iron_mine in Pass 4 ⇒ realized iron_mine
     // production 0.0001/s < realized workshop consumption 0.000233/s ⇒ net < 0
     // (iron_ore conjured from nothing at a zero-pinned bin).
-    // Post-fix: mine's flow coeff is pf-scaled before the solve, so the
-    // zero-constraint throttles the workshop to the realized mine output ⇒ net 0.
+    // Post-fix: iron_mine's flow coeff is pf-scaled before the solve, so the
+    // zero-constraint throttles the workshop to the realized iron_mine output ⇒ net 0.
     const base = { ...tinyGenCatalog(0.05) };
     const { power: _wp, ...workshopNoPower } = base.workshop;
     base.workshop = workshopNoPower as BuildingDef;
@@ -1339,15 +1340,15 @@ describe('§15.3 × §5.1 — pinned bins net to 0 under asymmetric-power browno
     // Workshop CONSUMES iron_ore (+ coal) and draws 60 kW. Generator makes a
     // tiny amount ⇒ pf < 1.
     //
-    // Pre-fix: solver throttles the mine to the workshop's NOMINAL draw, then pf
-    // scales only the workshop in Pass 4 ⇒ realized mine production exceeds
+    // Pre-fix: solver throttles the iron_mine to the workshop's NOMINAL draw, then pf
+    // scales only the workshop in Pass 4 ⇒ realized iron_mine production exceeds
     // realized workshop consumption ⇒ net > 0 (iron_ore over-produced past cap,
     // silently discarded by applyRates).
     // Post-fix: workshop's flow coeff is pf-scaled before the solve, so the
-    // cap-constraint throttles the mine to the realized workshop draw ⇒ net 0.
+    // cap-constraint throttles the iron_mine to the realized workshop draw ⇒ net 0.
     const base = { ...tinyGenCatalog(0.05) };
-    const { power: _mp, ...mineNoPower } = base.mine;
-    base.mine = mineNoPower as BuildingDef;
+    const { power: _mp, ...mineNoPower } = base.iron_mine;
+    base.iron_mine = mineNoPower as BuildingDef;
     const defs: DefCatalog = base;
     const state = makeState({
       buildings: [TINY_GEN, MINE, WORKSHOP_PWR],
@@ -1374,8 +1375,8 @@ describe('§15.3 × §5.1 — pinned bins net to 0 under asymmetric-power browno
     expect(power.factor).toBe(1);
     const mineRate = byBuilding.find((r) => r.building === MINE_PWR)?.effectiveRate;
     const wsRate = byBuilding.find((r) => r.building === WORKSHOP_PWR)?.effectiveRate;
-    // HEAD snapshot: mine 1/20 = 0.05/s, workshop 1/4300/s — full rate, pf=1.
-    expect(mineRate).toBe(SNAPSHOT_NO_BROWNOUT.mine);
+    // HEAD snapshot: iron_mine 1/20 = 0.05/s, workshop 1/4300/s — full rate, pf=1.
+    expect(mineRate).toBe(SNAPSHOT_NO_BROWNOUT.iron_mine);
     expect(wsRate).toBe(SNAPSHOT_NO_BROWNOUT.workshop);
   });
 
@@ -1384,8 +1385,8 @@ describe('§15.3 × §5.1 — pinned bins net to 0 under asymmetric-power browno
     // pinned at cap; Workshop (powered) consumes iron_ore; tiny generator
     // forces a genuine brownout.
     const base = { ...tinyGenCatalog(0.05) };
-    const { power: _mp, ...mineNoPower } = base.mine;
-    base.mine = mineNoPower as BuildingDef;
+    const { power: _mp, ...mineNoPower } = base.iron_mine;
+    base.iron_mine = mineNoPower as BuildingDef;
     const defs: DefCatalog = base;
     const state = makeState({
       buildings: [TINY_GEN, MINE, WORKSHOP_PWR],
@@ -1397,7 +1398,7 @@ describe('§15.3 × §5.1 — pinned bins net to 0 under asymmetric-power browno
     const powerFactors: number[] = [];
     for (let i = 0; i < 50; i++) {
       const r = computeRates(state, { defs });
-      const mineRate = r.byBuilding.find((b) => b.building.id === 'b-mine')?.effectiveRate ?? 0;
+      const mineRate = r.byBuilding.find((b) => b.building.id === 'b-iron_mine')?.effectiveRate ?? 0;
       rates.push(mineRate);
       powerFactors.push(r.power.factor);
       advanceIsland(state, state.lastTick + 200, { defs });
@@ -1459,7 +1460,7 @@ describe('§5.1 power scales with effective throughput (rebalance)', () => {
       inventory: { ...blankInventory(), coal: 50, iron_ore: 100 },
     });
     const { power } = computeRates(state);
-    expect(power.consumed).toBe(0); // mine output-stalled → 0 draw
+    expect(power.consumed).toBe(0); // iron_mine output-stalled → 0 draw
     expect(power.factor).toBe(1);
   });
 
@@ -1469,8 +1470,8 @@ describe('§5.1 power scales with effective throughput (rebalance)', () => {
     // Coal Gen produces 100W so factor = 1.
     const defs: DefCatalog = {
       ...BUILDING_DEFS,
-      mine: {
-        ...BUILDING_DEFS.mine,
+      iron_mine: {
+        ...BUILDING_DEFS.iron_mine,
         gates: [{ matchType: 'def_id', defId: 'coal_furnace', hard: false, degradeMul: 0.5 }],
       },
     };
@@ -1502,8 +1503,8 @@ describe('§5.1 power scales with effective throughput (rebalance)', () => {
     // power.factor stays = 1 and doesn't muddy the assertion on consumed.
     const defs: DefCatalog = {
       ...BUILDING_DEFS,
-      mine: {
-        ...BUILDING_DEFS.mine,
+      iron_mine: {
+        ...BUILDING_DEFS.iron_mine,
         gates: [
           {
             matchType: 'def_id',
@@ -1546,8 +1547,8 @@ describe('§5.1 power scales with effective throughput (rebalance)', () => {
     const mineGate = 0.5 * 0.5 * (1 / 4300) / (1 / 20);
     const defs: DefCatalog = {
       ...BUILDING_DEFS,
-      mine: {
-        ...BUILDING_DEFS.mine,
+      iron_mine: {
+        ...BUILDING_DEFS.iron_mine,
         gates: [{ matchType: 'def_id', defId: 'coal_furnace', hard: false, degradeMul: mineGate }],
       },
       workshop: {
@@ -1822,7 +1823,7 @@ describe('modifier integration in computeRates / advanceIsland (§3.5)', () => {
     });
     const mul = effectiveModifierMultipliers(['high_wind']);
     const { byBuilding } = computeRates(state, { modifierMul: mul, defs: POWER_FREE }, 0);
-    const mineRate = byBuilding.find((r) => r.building.defId === 'mine')!.effectiveRate;
+    const mineRate = byBuilding.find((r) => r.building.defId === 'iron_mine')!.effectiveRate;
     const wsRate = byBuilding.find((r) => r.building.defId === 'workshop')!.effectiveRate;
     // Mine should be within ±20% of 1/17 (post-÷3 rebalance)
     expect(mineRate).toBeGreaterThanOrEqual((1 / 20) * 0.8);
@@ -1978,7 +1979,7 @@ describe('step-9 chain — Smelter T1 + storage aggregation', () => {
     // TODO: Phase 10 recalibration — smelter recipe rewritten in Phase 2 commit 3.
     // Smelter 6/27s ≈ 0.222/s. Over 100s = 22.2 ingots, 37.0 iron_ore + 11.1 coal consumed.
     const SMELTER: PlacedBuilding = { id: 'b-smelter', defId: 'smelter', x: 0, y: 0 };
-    // POWER_FREE only strips mine/workshop; smelter still consumes 50W per
+    // POWER_FREE only strips iron_mine/workshop; smelter still consumes 50W per
     // its def. Use a custom catalog stripping smelter for this test.
     const noSmelterPower = ((): DefCatalog => {
       const base = { ...BUILDING_DEFS } as Record<BuildingDefId, BuildingDef>;
@@ -2071,7 +2072,7 @@ describe('step-9 chain — Smelter T1 + storage aggregation', () => {
   it('aggregateStorageCaps: no storage buildings → per-category baseline caps', () => {
     // SI-units rev-16 §13.4: baseline is per-category default, not a global 2000.
     const caps = aggregateStorageCaps([
-      { id: 'b-mine', defId: 'mine', x: 0, y: 0 },
+      { id: 'b-iron_mine', defId: 'iron_mine', x: 0, y: 0 },
     ]);
     for (const r of ALL_RESOURCES) {
       expect(caps[r]).toBe(RESOURCE_BASE_CAP[r] ?? defaultCapForCategory(RESOURCE_STORAGE_CATEGORY[r]));
@@ -2260,7 +2261,7 @@ describe('step-12 — T4 endgame production integration (§6.5)', () => {
     // accrues operatingMs past the §4.7 threshold, which would poison every
     // later test that reuses the shared object.
     const state = makeState({
-      buildings: [{ id: 'b-mine-36', defId: 'mine', x: 0, y: 0 }],
+      buildings: [{ id: 'b-iron_mine-36', defId: 'iron_mine', x: 0, y: 0 }],
       inventory: { ...blankInventory(), iron_ore: 99.5 },
     });
     advanceIsland(state, 24 * 3600 * 1000, { defs: POWER_FREE });
@@ -2738,7 +2739,7 @@ describe('§9.7 — tier-band runtime gate', () => {
     expect(bfRate).toBeDefined();
     expect(bfRate?.effectiveRate).toBe(0);
     // No pig_iron over a 100s tick; inventory untouched apart from the
-    // mine-coal flow (no mine here, so coal stays at 1000).
+    // iron_mine-coal flow (no iron_mine here, so coal stays at 1000).
     advanceIsland(state, 100_000, { defs: PWR_FREE_BF });
     expect(state.inventory.pig_iron).toBe(0);
     expect(state.inventory.iron_ingot).toBe(1000);
@@ -2866,56 +2867,23 @@ describe('step-11 — artificial-island construction integration (§2.5)', () =>
   });
 });
 
-describe('§8.1 — Mine output branches on tile via resolveRecipe', () => {
-  it('Mine on a coal-tile spec produces coal at 1/50s (not iron_ore)', () => {
-    // Mine on coal tile → mine_on_coal. Rate 9/10s = 0.9 coal/s. Over 100 s = 90 coal. (rebalanced 2026-05-23)
-    const state = makeState({
-      buildings: [MINE],
-      inventory: blankInventory(),
-    });
-    advanceIsland(state, 100_000, {
-      defs: POWER_FREE,
-      terrainAt: () => 'coal',
-    });
-    expect(state.inventory.coal).toBeCloseTo(5, 9);
-    expect(state.inventory.iron_ore).toBeCloseTo(0, 9);
-  });
-
-  it('Mine on an ore-tile spec produces iron_ore at 1/50s (mine_on_ore branch)', () => {
-    // Mine on ore tile → mine_on_ore. Rate 1/50s = 0.02/s. Over 100s = 2 iron_ore. (rebalanced step #19)
-    const state = makeState({
-      buildings: [MINE],
-      inventory: blankInventory(),
-    });
-    advanceIsland(state, 100_000, {
-      defs: POWER_FREE,
-      terrainAt: () => 'ore',
-    });
+describe('§8.1 — split Iron Mine / Coal Mine fixed output', () => {
+  // After the §8.1 split the recipe is fixed by the building (no terrain
+  // discrimination): Iron Mine → iron_ore on ore, Coal Mine → coal on coal.
+  // Each extracts from its own (placement-enforced) terrain. 0.05/s × 100 s = 5.
+  it('iron_mine on ore produces iron_ore', () => {
+    const state = makeState({ buildings: [MINE], inventory: blankInventory() });
+    advanceIsland(state, 100_000, { defs: POWER_FREE, terrainAt: () => 'ore' });
     expect(state.inventory.iron_ore).toBeCloseTo(5, 9);
     expect(state.inventory.coal).toBeCloseTo(0, 9);
   });
 
-  it('Mine with no terrainAt falls back to RECIPES.mine (iron_ore)', () => {
-    // Legacy callers keep pre-tile-aware behaviour (Mine → iron_ore). 0.02/s × 100s = 2. (rebalanced step #19)
+  it('coal_mine on coal produces coal', () => {
     const state = makeState({
-      buildings: [MINE],
+      buildings: [{ id: 'cm', defId: 'coal_mine', x: 0, y: 0 }],
       inventory: blankInventory(),
     });
-    advanceIsland(state, 100_000, { defs: POWER_FREE });
-    expect(state.inventory.iron_ore).toBeCloseTo(5, 9);
-    expect(state.inventory.coal).toBeCloseTo(0, 9);
-  });
-
-  it('Mine on a mixed ore+coal footprint picks the coal variant (any coal tile wins)', () => {
-    // 1 coal tile among 4 ore tiles → mine_on_coal. 0.9/s × 100s = 90 coal. (rebalanced 2026-05-23)
-    const state = makeState({
-      buildings: [MINE],
-      inventory: blankInventory(),
-    });
-    advanceIsland(state, 100_000, {
-      defs: POWER_FREE,
-      terrainAt: (x, y) => (x === 1 && y === 1 ? 'coal' : 'ore'),
-    });
+    advanceIsland(state, 100_000, { defs: POWER_FREE, terrainAt: () => 'coal' });
     expect(state.inventory.coal).toBeCloseTo(5, 9);
     expect(state.inventory.iron_ore).toBeCloseTo(0, 9);
   });
@@ -3096,14 +3064,14 @@ describe('§4.7 maintenance — integration with advanceIsland', () => {
         // this one; the new policy MUST skip it.
         {
           ...MINE,
-          id: 'mine-light',
+          id: 'iron_mine-light',
           operatingMs: T1_THRESHOLD + 10,
           placedAt: 0,
           maintainedAt: 0,
         },
         {
           ...MINE,
-          id: 'mine-plateau',
+          id: 'iron_mine-plateau',
           operatingMs: T1_THRESHOLD + MAINTENANCE_DEGRADE_DURATION_MS + 1000,
           placedAt: 0,
           maintainedAt: 0,
@@ -3118,8 +3086,8 @@ describe('§4.7 maintenance — integration with advanceIsland', () => {
     });
     advanceIsland(state, 1_000, { defs: POWER_FREE });
     // The plateau-deep building is the one that got maintained.
-    const light = state.buildings.find((b) => b.id === 'mine-light')!;
-    const plateau = state.buildings.find((b) => b.id === 'mine-plateau')!;
+    const light = state.buildings.find((b) => b.id === 'iron_mine-light')!;
+    const plateau = state.buildings.find((b) => b.id === 'iron_mine-plateau')!;
     expect(plateau.operatingMs).toBe(1_000); // reset to 0 then 1s of accrual
     expect(light.operatingMs).toBeGreaterThan(T1_THRESHOLD); // untouched / still degraded
     expect(state.inventory.lubricant).toBe(0);
@@ -3127,7 +3095,7 @@ describe('§4.7 maintenance — integration with advanceIsland', () => {
   });
 
   it('disabled degraded building neither soaks materials nor blocks an enabled sibling (fix 4.4)', () => {
-    // The DISABLED mine is plateau-deep (most degraded). Without the
+    // The DISABLED iron_mine is plateau-deep (most degraded). Without the
     // disabled filter in pickMostDegradedTarget it would be targeted: with
     // materials in stock it soaks them while producing nothing; the enabled
     // just-past-threshold sibling is never serviced. With the filter, the
@@ -3136,7 +3104,7 @@ describe('§4.7 maintenance — integration with advanceIsland', () => {
       buildings: [
         {
           ...MINE,
-          id: 'mine-disabled',
+          id: 'iron_mine-disabled',
           disabledFloors: displayedFloorLevel({ floorLevel: 0 }),
           operatingMs: T1_THRESHOLD + MAINTENANCE_DEGRADE_DURATION_MS + 1000,
           placedAt: 0,
@@ -3144,7 +3112,7 @@ describe('§4.7 maintenance — integration with advanceIsland', () => {
         },
         {
           ...MINE,
-          id: 'mine-enabled',
+          id: 'iron_mine-enabled',
           operatingMs: T1_THRESHOLD + 10,
           placedAt: 0,
           maintainedAt: 0,
@@ -3158,8 +3126,8 @@ describe('§4.7 maintenance — integration with advanceIsland', () => {
       },
     });
     advanceIsland(state, 1_000, { defs: POWER_FREE });
-    const disabled = state.buildings.find((b) => b.id === 'mine-disabled')!;
-    const enabled = state.buildings.find((b) => b.id === 'mine-enabled')!;
+    const disabled = state.buildings.find((b) => b.id === 'iron_mine-disabled')!;
+    const enabled = state.buildings.find((b) => b.id === 'iron_mine-enabled')!;
     // The ENABLED sibling got the cycle: reset to 0 then 1 s of accrual.
     expect(enabled.operatingMs).toBe(1_000);
     // The disabled one is untouched (frozen — no accrual, no reset).
@@ -3177,8 +3145,8 @@ describe('§4.7 maintenance — integration with advanceIsland', () => {
     const state = makeState({
       buildings: [
         {
-          id: 'mine-light',
-          defId: 'mine',
+          id: 'iron_mine-light',
+          defId: 'iron_mine',
           x: 0,
           y: 0,
           operatingMs: T1_THRESHOLD + 10,
@@ -3205,7 +3173,7 @@ describe('§4.7 maintenance — integration with advanceIsland', () => {
       },
     });
     advanceIsland(state, 1_000, { defs: POWER_FREE });
-    const light = state.buildings.find((b) => b.id === 'mine-light')!;
+    const light = state.buildings.find((b) => b.id === 'iron_mine-light')!;
     const plateau = state.buildings.find((b) => b.id === 'fab-plateau')!;
     // Neither was serviced — T1 inputs remain in stock, T1 timer still ticking.
     expect(state.inventory.lubricant).toBe(100);
@@ -3623,7 +3591,7 @@ describe('Genesis Chamber', () => {
     const state = makeState({
       buildings: [
         { id: 'g1', defId: 'genesis_chamber', x: 0, y: 0 },
-        { id: 'm1', defId: 'mine', x: 5, y: 0 },
+        { id: 'm1', defId: 'iron_mine', x: 5, y: 0 },
         { id: 's1', defId: 'solar', x: 10, y: 0 },
       ],
       genesisTarget: 'iron_ingot',
@@ -3672,7 +3640,7 @@ describe('Time Lock', () => {
       inventory: { ...blankInventory() },
     });
     // Place a Mine too so we can verify normal advancement.
-    state.buildings.push({ id: 'b-mine', defId: 'mine', x: 5, y: 0 });
+    state.buildings.push({ id: 'b-iron_mine', defId: 'iron_mine', x: 5, y: 0 });
     advanceIsland(state, 100_000, { defs: POWER_FREE });
     expect(state.timeLockBankedMin).toBe(0);
     expect(state.inventory.iron_ore).toBeCloseTo(5, 6);
@@ -3685,7 +3653,7 @@ describe('Time Lock', () => {
       accelerationRemainingMin: 60,
     });
     advanceIsland(state, 60_000, { defs: POWER_FREE });
-    // Base mine 0.02/s. Over 60s at 3× = 3.6 iron_ore.
+    // Base iron_mine 0.02/s. Over 60s at 3× = 3.6 iron_ore.
     expect(state.inventory.iron_ore).toBeCloseTo(9, 6);
     // 1 minute consumed from the 60-minute block.
     expect(state.accelerationRemainingMin).toBeCloseTo(59, 6);
@@ -3774,7 +3742,7 @@ describe('Singularity Battery', () => {
     state.buildings.push({ id: 'sb1', defId: 'singularity_battery', x: 0, y: 0 });
     state.batteryStoredWs = 1e9; // seed with stored energy
     // Mine (40W consumer) + battery (0W) = 40W deficit, no producers
-    state.buildings.push({ id: 'mine1', defId: 'mine', x: 2, y: 0 });
+    state.buildings.push({ id: 'mine1', defId: 'iron_mine', x: 2, y: 0 });
     advanceIsland(state, 1000);
     expect(state.batteryStoredWs).toBeLessThan(1e9);
     // Mine ran at full speed because battery covered the deficit
@@ -3824,11 +3792,11 @@ describe('Singularity Battery', () => {
         { id: 'wt1', defId: 'wind_turbine', x: 10, y: 0 },
         // 5 × 25 kW Mines ⇒ 125 kW demand ⇒ 25 kW deficit, powerFactor 0.8.
         // Spread out so no §4.5 adjacency buffs perturb the rates.
-        { id: 'm1', defId: 'mine', x: 20, y: 0 },
-        { id: 'm2', defId: 'mine', x: 30, y: 0 },
-        { id: 'm3', defId: 'mine', x: 40, y: 0 },
-        { id: 'm4', defId: 'mine', x: 50, y: 0 },
-        { id: 'm5', defId: 'mine', x: 60, y: 0 },
+        { id: 'm1', defId: 'iron_mine', x: 20, y: 0 },
+        { id: 'm2', defId: 'iron_mine', x: 30, y: 0 },
+        { id: 'm3', defId: 'iron_mine', x: 40, y: 0 },
+        { id: 'm4', defId: 'iron_mine', x: 50, y: 0 },
+        { id: 'm5', defId: 'iron_mine', x: 60, y: 0 },
       ],
       batteryStoredWs: 1e-10, // float residue from a previous discharge
       lastTick: T0,
@@ -4416,7 +4384,7 @@ describe('§4 ocean anchor crediting + paused reasons (Task 10)', () => {
     // Place a known land-side consumer to make the power balance non-trivial
     // and a Solar to ensure factor==1 baseline (so geothermal's contribution
     // is observable in `power.produced`).
-    const MINE_PWR_ON_A: PlacedBuilding = { id: 'mn', defId: 'mine', x: 0, y: 0 };
+    const MINE_PWR_ON_A: PlacedBuilding = { id: 'mn', defId: 'iron_mine', x: 0, y: 0 };
     // T6 generator needs `ascendantCoreCrafted && hasSpaceport` to unlock
     // via `buildingUnlocked` (building-defs.ts:4200). Without a Spaceport
     // on the anchor, pass-3 skips the generator via `isBuildingActive(b)`
@@ -4564,8 +4532,8 @@ describe('findNextCapEvent precision-residue handling', () => {
     const tMs = 1_300_000;
     const nowMs = tMs + 16; // one ~60-fps frame
     const constructingMine: PlacedBuilding = {
-      id: 'b-mine-construction',
-      defId: 'mine',
+      id: 'b-iron_mine-construction',
+      defId: 'iron_mine',
       x: 1,
       y: 0,
       constructionRemainingMs: 30_000,
@@ -4684,7 +4652,7 @@ describe('disabled building contributes 0 to power balance', () => {
 describe('disabled building does not accrue operatingMs', () => {
   it('operatingMs stays at its pre-disable value across a 1h advance', () => {
     const state = makeState({
-      buildings: [{ id: 'm', defId: 'mine', x: 0, y: 0, disabledFloors: displayedFloorLevel({ floorLevel: 0 }), operatingMs: 5000 }],
+      buildings: [{ id: 'm', defId: 'iron_mine', x: 0, y: 0, disabledFloors: displayedFloorLevel({ floorLevel: 0 }), operatingMs: 5000 }],
       inventory: blankInventory(),
     });
     advanceIsland(state, 3600 * 1000, { defs: BUILDING_DEFS });
@@ -4698,7 +4666,7 @@ describe('invalid building does not accrue operatingMs (fix 4.4)', () => {
     // Invalid buildings produce nothing (isOperationalBuilding filters them
     // from computeRates) — they must not accrue maintenance wear either.
     const state = makeState({
-      buildings: [{ id: 'm', defId: 'mine', x: 0, y: 0, invalid: true, operatingMs: 5000 } as PlacedBuilding],
+      buildings: [{ id: 'm', defId: 'iron_mine', x: 0, y: 0, invalid: true, operatingMs: 5000 } as PlacedBuilding],
       inventory: blankInventory(),
     });
     advanceIsland(state, 3600 * 1000, { defs: BUILDING_DEFS });
@@ -5078,7 +5046,7 @@ describe('effectiveSkillMultipliers memoization', () => {
       level: 25,
       buildings: Array.from({ length: 50 }, (_, i) => ({
         id: `b-${i}`,
-        defId: 'mine' as BuildingDefId,
+        defId: 'iron_mine' as BuildingDefId,
         x: i,
         y: 0,
       })),
@@ -5105,7 +5073,7 @@ describe('advanceIsland perf-regression gate', () => {
       level: 25,
       buildings: Array.from({ length: 50 }, (_, i) => ({
         id: `b-${i}`,
-        defId: 'mine' as BuildingDefId,
+        defId: 'iron_mine' as BuildingDefId,
         x: i,
         y: 0,
       })),
@@ -5414,14 +5382,14 @@ describe('queue promotion on completion', () => {
     // and begins ticking within the same advance call.
     const R: PlacedBuilding = {
       id: 'b-running',
-      defId: 'mine',
+      defId: 'iron_mine',
       x: 0,
       y: 0,
       constructionRemainingMs: 1000,
     };
     const Q: PlacedBuilding = {
       id: 'b-queued',
-      defId: 'mine',
+      defId: 'iron_mine',
       x: 3,
       y: 0,
       constructionRemainingMs: 5000,
@@ -5457,14 +5425,14 @@ describe('queue promotion on completion', () => {
     // this test would fail: the Qb-still-queued / Qa-promoted assertions invert.)
     const R: PlacedBuilding = {
       id: 'b-running',
-      defId: 'mine',
+      defId: 'iron_mine',
       x: 0,
       y: 0,
       constructionRemainingMs: 1000,
     };
     const Qb: PlacedBuilding = {
       id: 'b-queued-b',
-      defId: 'mine',
+      defId: 'iron_mine',
       x: 3,
       y: 0,
       constructionRemainingMs: 5000,
@@ -5473,7 +5441,7 @@ describe('queue promotion on completion', () => {
     };
     const Qa: PlacedBuilding = {
       id: 'b-queued-a',
-      defId: 'mine',
+      defId: 'iron_mine',
       x: 6,
       y: 0,
       constructionRemainingMs: 5000,
@@ -5566,7 +5534,7 @@ describe('storage caps granted on construction completion', () => {
   it('queued storage build grants no cap (never started ticking)', () => {
     const spec = storageSpec();
     // Occupy the single running slot with a long non-storage build.
-    spec.buildings.push({ id: 'busy', defId: 'mine', x: 6, y: 6, constructionRemainingMs: 5_000_000 });
+    spec.buildings.push({ id: 'busy', defId: 'iron_mine', x: 6, y: 6, constructionRemainingMs: 5_000_000 });
     const state = makeState({ buildings: spec.buildings, lastTick: 0 });
     state.inventory.wood = 1000;
     state.inventory.stone = 1000;
@@ -5648,14 +5616,14 @@ describe('net-flow at storage cap (§15.3 rework)', () => {
   it('XP accrues at the throttled rate, not the nominal rate', () => {
     const N = 600; // seconds
 
-    // Capped island: mine throttled by workshop draw.
+    // Capped island: iron_mine throttled by workshop draw.
     const capped = makeState({
       buildings: [MINE, WORKSHOP],
       inventory: { ...blankInventory(), iron_ore: 100, coal: 50 },
     });
     advanceIsland(capped, N * 1000, { defs: POWER_FREE });
 
-    // Empty-bin island: mine runs at full rate.
+    // Empty-bin island: iron_mine runs at full rate.
     const empty = makeState({
       buildings: [MINE, WORKSHOP],
       inventory: { ...blankInventory(), coal: 50 },
@@ -5673,11 +5641,11 @@ describe('net-flow at storage cap (§15.3 rework)', () => {
     const mineXpCapped = capped.xp - workshopOnly.xp;
     const mineXpEmpty = empty.xp - workshopOnly.xp;
 
-    // Throttled mine rate = (1/20) × (1/215) = 1/4300 cycles/s.
+    // Throttled iron_mine rate = (1/20) × (1/215) = 1/4300 cycles/s.
     // Mine XP = rate × XP_WEIGHT.iron_ore × N = N / 4300.
     expect(mineXpCapped).toBeCloseTo(N / 4300, 9);
 
-    // Full mine rate = 1/20 cycles/s.
+    // Full iron_mine rate = 1/20 cycles/s.
     // Mine XP = (1/20) × 1 × N = N / 20.
     expect(mineXpEmpty).toBeCloseTo(N / 20, 9);
 
@@ -5716,7 +5684,7 @@ describe('net-flow at storage cap (§15.3 rework)', () => {
       return base;
     })();
 
-    const COAL_MINE: PlacedBuilding = { id: 'b-coal-mine', defId: 'mine', x: 5, y: 5 };
+    const COAL_MINE: PlacedBuilding = { id: 'b-coal-mine', defId: 'coal_mine', x: 5, y: 5 };
     const BF: PlacedBuilding = { id: 'bf', defId: 'blast_furnace', x: 0, y: 0 };
     const CF: PlacedBuilding = { id: 'cf', defId: 'coal_furnace', x: 3, y: 1 };
 
@@ -5735,7 +5703,7 @@ describe('net-flow at storage cap (§15.3 rework)', () => {
 
     const ctx = { defs: COAL_PWR_FREE, terrainAt: () => 'coal' as TerrainKind };
 
-    // Coal mine nominal rate = 1/20 coal/s (mine_on_coal, cycleSec=20).
+    // Coal iron_mine nominal rate = 1/20 coal/s (coal_mine, cycleSec=20).
     // Blast furnace does not consume coal in its recipe.
     // Coal furnace burn = coalPerCycle × servedCount / 30 = 1 × 1 / 30 = 1/30 coal/s.
     // Total coal demand = 1/30.
@@ -5793,7 +5761,7 @@ describe('utilization-scaled maintenance wear (§4.7 net-flow)', () => {
 
   it('building at utilization θ accrues operatingMs at θ-scaled speed', () => {
     // Mine nominal = 1/20 iron_ore/s; Workshop draw = 1/4300 iron_ore/s.
-    // At a pinned cap with one consumer, mine utilization
+    // At a pinned cap with one consumer, iron_mine utilization
     // θ = (1/4300) / (1/20) = 20/4300 = 1/215.
     const state = makeState({
       buildings: [
@@ -5804,10 +5772,10 @@ describe('utilization-scaled maintenance wear (§4.7 net-flow)', () => {
     });
     const WALL_MS = 4300 * 1000; // 4300 s
     advanceIsland(state, WALL_MS, { defs: POWER_FREE });
-    const mine = state.buildings.find((b) => b.id === MINE.id)!;
+    const iron_mine = state.buildings.find((b) => b.id === MINE.id)!;
     const workshop = state.buildings.find((b) => b.id === WORKSHOP.id)!;
     // Mine wear = wall × θ = 4300s / 215 = 20s.
-    expect(mine.operatingMs).toBeCloseTo(20_000, 0);
+    expect(iron_mine.operatingMs).toBeCloseTo(20_000, 0);
     // Workshop runs unthrottled (u=1) → full wall-clock wear.
     expect(workshop.operatingMs).toBe(WALL_MS);
   });
@@ -5840,16 +5808,16 @@ describe('utilization-scaled maintenance wear (§4.7 net-flow)', () => {
     });
     // Advance to exactly the stretched boundary.
     advanceIsland(state, 215_000, { defs: POWER_FREE });
-    const mine = state.buildings.find((b) => b.id === MINE.id)!;
+    const iron_mine = state.buildings.find((b) => b.id === MINE.id)!;
     // operatingMs should have reached the threshold exactly.
-    expect(mine.operatingMs).toBeCloseTo(T1_THRESHOLD, 0);
+    expect(iron_mine.operatingMs).toBeCloseTo(T1_THRESHOLD, 0);
     // maintenanceFactor exactly at threshold → 1.0.
-    expect(maintenanceFactor(mine, BUILDING_DEFS.mine)).toBe(1.0);
+    expect(maintenanceFactor(iron_mine, BUILDING_DEFS.iron_mine)).toBe(1.0);
 
     // Advance 1 ms past the boundary.
     advanceIsland(state, 215_001, { defs: POWER_FREE });
     // Now past threshold → factor < 1.0.
-    expect(maintenanceFactor(mine, BUILDING_DEFS.mine)).toBeLessThan(1.0);
+    expect(maintenanceFactor(iron_mine, BUILDING_DEFS.iron_mine)).toBeLessThan(1.0);
   });
 
   it('degraded building wears at duty-cycle speed, not × maintenanceFactor', () => {
@@ -5869,9 +5837,9 @@ describe('utilization-scaled maintenance wear (§4.7 net-flow)', () => {
       inventory: { ...blankInventory(), iron_ore: 0, coal: 50 },
     });
     advanceIsland(state, HOUR_MS, { defs: POWER_FREE });
-    const mine = state.buildings[0]!;
+    const iron_mine = state.buildings[0]!;
     // Full wall-clock accrual because u=1 despite mf=0.75.
-    expect(mine.operatingMs).toBe(T1_THRESHOLD + 3 * HOUR_MS);
+    expect(iron_mine.operatingMs).toBe(T1_THRESHOLD + 3 * HOUR_MS);
   });
 });
 
@@ -5889,14 +5857,14 @@ describe('computeRates derivations memo — equivalence under mutation', () => {
    *  x∈{0,1}, B covers x∈{2,3}; B's x=2 column lies in A's border set) —
    *  a same-category (extraction) cluster of k=2 per §4.5. */
   function mkMine(id: string, x: number): PlacedBuilding {
-    return { id, defId: 'mine', x, y: 0 };
+    return { id, defId: 'iron_mine', x, y: 0 };
   }
   function rateOf(res: ReturnType<typeof computeRates>, id: string): number {
     return res.byBuilding.find((br) => br.building.id === id)?.effectiveRate ?? 0;
   }
-  // §4.5 cluster bonus rate for the mine's category (extraction = 0.1):
+  // §4.5 cluster bonus rate for the iron_mine's category (extraction = 0.1):
   // each member of a k=2 cluster runs at ×(1 + (2−1)×rate) = ×1.1.
-  const EXTRACTION_RATE = CATEGORY_ADJACENCY_RATE[BUILDING_DEFS.mine.category] ?? 0;
+  const EXTRACTION_RATE = CATEGORY_ADJACENCY_RATE[BUILDING_DEFS.iron_mine.category] ?? 0;
 
   it('warm-cache compute is bit-identical to a cold-cache compute', () => {
     const state = makeState({ buildings: [mkMine('m-a', 0), mkMine('m-b', 2)] });
@@ -5947,7 +5915,7 @@ describe('computeRates derivations memo — equivalence under mutation', () => {
     const soloRate = rateOf(solo, 'm-a');
     expect(soloRate).toBeGreaterThan(0);
 
-    // Place an adjacent mine the way placement does — push into the live
+    // Place an adjacent iron_mine the way placement does — push into the live
     // buildings array. Cluster k 1→2: both run at soloRate × (1 + 0.1).
     state.buildings.push(mkMine('m-b', 2));
     const clustered = computeRates(state, { defs: POWER_FREE });
@@ -6036,7 +6004,7 @@ describe('stacked upgrade queue (#31)', () => {
 
   it('runs a 3-deep upgrade stack sequentially to completion', () => {
     const spec = mineSpec();
-    spec.buildings.push({ id: 'm1', defId: 'mine', x: 0, y: 0 });
+    spec.buildings.push({ id: 'm1', defId: 'iron_mine', x: 0, y: 0 });
     const state = makeState({ buildings: spec.buildings, lastTick: 0 });
     state.inventory.stone = 1e9;
     state.inventory.wood = 1e9;
@@ -6060,7 +6028,7 @@ describe('stacked upgrade queue (#31)', () => {
 
   it('keeps producing while an upgrade is merely QUEUED, offline only while running', () => {
     const spec = mineSpec();
-    spec.buildings.push({ id: 'm1', defId: 'mine', x: 0, y: 0 });
+    spec.buildings.push({ id: 'm1', defId: 'iron_mine', x: 0, y: 0 });
     const state = makeState({ buildings: spec.buildings, lastTick: 0 });
     state.inventory.stone = 1e9;
     state.inventory.wood = 1e9;

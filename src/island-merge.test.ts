@@ -364,13 +364,13 @@ describe('performMerge', () => {
       id: 'a',
       cx: 0,
       cy: 0,
-      buildings: [{ id: 'a-mine', defId: 'mine', x: 1, y: 1 }],
+      buildings: [{ id: 'a-mine', defId: 'iron_mine', x: 1, y: 1 }],
     });
     const b = makeSpec({
       id: 'b',
       cx: 20,
       cy: 0,
-      buildings: [{ id: 'b-mine', defId: 'mine', x: 3, y: 4 }],
+      buildings: [{ id: 'b-mine', defId: 'iron_mine', x: 3, y: 4 }],
     });
     const world = makeWorld([a, b]);
     const states = new Map<string, IslandState>([
@@ -379,9 +379,9 @@ describe('performMerge', () => {
     ]);
     performMerge(world, states, a, b);
     expect(a.buildings).toHaveLength(2);
-    expect(a.buildings[0]).toEqual({ id: 'a-mine', defId: 'mine', x: 1, y: 1 });
+    expect(a.buildings[0]).toEqual({ id: 'a-mine', defId: 'iron_mine', x: 1, y: 1 });
     // Absorbed buildings are re-minted from shifted coords (fix 1).
-    expect(a.buildings[1]).toEqual({ id: 'placed-23,4', defId: 'mine', x: 23, y: 4 });
+    expect(a.buildings[1]).toEqual({ id: 'placed-23,4', defId: 'iron_mine', x: 23, y: 4 });
   });
 
   it('redirects routes targeting absorbed; redirects routes leaving absorbed; deletes A↔B routes', () => {
@@ -482,7 +482,7 @@ describe('performMerge', () => {
       id: 'a',
       cx: 0,
       cy: 0,
-      buildings: [{ id: 'placed-0,0', defId: 'mine', x: 0, y: 0 }],
+      buildings: [{ id: 'placed-0,0', defId: 'iron_mine', x: 0, y: 0 }],
     });
     const b = makeSpec({
       id: 'b',
@@ -508,7 +508,7 @@ describe('performMerge', () => {
       id: 'a',
       cx: 0,
       cy: 0,
-      buildings: [{ id: 'placed-0,0', defId: 'mine', x: 0, y: 0 }],
+      buildings: [{ id: 'placed-0,0', defId: 'iron_mine', x: 0, y: 0 }],
     });
     const b = makeSpec({
       id: 'b',

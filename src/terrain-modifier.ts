@@ -90,7 +90,7 @@ export const RARE_TARGET_TERRAINS: ReadonlySet<TerrainKind> = new Set<TerrainKin
  *  extractors only. */
 export const RARE_TARGET_INPUT: Readonly<Record<string, ResourceId>> = {
   ore: 'iron_ore',          // mine / deep_mine → iron_ore
-  coal: 'coal',             // mine (mine_on_coal recipe) → coal
+  coal: 'coal',             // coal_mine → coal
   oil_well: 'crude_oil',    // pump_jack → crude_oil
   gas_seep: 'natural_gas',  // gas_extractor → natural_gas
   helium_vent: 'helium_3',  // drilling_rig → helium_3
@@ -119,8 +119,8 @@ export const RARE_TARGET_INPUT: Readonly<Record<string, ResourceId>> = {
  *  rate. Verified against recipes.ts: every entry exists, outputs qty 1 of the
  *  mapped resource, and carries `exogenousFlow: 'terrain'`. */
 export const RARE_TARGET_EXTRACTOR_RECIPE: Readonly<Record<string, RecipeId>> = {
-  ore: 'mine_on_ore',
-  coal: 'mine_on_coal',
+  ore: 'iron_mine',
+  coal: 'coal_mine',
   oil_well: 'pump_jack',
   gas_seep: 'gas_extractor',
   helium_vent: 'drilling_rig',

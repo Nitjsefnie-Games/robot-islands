@@ -246,7 +246,7 @@ describe('§6 tileInfoForHover', () => {
     // (0, 0). Mine sits at world tile (8, 8) — hover that tile.
     const mineBuilding: PlacedBuilding = {
       id: 'placed-mine',
-      defId: 'mine',
+      defId: 'iron_mine',
       x: 0,
       y: 0,
       rotation: 0,
@@ -426,7 +426,7 @@ describe('§6 tileInfoForHover — visibility predicate matches map fog', () => 
     const home = makePopulatedHome({ terrainAt: () => 'iron_ore' });
     const neighbourMine: PlacedBuilding = {
       id: 'neigh-mine',
-      defId: 'mine',
+      defId: 'iron_mine',
       x: 0,
       y: 0,
       rotation: 0,

@@ -22,7 +22,6 @@
 import type { BuildingDef, BuildingDefId } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
 import type { TerrainKind } from './island.js';
-import { footprintTiles, type Rotation } from './shape-mask.js';
 import type { IslandState } from './economy.js';
 import type { Graph } from './skilltree-graph.js';
 
@@ -1519,8 +1518,6 @@ export interface Recipe {
  */
 export type RecipeId =
   | BuildingDefId
-  | 'mine_on_ore'
-  | 'mine_on_coal'
   | 'steel_mill_from_scrap'
   | 'nodule_concentrator_re'
   | 'nodule_concentrator_co'
@@ -1662,31 +1659,19 @@ export type RecipeId =
  *                              (higher-throughput alternative to Steel Mill)
  */
 export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
-  // T1 extraction — rebalanced for idle-game scale, step #19 (×10)
-  // `mine` is the legacy / fallback Mine recipe (= mine_on_ore). Tile-aware
-  // callers go through `resolveRecipe` and receive `mine_on_ore` or
-  // `mine_on_coal` depending on the building's footprint terrain. The
-  // bare-defId lookup is preserved for tests + saved games that never had
-  // a tile-aware path.
-  mine: {
+  // §8.1 T1 extraction — rebalanced for idle-game scale, step #19 (×10).
+  // The terrain-discriminated Mine was split into two single-terrain
+  // buildings (each its own base recipe): Iron Mine on an ore vein → iron_ore;
+  // Coal Mine on a coal vein → coal. Identical cycleSec/category so the split
+  // is rate-neutral vs the old mine_on_ore / mine_on_coal variants.
+  iron_mine: {
     cycleSec: 20, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { iron_ore: 1 },
     exogenousFlow: 'terrain',
     category: 'extraction',
   },
-  // §8.1 Mine variants — tile-dependent recipe selection. The two entries
-  // differ only in output: ore-vein footprint → iron_ore; coal-vein
-  // footprint → coal. Inputs/cycleSec/category identical so a build-order
-  // change in placement doesn't shift any other downstream rate.
-  mine_on_ore: {
-    cycleSec: 20, // auto-derived (gen-cyclesec): density × footprint × M
-    inputs: {},
-    outputs: { iron_ore: 1 },
-    exogenousFlow: 'terrain',
-    category: 'extraction',
-  },
-  mine_on_coal: {
+  coal_mine: {
     cycleSec: 20, // auto-derived (gen-cyclesec): density × footprint × M
     inputs: {},
     outputs: { coal: 1 },
@@ -3959,8 +3944,6 @@ export const RECIPES: Partial<Record<RecipeId, Recipe>> = {
  */
 
 const SPECIAL_RECIPE_IDS = new Set<RecipeId>([
-  'mine_on_ore',
-  'mine_on_coal',
   'steel_mill_from_scrap',
   'nodule_concentrator_re',
   'nodule_concentrator_co',
@@ -4026,36 +4009,12 @@ export function availableRecipes(
 
 export function resolveRecipe(
   def: BuildingDef,
-  b: PlacedBuilding,
-  terrainAt?: (x: number, y: number) => TerrainKind,
+  // _b / _terrainAt: retained for call-site stability — the terrain-aware Mine
+  // branch that used them moved to per-building defs (iron_mine / coal_mine).
+  _b: PlacedBuilding,
+  _terrainAt?: (x: number, y: number) => TerrainKind,
   inventory?: Partial<Record<ResourceId, number>>,
 ): Recipe | undefined {
-  if (def.id === 'mine' && terrainAt) {
-    let sawCoal = false;
-    let sawOre = false;
-    const rotation = (b.rotation ?? 0) as Rotation;
-    for (const t of footprintTiles(def.footprint, b.x, b.y, rotation)) {
-      const k = terrainAt(t.x, t.y);
-      if (k === 'coal') {
-        sawCoal = true;
-      } else if (k === 'ore') {
-        sawOre = true;
-      }
-      // We can short-circuit only when we've seen coal: coal wins the
-      // tie per the §8.1 "Ore or coal output by tile" rule encoded as
-      // "any coal tile → coal recipe". Without seeing coal, an early ore
-      // tile may still be followed by coal later in the scan.
-      if (sawCoal) {
-        return RECIPES.mine_on_coal;
-      }
-    }
-    if (sawOre) return RECIPES.mine_on_ore;
-    // No ore and no coal in footprint — shouldn't happen because
-    // `validatePlacement` enforces `def.requiredTile` on every footprint
-    // tile. Return undefined defensively so the rate loop sees a no-op
-    // building rather than picking up a stale (legacy) iron_ore recipe.
-    return undefined;
-  }
   // §6.7 Steel Mill scrap substitution. Choice is per-tick, driven by the
   // current inventory snapshot. Prefer pig_iron whenever any is on hand;
   // fall back to the scrap variant only when the pig_iron stockpile is

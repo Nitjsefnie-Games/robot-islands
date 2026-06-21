@@ -15,7 +15,7 @@ import {
 function mkBuilding(remaining?: number): PlacedBuilding {
   return {
     id: 'b',
-    defId: 'mine',
+    defId: 'iron_mine',
     x: 0,
     y: 0,
     ...(remaining !== undefined ? { constructionRemainingMs: remaining } : {}),
@@ -24,17 +24,17 @@ function mkBuilding(remaining?: number): PlacedBuilding {
 
 describe('constructionTimeFor', () => {
   it('returns the base tier time at multiplier 1', () => {
-    expect(constructionTimeFor(BUILDING_DEFS.mine, 1)).toBe(BASE_CONSTRUCTION_MS_BY_TIER[1]);
+    expect(constructionTimeFor(BUILDING_DEFS.iron_mine, 1)).toBe(BASE_CONSTRUCTION_MS_BY_TIER[1]);
   });
 
   it('halves the time at multiplier 2', () => {
-    expect(constructionTimeFor(BUILDING_DEFS.mine, 2)).toBe(
+    expect(constructionTimeFor(BUILDING_DEFS.iron_mine, 2)).toBe(
       Math.round(BASE_CONSTRUCTION_MS_BY_TIER[1] / 2),
     );
   });
 
   it('handles non-positive multipliers by falling back to base (defensive)', () => {
-    expect(constructionTimeFor(BUILDING_DEFS.mine, 0)).toBe(BASE_CONSTRUCTION_MS_BY_TIER[1]);
+    expect(constructionTimeFor(BUILDING_DEFS.iron_mine, 0)).toBe(BASE_CONSTRUCTION_MS_BY_TIER[1]);
   });
 
   it('scales with tier (T6 ≫ T1)', () => {
@@ -97,19 +97,19 @@ describe('nextConstructionCompletionMs', () => {
 
 describe('queued builds do not tick', () => {
   it('tickConstruction leaves a queued build untouched and returns false', () => {
-    const b: PlacedBuilding = { id: 'q', defId: 'mine', x: 0, y: 0, rotation: 0, constructionRemainingMs: 5000, queued: true };
+    const b: PlacedBuilding = { id: 'q', defId: 'iron_mine', x: 0, y: 0, rotation: 0, constructionRemainingMs: 5000, queued: true };
     expect(tickConstruction(b, 9999)).toBe(false);
     expect(b.constructionRemainingMs).toBe(5000);
   });
   it('nextConstructionCompletionMs ignores queued builds', () => {
-    const running: PlacedBuilding = { id: 'r', defId: 'mine', x: 0, y: 0, rotation: 0, constructionRemainingMs: 3000 };
-    const queued: PlacedBuilding = { id: 'q', defId: 'mine', x: 1, y: 0, rotation: 0, constructionRemainingMs: 1000, queued: true };
+    const running: PlacedBuilding = { id: 'r', defId: 'iron_mine', x: 0, y: 0, rotation: 0, constructionRemainingMs: 3000 };
+    const queued: PlacedBuilding = { id: 'q', defId: 'iron_mine', x: 1, y: 0, rotation: 0, constructionRemainingMs: 1000, queued: true };
     expect(nextConstructionCompletionMs([queued, running], 0)).toBe(3000);
   });
 });
 
 describe('constructionProgress', () => {
-  const mine = BUILDING_DEFS.mine; // tier 1
+  const mine = BUILDING_DEFS.iron_mine; // tier 1
   const BASE = BASE_CONSTRUCTION_MS_BY_TIER[1];
 
   it('runs 0 → 1 over a fresh placement (floor 0, total = base)', () => {

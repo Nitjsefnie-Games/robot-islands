@@ -64,8 +64,8 @@ const EQUINOX_NOON = new Date('2026-03-20T12:00:00Z').getTime();
 
 describe('floor level scales economy', () => {
   it('producer effectiveRate is 4× at floorLevel 3 vs L0', () => {
-    const mineL0: PlacedBuilding = { id: 'b-mine-l0', defId: 'mine', x: 0, y: 0 };
-    const mineL3: PlacedBuilding = { id: 'b-mine-l3', defId: 'mine', x: 0, y: 0, floorLevel: 3 };
+    const mineL0: PlacedBuilding = { id: 'b-mine-l0', defId: 'iron_mine', x: 0, y: 0 };
+    const mineL3: PlacedBuilding = { id: 'b-mine-l3', defId: 'iron_mine', x: 0, y: 0, floorLevel: 3 };
     const genL0: PlacedBuilding = { id: 'b-gen-l0', defId: 'coal_gen', x: 0, y: 0 };
     const genL3: PlacedBuilding = { id: 'b-gen-l3', defId: 'coal_gen', x: 0, y: 0 };
 
@@ -90,8 +90,8 @@ describe('floor level scales economy', () => {
   it('consumer power.consumed is 2.5× at floorLevel 3 vs L0', () => {
     // Mine consumes power but has no inputs, so nominalThroughputFrac is always 1.
     // The only scaling factor is floorPowerDrawMul.
-    const mineL0: PlacedBuilding = { id: 'b-mine-l0', defId: 'mine', x: 0, y: 0 };
-    const mineL3: PlacedBuilding = { id: 'b-mine-l3', defId: 'mine', x: 0, y: 0, floorLevel: 3 };
+    const mineL0: PlacedBuilding = { id: 'b-mine-l0', defId: 'iron_mine', x: 0, y: 0 };
+    const mineL3: PlacedBuilding = { id: 'b-mine-l3', defId: 'iron_mine', x: 0, y: 0, floorLevel: 3 };
 
     const stateL0 = makeState({ buildings: [mineL0] });
     const stateL3 = makeState({ buildings: [mineL3] });

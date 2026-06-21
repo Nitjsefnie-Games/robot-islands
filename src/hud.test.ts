@@ -91,27 +91,27 @@ describe('enumerateBuildings', () => {
 
   it('groups buildings by category and counts duplicates', () => {
     const buildings: PlacedBuilding[] = [
-      { id: 'b1', defId: 'mine', x: 0, y: 0 },
-      { id: 'b2', defId: 'mine', x: 2, y: 0 },
+      { id: 'b1', defId: 'iron_mine', x: 0, y: 0 },
+      { id: 'b2', defId: 'iron_mine', x: 2, y: 0 },
       { id: 'b3', defId: 'workshop', x: 4, y: 0 },
       { id: 'b4', defId: 'smelter', x: 6, y: 0 },
     ];
     const rows = enumerateBuildings(buildings);
-    // defId → category → label: mine→extraction→Extract, smelter→smelting→Refine.
-    expect(rowString(rows, 'Extract')).toBe('Mine ×2');
+    // defId → category → label: iron_mine→extraction→Extract, smelter→smelting→Refine.
+    expect(rowString(rows, 'Extract')).toBe('Iron Mine ×2');
     expect(rowString(rows, 'Refine')).toBe('Smelter ×1');
     expect(rowString(rows, 'Manufacturing')).toBe('Workshop ×1');
   });
 
   it('suppresses categories with no buildings entirely', () => {
-    const rows = enumerateBuildings([{ id: 'b', defId: 'mine', x: 0, y: 0 }]);
+    const rows = enumerateBuildings([{ id: 'b', defId: 'iron_mine', x: 0, y: 0 }]);
     expect(rows.map((r) => r.label)).toEqual(['Extract']);
   });
 
   it('preserves the HUD_CATEGORY_ORDER between visible categories', () => {
     const buildings: PlacedBuilding[] = [
       { id: 'b1', defId: 'dock', x: 0, y: 0 }, // logistics
-      { id: 'b2', defId: 'mine', x: 2, y: 0 }, // extraction
+      { id: 'b2', defId: 'iron_mine', x: 2, y: 0 }, // extraction
       { id: 'b3', defId: 'solar', x: 4, y: 0 }, // power
     ];
     const rows = enumerateBuildings(buildings);
@@ -123,12 +123,12 @@ describe('enumerateBuildings', () => {
     // Mine should come first (count=3 > 1).
     const buildings: PlacedBuilding[] = [
       { id: 'q', defId: 'quarry', x: 0, y: 0 },
-      { id: 'm1', defId: 'mine', x: 2, y: 0 },
-      { id: 'm2', defId: 'mine', x: 4, y: 0 },
-      { id: 'm3', defId: 'mine', x: 6, y: 0 },
+      { id: 'm1', defId: 'iron_mine', x: 2, y: 0 },
+      { id: 'm2', defId: 'iron_mine', x: 4, y: 0 },
+      { id: 'm3', defId: 'iron_mine', x: 6, y: 0 },
     ];
     const rows = enumerateBuildings(buildings);
-    expect(rowString(rows, 'Extract')).toBe('Mine ×3 · Quarry ×1');
+    expect(rowString(rows, 'Extract')).toBe('Iron Mine ×3 · Quarry ×1');
   });
 
   it('exposes a label map and order that covers every BuildingCategory', () => {

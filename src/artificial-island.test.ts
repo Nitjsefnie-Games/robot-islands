@@ -204,10 +204,10 @@ describe('validateConstruction', () => {
 
   it('rejects when founder has no Platform Constructor', () => {
     const spec = makeFounderSpec([
-      { id: 'no-pc', defId: 'mine', x: 0, y: 0 },
+      { id: 'no-pc', defId: 'iron_mine', x: 0, y: 0 },
     ]);
     const state = makeFounderState(
-      [{ id: 'no-pc', defId: 'mine', x: 0, y: 0 }],
+      [{ id: 'no-pc', defId: 'iron_mine', x: 0, y: 0 }],
       { steel_beam: 9999, concrete: 9999 },
     );
     const r = validateConstruction(state, spec, okReq);

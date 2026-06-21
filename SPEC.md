@@ -525,7 +525,7 @@ A building can be placed if and only if:
 
 * Every tile in the rotated shape mask is within the island bounds (i.e. its unit square is fully inscribed inside one of the island's constituent ellipses; see §3.4 and §3.6)
 * Every tile in the rotated shape mask is buildable (not occupied by another building, not blocked by uncleared terrain, not requiring a specific tile type the building doesn't allow)
-* All terrain-tile requirements are satisfied (e.g. Mine requires every cell of its footprint to be on an ore/coal vein)
+* All terrain-tile requirements are satisfied (e.g. an Iron Mine requires every cell of its footprint to be on an ore vein; a Coal Mine on a coal vein)
 
 **Implementation note — ocean-placed buildings.** Building defs that carry `oceanPlacement: true` (e.g. `sonar_buoy`, `seawater_intake_rig`, `nodule_harvester`, `trench_drill`, `vent_tap`, and the §5-processor / §6-power ocean catalog) bypass the island-bounds rule entirely — their footprints are validated against `world.oceanCells` instead. `validateOceanPlacement` (`placement.ts`) checks: (1) no land-tile overlap (5-sample test per cell), (2) every footprint cell matches `def.terrainReqs` via `footprintMatches`, and (3) at least one populated island lies within `ANCHOR_MAX_RANGE_CELLS` (= 50 cells, Appendix-A placeholder) of the placement cell — computed by `candidateAnchors` (`anchor-picker.ts`). When validation passes, the anchor-picker modal (`mountAnchorPicker`) opens so the player selects the island that receives the platform's output and supplies its power (§5.3). The chosen anchor id is stored on the `PlacedBuilding` and read by the economy tick. Land defs routed through `validateOceanPlacement` defensively return `def-not-ocean`.
 
@@ -924,13 +924,16 @@ The recipe ties T6 launch fuel back to the T4 antimatter chain — a player who 
 |-|-|-|-|-|-|
 |Logger|1x1|T1|tree|none|Wood output|
 |Heavy Logger|2x2|T2|dense forest|medium|Wood output, higher rate|
-|Mine|2x2|T1|ore vein or coal vein|medium|Ore or coal output by tile|
-|Deep Mine|2x3|T2|ore vein|high|Higher rate **and denser per tile** than Mine (~1.6× ore/tile), deeper veins, requires Mining sub-path|
+|Iron Mine|2x2|T1|ore vein|medium|Iron ore output|
+|Coal Mine|2x2|T1|coal vein|medium|Coal output|
+|Deep Mine|2x3|T2|ore vein|high|Higher rate **and denser per tile** than Iron Mine (~1.6× ore/tile), deeper veins, requires Mining sub-path|
 |Quarry|2x2|T1|stone or sand|low|Stone/sand output|
 |Well|1x1|T1|water|low|Fresh water output|
 |Pump Jack|2x2|T2|(placed near oil)|medium|Crude oil output|
 |Gas Extractor|2x2|T2|(placed near gas vent)|medium|Natural gas|
 |Drilling Rig|3x3|T3|(deep vein)|high|Rare earth, lithium, uranium|
+
+**Implementation note — Iron Mine / Coal Mine split.** The single terrain-discriminated `mine` (which auto-selected its recipe from the footprint tile) was split into two single-terrain buildings: `iron_mine` (`requiredTile: ['ore']` → `iron_ore`) and `coal_mine` (`requiredTile: ['coal']` → `coal`). Each carries a fixed base recipe, so `resolveRecipe` no longer branches on terrain for mines — the building identity determines the output, and `requiredTile` enforces the matching vein at both placement (`validatePlacement`) and production (the §8.1 tile-gating stall in `economy.ts`). Footprint/power/cost are identical to the old Mine, so the split is rate-neutral. Persistence: the snapshot schema bumped to **v31** (`migrateV30toV31`), which reclassifies every existing `mine` building by reconstructing its footprint terrain (via `attachTerrainAt`) — any coal tile → `coal_mine` (coal wins, mirroring the old resolver), else `iron_mine`.
 
 ### 8.2 Smelting / Refining
 

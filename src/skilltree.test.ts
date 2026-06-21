@@ -176,7 +176,7 @@ describe('t5Unlocked (§13.1 T5 access gate)', () => {
 
 describe('t6Unlocked (§14.1 T6 access gate)', () => {
   const specWithSpaceport = { buildings: [{ defId: 'spaceport' }] };
-  const specWithoutSpaceport = { buildings: [{ defId: 'mine' }] };
+  const specWithoutSpaceport = { buildings: [{ defId: 'iron_mine' }] };
   const emptySpec = { buildings: [] };
 
   it('locked when ascendantCoreCrafted=false regardless of Spaceport', () => {
@@ -192,14 +192,14 @@ describe('t6Unlocked (§14.1 T6 access gate)', () => {
     expect(t6Unlocked({ ascendantCoreCrafted: true }, specWithSpaceport)).toBe(true);
   });
   it('unlocked when Spaceport is one of several placed buildings', () => {
-    const spec = { buildings: [{ defId: 'mine' }, { defId: 'spaceport' }, { defId: 'workshop' }] };
+    const spec = { buildings: [{ defId: 'iron_mine' }, { defId: 'spaceport' }, { defId: 'workshop' }] };
     expect(t6Unlocked({ ascendantCoreCrafted: true }, spec)).toBe(true);
   });
 });
 
 describe('effectiveIslandTier (#134 UI T6 surfacing)', () => {
   const withSpaceport = { buildings: [{ defId: 'spaceport' }] };
-  const noSpaceport = { buildings: [{ defId: 'mine' }] };
+  const noSpaceport = { buildings: [{ defId: 'iron_mine' }] };
 
   it('promotes to T6 when t6Unlocked (Ascendant Core + Spaceport)', () => {
     expect(effectiveIslandTier({ level: 50, ascendantCoreCrafted: true }, withSpaceport)).toBe(6);

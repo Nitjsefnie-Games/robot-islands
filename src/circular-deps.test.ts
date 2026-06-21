@@ -33,7 +33,7 @@ function findDeadlockCycles(): string[][] {
   const buildingIdSet = new Set(buildingIds);
 
   // Recipe key -> running building (longest building-id prefix; covers
-  // variant keys like `mine_on_ore`).
+  // variant keys like `iron_mine`).
   const ownerOf = (rk: string): string => {
     if (buildingIdSet.has(rk)) return rk;
     let best: string | null = null;

@@ -53,7 +53,8 @@ export type BuildingCategory =
  *  economy would silently break on an undefined lookup otherwise. */
 export type BuildingDefId =
   // Existing (step 1-8): T1 buildings on the home island
-  | 'mine'
+  | 'iron_mine'
+  | 'coal_mine'
   | 'workshop'
   | 'solar'
   | 'coal_gen'
@@ -628,20 +629,39 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
   // Per §8.1 catalog: "Mine | 2x2 | T1 | ore vein or coal vein | … Ore or coal
   // output by tile". `requiredTile` is the placement gate; recipe selection is
   // a runtime resolve so a single defId backs both extraction variants.
-  mine: {
-    id: 'mine',
-    displayName: 'Mine',
+  // §8.1 T1 extraction split into two single-terrain buildings (was the
+  // terrain-discriminated `mine`): Iron Mine on an ore vein → iron_ore;
+  // Coal Mine on a coal vein → coal. Identical footprint/power/cost; only the
+  // required tile + output differ, so the split is rate-neutral.
+  iron_mine: {
+    id: 'iron_mine',
+    displayName: 'Iron Mine',
     category: 'extraction',
     tier: 1,
     footprint: SHAPES.square2,
     fill: 0x9a9a9a,
     stroke: 0x222222,
-    power: { consumes: 25 }, // also applies to mine_on_ore via shared def.
-    requiredTile: ['ore', 'coal'],
+    power: { consumes: 25 },
+    requiredTile: ['ore'],
     // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
     // Small open-pit head-frame analog: 200 kg foundation stone + 80 kg wood
     // frame = 280 kg embodied.
-    // cycle-break (P4C2b): removed iron_ingot per circular-deps invariant.
+    placementCost: { stone: 200, wood: 80 },
+    glyph: '⛏',
+  },
+  coal_mine: {
+    id: 'coal_mine',
+    displayName: 'Coal Mine',
+    category: 'extraction',
+    tier: 1,
+    footprint: SHAPES.square2,
+    fill: 0x6a6a6a,
+    stroke: 0x111111,
+    power: { consumes: 25 },
+    requiredTile: ['coal'],
+    // BOM source: Hartman & Mutmansky, *SME Mining Engineering Handbook* ch. 12.
+    // Small open-pit head-frame analog: 200 kg foundation stone + 80 kg wood
+    // frame = 280 kg embodied (identical to the Iron Mine).
     placementCost: { stone: 200, wood: 80 },
     glyph: '⛏',
   },

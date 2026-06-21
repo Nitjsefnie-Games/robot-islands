@@ -237,7 +237,7 @@ describe('terrain-modifier — resolveShot', () => {
     const state = makeInitialIslandState(spec, 0);
     // Place a Mine at (5, 5) — on natural ore terrain.
     state.buildings.push({
-      id: 'mine1', defId: 'mine', x: 5, y: 5, rotation: 0,
+      id: 'mine1', defId: 'iron_mine', x: 5, y: 5, rotation: 0,
     });
     // Place a modifier whose brush covers (5, 5).
     const modifier: PlacedBuilding = {
