@@ -658,7 +658,17 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
       : reason === 'no-world'
         ? '  ·  NO WORLD'
         : `  ·  ${OCEAN_REASON_LABEL[reason]}`;
-    labelText.text = labelMain + labelTail;
+    // §14 cost row — the basket the chosen anchor island pays on commit. The
+    // paying island isn't known until the anchor picker resolves, so this shows
+    // the cost without an affordability colour (the land path colours by the
+    // active island; an ocean def has no single payer at preview time).
+    const cost = placementCostFor(def);
+    const costEntries = Object.entries(cost) as Array<[ResourceId, number]>;
+    const costStr =
+      costEntries.length === 0
+        ? ''
+        : costEntries.map(([r, n]) => `${n} ${r.toUpperCase().replace(/_/g, ' ')}`).join(', ');
+    labelText.text = labelMain + labelTail + (costStr ? `\nCOST: ${costStr}` : '');
     labelText.style.fill = color;
     const padX = 6;
     const padY = 3;

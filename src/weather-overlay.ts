@@ -130,7 +130,12 @@ export function mountWeatherOverlay(world: WorldState): WeatherOverlayHandle {
     sprite.height = CELL_PX;
     sprite.tint = tint.color;
     sprite.alpha = tint.alpha * alphaScale;
-    sprite.position.set(cellX * CELL_PX, cellY * CELL_PX);
+    // Render convention (AGENTS.md "Tile index has TWO conventions"): tile
+    // (x,y) is drawn CENTRED at x*TILE_PX, so a cell's top-left corner sits at
+    // cellX*CELL_PX − TILE_PX/2. Without the −half the weather tint lands half
+    // a tile off the buildings / land / ocean cells it overlays.
+    const half = TILE_PX / 2;
+    sprite.position.set(cellX * CELL_PX - half, cellY * CELL_PX - half);
     layer.addChild(sprite);
   };
 

@@ -51,14 +51,18 @@ function getCellSquareTexture(): Texture {
   return cellSquareTexture;
 }
 
-/** Cell-sized sprite tinted `colorHex`, top-left at the cell's top-left
- *  world pixel. Cell `(cx, cy)` covers world tiles `[cx*16, (cx+1)*16)`. */
+/** Cell-sized sprite tinted `colorHex`, top-left at the cell's top-left world
+ *  pixel. Cell `(cx, cy)` covers world tiles `[cx*16, (cx+1)*16)`. Render
+ *  convention (AGENTS.md): tile (x,y) is drawn CENTRED at x*TILE_PX, so the
+ *  cell's top-left corner sits at cx*CELL_PX − TILE_PX/2 — the −half keeps the
+ *  ocean vision tints aligned with the buildings/land/grid. */
 function makeCellSquare(cx: number, cy: number, colorHex: number): Sprite {
+  const half = TILE_PX / 2;
   const s = new Sprite(getCellSquareTexture());
   s.width = CELL_PX;
   s.height = CELL_PX;
   s.tint = colorHex;
-  s.position.set(cx * CELL_PX, cy * CELL_PX);
+  s.position.set(cx * CELL_PX - half, cy * CELL_PX - half);
   return s;
 }
 

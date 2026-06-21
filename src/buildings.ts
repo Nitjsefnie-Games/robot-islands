@@ -19,7 +19,8 @@ import type { PausedReason } from './economy.js';
 import { TILE_PX, desaturate, lighten } from './island.js';
 import { isOperationalBuilding } from './building-operational.js';
 import type { ResourceId } from './recipes.js';
-import { footprintTiles, type Rotation } from './shape-mask.js';
+import { footprintTiles, shapeHeight, shapeWidth, type Rotation } from './shape-mask.js';
+import { CELL_SIZE_TILES } from './constants.js';
 
 /** Per-instance placement. `id` is unique across the world; `defId` points
  *  into BUILDING_DEFS. (x, y) is the anchor tile of the footprint —
@@ -302,6 +303,33 @@ export function renderBuildings(buildings: ReadonlyArray<PlacedBuilding>): Conta
 
   for (const b of buildings) {
     const def = BUILDING_DEFS[b.defId];
+    // §4 ocean platforms reserve whole stratification CELLS (footprint dims are
+    // cell-units per validateOceanPlacement) and are hit-tested over the full
+    // cell region (findOceanBuildingAt → shapeWidth × CELL_SIZE_TILES). Render
+    // them FILLING that region with a centred glyph, so the drawn building
+    // matches what it reserves and what you can click — instead of a tiny
+    // 1-tile sprite in the cell's corner.
+    if (def.oceanPlacement === true) {
+      const regionW = shapeWidth(def.footprint) * CELL_SIZE_TILES;
+      const regionH = shapeHeight(def.footprint) * CELL_SIZE_TILES;
+      const px = b.x * TILE_PX - half + inset;
+      const py = b.y * TILE_PX - half + inset;
+      const w = regionW * TILE_PX - inset * 2;
+      const hgt = regionH * TILE_PX - inset * 2;
+      g.rect(px + SHADOW_OFFSET, py + SHADOW_OFFSET, w, hgt).fill({ color: 0x000000, alpha: SHADOW_ALPHA });
+      const fillCol = desaturate(def.fill, DESAT_AMOUNT);
+      g.rect(px, py, w, hgt).fill(fillCol).stroke({ width: 2, color: def.stroke, alignment: 1 });
+      const fontSize = Math.round(Math.min(regionW, regionH) * TILE_PX * GLYPH_SCALE);
+      const gt = new Text({
+        text: def.glyph,
+        style: { fontFamily: 'ui-monospace, monospace', fontSize, fill: lighten(fillCol, GLYPH_LIGHTEN) },
+      });
+      gt.alpha = GLYPH_ALPHA;
+      gt.anchor.set(0.5);
+      gt.position.set(px + w / 2, py + hgt / 2);
+      glyphLayer.addChild(gt);
+      continue;
+    }
     const rot = (b.rotation ?? 0) as Rotation;
     const tiles = footprintTiles(def.footprint, b.x, b.y, rot);
 

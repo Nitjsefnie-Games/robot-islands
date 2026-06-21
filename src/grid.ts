@@ -28,6 +28,12 @@ export function renderCellGrid(halfSizeTiles: number): Container {
 
   const cellPx = CELL_SIZE_TILES * TILE_PX;
   const halfPx = halfSizeTiles * TILE_PX;
+  // Render convention (AGENTS.md "Tile index has TWO conventions"): tile (x,y)
+  // is drawn CENTRED at x*TILE_PX, so a cell boundary — the left edge of tile
+  // cellX*16 — sits at cellX*cellPx − TILE_PX/2. Without the −half the grid
+  // (and every per-cell tint keyed to it) lands half a tile off the
+  // buildings/land it should bound.
+  const half = TILE_PX / 2;
 
   const g = new Graphics();
   const style = { width: 1, color: 0x808080, alpha: 0.25 } as const;
@@ -36,12 +42,12 @@ export function renderCellGrid(halfSizeTiles: number): Container {
   const startCell = Math.floor(-halfPx / cellPx);
   const endCell = Math.ceil(halfPx / cellPx);
   for (let i = startCell; i <= endCell; i++) {
-    const x = i * cellPx;
-    g.moveTo(x, -halfPx).lineTo(x, halfPx).stroke(style);
+    const x = i * cellPx - half;
+    g.moveTo(x, -halfPx - half).lineTo(x, halfPx - half).stroke(style);
   }
   for (let i = startCell; i <= endCell; i++) {
-    const y = i * cellPx;
-    g.moveTo(-halfPx, y).lineTo(halfPx, y).stroke(style);
+    const y = i * cellPx - half;
+    g.moveTo(-halfPx - half, y).lineTo(halfPx - half, y).stroke(style);
   }
 
   layer.addChild(g);
