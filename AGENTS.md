@@ -44,6 +44,12 @@ A systemd unit `robot-islands-dev.service` runs `vite preview --host 0.0.0.0 --p
 - **Every change that alters behavior must update `SPEC.md` in the same change** — code and spec move together. SPEC.md is the source of truth, so any divergence is a bug: if a "fix" makes the code contradict its §, you are either fixing the code to match the spec or revising the spec to match an intended design change (surface which, and edit the relevant § accordingly). Never leave code and SPEC.md out of sync; never silently let code win over an unrevised spec.
 - `CONTRIBUTING.md` defines **two integration tracks** plus a **linear history**: quick fixes (small, low-risk, self-contained) commit directly to `master`; full new features and massive/risky fixes go on a feature branch cut from `master`, reviewed via PR, then rebased and fast-forwarded. Either way `master` stays green and linear — integrate by rebasing and fast-forwarding, never merge commits. Repo-local git config has `pull.rebase=true` and `merge.ff=only`.
 
+## Scope — fix the whole family, scope creep is welcome
+
+**This repo accepts scope creep toward correctness.** When you find a bug, fix every sibling with the same root cause — not just the one instance that was reported. A bug almost never lives alone: the same missing `−half`, the same un-wired effect, the same off-by-one convention will be copy-pasted across N call sites (the cell-render `−half` family — `weather-overlay.ts` / `grid.ts` / `ocean.ts` / `drones-ui.ts` — and the §2.5 construction-ghost are the canonical examples). Grep for the pattern, fix all of it in one change, and update `SPEC.md`/this file if the fix encodes a convention.
+
+**Do NOT refuse or defer a fix on "you didn't explicitly ask for this file" / "that's out of scope" grounds.** Surfacing a sibling and then *not* fixing it is the wrong default here — fix it. The only things that gate a fix are correctness risk (verify it) and the integration track (a genuinely large/risky sweep goes on a branch per `CONTRIBUTING.md`, but it still gets done). Narrowing scope to a single reported symptom and leaving known-identical bugs in place is itself a defect.
+
 ## Architecture
 
 The codebase strictly separates **pure math** from **PixiJS rendering** so the simulation is testable without a renderer:

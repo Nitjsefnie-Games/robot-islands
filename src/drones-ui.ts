@@ -869,8 +869,12 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     const cells = scanPreviewCells(originTile, waypointBuffer, cursorTile, scanRadius);
     for (const key of cells) {
       const { cellX, cellY } = parseCellKey(key);
+      // −half: tile (x,y) renders centred at x*TILE_PX (AGENTS.md), so a cell's
+      // corner is at cellX*CELL_PX − TILE_PX/2 — keep the scan preview aligned
+      // with the cells/land it highlights.
+      const half = TILE_PX / 2;
       scanPreviewGfx
-        .rect(cellX * CELL_PX, cellY * CELL_PX, CELL_PX, CELL_PX)
+        .rect(cellX * CELL_PX - half, cellY * CELL_PX - half, CELL_PX, CELL_PX)
         .fill({ color: SCAN_PREVIEW_GREEN, alpha: 0.18 });
     }
     scanPreviewLayer.visible = cells.size > 0;
