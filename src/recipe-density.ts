@@ -24,7 +24,7 @@ export type Archetype = keyof typeof ARCHETYPE_DENSITY;
 /** Each recipe-bearing building → its archetype. */
 export const BUILDING_ARCHETYPE: Partial<Record<BuildingDefId, Archetype>> = {
   // extraction
-  mine: 'hard_rock_mining', deep_mine: 'hard_rock_mining',
+  iron_mine: 'hard_rock_mining', coal_mine: 'hard_rock_mining', deep_mine: 'hard_rock_mining',
   copper_mine: 'hard_rock_mining', tin_mine: 'hard_rock_mining', lead_mine: 'hard_rock_mining',
   bauxite_mine: 'hard_rock_mining', manganese_mine: 'hard_rock_mining', zinc_mine: 'hard_rock_mining',
   chromium_mine: 'hard_rock_mining', nickel_mine: 'hard_rock_mining', tungsten_mine: 'hard_rock_mining',
@@ -117,7 +117,6 @@ export const BUILDING_ARCHETYPE: Partial<Record<BuildingDefId, Archetype>> = {
  *  variants resolve to their base building. */
 export function buildingForRecipe(recipeId: string): BuildingDefId {
   const variant: Record<string, string> = {
-    mine_on_ore: 'mine', mine_on_coal: 'mine',
     steel_mill_from_scrap: 'steel_mill_scrap',
     sheet_mill: 'sheet_metal_mill',
     nodule_concentrator_re: 'nodule_concentrator',

@@ -137,7 +137,7 @@ describe('Sonar Buoy', () => {
 
   it('non-buoy buildings do not write to discovery sets', () => {
     const island = makeIslandSpec({
-      buildings: [powerSource('gen'), { id: 'mine', defId: 'mine', x: 5, y: 5 }],
+      buildings: [powerSource('gen'), { id: 'iron_mine', defId: 'iron_mine', x: 5, y: 5 }],
     });
     const world = makeWorld([island]);
 

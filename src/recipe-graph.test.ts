@@ -27,11 +27,11 @@ describe('buildRecipeTableRows', () => {
     expect(row!.outputs.map((e) => e.resource)).toContain('iron_ingot');
   });
 
-  it('attributes mine_on_ore and mine_on_coal to the mine building', () => {
-    const oreRow = rows.find((r) => r.recipeKey === 'mine_on_ore');
-    const coalRow = rows.find((r) => r.recipeKey === 'mine_on_coal');
-    expect(oreRow?.buildingId).toBe('mine');
-    expect(coalRow?.buildingId).toBe('mine');
+  it('attributes the iron_mine / coal_mine recipes to their own buildings', () => {
+    const oreRow = rows.find((r) => r.recipeKey === 'iron_mine');
+    const coalRow = rows.find((r) => r.recipeKey === 'coal_mine');
+    expect(oreRow?.buildingId).toBe('iron_mine');
+    expect(coalRow?.buildingId).toBe('coal_mine');
   });
 
   it('sorts inputs and outputs alphabetically by resource id', () => {

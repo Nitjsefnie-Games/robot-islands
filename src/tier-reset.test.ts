@@ -299,7 +299,7 @@ describe('executeTierReset — preserves construction-state', () => {
 
   it('preserves the buildings array reference and contents', () => {
     const buildings = [
-      { id: 'b1', defId: 'mine' as const, x: 0, y: 0 },
+      { id: 'b1', defId: 'iron_mine' as const, x: 0, y: 0 },
       { id: 'b2', defId: 'workshop' as const, x: 2, y: 0 },
     ];
     const state = makeState({ level: 15, buildings });
@@ -308,7 +308,7 @@ describe('executeTierReset — preserves construction-state', () => {
     // Same array reference (the IslandSpec/IslandState share — see world.ts).
     expect(state.buildings).toBe(buildings);
     expect(state.buildings.length).toBe(2);
-    expect(state.buildings[0]?.defId).toBe('mine');
+    expect(state.buildings[0]?.defId).toBe('iron_mine');
   });
 
   it('preserves aiCoreCrafted and ascendantCoreCrafted (historical flags)', () => {

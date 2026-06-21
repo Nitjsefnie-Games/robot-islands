@@ -340,7 +340,7 @@ describe('crossIslandNeighbors', () => {
       populated: true,
       discovered: true,
       buildings: [
-        { id: 'remote-mine', defId: 'mine', x: 0, y: 0 },
+        { id: 'remote-mine', defId: 'iron_mine', x: 0, y: 0 },
         { id: 'remote-workshop', defId: 'workshop', x: 2, y: 0 },
       ],
       modifiers: [],
@@ -367,7 +367,7 @@ describe('crossIslandNeighbors', () => {
       populated: true,
       discovered: true,
       buildings: [
-        { id: 'remote-mine', defId: 'mine', x: 0, y: 0 },
+        { id: 'remote-mine', defId: 'iron_mine', x: 0, y: 0 },
         { id: 'remote-bad', defId: 'workshop', x: 2, y: 0, invalid: true },
       ],
       modifiers: [],

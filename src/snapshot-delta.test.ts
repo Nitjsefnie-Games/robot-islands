@@ -57,7 +57,7 @@ describe('computeSnapshotDelta / applySnapshotDelta round-trip', () => {
   });
 
   it('reproduces a world scalar change while leaving large arrays alone', () => {
-    const buildings = Array.from({ length: 50 }, (_, i) => ({ id: `b${i}`, kind: 'mine' }));
+    const buildings = Array.from({ length: 50 }, (_, i) => ({ id: `b${i}`, kind: 'iron_mine' }));
     const prev = snap({ world: { totalCo2Kg: 10, islands: buildings } });
     const next = snap({ world: { totalCo2Kg: 12, islands: buildings } });
     const { delta } = computeSnapshotDelta(prev, next);
@@ -142,7 +142,7 @@ describe('computeSnapshotDelta / applySnapshotDelta round-trip', () => {
 describe('keyed-array diffing (by id)', () => {
   it('sends only the changed field of one element in a large keyed array', () => {
     const buildings = (mul: number) =>
-      Array.from({ length: 40 }, (_, i) => ({ id: `b${i}`, defId: 'mine', x: i, y: 0, operatingMs: i * mul }));
+      Array.from({ length: 40 }, (_, i) => ({ id: `b${i}`, defId: 'iron_mine', x: i, y: 0, operatingMs: i * mul }));
     const prev = snap({ islandStates: [{ id: 'home', state: { lastTick: 1, buildings: buildings(1) } }] });
     const next = snap({ islandStates: [{ id: 'home', state: { lastTick: 2, buildings: buildings(2) } }] });
     const { delta } = computeSnapshotDelta(prev, next);

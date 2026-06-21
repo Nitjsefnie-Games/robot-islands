@@ -548,7 +548,7 @@ describe('§8.1 T2 extraction recipes', () => {
     expect(t2Rate).toBeGreaterThan(t1Rate);
   });
   it('deep_mine produces iron_ore with higher rate than mine', () => {
-    const t1 = RECIPES.mine!;
+    const t1 = RECIPES.iron_mine!;
     const t2 = RECIPES.deep_mine!;
     const t1Rate = (t1.outputs.iron_ore ?? 0) / t1.cycleSec;
     const t2Rate = (t2.outputs.iron_ore ?? 0) / t2.cycleSec;
@@ -2037,9 +2037,9 @@ describe('availableRecipes', () => {
 
   it('returns base recipe for mine', () => {
     const state = { unlockedNodes: new Set<string>() } as IslandState;
-    const recipes = availableRecipes('mine', state);
+    const recipes = availableRecipes('iron_mine', state);
     expect(recipes).toHaveLength(1);
-    expect(recipes[0]).toBe(RECIPES.mine);
+    expect(recipes[0]).toBe(RECIPES.iron_mine);
   });
 
   it('returns skill-unlocked recipe when node is owned', () => {
@@ -2052,7 +2052,7 @@ describe('availableRecipes', () => {
           depth: 1,
           cost: 1,
           magnitude: 0.05,
-          effect: { kind: 'unlockRecipe', targetBuilding: 'mine', recipe: unlockedRecipe },
+          effect: { kind: 'unlockRecipe', targetBuilding: 'iron_mine', recipe: unlockedRecipe },
           description: 'test',
         },
       ],
@@ -2061,9 +2061,9 @@ describe('availableRecipes', () => {
       graftSockets: [],
     };
     const state = { unlockedNodes: new Set<string>(['test.1']) } as IslandState;
-    const recipes = availableRecipes('mine', state, graph);
+    const recipes = availableRecipes('iron_mine', state, graph);
     expect(recipes).toHaveLength(2);
-    expect(recipes[0]).toBe(RECIPES.mine);
+    expect(recipes[0]).toBe(RECIPES.iron_mine);
     expect(recipes[1]).toBe(unlockedRecipe);
   });
 
@@ -2102,7 +2102,7 @@ describe('availableRecipes', () => {
           depth: 1,
           cost: 1,
           magnitude: 0.05,
-          effect: { kind: 'unlockRecipe', targetBuilding: 'mine', recipe: unlockedRecipe },
+          effect: { kind: 'unlockRecipe', targetBuilding: 'iron_mine', recipe: unlockedRecipe },
           description: 'test',
         },
       ],
@@ -2128,7 +2128,7 @@ describe('availableRecipes', () => {
           depth: 1,
           cost: 1,
           magnitude: 0.05,
-          effect: { kind: 'unlockRecipe', targetBuilding: 'mine', recipe: recipeA },
+          effect: { kind: 'unlockRecipe', targetBuilding: 'iron_mine', recipe: recipeA },
           description: 'test a',
         },
         {
@@ -2137,7 +2137,7 @@ describe('availableRecipes', () => {
           depth: 2,
           cost: 2,
           magnitude: 0.10,
-          effect: { kind: 'unlockRecipe', targetBuilding: 'mine', recipe: recipeB },
+          effect: { kind: 'unlockRecipe', targetBuilding: 'iron_mine', recipe: recipeB },
           description: 'test b',
         },
       ],
@@ -2146,9 +2146,9 @@ describe('availableRecipes', () => {
       graftSockets: [],
     };
     const state = { unlockedNodes: new Set<string>(['test.4a', 'test.4b']) } as IslandState;
-    const recipes = availableRecipes('mine', state, graph);
+    const recipes = availableRecipes('iron_mine', state, graph);
     expect(recipes).toHaveLength(3);
-    expect(recipes[0]).toBe(RECIPES.mine);
+    expect(recipes[0]).toBe(RECIPES.iron_mine);
     expect(recipes[1]).toBe(recipeA);
     expect(recipes[2]).toBe(recipeB);
   });
@@ -2163,7 +2163,7 @@ describe('availableRecipes', () => {
           depth: 1,
           cost: 1,
           magnitude: 0.05,
-          effect: { kind: 'unlockRecipe', targetBuilding: 'mine', recipe: unlockedRecipe },
+          effect: { kind: 'unlockRecipe', targetBuilding: 'iron_mine', recipe: unlockedRecipe },
           description: 'g1',
         },
       ],
@@ -2173,8 +2173,8 @@ describe('availableRecipes', () => {
     };
     const graphB: Graph = { nodes: [], edges: [], bridges: [], graftSockets: [] };
     const state = { unlockedNodes: new Set<string>(['g1.1']) } as IslandState;
-    expect(availableRecipes('mine', state, graphA)).toHaveLength(2);
-    expect(availableRecipes('mine', state, graphB)).toHaveLength(1);
+    expect(availableRecipes('iron_mine', state, graphA)).toHaveLength(2);
+    expect(availableRecipes('iron_mine', state, graphB)).toHaveLength(1);
   });
 });
 

@@ -252,7 +252,7 @@ export function settleViaSpacetimeAnchor(
 function starterDefIdsFor(kind: VehicleKind, tier: VehicleTier): BuildingDefId[] {
   if (tier <= 2) return [];
   const list: BuildingDefId[] = ['solar', 'workshop'];
-  if (kind === 'ship' && tier >= 3) list.push('mine');
+  if (kind === 'ship' && tier >= 3) list.push('iron_mine');
   if (tier >= 4) list.push('coal_gen', 'crate');
   return list;
 }

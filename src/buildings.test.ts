@@ -149,7 +149,7 @@ describe('floor-disable is lossless across save round-trip', () => {
 describe('queue model fields', () => {
   it('PlacedBuilding accepts queued + queueSeq', () => {
     const b: PlacedBuilding = {
-      id: 'placed-1', defId: 'mine', x: 0, y: 0, rotation: 0,
+      id: 'placed-1', defId: 'iron_mine', x: 0, y: 0, rotation: 0,
       constructionRemainingMs: 30000, queued: true, queueSeq: 3,
     };
     expect(b.queued).toBe(true);

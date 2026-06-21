@@ -56,7 +56,7 @@ describe('makeRemoteGateway — gateway-rejection contract', () => {
     const gateway = makeRemoteGateway(rejectingClient('Socket is not open'));
     // A representative spread of mutation methods — each returns a Promise in
     // REMOTE mode and must resolve (not reject) to the failure contract.
-    const r1 = await gateway.placeBuilding('home', 'mine', 0, 0, 0);
+    const r1 = await gateway.placeBuilding('home', 'iron_mine', 0, 0, 0);
     const r2 = await gateway.applyUpgrade('home', 'b-1');
     const r3 = await gateway.expandIsland('home', 0, 'major');
     for (const r of [r1, r2, r3]) {
@@ -185,7 +185,7 @@ describe('makeLocalGateway — createRoute parity', () => {
     const { now, world, islandStates, colony } = makeTwoPopulatedIslands();
     const home = world.islands.find((s) => s.id === 'home')!;
     home.buildings = [{
-      id: 'mine-1', defId: 'mine', x: 0, y: 0,
+      id: 'mine-1', defId: 'iron_mine', x: 0, y: 0,
       constructionRemainingMs: 0, placedAt: now,
     }];
     islandStates.get('home')!.buildings = home.buildings;
