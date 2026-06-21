@@ -621,14 +621,37 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     // feedback. Without `getWorld` (headless test fixture) we paint amber
     // and the status carries the routing-issue label.
     const world = deps.getWorld?.();
+    const cost = placementCostFor(def);
     let ok = false;
     let reason: OceanPlacementReason | 'no-world' = 'no-world';
+    // Non-null ⇒ geometry is fine but no in-range anchor can afford the cost;
+    // holds the shortfall of the closest-to-affording anchor (or {}).
+    let unaffordableShortfall: Partial<Record<ResourceId, number>> | null = null;
     if (world) {
       const ov = validateOceanPlacement(world, defId, cellX, cellY, world.depthRevealedCells);
-      if (ov.ok) {
-        ok = true;
-      } else {
+      if (!ov.ok) {
         reason = ov.reason ?? 'terrain-mismatch';
+      } else {
+        // §14 affordability: whichever anchor the player picks pays the cost, so
+        // the placement is affordable iff at least one in-range anchor affords
+        // it. Otherwise surface the shortfall like the land path does (the
+        // commit re-checks per-anchor server-side). Headless (no getStateById)
+        // skips the check so tests that only assert geometry still pass.
+        const anchors = deps.getStateById ? candidateAnchors(world, cellX, cellY) : [];
+        let anyAfford = anchors.length === 0;
+        let best: Partial<Record<ResourceId, number>> | null = null;
+        for (const a of anchors) {
+          const st = deps.getStateById?.(a.islandId);
+          if (!st) continue;
+          const sf = affordabilityShortfall(st.inventory, cost);
+          if (Object.keys(sf).length === 0) {
+            anyAfford = true;
+            break;
+          }
+          if (best === null || Object.keys(sf).length < Object.keys(best).length) best = sf;
+        }
+        if (anyAfford) ok = true;
+        else unaffordableShortfall = best ?? {};
       }
     }
     const color = ok ? OK_COLOR : WARN_COLOR;
@@ -655,14 +678,16 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     const labelMain = `${def.displayName.toUpperCase()} ${cellW}×${cellH} CELL`;
     const labelTail = ok
       ? ''
-      : reason === 'no-world'
-        ? '  ·  NO WORLD'
-        : `  ·  ${OCEAN_REASON_LABEL[reason]}`;
-    // §14 cost row — the basket the chosen anchor island pays on commit. The
-    // paying island isn't known until the anchor picker resolves, so this shows
-    // the cost without an affordability colour (the land path colours by the
-    // active island; an ocean def has no single payer at preview time).
-    const cost = placementCostFor(def);
+      : unaffordableShortfall !== null
+        ? Object.keys(unaffordableShortfall).length > 0
+          ? `  ·  NEED ${formatMissing(unaffordableShortfall)}`
+          : '  ·  INSUFFICIENT RESOURCES'
+        : reason === 'no-world'
+          ? '  ·  NO WORLD'
+          : `  ·  ${OCEAN_REASON_LABEL[reason]}`;
+    // §14 cost row — the basket whichever anchor island the player picks pays on
+    // commit. The whole label (incl. cost) goes WARN when `ok` is false, so an
+    // unaffordable placement shows the cost in red alongside the NEED tail.
     const costEntries = Object.entries(cost) as Array<[ResourceId, number]>;
     const costStr =
       costEntries.length === 0
@@ -944,6 +969,19 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
       if (cands.length === 0) {
         recordRejection();
         return { ok: false, oceanReason: 'no-anchor-in-range' };
+      }
+      // §14 affordability parity with the land path: the anchor the player
+      // picks pays, so block BEFORE opening the picker if NO in-range anchor can
+      // afford the cost (the preview surfaces the same). If at least one can,
+      // the picker opens and the server re-checks the chosen anchor's inventory.
+      const oceanCost = placementCostFor(def);
+      const anyAfford = cands.some((c) => {
+        const st = deps.getStateById?.(c.islandId);
+        return st !== undefined && Object.keys(affordabilityShortfall(st.inventory, oceanCost)).length === 0;
+      });
+      if (!anyAfford) {
+        recordRejection();
+        return { ok: false, reason: 'insufficient-resources' };
       }
       // Kick off the anchor picker. The commit completes asynchronously
       // when the picker resolves — mirrors the cargo-label `pickCargoLabel`
