@@ -13,6 +13,7 @@ import type { IslandState } from './economy.js';
 import { BUILDING_DEFS } from './building-defs.js';
 import { floorScaledCapacity, isOperationalBuilding } from './buildings.js';
 import { creditStorageCaps } from './placement.js';
+import { cap } from './storage-cap.js';
 import { nodeById } from './skilltree.js';
 import {
   islandsOverlap,
@@ -225,12 +226,14 @@ export function performMerge(
   //    overflow. Skip if either state is missing (§3.6 implies both islands
   //    are populated for a merge to make sense).
   if (absorberState && absorbedState) {
-    const caps = absorberState.storageCaps;
     for (const r of Object.keys(absorbedState.inventory) as ResourceId[]) {
       const cur = absorberState.inventory[r] ?? 0;
       const incoming = absorbedState.inventory[r] ?? 0;
-      const capR = caps[r] ?? 0;
-      absorberState.inventory[r] = Math.min(capR, cur + incoming);
+      // Clamp to the EFFECTIVE cap (nominal × §9.3 storage-skill multiplier),
+      // not the raw nominal `storageCaps[r]` — using the raw value silently
+      // dropped the skill multiplier and discarded the absorber's own
+      // inventory down to ~1/mult (the §3.6 merge inventory-loss bug).
+      absorberState.inventory[r] = Math.min(cap(absorberState, r), cur + incoming);
     }
   }
 

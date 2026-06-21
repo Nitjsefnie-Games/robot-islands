@@ -15,7 +15,7 @@ import { borderTiles, checkGates, clusterBonusMuls, computeBuffStack, footprintK
 import { IDENTITY_MODIFIER_MULTIPLIERS, type ModifierMultipliers } from './biomes.js';
 import { nextConstructionCompletionMs, tickConstruction } from './construction.js';
 import { creditStorageCaps, promoteQueuedBuilds } from './placement.js';
-import { RESOURCE_STORAGE_CATEGORY } from './storage-categories.js';
+import { cap } from './storage-cap.js';
 import {
   BUILDING_DEFS,
   buildingUnlocked,
@@ -495,48 +495,13 @@ export function inv(state: IslandState, r: ResourceId): number {
   return state.inventory[r] ?? 0;
 }
 
-/**
- * Safe cap read; missing key means no storage for that resource. Applies the
- * skill-tree storage multiplier (§9.3 Storage sub-path) so every read path —
- * outputAvail, findNextCapEvent, applyRates — uses the same effective cap.
- *
- * The HUD reads `state.storageCaps[r]` directly (it predates skills) and so
- * still displays nominal caps; the economy uses these effective caps. That
- * UX inconsistency is left to a later step alongside the broader storage UI.
- */
-// Perf note: callers that don't thread `mult` (UI paths — hud/inventory/
-// inspector, per resource per frame) fall back to `effectiveSkillMultipliers`,
-// which is memoized at source since §perf-2026-06-10 (skilltree.ts) — the
-// fallback is a signature check + clone, not a full graph re-fold.
-export function cap(
-  state: IslandState,
-  r: ResourceId,
-  override?: Record<ResourceId, number>,
-  opts?: { ignoreGrace?: boolean },
-  mult?: SkillMultipliers,
-): number {
-  const nominal = override?.[r] ?? state.storageCaps[r] ?? 0;
-  // §12.4: starter grace must apply even at zero nominal cap — the early
-  // return on nominal === 0 sat BEFORE the grace read, which made the kit
-  // allowance unreachable for resources with no storage built yet (fix 3.3).
-  // The zero short-circuit is kept (skill-mul fold skipped) but now resolves
-  // to the grace value unless the caller asked to ignore it.
-  if (nominal === 0) {
-    if (opts?.ignoreGrace) return 0;
-    return state.starterInventoryGrace[r] ?? 0;
-  }
-  const resolvedMult = mult ?? effectiveSkillMultipliers(state);
-  // Storage sub-path (depth ≥ 2): per-category cap multiplier. Looks up the
-  // resource's storage category — if it hasn't been categorised yet
-  // (forward-compat with new resources) the lookup returns undefined and the
-  // category-mul defaults to 1.
-  const cat = RESOURCE_STORAGE_CATEGORY[r];
-  const catMul = cat ? resolvedMult.storageCategoryCap[cat] ?? 1 : 1;
-  const computedCap = nominal * catMul;
-  if (opts?.ignoreGrace) return computedCap;
-  const grace = state.starterInventoryGrace[r] ?? 0;
-  return Math.max(computedCap, grace);
-}
+// `cap()` — the effective per-resource storage cap — now lives in the leaf
+// `storage-cap.ts` so the inventory-clamp paths outside the economy
+// (island-merge, placement) can share it without a runtime import cycle.
+// Imported above for internal use and re-exported so existing
+// `import { cap } from './economy.js'` consumers (hud, inventory-ui, trade,
+// route-throttle, cargo-label-picker) are unchanged.
+export { cap };
 
 /** §12.4: clear starter inventory grace for a single resource when its
  *  normal cap meets or exceeds current inventory. */
