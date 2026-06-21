@@ -52,8 +52,24 @@ export function buildRecipeTableRows(): ReadonlyArray<RecipeTableRow> {
       .map(([resource, n]) => ({ resource: resource as ResourceId, n: n ?? 0 }))
       .sort((a, b) => a.resource.localeCompare(b.resource));
 
-    const outputs = Object.entries(recipe.outputs)
-      .map(([resource, n]) => ({ resource: resource as ResourceId, n: n ?? 0 }))
+    // Union the base outputs with every §8.10 rotateOutputs variant — a
+    // rotating producer (e.g. aetheric_conduit → aetheric_current / quantum_foam)
+    // only lists ONE output in `outputs`, so reading `outputs` alone hides the
+    // other rotated products and makes them look like they have no producer in
+    // the graph. Per-cycle `n` is the variant's amount (it rotates across cycles).
+    const outputMap = new Map<ResourceId, number>();
+    for (const [resource, n] of Object.entries(recipe.outputs)) {
+      outputMap.set(resource as ResourceId, n ?? 0);
+    }
+    if (recipe.rotateOutputs) {
+      for (const variant of recipe.rotateOutputs) {
+        for (const [resource, n] of Object.entries(variant)) {
+          if (!outputMap.has(resource as ResourceId)) outputMap.set(resource as ResourceId, n ?? 0);
+        }
+      }
+    }
+    const outputs = [...outputMap.entries()]
+      .map(([resource, n]) => ({ resource, n }))
       .sort((a, b) => a.resource.localeCompare(b.resource));
 
     if (inputs.length === 0 && outputs.length === 0) continue;
