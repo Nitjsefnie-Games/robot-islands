@@ -73,7 +73,7 @@ import {
 import { maxRadiusForFounderLevel } from './artificial-island.js';
 import { mountInspectorUi, type InspectorTarget } from './inspector-ui.js';
 import { mountInspectorMulti, type MultiTarget } from './inspector-multi.js';
-import { planMassUpgrade } from './mass-actions.js';
+import { planMassUpgrade, buildingsInBox, type TileBox } from './mass-actions.js';
 import { rawFloorLevel } from './floor-levels.js';
 import { resolveRecipe } from './recipes.js';
 import { type Axis } from './land-reclamation.js';
@@ -793,6 +793,40 @@ async function main(): Promise<void> {
   // §2.5 construction ghost drag state. Mirrors bendDrag: set in the DOM
   // mousedown handler, consumed in mousemove/mouseup, and suppresses camera pan.
   let ghostDrag: 'body' | 0 | 1 | 2 | 3 | null = null;
+  // §4 box-select drag state. Sibling to ghostDrag/bendDrag: shift-drag over
+  // empty ocean rubber-bands a selection rect. `boxDrag` holds the world-tile
+  // anchor (mousedown point); the mousemove handler redraws `boxSelectGfx` and
+  // suppresses camera pan while set; mouseup computes a TileBox and adds every
+  // building inside it to the selection. A world-space overlay Graphics (added
+  // to `world` so it rides the camera transform); starts hidden.
+  let boxDrag: { x0: number; y0: number } | null = null;
+  const boxSelectGfx = new Graphics();
+  boxSelectGfx.label = 'box-select';
+  boxSelectGfx.visible = false;
+  world.addChild(boxSelectGfx);
+
+  /** Redraw the rubber-band rect from the `boxDrag` anchor to a cursor tile
+   *  (both world tiles → world px via TILE_PX). Makes the overlay visible. */
+  function redrawBoxSelect(curX: number, curY: number): void {
+    if (!boxDrag) return;
+    const x0 = Math.min(boxDrag.x0, curX) * TILE_PX;
+    const y0 = Math.min(boxDrag.y0, curY) * TILE_PX;
+    const w = Math.abs(curX - boxDrag.x0) * TILE_PX;
+    const h = Math.abs(curY - boxDrag.y0) * TILE_PX;
+    boxSelectGfx.clear();
+    boxSelectGfx
+      .rect(x0, y0, w, h)
+      .fill({ color: VISION_BLUE, alpha: 0.08 })
+      .stroke({ width: 2, color: VISION_BLUE, alpha: 0.9, alignment: 1 });
+    boxSelectGfx.visible = true;
+  }
+
+  /** Cancel any in-progress box-select drag and hide the overlay. */
+  function clearBoxSelect(): void {
+    boxDrag = null;
+    boxSelectGfx.clear();
+    boxSelectGfx.visible = false;
+  }
   // Prior weather-overlay layer visibility, captured when a route is selected
   // so deselect restores it (the overlay has no toggle action — its layer is
   // simply forced visible while editing and restored after).
@@ -874,6 +908,7 @@ async function main(): Promise<void> {
     lastY = e.clientY;
     accumDrag = 0;
     bendDrag = null;
+    boxDrag = null;
     // §2.5 ghost grab. Takes priority over the bend/route branch below while
     // the construction panel is open. The mousemove/mouseup handlers consume
     // `ghostDrag` and suppress camera panning while it is set.
@@ -885,6 +920,32 @@ async function main(): Promise<void> {
         const wt = screenToWorldTile(sx, sy);
         const hit = ghostHitTest(constructionCandidate, wt.x, wt.y, bendTolTiles());
         if (hit !== null) { ghostDrag = hit; return; }
+      }
+    }
+    // §4 box-select arm. A shift-press over empty ocean (NOT on a building) and
+    // with no mode armed starts a rubber-band box drag — sibling to ghost/bend
+    // drag. The mousemove handler redraws the overlay + suppresses camera pan;
+    // mouseup unions every building in the box into the selection. A shift-press
+    // ON a building is left for the mouseup click path (T5 shift-toggle), so we
+    // skip arming when the press hits a building. When the selection is empty we
+    // adopt the populated island under the anchor as `selectionSpec` so the
+    // box's hits land on the right island.
+    if (e.shiftKey && !anyModeArmed() && ghostDrag === null) {
+      const rect = app.canvas.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      if (sx >= 0 && sx <= rect.width && sy >= 0 && sy <= rect.height) {
+        const wt = screenToWorldTile(sx, sy);
+        const anchorIsland = findPopulatedIslandAt(wt.x, wt.y, worldState.islands);
+        const onBuilding =
+          (anchorIsland &&
+            buildingAtTile(anchorIsland, wt.x - anchorIsland.cx, wt.y - anchorIsland.cy) !== null) ||
+          findOceanBuildingAt(worldState.islands, wt.x, wt.y) !== null;
+        if (!onBuilding) {
+          boxDrag = { x0: wt.x, y0: wt.y };
+          if (selection.size === 0 && anchorIsland) selectionSpec = anchorIsland;
+          return;
+        }
       }
     }
     // §2.6 bend grab. Only when no placement / launch mode owns the cursor.
@@ -963,6 +1024,31 @@ async function main(): Promise<void> {
     // §2.5 ghost drag release — consume the gesture before any click/drag
     // disambiguation below fires.
     if (ghostDrag !== null) { ghostDrag = null; return; }
+    // §4 box-select commit — runs before the bend/launch/placement/building-
+    // select branches. A real drag (box spans ≥1 tile in either axis) unions
+    // every building inside the box into the selection and consumes the event.
+    // A zero-area box (shift-click, no drag) clears the overlay and FALLS
+    // THROUGH to the normal click path so a shift-click on a building still
+    // toggles (T5 behaviour).
+    if (boxDrag !== null) {
+      const anchor = boxDrag;
+      const rect = app.canvas.getBoundingClientRect();
+      const sx = e.clientX - rect.left;
+      const sy = e.clientY - rect.top;
+      const wt = screenToWorldTile(sx, sy);
+      const zeroArea =
+        Math.abs(wt.x - anchor.x0) < 1 && Math.abs(wt.y - anchor.y0) < 1;
+      clearBoxSelect();
+      if (!zeroArea) {
+        const box: TileBox = { x0: anchor.x0, y0: anchor.y0, x1: wt.x, y1: wt.y };
+        if (selectionSpec) {
+          for (const id of buildingsInBox(selectionSpec, box)) selection.add(id);
+        }
+        syncSelectionUi();
+        return;
+      }
+      // zero-area → fall through (do NOT return) to normal click handling.
+    }
     // §2.6 bend gesture commit — runs FIRST (before the launch/placement/
     // building-select branches) and consumes the gesture when a bend was
     // grabbed or a selected route was clicked.
@@ -1192,6 +1278,14 @@ async function main(): Promise<void> {
       const p = bendDrag.preview[bendDrag.index];
       if (p) { p.x = wt.x; p.y = wt.y; }
       refreshBendOverlay();
+      return;
+    }
+    // §4 box-select owns the cursor — grow the rubber-band rect to the cursor
+    // tile instead of panning the camera (sibling to ghost/bend early-returns).
+    if (boxDrag) {
+      const rect = app.canvas.getBoundingClientRect();
+      const wt = screenToWorldTile(e.clientX - rect.left, e.clientY - rect.top);
+      redrawBoxSelect(wt.x, wt.y);
       return;
     }
     panCam(cam, dx, dy);
@@ -2294,6 +2388,9 @@ async function main(): Promise<void> {
     orbitalUi.hide();
     placementUi.cancel();
     dronesUi.cancelPath();
+    // §4 box-select: Escape cancels an in-progress rubber-band drag and hides
+    // its overlay. Idempotent — a no-op when no box drag is active.
+    clearBoxSelect();
     // §4 inspector: Escape also closes the inspector + clears the
     // selection outline. Idempotent; closing while already hidden is a
     // no-op.
