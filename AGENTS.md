@@ -65,6 +65,13 @@ Tests target the pure layer only. Render code is read-only against state.
 - **World pixels** = `tile * TILE_PX` (`TILE_PX = 24` in `island.ts`). `tileToWorldPx` converts.
 - **Screen pixels** = `world_px * cam.zoom + (cam.tx, cam.ty)`. The `Camera` in `camera.ts` is pure state; `main.ts`'s ticker syncs `world.position`/`world.scale` from it once per frame. `app.renderer.screen.{width,height}` are CSS pixels and match camera units; `renderer.{width,height}` are device pixels (DPR-scaled) — don't mix them.
 
+#### Tile index has TWO conventions — geometry uses corners, render uses centres
+
+A tile index `(x, y)` means different things to the two layers, and conflating them shifts drawings half a cell (this bit the §2.5 construction ghost):
+
+- **Geometry / inscription (pure layer):** tile `(x, y)` is the unit square from `(x, y)` to `(x+1, y+1)`. A tile is part of an island iff all four corners `(x,y),(x+1,y),(x,y+1),(x+1,y+1)` lie strictly inside the ellipse — `tileInscribedInEllipse` (`island.ts`), wrapped by `islandInscribedAny` (multi-constituent) and used by every placement/footprint check (`validatePlacement`, `regionDiscoveredOrVisible`, `islandsOverlap`). Coords here are **island-local** (relative to `IslandSpec.cx/cy`); a building's stored `b.x/b.y` are island-local too, so its world tile is `(spec.cx + b.x, spec.cy + b.y)`.
+- **Render (PixiJS layer):** tile `(x, y)` is drawn **centred** at world pixel `(x*TILE_PX, y*TILE_PX)` — its rect is `[x*TILE_PX − TILE_PX/2, x*TILE_PX + TILE_PX/2)`. So tile-drawing code subtracts `half = TILE_PX/2`; it must NOT put the rect corner at `x*TILE_PX`. Canonical example: `renderBuildings` in `buildings.ts` (`t.x * TILE_PX - half`). Any new tile-footprint render (e.g. `construction-overlay.ts`) must apply the same `−half`, or it lands half a cell off the buildings/land it should align with.
+
 ### Spec/state separation per island
 
 `IslandSpec` (in `world.ts`) is the static `readonly` definition (terrain function, ellipse, building positions, discovered/populated flags). `IslandState` (in `economy.ts`) is the mutable runtime (inventory, xp, level, lastTick). They reference each other by `id`. `makeInitialIslandState(spec, nowMs)` constructs state from a spec.
