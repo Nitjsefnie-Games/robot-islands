@@ -26,6 +26,7 @@
 // paints the outline.
 
 import {
+  ALL_BUILDING_DEF_IDS,
   BUILDING_DEFS,
   type BuildingCategory,
   type BuildingDefId,
@@ -35,7 +36,9 @@ import { clusterBonusMul, gateSatisfied } from './adjacency.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
 import { affordabilityShortfall, applyRelabelStorageCap, countQueuedUpgrades, formatShortfall, inProgressBuildCount, parallelBuildSlots, queuedBuildCount, queuedBuildSlots, relocateFee, topUpgradeLevel, totalInvestedCost, upgradeCost } from './placement.js';
 import { upgradeConstructionMs } from './construction.js';
+import { buildingCardLockState } from './buildings-ui.js';
 import { activeFloorLevel, activeFloors, displayedFloorLevel, floorEffectMul, floorLevel, floorPowerDrawMul, floorScaledCapacity, hasOperationalBuilding, isOperationalBuilding, participatesInCluster, rawFloorLevel, ratedBuildingPower, type PlacedBuilding } from './buildings.js';
+import { scrapRecipeForTarget } from './demolition-yard.js';
 import { convertToServitor as pureConvertToServitor } from './servitor.js';
 import { defineAction, dispatchAction, type InputRegistry } from './input.js';
 import type { IslandState } from './economy.js';
@@ -974,6 +977,136 @@ export function mountInspectorUi(
     }
   }
 
+  // §6.7 Demolition Yard target picker — shown only for demolition_yard instances.
+  // Eligible targets are building kinds whose derived scrap recipe mints ≥1 scrap
+  // AND that are currently placeable on this island (tier + biome + skill bypasses).
+  function isTargetPlaceable(id: BuildingDefId, target: InspectorTarget): boolean {
+    const lock = buildingCardLockState(BUILDING_DEFS[id], target.state, target.spec);
+    return lock.unlocked && lock.biomeOk;
+  }
+  const eligibleScrapTargets = (target: InspectorTarget): BuildingDefId[] =>
+    ALL_BUILDING_DEF_IDS.filter(
+      (id) => scrapRecipeForTarget(id) !== undefined && isTargetPlaceable(id, target),
+    );
+
+  const scrapTargetSection = makeSection('Scrap Target');
+  const scrapTargetControls = (() => {
+    const wrap = document.createElement('div');
+    styled(wrap, ['display: flex', 'flex-direction: column', 'gap: 4px'].join(';'));
+    const row = document.createElement('div');
+    styled(row, ['display: flex', 'gap: 6px', 'align-items: center'].join(';'));
+    const labelTxt = document.createElement('span');
+    labelTxt.textContent = 'TARGET';
+    styled(
+      labelTxt,
+      [`color: ${'var(--ri-fg-3)'}`, 'font-size: 9.5px', 'letter-spacing: 0.14em'].join(';'),
+    );
+    const select = document.createElement('select');
+    styled(
+      select,
+      [
+        'flex: 1 1 auto',
+        `color: ${'var(--ri-fg-1)'}`,
+        `background: ${'rgba(24, 29, 39, 0.6)'}`,
+        `border: 1px solid ${'var(--ri-border-strong)'}`,
+        'border-radius: 2px',
+        'padding: 2px 4px',
+        'font-family: ui-monospace, monospace',
+        'font-size: 10.5px',
+        'letter-spacing: 0.02em',
+      ].join(';'),
+    );
+    const clearBtn = document.createElement('button');
+    styled(
+      clearBtn,
+      [
+        'background: transparent',
+        `color: ${'var(--ri-fg-3)'}`,
+        `border: 1px solid ${'var(--ri-border-strong)'}`,
+        'padding: 3px 8px',
+        'cursor: pointer',
+        'font-family: ui-monospace, monospace',
+        'font-size: 10px',
+        'letter-spacing: 0.1em',
+        'text-transform: uppercase',
+        'border-radius: 2px',
+      ].join(';'),
+    );
+    clearBtn.textContent = 'Clear';
+    row.appendChild(labelTxt);
+    row.appendChild(select);
+    row.appendChild(clearBtn);
+    wrap.appendChild(row);
+    return { wrap, select, clearBtn };
+  })();
+  scrapTargetSection.body.appendChild(scrapTargetControls.wrap);
+
+  scrapTargetControls.select.addEventListener('change', () => {
+    const target = resolveTarget();
+    if (!target) { close(); return; }
+    const b = target.building;
+    const next = scrapTargetControls.select.value as BuildingDefId;
+    if (!deps.gateway) {
+      b.scrapTarget = next;
+      return;
+    }
+    const result = deps.gateway.setScrapTarget(target.spec.id, b.id, next);
+    if (result instanceof Promise) {
+      void (async () => {
+        const res = await result;
+        if (!res.ok) return;
+        b.scrapTarget = next;
+      })();
+      return;
+    }
+    if (!result.ok) return;
+    b.scrapTarget = next;
+  });
+  scrapTargetControls.clearBtn.addEventListener('click', () => {
+    const target = resolveTarget();
+    if (!target) { close(); return; }
+    const b = target.building;
+    if (!deps.gateway) {
+      b.scrapTarget = undefined;
+      paint();
+      return;
+    }
+    const result = deps.gateway.setScrapTarget(target.spec.id, b.id, null);
+    if (result instanceof Promise) {
+      void (async () => {
+        const res = await result;
+        if (!res.ok) return;
+        b.scrapTarget = undefined;
+        paint();
+      })();
+      return;
+    }
+    if (!result.ok) return;
+    b.scrapTarget = undefined;
+    paint();
+  });
+
+  /** Render the Demolition Yard scrap-target dropdown for the currently-targeted
+   *  building. Called from `paint()` only. */
+  function renderScrapTargetUi(b: PlacedBuilding, target: InspectorTarget): void {
+    scrapTargetSection.wrap.style.display = '';
+    const targets = eligibleScrapTargets(target);
+    scrapTargetControls.select.replaceChildren();
+    const current = b.scrapTarget;
+    for (const id of targets) {
+      const recipe = scrapRecipeForTarget(id)!;
+      const opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = `${BUILDING_DEFS[id].displayName} (≈${recipe.outputs.scrap} scrap / ${recipe.cycleSec}s)`;
+      scrapTargetControls.select.appendChild(opt);
+    }
+    if (current && targets.includes(current)) {
+      scrapTargetControls.select.value = current;
+    } else {
+      scrapTargetControls.select.selectedIndex = -1;
+    }
+  }
+
   // Heat section (§5.2) — only shown when the def is a heat consumer
   // (`requiresHeat`) OR a heat source (`heatSource`). For a consumer, shows
   // whether an adjacent source is currently assigned. For a source, shows
@@ -1563,6 +1696,7 @@ export function mountInspectorUi(
   body.appendChild(powerSection.wrap);
   body.appendChild(gateSection.wrap);
   body.appendChild(storageSection.wrap);
+  body.appendChild(scrapTargetSection.wrap);
   body.appendChild(heatSection.wrap);
   body.appendChild(floorSection.wrap);
   body.appendChild(maintenanceSection.wrap);
@@ -1913,6 +2047,13 @@ export function mountInspectorUi(
     } else {
       storageSection.wrap.style.display = 'none';
       cargoLabelControls.wrap.style.display = 'none';
+    }
+
+    // §6.7 Demolition Yard scrap target picker.
+    if (building.defId === 'demolition_yard') {
+      renderScrapTargetUi(building, target);
+    } else {
+      scrapTargetSection.wrap.style.display = 'none';
     }
 
     // Heat section (§5.2). Shown only for heat consumers / heat sources.
