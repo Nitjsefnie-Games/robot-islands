@@ -19,6 +19,17 @@ describe('buildRecipeTableRows', () => {
     expect(rows.length).toBe(expected);
   });
 
+  it('includes §8.10 rotateOutputs variants so rotated products show a producer', () => {
+    // aetheric_conduit rotates aetheric_current / quantum_foam; quantum_foam
+    // lives only in rotateOutputs, so reading recipe.outputs alone hid it (no
+    // producer edge in the graph → looked unobtainable).
+    const row = rows.find((r) => r.recipeKey === 'aetheric_conduit');
+    expect(row).toBeDefined();
+    const outs = row!.outputs.map((e) => e.resource);
+    expect(outs).toContain('aetheric_current');
+    expect(outs).toContain('quantum_foam');
+  });
+
   it('emits the iron_ore → smelter → iron_ingot row', () => {
     const row = rows.find((r) => r.recipeKey === 'smelter');
     expect(row).toBeDefined();
