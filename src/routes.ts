@@ -1326,6 +1326,23 @@ export function eligibleTransportBuildings(
   );
 }
 
+/** §5.3 power endpoints (Power Substation / Spacetime Anchor) on `island` not
+ *  already hosting a route — the sources for inter-island power-link creation
+ *  (#115). Kept separate from `eligibleTransportBuildings` so the merged-route
+ *  planner and floor-scaling stay cargo-only. */
+export function eligiblePowerEndpoints(
+  island: IslandSpec,
+  routes: ReadonlyArray<Route>,
+): PlacedBuilding[] {
+  const taken = new Set<string>();
+  for (const r of routes) {
+    if (r.sourceBuildingId !== undefined) taken.add(r.sourceBuildingId);
+  }
+  return island.buildings.filter(
+    (b) => powerLinkTypeForBuilding(b.defId) !== null && !taken.has(b.id),
+  );
+}
+
 /** Picker sentinel for a `from`/`to` value meaning "every eligible island". */
 export const ROUTE_ALL = 'all';
 
@@ -1408,6 +1425,59 @@ export function createRouteFromBuilding(
     mode: 'priority',
     cargo: filter !== null ? [{ resourceId: filter }] : [],
     transitTimeSec: transitTimeForDistance(distanceTiles, profile.speedTilesPerSec),
+    inFlight: [],
+    sourceBuildingId: building.id,
+  };
+}
+
+/** §5.3 per-cable transmission capacity (kW), summed into a component's cable
+ *  capacity by `computeCableNetworkBalance`. Placeholder balance value — the
+ *  Power Substation def defers the magnitude to this §5.3 wire-up task; tune
+ *  here. The infinite-capacity `spacetime` route ignores this (always passes).*/
+export const CABLE_TRANSMISSION_KW = 500;
+
+/** Power-endpoint def → the power-link `RouteType` it commissions, or null if
+ *  `defId` is not a §5.3 power endpoint. Two distinct islands are separated by
+ *  open ocean, so a Power Substation link is the ocean-layer `submarine_cable`;
+ *  a Spacetime Anchor link is the infinite-capacity `spacetime` route. */
+export function powerLinkTypeForBuilding(defId: BuildingDefId): RouteType | null {
+  if (defId === 'power_substation') return 'submarine_cable';
+  if (defId === 'spacetime_anchor') return 'spacetime';
+  return null;
+}
+
+/** The matching destination endpoint a power link from `defId` requires — §5.3
+ *  needs the same endpoint def at BOTH ends. Null if `defId` is not a power
+ *  endpoint. */
+export function powerLinkPeerDef(defId: BuildingDefId): BuildingDefId | null {
+  if (defId === 'power_substation') return 'power_substation';
+  if (defId === 'spacetime_anchor') return 'spacetime_anchor';
+  return null;
+}
+
+/** Build a §5.3 inter-island power-link route from a power endpoint. Power
+ *  links transmit power, not cargo, so they carry no cargo and have zero
+ *  transit time; `capacityPerSec` is the §5.3 transmission budget summed by
+ *  `computeCableNetworkBalance` (0 for the always-passing `spacetime` type).
+ *  Returns null if `building` is not a power endpoint. Callers must
+ *  independently verify the destination island carries the matching endpoint
+ *  (`powerLinkPeerDef`). */
+export function createPowerLinkRoute(
+  building: PlacedBuilding,
+  fromIslandId: string,
+  toIslandId: string,
+): Route | null {
+  const type = powerLinkTypeForBuilding(building.defId);
+  if (type === null) return null;
+  return {
+    id: nextRouteId(),
+    from: fromIslandId,
+    to: toIslandId,
+    type,
+    capacityPerSec: type === 'spacetime' ? 0 : CABLE_TRANSMISSION_KW,
+    mode: 'priority',
+    cargo: [],
+    transitTimeSec: 0,
     inFlight: [],
     sourceBuildingId: building.id,
   };

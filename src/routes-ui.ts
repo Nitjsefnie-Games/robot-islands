@@ -17,11 +17,16 @@ import {
   transitTimeForDistance,
   routeProfileForBuilding,
   routeFloorMultiplier,
+  createPowerLinkRoute,
   createRouteFromBuilding,
+  eligiblePowerEndpoints,
   eligibleTransportBuildings,
   islandHasTeleporterPad,
   isPowerLink,
+  powerLinkPeerDef,
+  powerLinkTypeForBuilding,
   routeEffectiveCapacity,
+  CABLE_TRANSMISSION_KW,
   planMergedRoutes,
   nextGroupId,
   ROUTE_ALL,
@@ -31,6 +36,7 @@ import {
 import { routeThrottleReason, throttleBadge } from './route-throttle.js';
 import { type IslandSpec, type WorldState } from './world.js';
 import { BUILDING_DEFS } from './building-defs.js';
+import { hasOperationalBuilding } from './building-operational.js';
 import { type MutationGateway } from './mutation-gateway.js';
 import { activeFloorLevel, floorEffectMul, floorScaledCapacity } from './buildings.js';
 import type { RouteRenderer } from './routes-renderer.js';
@@ -568,8 +574,13 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
       return;
     }
     const island = deps.islandSpecs.get(fromSel.value);
+    // Transport buildings host cargo routes; §5.3 power endpoints (Power
+    // Substation / Spacetime Anchor) host inter-island power links (#115).
     const eligible = island
-      ? eligibleTransportBuildings(island, deps.world.routes)
+      ? [
+          ...eligibleTransportBuildings(island, deps.world.routes),
+          ...eligiblePowerEndpoints(island, deps.world.routes),
+        ]
       : [];
     if (eligible.length === 0) {
       const o = document.createElement('option');
@@ -581,10 +592,12 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     }
     buildingSel.disabled = false;
     for (const b of eligible) {
-      const profile = routeProfileForBuilding(b.defId)!;
       const o = document.createElement('option');
       o.value = b.id;
-      o.textContent = buildingOptionLabel(b, profile);
+      const powerType = powerLinkTypeForBuilding(b.defId);
+      o.textContent = powerType !== null
+        ? `${BUILDING_DEFS[b.defId].displayName} · ${powerType} · ${powerType === 'spacetime' ? '∞' : `${CABLE_TRANSMISSION_KW} kW`}`
+        : buildingOptionLabel(b, routeProfileForBuilding(b.defId)!);
       buildingSel.appendChild(o);
     }
   }
@@ -655,6 +668,20 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     }
     if (!spec1 || !spec2) return reject('');
     if (fromId === toId) return reject('pick distinct endpoints');
+    // §5.3 power link: needs the same operational endpoint on the destination;
+    // transmits power (no cargo/ETA), so the readout shows kW capacity.
+    if (building) {
+      const powerType = powerLinkTypeForBuilding(building.defId);
+      if (powerType !== null) {
+        const peer = powerLinkPeerDef(building.defId)!;
+        if (!hasOperationalBuilding(spec2.buildings, peer)) {
+          return reject(`destination needs an operational ${BUILDING_DEFS[peer].displayName}`);
+        }
+        return accept(powerType === 'spacetime'
+          ? `${powerType} · ∞ capacity (always passes the §5.3 gate)`
+          : `${powerType} · ${CABLE_TRANSMISSION_KW} kW transmission`);
+      }
+    }
     if (!building || !profile) return reject('no transport building available');
     if (profile.type === 'teleporter' && !islandHasTeleporterPad(spec2)) {
       return reject('teleporter needs a pad on the destination');
@@ -707,6 +734,22 @@ export function mountRoutesUi(parentEl: HTMLElement, deps: RouteUiDeps): RouteUi
     if (!spec1 || !spec2 || fromId === toId) return;
     const building = spec1.buildings.find((b) => b.id === buildingSel.value);
     if (!building) return;
+    // §5.3 power link path: both ends need the matching operational endpoint;
+    // the gateway/intent build a cargo-less power route.
+    const powerType = powerLinkTypeForBuilding(building.defId);
+    if (powerType !== null) {
+      if (!hasOperationalBuilding(spec2.buildings, powerLinkPeerDef(building.defId)!)) return;
+      if (deps.gateway) {
+        const res = await deps.gateway.createRoute(fromId, toId, building.id, null);
+        if (!res.ok) return;
+      } else {
+        const link = createPowerLinkRoute(building, fromId, toId);
+        if (!link) return;
+        deps.world.routes.push(link);
+      }
+      refresh(performance.now());
+      return;
+    }
     const profile = routeProfileForBuilding(building.defId);
     if (!profile) return;
     if (profile.type === 'teleporter' && !islandHasTeleporterPad(spec2)) return;

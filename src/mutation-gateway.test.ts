@@ -135,6 +135,48 @@ function makeDrainingRoute() {
   return { now, world, islandStates, gateway, route };
 }
 
+describe('makeLocalGateway — power-link routes (§5.3, #115)', () => {
+  function setup(withColonyEndpoint: boolean, defId: 'power_substation' | 'spacetime_anchor' = 'power_substation') {
+    const now = Date.now();
+    const { world, islandStates } = createNewGame(now);
+    const colony = world.islands.find((s) => s.id !== 'home')!;
+    colony.populated = true;
+    colony.discovered = true;
+    islandStates.set(colony.id, makeInitialIslandState(colony, now));
+    const home = world.islands.find((s) => s.id === 'home')!;
+    home.buildings.push({ id: 'src', defId, x: 0, y: 0, constructionRemainingMs: 0, placedAt: now });
+    islandStates.get('home')!.buildings = home.buildings;
+    if (withColonyEndpoint) {
+      colony.buildings.push({ id: 'dst', defId, x: 0, y: 0, constructionRemainingMs: 0, placedAt: now });
+    }
+    return { world, colony, gateway: makeLocalGateway(world, islandStates) };
+  }
+
+  it('creates a submarine_cable when both islands carry a Power Substation', () => {
+    const { gateway, colony, world } = setup(true);
+    const res = unwrapGatewayResult(gateway.createRoute('home', colony.id, 'src'));
+    expect(res.ok).toBe(true);
+    expect(world.routes).toHaveLength(1);
+    expect(world.routes[0]).toMatchObject({ from: 'home', to: colony.id, type: 'submarine_cable', sourceBuildingId: 'src' });
+    expect(world.routes[0]!.cargo).toEqual([]);
+  });
+
+  it('creates a spacetime route between two Spacetime Anchors', () => {
+    const { gateway, colony, world } = setup(true, 'spacetime_anchor');
+    const res = unwrapGatewayResult(gateway.createRoute('home', colony.id, 'src'));
+    expect(res.ok).toBe(true);
+    expect(world.routes[0]).toMatchObject({ type: 'spacetime' });
+  });
+
+  it('rejects when the destination lacks the matching endpoint, world unchanged', () => {
+    const { gateway, colony, world } = setup(false);
+    const res = unwrapGatewayResult(gateway.createRoute('home', colony.id, 'src'));
+    expect(res.ok).toBe(false);
+    expect((res as { error: string }).error).toContain('power_substation');
+    expect(world.routes).toHaveLength(0);
+  });
+});
+
 describe('makeLocalGateway — createRoute parity', () => {
   it('rejects an unpopulated endpoint (Fix 7)', () => {
     const now = Date.now();

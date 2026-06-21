@@ -33,11 +33,14 @@ import {
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import { CARGO_WILDCARD, type CargoEntry, type CargoMode } from './route-cargo.js';
 import {
+  createPowerLinkRoute,
   createRouteFromBuilding,
   drainRoutesForBuilding,
   islandHasTeleporterPad,
   nextGroupId,
   planMergedRoutes,
+  powerLinkPeerDef,
+  powerLinkTypeForBuilding,
   reorderPriorityList,
   retargetRoute as retargetRoutePure,
   routeProfileForBuilding,
@@ -759,6 +762,20 @@ export function makeLocalGateway(
       if (!toSpec.populated) return err('island not populated');
       const building = fromSpec.buildings.find((b) => b.id === buildingId);
       if (!building) return err('building not on from island');
+      // §5.3 inter-island power link — both ends need the same operational
+      // endpoint; the link transmits power, not cargo.
+      const powerType = powerLinkTypeForBuilding(building.defId);
+      if (powerType !== null) {
+        const peer = powerLinkPeerDef(building.defId)!;
+        if (!hasOperationalBuilding(toSpec.buildings, peer)) {
+          return err(`destination needs an operational ${peer}`);
+        }
+        const link = createPowerLinkRoute(building, fromIslandId, toIslandId);
+        if (!link) return err('power link could not be created');
+        if (groupId !== undefined) link.groupId = groupId;
+        world.routes.push(link);
+        return ok();
+      }
       const profile = routeProfileForBuilding(building.defId);
       if (profile === null) return err('building is not a transport building');
       if (profile.type === 'teleporter' && !islandHasTeleporterPad(toSpec)) {
