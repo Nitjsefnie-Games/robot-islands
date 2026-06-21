@@ -92,12 +92,13 @@ mutation that must flow through the gateway.
 
 ## Persistence
 
-- **Schema bump 31 → 32** (`src/persistence.ts`, bump = migrate policy):
-  1. Add `SerializedSnapshotV31` alias capturing the pre-`scrapTarget` shape.
-  2. Add `migrateV31toV32` — a **no-op** structural migration (`scrapTarget`
-     defaults `undefined`; old buildings load as unconfigured/idle).
-  3. Wire into `loadWorld`'s version-dispatch chain.
-  4. Add `32` to `SUPPORTED_LOAD_VERSIONS`.
+- **No schema bump.** Planning confirmed the building (de)serializer is a
+  structural spread (`{ ...b }` / `...rest`, `persistence.ts:582`/`:1189`), which
+  carries any optional field automatically — exactly as `cargoLabel` / `paused` /
+  `placedAt` are carried. `scrapTarget` is therefore a purely additive,
+  forward/backward-compatible optional field that needs no migration. (Revises the
+  initial "bump 31 → 32" idea.) A round-trip test guards it; a no-op
+  `migrateV31toV32` can be added later if review prefers the explicit bump.
 
 ## UI
 
