@@ -328,7 +328,11 @@ export function mountBuildingsUi(
         .join(' / ');
       const chip = document.createElement('span');
       chip.className = 'ri-chip';
-      chip.textContent = biomeLabel;
+      // Biome-locked uniques require a NATURAL island of the biome — artificial
+      // islands never host them (canPlaceOnIsland §9.5), so even a matching-biome
+      // artificial island stays locked. Spell that out so the player isn't
+      // confused by "VOLCANIC" showing locked on their own volcanic build.
+      chip.textContent = `${biomeLabel} · NATURAL`;
       if (placementLocked) chip.dataset.tone = 'warn';
       ref.metaEl.appendChild(chip);
     }
