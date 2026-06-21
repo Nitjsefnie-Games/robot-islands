@@ -310,6 +310,29 @@ describe('performMerge', () => {
     expect(sa.inventory.iron_ore).toBe(100);
   });
 
+  it('clamps to the EFFECTIVE cap, not raw storageCaps — preserves the absorber stock (§3.6 loss bug)', () => {
+    const a = makeSpec({ id: 'a' });
+    const b = makeSpec({ id: 'b', cx: 20, cy: 0 });
+    // Absorber's effective cap exceeds its raw nominal storageCaps — the
+    // condition the §9.3 storage skill creates (cap = nominal × catMul). Here
+    // the §12.4 starter grace stands in for that lever: cap(iron_ore)=1000 even
+    // though nominal storageCaps=100. The absorber legitimately holds 800
+    // (above nominal, within its effective cap). The OLD merge clamped to raw
+    // nominal 100 → silently destroyed 700 of the absorber's OWN stock. The fix
+    // clamps to cap() so the stock survives.
+    const sa = makeState({
+      id: 'a',
+      storageCaps: caps(100),
+      inventory: { ...emptyInv(), iron_ore: 800 },
+      starterInventoryGrace: { ...emptyInv(), iron_ore: 1000 },
+    });
+    const sb = makeState({ id: 'b', inventory: { ...emptyInv(), iron_ore: 0 } });
+    const world = makeWorld([a, b]);
+    const states = new Map<string, IslandState>([['a', sa], ['b', sb]]);
+    performMerge(world, states, a, b);
+    expect(sa.inventory.iron_ore).toBe(800);
+  });
+
   it("refunds absorbed island's unspent + spent skill points as unspent on absorber", () => {
     const a = makeSpec({ id: 'a' });
     const b = makeSpec({ id: 'b', cx: 20, cy: 0 });

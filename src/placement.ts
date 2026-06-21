@@ -33,6 +33,7 @@ export { rotateShape, type ShapeMask };
 import { displayedFloorLevel, floorEffectMul, floorScaledCapacity, hasOperationalBuilding, rawFloorLevel, type PlacedBuilding } from './buildings.js';
 import { constructionTimeFor, upgradeConstructionMs } from './construction.js';
 import type { BuildJob, IslandState } from './economy.js';
+import { cap } from './storage-cap.js';
 import { islandInscribedAny } from './island.js';
 import { footprintMatches } from './ocean-cell.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
@@ -533,8 +534,9 @@ export function setBuildingActiveFloors(
     // Clamp overflow: discard inventory above the lowered cap, mirroring
     // creditStorageCaps' resource selection exactly via storageCapResources.
     for (const r of storageCapResources(b, def)) {
-      const cap = state.storageCaps[r] ?? 0;
-      if ((state.inventory[r] ?? 0) > cap) state.inventory[r] = cap;
+      // Clamp to the EFFECTIVE cap (skill multiplier applied), not raw nominal.
+      const effCap = cap(state, r);
+      if ((state.inventory[r] ?? 0) > effCap) state.inventory[r] = effCap;
     }
   }
   if (next === 0) delete b.disabledFloors; else b.disabledFloors = next;
@@ -1178,7 +1180,8 @@ export function demolishBuilding(
       const next = (state.storageCaps[r] ?? 0) - mult * storageBaseFor(r);
       state.storageCaps[r] = next < 0 ? 0 : next;
       const have = state.inventory[r] ?? 0;
-      const newCap = state.storageCaps[r] ?? 0;
+      // Clamp to the EFFECTIVE cap after the nominal reduction (skill mul applied).
+      const newCap = cap(state, r);
       if (have > newCap) state.inventory[r] = newCap;
     };
     if (storage.category === 'generic') {
@@ -1193,7 +1196,7 @@ export function demolishBuilding(
   // `applyRates` in economy.ts — never overfill a stockpile.
   if (scrapReturned > 0) {
     const have = state.inventory.scrap ?? 0;
-    const scrapCap = state.storageCaps.scrap ?? 0;
+    const scrapCap = cap(state, 'scrap');
     const next = Math.min(scrapCap, have + scrapReturned);
     state.inventory.scrap = next;
   }
@@ -1211,8 +1214,8 @@ export function demolishBuilding(
     const half = Math.floor(n / 2);
     if (half <= 0) continue;
     const have = state.inventory[r] ?? 0;
-    const cap = state.storageCaps[r] ?? 0;
-    const next = Math.min(cap, have + half);
+    const effCap = cap(state, r);
+    const next = Math.min(effCap, have + half);
     const credited = next - have;
     if (credited > 0) {
       state.inventory[r] = next;
@@ -1261,8 +1264,8 @@ export function cancelConstruction(
     for (const [r, n] of Object.entries(cost) as Array<[ResourceId, number]>) {
       if (n <= 0) continue;
       const have = state.inventory[r] ?? 0;
-      const cap = state.storageCaps[r] ?? 0;
-      const next = Math.min(cap, have + n);
+      const effCap = cap(state, r);
+      const next = Math.min(effCap, have + n);
       const credited = next - have;
       if (credited > 0) {
         state.inventory[r] = next;
