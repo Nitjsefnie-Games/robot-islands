@@ -661,7 +661,7 @@ export const INTENTS: Record<string, IntentHandler> = {
       const island = resolveIsland(game, islandId);
       if (!island) return { ok: false, error: 'unknown island' };
       const rot = rotation === undefined ? undefined : (rotation as Rotation);
-      const r = relocateBuilding(island.spec, island.state, buildingId, x, y, rot);
+      const r = relocateBuilding(island.spec, island.state, buildingId, x, y, rot, game.world);
       if (!r.ok) return { ok: false, error: r.reason ?? 'relocate failed' };
       return { ok: true };
     },

@@ -399,7 +399,7 @@ export function makeLocalGateway(
     relocateBuilding(islandId, buildingId, x, y, rotation) {
       const island = resolveIsland(islandId);
       if (!island) return err('unknown island');
-      return fromOutcome(relocateBuilding(island.spec, island.state, buildingId, x, y, rotation));
+      return fromOutcome(relocateBuilding(island.spec, island.state, buildingId, x, y, rotation, world));
     },
 
     applyUpgrade(islandId, buildingId, spendToken = false) {

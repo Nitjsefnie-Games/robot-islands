@@ -950,6 +950,46 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
         // from a validator rejection, which surfaces via `oceanReason`.)
         return { ok: false, reason: 'def-is-ocean' };
       }
+      // §4 ocean RELOCATE: move the existing platform to the new cell via the
+      // ocean-aware relocateBuilding (keeps the anchor, charges the half-fee).
+      // No anchor picker — unlike a fresh placement.
+      if (relocating) {
+        // The platform lives on its anchor island's buildings[]; relocate it
+        // there (keep the anchor, move the cell).
+        const anchorId = relocating.anchorIslandId;
+        const anchorSpec = anchorId ? world.islands.find((i) => i.id === anchorId) : undefined;
+        const anchorState = anchorId ? deps.getStateById(anchorId) : undefined;
+        if (!anchorId || !anchorSpec || !anchorState) {
+          recordRejection();
+          return { ok: false, reason: 'def-is-ocean' };
+        }
+        const relId = relocating.id;
+        const localX = cellX * CELL_SIZE_TILES - anchorSpec.cx;
+        const localY = cellY * CELL_SIZE_TILES - anchorSpec.cy;
+        if (deps.gateway) {
+          commitPending = true;
+          void Promise.resolve(
+            deps.gateway.relocateBuilding(anchorId, relId, localX, localY, 0),
+          ).then((r) => {
+            commitPending = false;
+            if (r.ok) {
+              deps.onPlaced?.();
+              cancel();
+            } else {
+              recordRejection();
+            }
+          });
+          return { ok: true };
+        }
+        const r = relocateBuilding(anchorSpec, anchorState, relId, localX, localY, 0, world);
+        if (r.ok) {
+          deps.onPlaced?.();
+          cancel();
+          return { ok: true };
+        }
+        recordRejection();
+        return { ok: false, reason: r.reason as PlacementReason };
+      }
       const ov = validateOceanPlacement(world, activeDefId, cellX, cellY, world.depthRevealedCells);
       if (!ov.ok) {
         recordRejection();
