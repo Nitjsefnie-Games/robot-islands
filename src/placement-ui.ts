@@ -50,6 +50,7 @@ import type { ResourceId } from './recipes.js';
 import { VISION_BLUE, tileToWorldPx, type IslandSpec, type WorldState } from './world.js';
 import { type MutationGateway } from './mutation-gateway.js';
 import { brushTilesAt, SHOT_DURATION_MS } from './terrain-modifier.js';
+import { validateGroupRelocate, groupRelocateFee, buildingFootprintTilesWorld } from './mass-actions.js';
 
 /** §4.6 picker dep: opens the cargo-label modal and resolves to the
  *  player's pick, or `null` if cancelled. The default implementation in
@@ -97,6 +98,11 @@ export interface PlacementUiHandle {
    *  validity ignores the building's own footprint, commit charges the
    *  half-fee via relocateBuilding. */
   beginRelocate(building: PlacedBuilding): void;
+  /** Enter group-relocate mode for a rigid cluster of buildings: the anchor
+   *  (`members[0]`) follows the cursor and every member translates by the same
+   *  (dx,dy). The whole cluster validates all-or-nothing via
+   *  validateGroupRelocate; commit relocates every member or none. */
+  beginGroupRelocate(members: PlacedBuilding[]): void;
   /** Rotate the in-progress placement clockwise (0 → 1 → 2 → 3 → 0). */
   rotate(): void;
   /** Update the cursor's screen position; recompute the preview's tile snap
@@ -241,6 +247,55 @@ function placedIdFor(islandId: string, x: number, y: number): string {
   return `placed-${islandId}-${x},${y}`;
 }
 
+/** Order `members` so each can be relocated by `(dx,dy)` without colliding with
+ *  a still-unmoved sibling's CURRENT footprint — required because the per-member
+ *  `relocateBuilding` re-validates against the live spec (see the call site).
+ *  Greedy topological commit: repeatedly emit any member whose destination tiles
+ *  don't overlap any remaining member's current tiles. For a rigid translation
+ *  such a member always exists (the "blocks" relation advances strictly along
+ *  (dx,dy) ⇒ acyclic). Falls back to emitting the remainder in input order if
+ *  no movable member is found (cannot happen for a valid rigid translation, but
+ *  keeps the function total). */
+function collisionSafeOrder(
+  spec: IslandSpec,
+  members: PlacedBuilding[],
+  dx: number,
+  dy: number,
+): PlacedBuilding[] {
+  // Precompute each member's CURRENT world-tile footprint and its DESTINATION
+  // world-tile footprint (current shifted by (dx,dy)).
+  const curr = new Map<string, Set<string>>();
+  const dest = new Map<string, Set<string>>();
+  for (const m of members) {
+    const tiles = buildingFootprintTilesWorld(spec, m);
+    curr.set(m.id, new Set(tiles.map((t) => `${t.x},${t.y}`)));
+    dest.set(m.id, new Set(tiles.map((t) => `${t.x + dx},${t.y + dy}`)));
+  }
+  const out: PlacedBuilding[] = [];
+  const remaining = [...members];
+  while (remaining.length > 0) {
+    const idx = remaining.findIndex((m) => {
+      const d = dest.get(m.id)!;
+      // Movable iff no OTHER remaining member's current footprint intersects d.
+      return !remaining.some((other) => {
+        if (other.id === m.id) return false;
+        const c = curr.get(other.id)!;
+        for (const tile of d) if (c.has(tile)) return true;
+        return false;
+      });
+    });
+    if (idx < 0) {
+      // No movable member (shouldn't happen for a valid rigid translation) —
+      // emit the rest in order so the function stays total.
+      out.push(...remaining);
+      break;
+    }
+    out.push(remaining[idx]!);
+    remaining.splice(idx, 1);
+  }
+  return out;
+}
+
 export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
   let active = false;
   let activeDefId: BuildingDefId | null = null;
@@ -278,6 +333,15 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
    *  Carries the building so the ghost can show the move fee and pass its id
    *  to validatePlacement as ignoreBuildingId. */
   let relocating: PlacedBuilding | null = null;
+  /** Non-null while group-relocating a rigid cluster of selected buildings.
+   *  The anchor is `groupRelocating[0]`: the cursor's target local tile maps
+   *  to the anchor's new position, and every other member translates by the
+   *  same (dx,dy). Mutually exclusive with `relocating` (single-building) —
+   *  the paint/commit paths short-circuit on this before the `relocating`
+   *  branch. Each member keeps its OWN def/rotation when drawn/validated;
+   *  `activeDefId`/`rotation` are set to the anchor's only so the existing
+   *  `active && activeDefId !== null` guards stay satisfied. */
+  let groupRelocating: PlacedBuilding[] | null = null;
 
   // World-space outline layer (scales with zoom).
   const previewLayer = new Container();
@@ -322,6 +386,14 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     }
 
     const def = BUILDING_DEFS[activeDefId];
+
+    // Group relocate (rigid cluster) — short-circuits the single-relocate and
+    // ocean branches. Draws one footprint ghost per member at its translated
+    // position; the whole cluster tints from validateGroupRelocate(...).ok.
+    if (groupRelocating !== null) {
+      paintGroupRelocate(groupRelocating);
+      return;
+    }
 
     // §4 ocean-layer (Task 10) — ocean defs paint their preview in WORLD
     // tile coords (not island-local) since they don't anchor to any one
@@ -445,6 +517,76 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
 
     // Lay out the background rectangle behind the text for legibility — same
     // panel-bg colour as the side docks but with no border.
+    const padX = 6;
+    const padY = 3;
+    const tw = labelText.width;
+    const th = labelText.height;
+    const baseX = cursorScreenX + 16;
+    const baseY = cursorScreenY + 16;
+    labelBg.clear();
+    labelBg
+      .rect(baseX - padX, baseY - padY, tw + padX * 2, th + padY * 2)
+      .fill({ color: 0x0e121a, alpha: 0.88 })
+      .stroke({ width: 1, color, alpha: 0.6, alignment: 1 });
+    labelText.position.set(baseX, baseY);
+    statusLayer.visible = true;
+  }
+
+  /** Group-relocate (rigid cluster) preview painter. The cursor's target
+   *  local tile maps to the anchor (`members[0]`); every member ghosts at
+   *  `(m.x+dx, m.y+dy)` using ITS OWN def footprint + rotation. The whole
+   *  cluster tints green/red from `validateGroupRelocate(...).ok`. Called
+   *  from `paintOutlineAndLabel` when `groupRelocating` is set. */
+  function paintGroupRelocate(members: PlacedBuilding[]): void {
+    const anchor = members[0];
+    if (!anchor) return;
+    const targetSpec = deps.getTargetSpec();
+    const targetState = deps.getTargetState();
+
+    // Cursor → world-tile → island-local (same convention as the single path).
+    const wt = deps.screenToWorldTile(cursorScreenX, cursorScreenY);
+    const localX = Math.round(wt.x - targetSpec.cx);
+    const localY = Math.round(wt.y - targetSpec.cy);
+    const dx = localX - anchor.x;
+    const dy = localY - anchor.y;
+
+    const v = validateGroupRelocate(targetSpec, targetState, members, dx, dy);
+    const color = v.ok ? OK_COLOR : WARN_COLOR;
+
+    // Label — member count + summed fee. Computed unconditionally so
+    // getLabelText() stays meaningful even before the cursor enters.
+    const fee = groupRelocateFee(members);
+    const feeEntries = Object.entries(fee) as Array<[ResourceId, number]>;
+    const feeStr = feeEntries
+      .map(([r, n]) => `${n} ${r.toUpperCase().replace(/_/g, ' ')}`)
+      .join(', ');
+    labelText.text =
+      `MOVE ${members.length} BUILDINGS` + (feeStr ? `\nFEE: ${feeStr}` : '');
+    labelText.style.fill = color;
+
+    if (!cursorSeen) return;
+
+    // One stroked rectangle per member tile (its own def footprint + rotation),
+    // in world-px inside previewLayer — same math as the single-relocate ghost.
+    outlineGfx.clear();
+    const islandWorldPx = tileToWorldPx(targetSpec.cx, targetSpec.cy);
+    const half = TILE_PX / 2;
+    for (const m of members) {
+      const mDef = BUILDING_DEFS[m.defId];
+      const mRot = (m.rotation ?? 0) as Rotation;
+      const tiles = footprintTiles(mDef.footprint, m.x + dx, m.y + dy, mRot);
+      for (const t of tiles) {
+        const wpx = (t.x * TILE_PX + islandWorldPx.x) - half;
+        const wpy = (t.y * TILE_PX + islandWorldPx.y) - half;
+        outlineGfx
+          .rect(wpx, wpy, TILE_PX, TILE_PX)
+          .fill({ color, alpha: 0.2 })
+          .stroke({ width: 2, color, alpha: 0.95, alignment: 1 });
+      }
+    }
+    previewLayer.visible = true;
+
+    // Status label background — same chrome as the single-relocate label.
     const padX = 6;
     const padY = 3;
     const tw = labelText.width;
@@ -612,6 +754,20 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     cursorSeen = false;
     paintOutlineAndLabel();
   }
+  function beginGroupRelocate(members: PlacedBuilding[]): void {
+    cancel();                 // clear any in-flight placement/relocate
+    const anchor = members[0];
+    if (!anchor) return;      // empty selection — nothing to move
+    groupRelocating = members;
+    active = true;
+    // Set activeDefId/rotation to the anchor's so the existing
+    // `active && activeDefId !== null` guards stay valid; the group itself
+    // uses each member's own def/rotation when drawing/validating.
+    activeDefId = anchor.defId;
+    rotation = (anchor.rotation ?? 0) as Rotation;
+    cursorSeen = false;
+    paintOutlineAndLabel();
+  }
   function cancel(): void {
     // Bump the epoch so any in-flight picker promise becomes stale on
     // resolve — covers the case where the player hits Escape, fires a
@@ -620,6 +776,7 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     // where placement was already armed (no picker in flight).
     beginEpoch++;
     relocating = null;
+    groupRelocating = null;
     if (!active) return;
     active = false;
     activeDefId = null;
@@ -665,6 +822,80 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
       world.recentBuildAttemptTs.set(activeDefId, performance.now());
     }
     const wt = deps.screenToWorldTile(cursorScreenX, cursorScreenY);
+    // Group relocate (rigid cluster) — short-circuits the ocean and single
+    // branches. Recompute (dx,dy) from the anchor, re-validate, then commit
+    // every member all-or-nothing (validateGroupRelocate is the contract).
+    if (groupRelocating !== null) {
+      const members = groupRelocating;
+      const anchor = members[0];
+      if (!anchor) return { ok: false };
+      const targetSpec = deps.getTargetSpec();
+      const targetState = deps.getTargetState();
+      const localX = Math.round(wt.x - targetSpec.cx);
+      const localY = Math.round(wt.y - targetSpec.cy);
+      const dx = localX - anchor.x;
+      const dy = localY - anchor.y;
+      const v = validateGroupRelocate(targetSpec, targetState, members, dx, dy);
+      if (!v.ok) {
+        recordRejection();
+        return { ok: false }; // invalid drop — stay armed, no mutation
+      }
+      // Commit order matters: `relocateBuilding` re-validates each member
+      // against the LIVE spec, where not-yet-moved siblings still sit at their
+      // OLD tiles. Moving a member into a tile a not-yet-moved sibling still
+      // occupies would falsely reject as `overlap` (validateGroupRelocate
+      // sidesteps this with a clone; the real sequential commit can't). So we
+      // commit in a collision-safe order: a member is movable once no STILL-
+      // UNMOVED sibling's current footprint overlaps its destination footprint.
+      // Such an order always exists for a rigid translation (the "blocks"
+      // relation strictly advances along (dx,dy) ⇒ acyclic; the zero-vector
+      // no-op blocks nothing). Computed up-front from original geometry, which
+      // is sound because validateGroupRelocate already proved the final layout
+      // is overlap-free.
+      const ordered = collisionSafeOrder(targetSpec, members, dx, dy);
+
+      // Commit each member in safe order. validateGroupRelocate already
+      // guaranteed every member fits, so partial failure shouldn't occur; if a
+      // gateway call still rejects, log and continue (best-effort) — validation
+      // is the contract. Mirror the single-relocate gateway-vs-pure choice and
+      // the sync|Promise handling.
+      const promises: Promise<unknown>[] = [];
+      for (const m of ordered) {
+        const mRot = (m.rotation ?? 0) as Rotation;
+        const nx = m.x + dx;
+        const ny = m.y + dy;
+        const gatewayResult = deps.gateway
+          ? deps.gateway.relocateBuilding(targetSpec.id, m.id, nx, ny, mRot)
+          : undefined;
+        if (gatewayResult instanceof Promise) {
+          promises.push(
+            gatewayResult.then((r) => {
+              if (!r.ok) {
+                console.warn(`group relocate: member ${m.id} rejected (${r.reason ?? 'unknown'})`);
+              }
+            }),
+          );
+        } else {
+          const r = gatewayResult ?? relocateBuilding(targetSpec, targetState, m.id, nx, ny, mRot);
+          if (!r.ok) {
+            console.warn(`group relocate: member ${m.id} rejected (${r.reason ?? 'unknown'})`);
+          }
+        }
+      }
+      if (promises.length > 0) {
+        commitPending = true;
+        void (async () => {
+          await Promise.all(promises);
+          commitPending = false;
+          cancel();
+          deps.onRelocated?.();
+        })();
+        return { ok: false }; // pending; success arrives via the async callback
+      }
+      cancel();
+      deps.onRelocated?.();
+      return { ok: true };
+    }
     // §4 ocean-layer (Task 10): ocean defs route through their own
     // placement flow (validateOceanPlacement + anchor picker). The land
     // validator early-rejects them as `def-is-ocean` (defense-in-depth);
@@ -878,6 +1109,7 @@ export function mountPlacementUi(deps: PlacementUiDeps): PlacementUiHandle {
     isActive: () => active,
     begin,
     beginRelocate,
+    beginGroupRelocate,
     cancel,
     rotate,
     setCursorScreenPos,
