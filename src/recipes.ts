@@ -21,6 +21,7 @@
 
 import type { BuildingDef, BuildingDefId } from './building-defs.js';
 import type { PlacedBuilding } from './buildings.js';
+import { scrapRecipeForTarget } from './demolition-yard.js';
 import type { TerrainKind } from './island.js';
 import type { IslandState } from './economy.js';
 import type { Graph } from './skilltree-graph.js';
@@ -4015,6 +4016,13 @@ export function resolveRecipe(
   _terrainAt?: (x: number, y: number) => TerrainKind,
   inventory?: Partial<Record<ResourceId, number>>,
 ): Recipe | undefined {
+  // §6.7 Demolition Yard — recipe derived per instance from the selected
+  // target's placementCost. Idle (no recipe) until the player picks a target.
+  // Resolution is permissive: it derives from the target def regardless of
+  // current tier/biome gates (the picker enforces eligibility at selection).
+  if (def.id === 'demolition_yard') {
+    return _b.scrapTarget ? scrapRecipeForTarget(_b.scrapTarget) : undefined;
+  }
   // §6.7 Steel Mill scrap substitution. Choice is per-tick, driven by the
   // current inventory snapshot. Prefer pig_iron whenever any is on hand;
   // fall back to the scrap variant only when the pig_iron stockpile is

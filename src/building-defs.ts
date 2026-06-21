@@ -26,7 +26,7 @@ import type { TerrainKind } from './island.js';
 import type { OceanTerrain } from './ocean-cell.js';
 import type { ResourceId } from './recipes.js';
 import { SHAPES, type ShapeMask } from './shape-mask.js';
-import { tierForLevel } from './skilltree.js';
+import { tierForLevel } from './tier.js';
 import type { StorageCategory } from './storage-categories.js';
 // Type-only imports avoid a runtime cycle with world.ts (which imports
 // BUILDING_DEFS from this file). The Biome union and IslandSpec interface
