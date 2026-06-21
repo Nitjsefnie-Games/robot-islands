@@ -51,6 +51,11 @@ export function createConstructionGhostOverlay(parent: Container): ConstructionG
     // (`tileInscribedInEllipse`) the island renderer and placement use. Fill each
     // inscribed tile, then stroke only boundary edges (an edge whose neighbour
     // tile is NOT inscribed) so the outline traces the tile silhouette.
+    // Tile index (x,y) renders CENTERED at x*TILE_PX (rect at x*TILE_PX - half),
+    // matching `renderBuildings` (buildings.ts) and the `islandInscribedAny`
+    // tile convention — so the ghost tiles sit exactly where buildings/land do,
+    // not shifted half a cell.
+    const half = TILE_PX / 2;
     const maj = current.major;
     const min = current.minor;
     const xMin = -Math.ceil(maj), xMax = Math.ceil(maj) - 1;
@@ -61,8 +66,8 @@ export function createConstructionGhostOverlay(parent: Container): ConstructionG
     for (let dy = yMin; dy <= yMax; dy++) {
       for (let dx = xMin; dx <= xMax; dx++) {
         if (!inside(dx, dy)) continue;
-        const tx = (current.cx + dx) * TILE_PX;
-        const ty = (current.cy + dy) * TILE_PX;
+        const tx = (current.cx + dx) * TILE_PX - half;
+        const ty = (current.cy + dy) * TILE_PX - half;
         body.rect(tx, ty, TILE_PX, TILE_PX);
       }
     }
@@ -70,8 +75,8 @@ export function createConstructionGhostOverlay(parent: Container): ConstructionG
     for (let dy = yMin; dy <= yMax; dy++) {
       for (let dx = xMin; dx <= xMax; dx++) {
         if (!inside(dx, dy)) continue;
-        const tx = (current.cx + dx) * TILE_PX;
-        const ty = (current.cy + dy) * TILE_PX;
+        const tx = (current.cx + dx) * TILE_PX - half;
+        const ty = (current.cy + dy) * TILE_PX - half;
         if (!inside(dx, dy - 1)) { body.moveTo(tx, ty); body.lineTo(tx + TILE_PX, ty); }
         if (!inside(dx, dy + 1)) { body.moveTo(tx, ty + TILE_PX); body.lineTo(tx + TILE_PX, ty + TILE_PX); }
         if (!inside(dx - 1, dy)) { body.moveTo(tx, ty); body.lineTo(tx, ty + TILE_PX); }
