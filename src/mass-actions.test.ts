@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { buildingFootprintTilesWorld, buildingsInBox, planMassUpgrade } from './mass-actions.js';
-import { makeInitialIslandState } from './world.js';
+import {
+  buildingFootprintTilesWorld, buildingsInBox, planMassUpgrade,
+  validateGroupRelocate, groupRelocateFee, ignoreCapUnion, selectionBreakdown,
+} from './mass-actions.js';
+import { makeInitialIslandState, attachTerrainAt } from './world.js';
 import type { IslandSpec } from './world.js';
 import type { PlacedBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
@@ -91,5 +94,137 @@ describe('planMassUpgrade', () => {
       { buildingId: 'm0', targetLevel: 2 },
     ] as unknown as IslandState['buildJobs']; // 2 queued (uses both queue slots)
     expect(planMassUpgrade(state, ['m0'])).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// validateGroupRelocate / groupRelocateFee / ignoreCapUnion / selectionBreakdown
+// ---------------------------------------------------------------------------
+
+// `cell_press` is tier 1 (unlocked at level 1), a single-tile land def with NO
+// requiredTile — placeable anywhere inside the island ellipse on `plains`. Using
+// a real island (attachTerrainAt) so off-island / overlap rejection is genuine.
+function relocSpec(buildings: PlacedBuilding[]): IslandSpec {
+  return attachTerrainAt({
+    id: 'reloc', name: 'reloc', cx: 0, cy: 0,
+    majorRadius: 14, minorRadius: 14, biome: 'plains',
+    populated: true, discovered: true,
+    buildings, modifiers: [],
+  } as unknown as Omit<IslandSpec, 'terrainAt'>);
+}
+function cp(id: string, x: number, y: number): PlacedBuilding {
+  return { id, defId: 'cell_press', x, y, floorLevel: 0 } as unknown as PlacedBuilding;
+}
+
+describe('validateGroupRelocate', () => {
+  it('accepts a clean rigid translation into free tiles', () => {
+    const members = [cp('a', 0, 0), cp('b', 1, 0)];
+    const spec = relocSpec([...members]);
+    const state = makeInitialIslandState(spec, 0);
+    expect(validateGroupRelocate(spec, state, members, 2, 0)).toEqual({ ok: true });
+  });
+
+  it('accepts a translation into a tile a sibling is vacating', () => {
+    // a:(0,0) -> (1,0), b:(1,0) -> (2,0). a moves into b's OLD tile. Must pass
+    // because the world is evaluated POST-move (the sibling-overlap caveat).
+    const members = [cp('a', 0, 0), cp('b', 1, 0)];
+    const spec = relocSpec([...members]);
+    const state = makeInitialIslandState(spec, 0);
+    expect(validateGroupRelocate(spec, state, members, 1, 0)).toEqual({ ok: true });
+  });
+
+  it('rejects a translation that pushes a member off the island', () => {
+    const members = [cp('a', 0, 0)];
+    const spec = relocSpec([...members]);
+    const state = makeInitialIslandState(spec, 0);
+    const r = validateGroupRelocate(spec, state, members, 1000, 0);
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('out-of-bounds');
+  });
+
+  it('rejects when two moved members land on the same tile', () => {
+    // A uniform translation can't make two distinct tiles coincide, so to
+    // exercise the member-vs-member overlap branch we pass two members that
+    // start on the SAME tile (a duplicate selection) — post-move they collide.
+    const m = cp('a', 0, 0);
+    const spec = relocSpec([m]);
+    const state = makeInitialIslandState(spec, 0);
+    const r = validateGroupRelocate(spec, state, [m, cp('b', 0, 0)], 1, 0);
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('member-overlap');
+  });
+
+  it('rejects overlap with a NON-selected building at its fixed position', () => {
+    // selected a:(0,0); a stationary cell_press 'x' sits at (1,0). Translating a
+    // by (1,0) lands on x's tile — x is not a member, so validatePlacement
+    // overlap fires.
+    const a = cp('a', 0, 0);
+    const x = cp('x', 1, 0);
+    const spec = relocSpec([a, x]);
+    const state = makeInitialIslandState(spec, 0);
+    const r = validateGroupRelocate(spec, state, [a], 1, 0);
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('overlap');
+  });
+});
+
+describe('groupRelocateFee', () => {
+  it('sums relocateFee across members', () => {
+    // cell_press placementCost wire/iron_ingot/etc. floorLevel 0 -> invested =
+    // base placementCost; relocateFee = floor(half) per resource. Two members
+    // => 2x the single-member fee.
+    const members = [cp('a', 0, 0), cp('b', 1, 0)];
+    const fee = groupRelocateFee(members);
+    const single = groupRelocateFee([cp('a', 0, 0)]);
+    for (const [r, n] of Object.entries(single)) {
+      expect(fee[r as keyof typeof fee]).toBe((n as number) * 2);
+    }
+    expect(Object.keys(fee).length).toBeGreaterThan(0);
+  });
+});
+
+describe('ignoreCapUnion', () => {
+  it('unions output resources and derives allSet per resource', () => {
+    const spec = relocSpec([]);
+    // two cell_press (output saltwater_cell) + one workshop (output bolt).
+    const a = { id: 'a', defId: 'cell_press', x: 0, y: 0, floorLevel: 0,
+      ignoreCapOverrides: { saltwater_cell: true } } as unknown as PlacedBuilding;
+    const b = { id: 'b', defId: 'cell_press', x: 1, y: 0, floorLevel: 0,
+      ignoreCapOverrides: { saltwater_cell: false } } as unknown as PlacedBuilding;
+    const w = { id: 'w', defId: 'workshop', x: 2, y: 0, floorLevel: 0,
+      ignoreCapOverrides: { bolt: true } } as unknown as PlacedBuilding;
+    const rows = ignoreCapUnion([
+      { spec, building: a }, { spec, building: b }, { spec, building: w },
+    ]);
+    const byRes = Object.fromEntries(rows.map((r) => [r.resource, r.allSet]));
+    // saltwater_cell: a=true, b=false -> not all set.
+    expect(byRes.saltwater_cell).toBe(false);
+    // bolt: only producer w has it true -> all set.
+    expect(byRes.bolt).toBe(true);
+    expect(rows.length).toBe(2);
+  });
+
+  it('treats a missing override as not-set for allSet', () => {
+    const spec = relocSpec([]);
+    const a = { id: 'a', defId: 'workshop', x: 0, y: 0, floorLevel: 0,
+      ignoreCapOverrides: { bolt: true } } as unknown as PlacedBuilding;
+    const b = { id: 'b', defId: 'workshop', x: 1, y: 0, floorLevel: 0 } as unknown as PlacedBuilding;
+    const rows = ignoreCapUnion([{ spec, building: a }, { spec, building: b }]);
+    expect(rows).toEqual([{ resource: 'bolt', allSet: false }]);
+  });
+});
+
+describe('selectionBreakdown', () => {
+  it('counts per defId descending by count', () => {
+    const out = selectionBreakdown([
+      cp('a', 0, 0),
+      { id: 'm', defId: 'mine', x: 0, y: 0, floorLevel: 0 } as unknown as PlacedBuilding,
+      cp('b', 1, 0),
+      cp('c', 2, 0),
+    ]);
+    expect(out).toEqual([
+      { defId: 'cell_press', count: 3 },
+      { defId: 'mine', count: 1 },
+    ]);
   });
 });
