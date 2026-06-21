@@ -29,7 +29,8 @@ import { OUTPUT_CAP_EXEMPT } from './output-cap.js';
 import type { ResourceId } from './recipes.js';
 import { SHOT_DURATION_MS } from './terrain-modifier.js';
 import { effectiveSkillMultipliers } from './skilltree.js';
-import { footprintTiles, type Rotation } from './shape-mask.js';
+import { footprintTiles, shapeHeight, shapeWidth, type Rotation } from './shape-mask.js';
+import { CELL_SIZE_TILES } from './constants.js';
 import type { WorldState } from './world.js';
 
 const REBUILD_MS = 2000;
@@ -96,6 +97,14 @@ export function mountBuildingAlertsOverlay(
           if (t.x > maxTx) maxTx = t.x;
           if (t.y < minTy) minTy = t.y;
           if (t.y > maxTy) maxTy = t.y;
+        }
+        // §4 ocean platforms render FILLING their reserved cell block
+        // (renderBuildings draws footprint-in-cells), so the floor-level badge +
+        // alert markers + construction tint must use the cell-sized extent — not
+        // the 1-tile footprint, which would land them in the cell's corner.
+        if (def.oceanPlacement === true) {
+          maxTx = minTx + shapeWidth(def.footprint) * CELL_SIZE_TILES - 1;
+          maxTy = minTy + shapeHeight(def.footprint) * CELL_SIZE_TILES - 1;
         }
 
         // §9.3 construction visual: translucent cyan footprint tint + top-left
