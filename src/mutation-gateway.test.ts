@@ -612,3 +612,96 @@ describe('makeRemoteGateway — setRouteWaypoints forwarding', () => {
     expect(captured).toEqual({ type: 'set-route-waypoints', payload: { routeId: 'r1', waypoints: [{ x: 10, y: 20 }] } });
   });
 });
+
+describe('makeRemoteGateway — setScrapTarget forwarding', () => {
+  it('forwards set-scrap-target with a building target', async () => {
+    let captured: { type: string; payload: unknown } | null = null;
+    const client: GameServerClient = {
+      sendIntent(type: string, payload: unknown) {
+        captured = { type, payload };
+        return Promise.resolve({ seq: 1, ok: true });
+      },
+      close() {},
+    };
+    const gateway = makeRemoteGateway(client);
+    await gateway.setScrapTarget('home', 'dy-1', 'iron_mine');
+    expect(captured).toEqual({ type: 'set-scrap-target', payload: { islandId: 'home', buildingId: 'dy-1', target: 'iron_mine' } });
+  });
+
+  it('forwards set-scrap-target with a null target', async () => {
+    let captured: { type: string; payload: unknown } | null = null;
+    const client: GameServerClient = {
+      sendIntent(type: string, payload: unknown) {
+        captured = { type, payload };
+        return Promise.resolve({ seq: 1, ok: true });
+      },
+      close() {},
+    };
+    const gateway = makeRemoteGateway(client);
+    await gateway.setScrapTarget('home', 'dy-1', null);
+    expect(captured).toEqual({ type: 'set-scrap-target', payload: { islandId: 'home', buildingId: 'dy-1', target: null } });
+  });
+});
+
+describe('makeLocalGateway — setScrapTarget parity', () => {
+  it('sets a scrap target on a demolition_yard', () => {
+    const now = Date.now();
+    const { world, islandStates } = createNewGame(now);
+    const home = world.islands.find((s) => s.id === 'home')!;
+    home.buildings.push({
+      id: 'dy-1', defId: 'demolition_yard', x: 0, y: 0,
+      constructionRemainingMs: 0, placedAt: now,
+    });
+    islandStates.get('home')!.buildings = home.buildings;
+    const gateway = makeLocalGateway(world, islandStates);
+    const result = gateway.setScrapTarget('home', 'dy-1', 'iron_mine');
+    expect(result).toEqual({ ok: true });
+    expect(home.buildings.find((b) => b.id === 'dy-1')!.scrapTarget).toBe('iron_mine');
+  });
+
+  it('clears a scrap target with null', () => {
+    const now = Date.now();
+    const { world, islandStates } = createNewGame(now);
+    const home = world.islands.find((s) => s.id === 'home')!;
+    home.buildings.push({
+      id: 'dy-1', defId: 'demolition_yard', x: 0, y: 0,
+      constructionRemainingMs: 0, placedAt: now,
+      scrapTarget: 'iron_mine',
+    });
+    islandStates.get('home')!.buildings = home.buildings;
+    const gateway = makeLocalGateway(world, islandStates);
+    const result = gateway.setScrapTarget('home', 'dy-1', null);
+    expect(result).toEqual({ ok: true });
+    expect(home.buildings.find((b) => b.id === 'dy-1')!.scrapTarget).toBeUndefined();
+  });
+
+  it('rejects an unknown island', () => {
+    const now = Date.now();
+    const { world, islandStates } = createNewGame(now);
+    const gateway = makeLocalGateway(world, islandStates);
+    const result = gateway.setScrapTarget('no-such-island', 'dy-1', 'iron_mine');
+    expect(result).toEqual({ ok: false, error: 'unknown island' });
+  });
+
+  it('rejects an unknown building', () => {
+    const now = Date.now();
+    const { world, islandStates } = createNewGame(now);
+    const gateway = makeLocalGateway(world, islandStates);
+    const result = gateway.setScrapTarget('home', 'dy-1', 'iron_mine');
+    expect(result).toEqual({ ok: false, error: 'not-found' });
+  });
+
+  it('rejects a non-demolition_yard building', () => {
+    const now = Date.now();
+    const { world, islandStates } = createNewGame(now);
+    const home = world.islands.find((s) => s.id === 'home')!;
+    home.buildings.push({
+      id: 'mine-1', defId: 'iron_mine', x: 0, y: 0,
+      constructionRemainingMs: 0, placedAt: now,
+    });
+    islandStates.get('home')!.buildings = home.buildings;
+    const gateway = makeLocalGateway(world, islandStates);
+    const result = gateway.setScrapTarget('home', 'mine-1', 'iron_mine');
+    expect(result).toEqual({ ok: false, error: 'building is not a demolition_yard' });
+  });
+});

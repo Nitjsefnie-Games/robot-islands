@@ -151,6 +151,7 @@ export interface MutationGateway {
   refreshMaintenance(islandId: string, buildingId: string): GatewayReturn;
   convertToServitor(islandId: string, buildingId: string): GatewayReturn;
   relabelCargo(islandId: string, buildingId: string, newLabel: ResourceId): GatewayReturn;
+  setScrapTarget(islandId: string, buildingId: string, target: BuildingDefId | null): GatewayReturn;
   expandIsland(islandId: string, constituentIndex: number, axis: Axis): GatewayReturn;
   renameIsland(islandId: string, name: string): GatewayReturn;
   editBiome(islandId: string, biomeId: string): GatewayReturn;
@@ -485,6 +486,18 @@ export function makeLocalGateway(
       }
       applyRelabelStorageCap(island.state, b, def, b.cargoLabel, newLabel);
       b.cargoLabel = newLabel;
+      return ok();
+    },
+
+    setScrapTarget(islandId, buildingId, target) {
+      const island = resolveIsland(islandId);
+      if (!island) return err('unknown island');
+      const b = island.spec.buildings.find((bb) => bb.id === buildingId);
+      if (!b) return err('not-found');
+      if (b.defId !== 'demolition_yard') {
+        return err('building is not a demolition_yard');
+      }
+      b.scrapTarget = target ?? undefined;
       return ok();
     },
 
@@ -990,6 +1003,9 @@ export function makeRemoteGateway(client: GameServerClient): MutationGateway {
     },
     relabelCargo(islandId, buildingId, newLabel) {
       return send('relabel-cargo', { islandId, buildingId, newLabel });
+    },
+    setScrapTarget(islandId, buildingId, target) {
+      return send('set-scrap-target', { islandId, buildingId, target });
     },
     expandIsland(islandId, constituentIndex, axis) {
       return send('expand-island', { islandId, constituentIndex, axis });
