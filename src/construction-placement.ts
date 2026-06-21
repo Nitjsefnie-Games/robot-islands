@@ -41,7 +41,7 @@ export function computePlacementValidity(
   const state = islandStates.get(cand.founderId);
   if (!spec || !state) return { ok: false, reason: 'unknown-founder' };
 
-  if (!positionIsFree(world, cand.cx, cand.cy, cand.major)) {
+  if (!positionIsFree(world, cand.cx, cand.cy, cand.major, cand.minor)) {
     return { ok: false, reason: 'position-occupied' };
   }
   if (!regionDiscoveredOrVisible(world, cand.cx, cand.cy, cand.major, cand.minor)) {

@@ -909,7 +909,7 @@ export const INTENTS: Record<string, IntentHandler> = {
       // Trust-surface: the Construction UI disables placement while the chosen
       // position overlaps an existing island. Re-run the same overlap check on
       // authoritative state so a crafted intent cannot mint an overlapping island.
-      if (!positionIsFree(game.world, cx, cy, majorRadius)) {
+      if (!positionIsFree(game.world, cx, cy, majorRadius, minorRadius)) {
         return { ok: false, error: 'position-occupied' };
       }
       if (!regionDiscoveredOrVisible(game.world, cx, cy, majorRadius, minorRadius)) {

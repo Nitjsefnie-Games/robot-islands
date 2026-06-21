@@ -6,7 +6,7 @@
 
 import { Container, Graphics } from 'pixi.js';
 
-import { TILE_PX } from './island.js';
+import { TILE_PX, tileInscribedInEllipse } from './island.js';
 import type { ConstructionCandidate } from './construction-placement.js';
 
 const GHOST_VALID = 0x4ade80;
@@ -46,10 +46,42 @@ export function createConstructionGhostOverlay(parent: Container): ConstructionG
     const rx = current.major * TILE_PX;
     const ry = current.minor * TILE_PX;
 
-    body.ellipse(px, py, rx, ry);
+    // Draw the ACTUAL inscribed-tile footprint (the stair-stepped shape the
+    // finished island will occupy), not a smooth ellipse — same inscription test
+    // (`tileInscribedInEllipse`) the island renderer and placement use. Fill each
+    // inscribed tile, then stroke only boundary edges (an edge whose neighbour
+    // tile is NOT inscribed) so the outline traces the tile silhouette.
+    const maj = current.major;
+    const min = current.minor;
+    const xMin = -Math.ceil(maj), xMax = Math.ceil(maj) - 1;
+    const yMin = -Math.ceil(min), yMax = Math.ceil(min) - 1;
+    const inside = (dx: number, dy: number): boolean =>
+      dx >= xMin && dx <= xMax && dy >= yMin && dy <= yMax &&
+      tileInscribedInEllipse(dx, dy, maj, min);
+    for (let dy = yMin; dy <= yMax; dy++) {
+      for (let dx = xMin; dx <= xMax; dx++) {
+        if (!inside(dx, dy)) continue;
+        const tx = (current.cx + dx) * TILE_PX;
+        const ty = (current.cy + dy) * TILE_PX;
+        body.rect(tx, ty, TILE_PX, TILE_PX);
+      }
+    }
     body.fill({ color, alpha: 0.22 });
+    for (let dy = yMin; dy <= yMax; dy++) {
+      for (let dx = xMin; dx <= xMax; dx++) {
+        if (!inside(dx, dy)) continue;
+        const tx = (current.cx + dx) * TILE_PX;
+        const ty = (current.cy + dy) * TILE_PX;
+        if (!inside(dx, dy - 1)) { body.moveTo(tx, ty); body.lineTo(tx + TILE_PX, ty); }
+        if (!inside(dx, dy + 1)) { body.moveTo(tx, ty + TILE_PX); body.lineTo(tx + TILE_PX, ty + TILE_PX); }
+        if (!inside(dx - 1, dy)) { body.moveTo(tx, ty); body.lineTo(tx, ty + TILE_PX); }
+        if (!inside(dx + 1, dy)) { body.moveTo(tx + TILE_PX, ty); body.lineTo(tx + TILE_PX, ty + TILE_PX); }
+      }
+    }
     body.stroke({ color, width: 3, alpha: 0.9 });
 
+    // Corner handles stay at the ellipse bounding-box corners (the drag/resize
+    // hit-test in construction-placement.ts is unchanged).
     const corners: Array<[number, number]> = [
       [px - rx, py - ry], [px + rx, py - ry], [px - rx, py + ry], [px + rx, py + ry],
     ];

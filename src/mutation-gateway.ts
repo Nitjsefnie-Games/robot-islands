@@ -575,7 +575,7 @@ export function makeLocalGateway(
       const req = { biome, majorRadius, minorRadius };
       const can = validateConstruction(founder.state, founder.spec, req);
       if (!can.ok) return err(can.reason ?? 'construction invalid', can.reason);
-      if (!positionIsFree(world, cx, cy, majorRadius)) {
+      if (!positionIsFree(world, cx, cy, majorRadius, minorRadius)) {
         return err('position-occupied', 'position-occupied');
       }
       if (!regionDiscoveredOrVisible(world, cx, cy, majorRadius, minorRadius)) {
