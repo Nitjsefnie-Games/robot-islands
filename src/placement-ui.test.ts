@@ -20,6 +20,7 @@ import type { IslandSpec, WorldState } from './world.js';
 import type { IslandState } from './economy.js';
 import { CELL_SIZE_TILES } from './constants.js';
 import type { OceanCellSpec } from './ocean-cell.js';
+import type { PlacedBuilding } from './buildings.js';
 
 function makeSpec(): IslandSpec {
   return {
@@ -552,5 +553,71 @@ describe('terrain_modifier placement-ui brush commit', () => {
     // getLabelText() reads the actually-painted label so this asserts
     // the annotation survived the unconditional labelText.text assignment (§15.2).
     expect(ui.getLabelText()).toContain('→ ORE');
+  });
+});
+
+// Group move (rigid-cluster relocate) — all-or-nothing commit, with a
+// collision-safe member order so a member translating into a not-yet-moved
+// sibling's CURRENT tile isn't falsely rejected by relocateBuilding's live
+// per-building re-validation.
+describe('group move (rigid cluster)', () => {
+  function crate(id: string, x: number, y: number): PlacedBuilding {
+    return { id, defId: 'crate', x, y, rotation: 0, cargoLabel: 'iron_ore' };
+  }
+
+  it('relocates an adjacent pair shifted +1 (sibling-into-vacated-tile order)', () => {
+    const spec = makeSpec();
+    const state = makeState(spec);
+    // Anchor at local (-1,0), sibling at (0,0): adjacent 1×1 crates. Cursor at
+    // screen (0,0) → identity transform → world tile (0,0) → anchor lands at
+    // local (0,0), so dx = +1. Post-move: anchor→(0,0), sibling→(1,0). Naive
+    // anchor-first order would move the anchor into (0,0) where the sibling
+    // still sits → false overlap reject. Collision-safe order moves the
+    // sibling first.
+    const anchor = crate('a', -1, 0);
+    const sibling = crate('b', 0, 0);
+    spec.buildings.push(anchor, sibling);
+    const ui = mountPlacementUi({
+      getTargetSpec: () => spec,
+      getTargetState: () => state,
+      screenToWorldTile: (x, y) => ({ x, y }),
+      onPlaced: () => {},
+      onRelocated: () => {},
+    });
+    ui.beginGroupRelocate([anchor, sibling]);
+    expect(ui.isActive()).toBe(true);
+    const r = ui.attemptCommit();
+    expect(r.ok).toBe(true);
+    const byId = new Map(spec.buildings.map((b) => [b.id, b]));
+    expect(byId.get('a')).toMatchObject({ x: 0, y: 0 });
+    expect(byId.get('b')).toMatchObject({ x: 1, y: 0 });
+  });
+
+  it('rejects an out-of-bounds drop as a no-op and stays armed', () => {
+    const spec = makeSpec();
+    const state = makeState(spec);
+    // Anchor far off so the +offset lands outside the r=14 ellipse. Cursor (0,0)
+    // → anchor lands at local (0,0). Put a sibling at local (100,100): after the
+    // same translation it's still off-island → validateGroupRelocate fails.
+    const anchor = crate('a', -1, 0);
+    const sibling = crate('b', 100, 100);
+    spec.buildings.push(anchor, sibling);
+    const startA = { x: anchor.x, y: anchor.y };
+    const startB = { x: sibling.x, y: sibling.y };
+    const ui = mountPlacementUi({
+      getTargetSpec: () => spec,
+      getTargetState: () => state,
+      screenToWorldTile: (x, y) => ({ x, y }),
+      onPlaced: () => {},
+      onRelocated: () => {},
+    });
+    ui.beginGroupRelocate([anchor, sibling]);
+    const r = ui.attemptCommit();
+    expect(r.ok).toBe(false);
+    // No mutation — both members stay at their original tiles, mode stays armed.
+    const byId = new Map(spec.buildings.map((b) => [b.id, b]));
+    expect(byId.get('a')).toMatchObject(startA);
+    expect(byId.get('b')).toMatchObject(startB);
+    expect(ui.isActive()).toBe(true);
   });
 });

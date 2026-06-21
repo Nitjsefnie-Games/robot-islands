@@ -1642,6 +1642,9 @@ async function main(): Promise<void> {
     },
     onRelocated: () => {
       rebuildWorldLayers();
+      // Repaint selection outlines so moved buildings' outlines follow to
+      // their new positions (group move keeps the selection intact).
+      syncSelectionUi();
     },
     pickCargoLabel: () => cargoLabelPicker.pick(),
     pickTerrainTarget: () => terrainTargetPicker.pick(),
@@ -2210,9 +2213,17 @@ async function main(): Promise<void> {
         if (next) inspectorMulti.open(next);
       })();
     },
-    onMove: (_t: MultiTarget) => {
-      // Group relocate is implemented in T11; keep the selection intact.
-      console.warn('group move: implemented in T11');
+    onMove: (t: MultiTarget) => {
+      // Rigid-cluster group move. Keep the selection (so the outlines repaint
+      // at the NEW positions after commit) but close the multi panel so the
+      // cursor ghost is visible. Point the placement target at the selection's
+      // island so getTargetSpec/getTargetState (= activeSpec/activeState) resolve
+      // to it during the move.
+      activeIslandId = t.spec.id;
+      hoveredBuilding = null;
+      repaintHover();
+      inspectorMulti.close();
+      placementUi.beginGroupRelocate(t.buildings);
     },
   });
 
