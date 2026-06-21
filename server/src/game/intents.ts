@@ -40,10 +40,13 @@ import type { TerrainKind } from '../../../src/island.js';
 import { activeFloors, displayedFloorLevel } from '../../../src/floor-levels.js';
 import { dispatchDrone, firePulse, type DroneTier } from '../../../src/drones.js';
 import {
+  createPowerLinkRoute,
   createRouteFromBuilding,
   drainRoutesForBuilding,
   nextGroupId,
   planMergedRoutes,
+  powerLinkPeerDef,
+  powerLinkTypeForBuilding,
   retargetRoute,
   routeProfileForBuilding,
   islandHasTeleporterPad,
@@ -520,6 +523,21 @@ export const INTENTS: Record<string, IntentHandler> = {
       if (!toSpec.populated) return { ok: false, error: 'to island is not populated' };
       const building = fromSpec.buildings.find((b) => b.id === buildingId);
       if (!building) return { ok: false, error: 'building not on from island' };
+      // §5.3 inter-island power link (Power Substation / Spacetime Anchor). Both
+      // ends need the SAME operational endpoint; the link carries power, not
+      // cargo (no filter, zero transit).
+      const powerType = powerLinkTypeForBuilding(building.defId);
+      if (powerType !== null) {
+        const peer = powerLinkPeerDef(building.defId)!;
+        if (!hasOperationalBuilding(toSpec.buildings, peer)) {
+          return { ok: false, error: `destination needs an operational ${peer}` };
+        }
+        const link = createPowerLinkRoute(building, fromIslandId, toIslandId);
+        if (link === null) return { ok: false, error: 'power link could not be created' };
+        if (typeof groupId === 'string') link.groupId = groupId;
+        game.world.routes.push(link);
+        return { ok: true };
+      }
       const profile = routeProfileForBuilding(building.defId);
       if (profile === null) return { ok: false, error: 'building is not a transport building' };
       if (profile.type === 'teleporter' && !islandHasTeleporterPad(toSpec)) {
