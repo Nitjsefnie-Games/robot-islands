@@ -13,7 +13,7 @@
 import {
   computeConstructionCost,
   constructIsland,
-  maxRadiusForFounderLevel,
+  maxRadiiForConstruction,
   type ConstructionRequirements,
 } from './artificial-island.js';
 import {
@@ -232,7 +232,7 @@ export function mountConstructionUi(
   majorValue.style.textAlign = 'right';
 
   majorSlider.addEventListener('input', () => {
-    const cap = radiusCap();
+    const cap = radiusCap().major;
     let v = parseInt(majorSlider.value, 10);
     if (!Number.isFinite(v)) return;
     v = Math.max(4, Math.min(v, cap));
@@ -260,7 +260,7 @@ export function mountConstructionUi(
   minorValue.style.textAlign = 'right';
 
   minorSlider.addEventListener('input', () => {
-    const cap = radiusCap();
+    const cap = radiusCap().minor;
     let v = parseInt(minorSlider.value, 10);
     if (!Number.isFinite(v)) return;
     v = Math.max(4, Math.min(v, cap));
@@ -508,12 +508,14 @@ export function mountConstructionUi(
   // ── Helpers ───────────────────────────────────────────────────────────────
   /** Maximum radius allowed for the currently resolved founder. Falls back
    *  to 8 when no founder is selected. */
-  function radiusCap(): number {
+  function radiusCap(): { major: number; minor: number } {
     const founder = candidate.founderId
       ? options.world.islands.find((s) => s.id === candidate.founderId)
       : undefined;
     const state = founder ? options.islandStates.get(founder.id) : undefined;
-    return state ? maxRadiusForFounderLevel(state.level) : 8;
+    // Per-axis cap = min(tier, biome reclamation cap) for the CURRENT biome
+    // selection, so switching to a smaller biome re-clamps the sliders.
+    return state ? maxRadiiForConstruction(state.level, candidate.biome) : { major: 8, minor: 8 };
   }
 
   /** Collect every island state that satisfies "populated + T3+ + has
@@ -580,15 +582,18 @@ export function mountConstructionUi(
       if (target) founderSelect.value = target;
     }
 
-    // Clamp radii to the founder tier cap and update slider ranges.
+    // Clamp radii to min(tier cap, biome reclamation cap) and update slider
+    // ranges — per axis, for the currently selected biome.
     const founder = candidate.founderId
       ? eligible.find((e) => e.spec.id === candidate.founderId)
       : null;
-    const cap = founder ? maxRadiusForFounderLevel(founder.state.level) : 8;
-    majorSlider.max = String(cap);
-    minorSlider.max = String(cap);
-    candidate.major = Math.max(4, Math.min(candidate.major, cap));
-    candidate.minor = Math.max(4, Math.min(candidate.minor, cap));
+    const cap = founder
+      ? maxRadiiForConstruction(founder.state.level, candidate.biome)
+      : { major: 8, minor: 8 };
+    majorSlider.max = String(cap.major);
+    minorSlider.max = String(cap.minor);
+    candidate.major = Math.max(4, Math.min(candidate.major, cap.major));
+    candidate.minor = Math.max(4, Math.min(candidate.minor, cap.minor));
 
     readCandidateIntoControls();
 

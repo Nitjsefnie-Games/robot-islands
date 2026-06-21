@@ -13,6 +13,7 @@ import {
   computeConstructionCost,
   constructIsland,
   maxRadiusForFounderLevel,
+  maxRadiiForConstruction,
   validateBuildingPlacement,
   validateConstruction,
   type ConstructionRequirements,
@@ -237,6 +238,24 @@ describe('validateConstruction', () => {
     const r = validateConstruction(state, spec, { biome: 'plains', majorRadius: 0, minorRadius: 4 });
     expect(r.ok).toBe(false);
     expect(r.reason).toBe('radius-too-large');
+  });
+
+  it('rejects radii above the biome reclamation cap even within the tier cap', () => {
+    const spec = makeFounderSpec([PC_BUILDING]);
+    // T5 founder → tier cap 16, but Volcanic biome reclamation cap is 14.
+    const state = makeFounderState([PC_BUILDING], { steel_beam: 999999, concrete: 999999 }, 50);
+    const r = validateConstruction(state, spec, { biome: 'volcanic', majorRadius: 15, minorRadius: 4 });
+    expect(r.ok).toBe(false);
+    expect(r.reason).toBe('radius-too-large');
+  });
+
+  it('does not reject radii at the biome reclamation cap on the radius gate', () => {
+    const spec = makeFounderSpec([PC_BUILDING]);
+    const state = makeFounderState([PC_BUILDING], { steel_beam: 999999, concrete: 999999 }, 50);
+    // Volcanic cap is 14 — radius 14 must pass the radius gate (may still fail on
+    // materials, but NOT with radius-too-large).
+    const r = validateConstruction(state, spec, { biome: 'volcanic', majorRadius: 14, minorRadius: 14 });
+    expect(r.reason).not.toBe('radius-too-large');
   });
 
   it('rejects when steel_beam is short', () => {
@@ -466,6 +485,18 @@ describe('maxRadiusForFounderLevel', () => {
   it('returns 16 for T5 founders (level 50+)', () => {
     expect(maxRadiusForFounderLevel(50)).toBe(16);
     expect(maxRadiusForFounderLevel(100)).toBe(16);
+  });
+});
+
+describe('maxRadiiForConstruction', () => {
+  it('caps each axis at min(tier cap, biome reclamation cap)', () => {
+    // T5 tier cap 16. Volcanic biome cap 14 → 14; Plains 28 → tier 16 binds.
+    expect(maxRadiiForConstruction(50, 'volcanic')).toEqual({ major: 14, minor: 14 });
+    expect(maxRadiiForConstruction(50, 'plains')).toEqual({ major: 16, minor: 16 });
+    // Coast is anisotropic (28 major / 14 minor): tier binds major, biome binds minor.
+    expect(maxRadiiForConstruction(50, 'coast')).toEqual({ major: 16, minor: 14 });
+    // Lower tier still binds when it is the smaller cap.
+    expect(maxRadiiForConstruction(15, 'plains')).toEqual({ major: 8, minor: 8 });
   });
 });
 

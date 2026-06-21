@@ -18,7 +18,7 @@ Legend: **L** = live · **P** = partial · **N** = not implemented.
 | §2.2 Discovery via drones | L | T1 / T2 / T3 / T4 / T5 dispatch; Drone Pad (T2) is the gate, launchable drone tier ranges from T1 up to current island tier. |
 | §2.3 Settlement | P | Vehicle dispatch + arrival + Foundation Kit. Per-tier vehicle stats (speed, range, loadout, failureRate, weatherMul) for both ships and helicopters via SHIP_STATS / HELICOPTER_STATS. T5 Spacetime Anchor bypass not implemented. |
 | §2.4 Inter-island routes | P | Cargo / drone / airship / mass_driver / teleporter / cable types. Teleporter routes consume per-tile biofuel so the Network skill has a primary scaling axis. Mass-driver routes consume Diesel per dispatch volume per §9.5; T5 spacetime-anchor routes not implemented as a distinct dispatch path (the enum exists; cables already cover power-link semantics). Priority-list dispatch with drag-to-reorder UI in the routes ledger. |
-| §2.5 Artificial islands | L | T3 / T4 / T5 founder caps in `MAX_RADIUS_BY_TIER` (8 / 12 / 16). |
+| §2.5 Artificial islands | L | Size capped per axis at min(tier cap `MAX_RADIUS_BY_TIER` 8/12/16, biome reclamation cap `BIOME_MAX_RADII`) via `maxRadiiForConstruction`. |
 | §2.6 Weather | L | Forecast model, biome modulation, vehicle destruction rolls, route capacity modulation, in-flight loss, satellite immunity. Map overlay snaps to vision cells. |
 | §2.7 Day-night cycle | L | Solar multiplier per phase, weather-phase modulation (+25% severe-storm Night/Dawn), full-viewport tint overlay. |
 | §3.1-3.4 Island spec / biomes / tile types / shape | L | All six biomes, ellipse geometry, Land Reclamation expansion, max-size table. |
@@ -214,7 +214,7 @@ Artificial islands:
 
 * Start at level 1
 * Have a chosen biome (subject to constraints)
-* Have a chosen size (capped by founder's tier, expressed as ellipse radii — T3 founder caps at major=8, minor=8; T4 caps at 12,12; T5 caps at 16,16). Artificial islands are constructed circular and can be expanded into ovals via Land Reclamation just like natural islands.
+* Have a chosen size, capped **per axis at the smaller of** (a) the founder's tier cap (`MAX_RADIUS_BY_TIER` — T3=8, T4=12, T5=16) and (b) the target biome's **Land Reclamation cap** (`BIOME_MAX_RADII` — e.g. Volcanic 14/14, Arctic 14/14, Coast 28/14, Plains 28/28). A build may not be sized larger than that biome could ever grow to via reclamation, so e.g. a T5 founder cannot construct a radius-16 Volcanic island (its cap is 14). The authoritative gate is `maxRadiiForConstruction(level, biome)` in `artificial-island.ts` (enforced by `validateConstruction`; the construction UI clamps the ghost + sliders to the same per-axis caps). Artificial islands are constructed circular and can be expanded into ovals via Land Reclamation just like natural islands.
 * Can have any starting layout because terrain is artificial
 * Cannot have rare-biome modifiers or unique-feature tiles (those are natural-only)
 
