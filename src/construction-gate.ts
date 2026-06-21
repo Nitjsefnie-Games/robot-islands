@@ -5,12 +5,9 @@
 // re-run the same overlap check the UI uses when validating an artificial
 // island construction intent.
 
-import { distSqTiles, type WorldState } from './world.js';
+import { islandsOverlap, type IslandSpec, type WorldState } from './world.js';
 import { tileInscribedInEllipse } from './island.js';
 import { cellKey, tileToCell } from './discovery.js';
-
-/** Distance buffer (tiles) added to (major_a + major_b) for overlap check. */
-export const POSITION_BUFFER_TILES = 4;
 
 /** Does the inscribed footprint of an ellipse at (cx,cy) lie entirely within
  *  discovered-or-visible space? "Unknown" = a stratification cell not present
@@ -38,16 +35,26 @@ export function regionDiscoveredOrVisible(
 
 /** Check whether a candidate position would overlap any existing island.
  *  Returns true if safe to place, false otherwise. Mirrors the UX guardrail
- *  enforced by the Construction UI before it lets the player confirm. */
+ *  enforced by the Construction UI before it lets the player confirm.
+ *
+ *  Uses the SAME land-footprint overlap test as §3.6 island merging
+ *  (`islandsOverlap`): rasterize the candidate's inscribed ellipse tiles and
+ *  reject if they touch any existing island's tiles. This replaces the former
+ *  circular major-radius distance check, which over-rejected near elongated
+ *  islands (it ignored the minor axis). Touching counts as overlap, so islands
+ *  cannot be placed flush against existing land. The candidate is a single
+ *  axis-aligned ellipse (no extras/rotation at construction time); existing
+ *  islands carry their full merged geometry, which `islandsOverlap` handles. */
 export function positionIsFree(
   world: WorldState,
   cx: number,
   cy: number,
   majorRadius: number,
+  minorRadius: number,
 ): boolean {
+  const candidate = { cx, cy, majorRadius, minorRadius } as unknown as IslandSpec;
   for (const s of world.islands) {
-    const minDist = s.majorRadius + majorRadius + POSITION_BUFFER_TILES;
-    if (distSqTiles(s.cx, s.cy, cx, cy) < minDist * minDist) return false;
+    if (islandsOverlap(s, candidate)) return false;
   }
   return true;
 }
