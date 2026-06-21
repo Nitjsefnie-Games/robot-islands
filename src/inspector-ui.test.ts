@@ -5,7 +5,7 @@ import { makeRegistry } from './input.js';
 import { mountInspectorUi, recipeToLines, bonusesText, co2CaptureKgPerMin, type InspectorDeps } from './inspector-ui.js';
 import { makeInitialIslandState, type IslandSpec, type WorldState } from './world.js';
 import type { PlacedBuilding } from './buildings.js';
-import type { Recipe } from './recipes.js';
+import type { Recipe, ResourceId } from './recipes.js';
 
 function makeSpec(over: Partial<IslandSpec> = {}): IslandSpec {
   return {
@@ -210,7 +210,14 @@ describe('mountInspectorUi', () => {
       repairDrones: [],
       debrisFields: [],
     } as unknown as WorldState;
-    const deps = makeDeps({ world });
+    // getRatesContext returns a §13.3 partial pooled override that pools NOTHING
+    // (empty inventory) — the real shared-network case that regressed. The
+    // inspector must merge the island's own inventory under it, not let the empty
+    // pool hide the mercury and show the base recipe.
+    const deps = makeDeps({
+      world,
+      getRatesContext: () => ({ inventory: {} as Record<ResourceId, number>, terrainAt: spec.terrainAt }),
+    });
     const reg = makeRegistry();
     const inspector = mountInspectorUi(reg, container, deps);
     inspector.open({ spec, state, building: plant });

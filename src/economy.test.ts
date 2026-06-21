@@ -6275,4 +6275,22 @@ describe('Demolition Yard economy integration', () => {
     expect(state.inventory.stone).toBeLessThan(1000);
     expect(state.inventory.wood).toBeLessThan(1000);
   });
+
+  it('selects an §8.x alt-input variant against own inventory under a partial/empty pooled ctx.inventory', () => {
+    // §13.3 shared-network participant that pools NOTHING → ctx.inventory = {}.
+    // A bare `ctx?.inventory ?? state.inventory` would feed resolveRecipe the
+    // empty pool and hide the island's own mercury, so the Chlor-Alkali Plant
+    // would never pick the mercury-cell variant. recipeInventoryFor must merge
+    // the island's own inventory under the empty override.
+    const { power: _p, ...noPower } = BUILDING_DEFS.chlor_alkali_plant;
+    const defs = { ...BUILDING_DEFS, chlor_alkali_plant: noPower as BuildingDef } as DefCatalog;
+    const state = makeState({
+      buildings: [{ id: 'cap', defId: 'chlor_alkali_plant', x: 0, y: 0 } as PlacedBuilding],
+      inventory: { ...blankInventory(), mercury: 100, salt: 1000, fresh_water: 1000 },
+    });
+    const rates = computeRates(state, { inventory: {} as Record<ResourceId, number>, defs });
+    const br = rates.byBuilding.find((r) => r.building.id === 'cap');
+    expect(br).toBeTruthy();
+    expect(br!.recipe.inputs.mercury ?? 0).toBeGreaterThan(0);
+  });
 });

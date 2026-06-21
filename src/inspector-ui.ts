@@ -44,7 +44,7 @@ import { defineAction, dispatchAction, type InputRegistry } from './input.js';
 import type { IslandState } from './economy.js';
 import { tierForResource } from './economy.js';
 import { activeBonusMul } from './active-bonus.js';
-import { computeRates, fledglingRecipeMul, hasNeighborWithAnyDefId, type RatesContext } from './economy.js';
+import { computeRates, fledglingRecipeMul, hasNeighborWithAnyDefId, recipeInventoryFor, type RatesContext } from './economy.js';
 import {
   type Axis,
   type ExpandResult,
@@ -1899,7 +1899,10 @@ export function mountInspectorUi(
       BUILDING_DEFS[building.defId],
       building,
       spec.terrainAt,
-      ratesCtx.inventory ?? state.inventory,
+      // §8.x: own inventory merged under any partial pooled override — a bare
+      // `ratesCtx.inventory ?? state.inventory` would let an empty/partial pool
+      // hide the island's own stock and show the base recipe (see economy.ts).
+      recipeInventoryFor(state, ratesCtx),
     );
     const skillMul: SkillMultipliers = effectiveSkillMultipliers(state);
     // §4.5/#35: include under-construction buildings (they bridge the cluster
