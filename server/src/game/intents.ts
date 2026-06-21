@@ -24,7 +24,7 @@ import {
   makeArtificialIdGenerator,
   validateConstruction,
 } from '../../../src/artificial-island.js';
-import { BUILDING_DEFS, type BuildingDefId } from '../../../src/building-defs.js';
+import { BUILDING_DEFS, ALL_BUILDING_DEF_IDS, type BuildingDefId } from '../../../src/building-defs.js';
 import {
   placeBuilding,
   validatePlacement,
@@ -110,6 +110,10 @@ export interface IntentHandler {
 
 function isValidResourceId(v: unknown): v is ResourceId {
   return typeof v === 'string' && (ALL_RESOURCES as ReadonlyArray<string>).includes(v);
+}
+
+function isValidBuildingDefId(v: unknown): v is BuildingDefId {
+  return typeof v === 'string' && (ALL_BUILDING_DEF_IDS as ReadonlyArray<string>).includes(v);
 }
 
 function isValidCargoMode(v: unknown): v is CargoMode {
@@ -746,6 +750,31 @@ export const INTENTS: Record<string, IntentHandler> = {
       }
       applyRelabelStorageCap(island.state, b, def, b.cargoLabel, newLabel);
       b.cargoLabel = newLabel;
+      return { ok: true };
+    },
+  },
+
+  // set-scrap-target — §6.7 Demolition Yard target selection. Player supplies
+  // { islandId, buildingId, target: BuildingDefId | null }. The handler
+  // validates the building exists and is a demolition_yard, that the target is
+  // a valid BuildingDefId (or null to clear), then sets `building.scrapTarget`.
+  'set-scrap-target': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { islandId, buildingId, target } = payload;
+      if (typeof islandId !== 'string') return { ok: false, error: 'islandId must be a string' };
+      if (typeof buildingId !== 'string') return { ok: false, error: 'buildingId must be a string' };
+      if (target !== null && !isValidBuildingDefId(target)) {
+        return { ok: false, error: 'target must be a valid building def id or null' };
+      }
+      const island = resolveIsland(game, islandId);
+      if (!island) return { ok: false, error: 'unknown island' };
+      const b = island.spec.buildings.find((bb) => bb.id === buildingId);
+      if (!b) return { ok: false, error: 'not-found' };
+      if (b.defId !== 'demolition_yard') {
+        return { ok: false, error: 'building is not a demolition_yard' };
+      }
+      b.scrapTarget = target ?? undefined;
       return { ok: true };
     },
   },
