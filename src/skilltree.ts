@@ -16,6 +16,7 @@ import type { IslandState } from './economy.js';
 import type { Recipe, RecipeCategory } from './recipes.js';
 import { ALL_RECIPE_CATEGORIES, type ResourceId } from './recipes.js';
 import { ALL_STORAGE_CATEGORIES, type StorageCategory } from './storage-categories.js';
+import { tierForLevel } from './tier.js';
 import type { CrystalId, Edge, EdgeId, Graph, BridgeEdge, KeystonePrereq } from './skilltree-graph.js';
 import { CRYSTAL_CATALOG } from './skilltree-crystals.js';
 import {
@@ -297,13 +298,7 @@ export const BRANCH_LABEL: Readonly<Record<BranchId, string>> = {
  * orthogonally to level via `t6Unlocked` below (Ascendant Core crafted
  * AND Spaceport placed).
  */
-export function tierForLevel(level: number): Tier {
-  if (level >= 50) return 5;
-  if (level >= 30) return 4;
-  if (level >= 15) return 3;
-  if (level >= 5) return 2;
-  return 1;
-}
+export { tierForLevel } from './tier.js';
 
 /**
  * §13.1 T5 access gate: an island unlocks T5 only after BOTH reaching level

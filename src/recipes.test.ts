@@ -25,12 +25,15 @@ import {
   nextRotateOutputBoundaryMs,
   resolveRotatingOutput,
   availableRecipes,
+  resolveRecipe,
   type RecipeCategory,
   type RecipeId,
   type ResourceId,
 } from './recipes.js';
 
 import { BUILDING_DEFS } from './building-defs.js';
+import { scrapRecipeForTarget } from './demolition-yard.js';
+import type { PlacedBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
 import type { Graph } from './skilltree-graph.js';
 
@@ -2210,5 +2213,18 @@ describe('P4 Phase-3a: mid-tier alloy/chem orphans', () => {
       expect(consumers.length, `${r} consumer`).toBeGreaterThan(0);
       expect(RESOURCE_META[r].terminal, r).toBe('consumed');
     }
+  });
+});
+
+describe('Demolition Yard recipe resolution', () => {
+  it('resolveRecipe: demolition_yard yields the derived recipe when scrapTarget set', () => {
+    const def = BUILDING_DEFS.demolition_yard;
+    const idle = resolveRecipe(def, { id: 'd', defId: 'demolition_yard', x: 0, y: 0 } as PlacedBuilding);
+    expect(idle).toBeUndefined();
+    const active = resolveRecipe(
+      def,
+      { id: 'd', defId: 'demolition_yard', x: 0, y: 0, scrapTarget: 'iron_mine' } as PlacedBuilding,
+    );
+    expect(active).toEqual(scrapRecipeForTarget('iron_mine'));
   });
 });

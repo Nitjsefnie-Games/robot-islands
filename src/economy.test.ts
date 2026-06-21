@@ -51,6 +51,7 @@ import {
   OUTPUT_CAP_EXEMPT,
 } from './economy.js';
 import { checkGates } from './adjacency.js';
+import { BASE_CONSTRUCTION_MS_BY_TIER } from './construction.js';
 import { applyUpgrade, placeBuilding, validatePlacement } from './placement.js';
 import { ALL_RESOURCES, RECIPES, resolveRotatingOutput, XP_WEIGHT, type Recipe, type ResourceId } from './recipes.js';
 import { RESOURCE_BASE_CAP, RESOURCE_STORAGE_CATEGORY, defaultCapForCategory, storageBaseFor } from './storage-categories.js';
@@ -6249,5 +6250,29 @@ describe('§2.6/§15.3 per-output cap-exemption — byproduct stored, drawable, 
     } finally {
       RECIPES.workshop = original;
     }
+  });
+});
+
+describe('Demolition Yard economy integration', () => {
+  it('demolition_yard produces scrap and consumes the net basket', () => {
+    // Strip the yard's power so the test isn't gated on a power source (the
+    // existing POWER_FREE catalog only strips a fixed set of defs).
+    const { power: _p, ...noPower } = BUILDING_DEFS.demolition_yard;
+    const defs = { ...BUILDING_DEFS, demolition_yard: noPower as BuildingDef } as DefCatalog;
+
+    const state = makeState({
+      buildings: [
+        { id: 'dy', defId: 'demolition_yard', x: 0, y: 0, scrapTarget: 'iron_mine' } as PlacedBuilding,
+      ],
+      inventory: { ...blankInventory(), stone: 1000, wood: 1000 },
+      lastTick: 0,
+    });
+    // iron_mine target: cycle = BASE_CONSTRUCTION_MS_BY_TIER[1]/1000 s,
+    // out 84 scrap, in 100 stone + 40 wood per cycle.
+    const cycleMs = BASE_CONSTRUCTION_MS_BY_TIER[1];
+    advanceIsland(state, cycleMs, { defs });
+    expect(state.inventory.scrap).toBeGreaterThan(0);
+    expect(state.inventory.stone).toBeLessThan(1000);
+    expect(state.inventory.wood).toBeLessThan(1000);
   });
 });
