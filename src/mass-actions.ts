@@ -7,8 +7,12 @@ import { CELL_SIZE_TILES } from './constants.js';
 import {
   parallelBuildSlots, inProgressBuildCount, queuedBuildSlots, queuedBuildCount,
   upgradeCost, topUpgradeLevel, affordabilityShortfall,
+  validatePlacement, relocateFee,
 } from './placement.js';
+import { DEFAULT_GRAPH } from './skilltree.js';
+import { resolveRecipe } from './recipes.js';
 import type { Rotation } from './shape-mask.js';
+import type { BuildingDef } from './building-defs.js';
 import type { IslandSpec } from './world.js';
 import type { IslandState } from './economy.js';
 import type { ResourceId } from './recipes.js';
@@ -84,4 +88,108 @@ export function planMassUpgrade(state: IslandState, selectedIds: Iterable<string
     plan.push(b.id);
   }
   return plan;
+}
+
+// ---------------------------------------------------------------------------
+// §4 group relocate / ignore-cap union / selection breakdown
+// ---------------------------------------------------------------------------
+
+/** Validate a rigid translation of `members` by (dx,dy) island-local tiles.
+ *
+ *  Two independent checks:
+ *   1. Moved-member vs moved-member overlap — done HERE on post-move world
+ *      footprints (`buildingFootprintTilesWorld`), NOT via `validatePlacement`.
+ *   2. Each member valid against the island: in-bounds, biome/tier gate, and
+ *      no overlap with a NON-selected building.
+ *
+ *  Sibling caveat (resolved): `validatePlacement` reads overlap from
+ *  `spec.buildings`, and with `ignoreBuildingId = m.id` it still sees the OTHER
+ *  moving members at their OLD positions — so a member translating into a tile
+ *  a sibling is vacating would be falsely rejected as `overlap`. We resolve by
+ *  validating each member against a CLONED spec/state in which every moving
+ *  member has been REMOVED (positions are not pre-applied; the post-move
+ *  member-vs-member overlap is owned entirely by check 1 above). A clean rigid
+ *  translation into freed tiles therefore passes, while overlap with any
+ *  stationary (non-selected) building still surfaces via `validatePlacement`.
+ *  The real `spec`/`state` are never mutated. */
+export function validateGroupRelocate(
+  spec: IslandSpec,
+  state: IslandState,
+  members: PlacedBuilding[],
+  dx: number,
+  dy: number,
+): { ok: boolean; reason?: string } {
+  // 1) overlap among moved members on post-move world tiles.
+  const seen = new Set<string>();
+  for (const m of members) {
+    for (const t of buildingFootprintTilesWorld(spec, { ...m, x: m.x + dx, y: m.y + dy })) {
+      const key = `${t.x},${t.y}`;
+      if (seen.has(key)) return { ok: false, reason: 'member-overlap' };
+      seen.add(key);
+    }
+  }
+
+  // 2) validate each member against a CLONE with all moving members removed, so
+  //    a sibling's vacated tile reads as free (see the sibling caveat above).
+  const movingIds = new Set(members.map((m) => m.id));
+  const remaining = spec.buildings.filter((b) => !movingIds.has(b.id));
+  const cloneSpec: IslandSpec = { ...spec, buildings: remaining };
+  const cloneState: IslandState = { ...state, buildings: remaining };
+
+  for (const m of members) {
+    const v = validatePlacement(
+      cloneSpec, cloneState, m.defId, m.x + dx, m.y + dy,
+      (m.rotation ?? 0) as Rotation, DEFAULT_GRAPH, m.id, true,
+    );
+    if (!v.ok) return { ok: false, reason: v.reason ?? 'invalid' };
+  }
+  return { ok: true };
+}
+
+/** Summed relocate fee across `members` (half the invested cost each, §relocate).
+ *  `defOf` lets callers inject a def lookup; defaults to `BUILDING_DEFS`. */
+export function groupRelocateFee(
+  members: PlacedBuilding[],
+  defOf: (defId: PlacedBuilding['defId']) => BuildingDef = (id) => BUILDING_DEFS[id],
+): Partial<Record<ResourceId, number>> {
+  const total: Partial<Record<ResourceId, number>> = {};
+  for (const m of members) {
+    for (const [r, n] of Object.entries(relocateFee(m, defOf(m.defId))) as Array<[ResourceId, number]>) {
+      total[r] = (total[r] ?? 0) + n;
+    }
+  }
+  return total;
+}
+
+export interface IgnoreCapRow { resource: ResourceId; allSet: boolean }
+
+/** Union of output resources across `targets`, each row's `allSet` true iff
+ *  EVERY target that outputs that resource has `ignoreCapOverrides[resource]
+ *  === true`. A target's outputs come from `resolveRecipe(def, b, terrainAt)`. */
+export function ignoreCapUnion(
+  targets: { spec: IslandSpec; building: PlacedBuilding }[],
+): IgnoreCapRow[] {
+  // Per resource: track whether every producing target has the override set.
+  const allSet = new Map<ResourceId, boolean>();
+  for (const { spec, building } of targets) {
+    const def = BUILDING_DEFS[building.defId];
+    const recipe = resolveRecipe(def, building, spec.terrainAt);
+    if (!recipe) continue;
+    for (const r of Object.keys(recipe.outputs) as ResourceId[]) {
+      const set = building.ignoreCapOverrides?.[r] === true;
+      allSet.set(r, (allSet.get(r) ?? true) && set);
+    }
+  }
+  return [...allSet.entries()].map(([resource, set]) => ({ resource, allSet: set }));
+}
+
+/** Count buildings per `defId`, sorted descending by count (ties: defId asc). */
+export function selectionBreakdown(
+  buildings: PlacedBuilding[],
+): { defId: string; count: number }[] {
+  const counts = new Map<string, number>();
+  for (const b of buildings) counts.set(b.defId, (counts.get(b.defId) ?? 0) + 1);
+  return [...counts.entries()]
+    .map(([defId, count]) => ({ defId, count }))
+    .sort((a, b) => (b.count - a.count) || (a.defId < b.defId ? -1 : 1));
 }
