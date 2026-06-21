@@ -43,6 +43,15 @@ export interface PlacedBuilding {
    *  attach a resource to a previously-unlabeled Crate. Mutable: the
    *  inspector's §4.6 relabel path reassigns this field. */
   cargoLabel?: ResourceId;
+  /** §6.7 Demolition Yard target. Meaningful ONLY for `demolition_yard`
+   *  instances: names the building type whose place-then-demolish loop this
+   *  Yard automates. `resolveRecipe` derives the Yard's recipe from this
+   *  target's placementCost via `scrapRecipeForTarget`. Undefined → the Yard
+   *  is idle (no recipe), exactly like an unlabeled generic-storage Crate.
+   *  Mutable: the inspector's set-scrap-target path reassigns this field.
+   *  Forward-compat: legacy saves omit it; carried by the structural-spread
+   *  (de)serializer, so no schema bump is required. */
+  scrapTarget?: BuildingDefId;
   /** §4 ocean-layer anchor (Task 10). Set at placement time for any def with
    *  `oceanPlacement: true`; the named island credits the platform's output
    *  and supplies its power from the §5.3 unified pool. Per the §4 design

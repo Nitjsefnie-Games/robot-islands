@@ -892,6 +892,19 @@ describe('serialize → JSON → deserialize round-trip', () => {
       expect(e === undefined || (Array.isArray(e) && e.length === 0)).toBe(true);
     }
   });
+
+  it('round-trips a building scrapTarget without a schema bump', () => {
+    const world = makeInitialWorld(0);
+    const homeSpec = world.islands.find((s) => s.id === 'home')!;
+    homeSpec.buildings.push({
+      id: 'dy1', defId: 'demolition_yard', x: 0, y: 0, scrapTarget: 'iron_mine',
+    } as PlacedBuilding);
+    const snap = serializeWorld(world, new Map(), 0);
+    const json = JSON.parse(JSON.stringify(snap)) as SaveSnapshot;
+    const { world: loaded } = deserializeWorld(json, 0, 0);
+    const b = loaded.islands.find((s) => s.id === 'home')!.buildings.find((x) => x.id === 'dy1')!;
+    expect(b.scrapTarget).toBe('iron_mine');
+  });
 });
 
 // ---------------------------------------------------------------------------
