@@ -72,9 +72,13 @@ import {
 } from './construction-placement.js';
 import { maxRadiusForFounderLevel } from './artificial-island.js';
 import { mountInspectorUi, type InspectorTarget } from './inspector-ui.js';
+import { mountInspectorMulti, type MultiTarget } from './inspector-multi.js';
+import { planMassUpgrade } from './mass-actions.js';
+import { rawFloorLevel } from './floor-levels.js';
+import { resolveRecipe } from './recipes.js';
 import { type Axis } from './land-reclamation.js';
 import { mountInventoryUi } from './inventory-ui.js';
-import { buildingAtTile, findOceanBuildingAt } from './placement.js';
+import { buildingAtTile, findOceanBuildingAt, totalInvestedCost } from './placement.js';
 import { footprintTiles, shapeHeight, shapeWidth, type Rotation } from './shape-mask.js';
 import { mountPlacementUi } from './placement-ui.js';
 import { mountCargoLabelPicker } from './cargo-label-picker.js';
@@ -1078,8 +1082,15 @@ async function main(): Promise<void> {
         if (hitBuilding) {
           const targetState = islandStates.get(island.id);
           if (targetState) {
-            inspector.open({ spec: island, state: targetState, building: hitBuilding });
-            selectedSpec = island;
+            // Shift-click toggles multi-select on the clicked island (no
+            // active-island switch); plain click replaces the selection.
+            if (e.shiftKey) {
+              toggleSelected(island, hitBuilding.id);
+              hoveredBuilding = { spec: island, building: hitBuilding };
+              repaintHover();
+              return;
+            }
+            setSingleSelected(island, hitBuilding.id);
             // Align hover state to the clicked building. The mousemove
             // handler normally keeps `hoveredBuilding` in sync with the
             // cursor, but if the click lands at a position the cursor
@@ -1095,7 +1106,6 @@ async function main(): Promise<void> {
             // (hover.id === selection.id → hoverLayer.visible = false)
             // takes effect on the next repaintHover call.
             hoveredBuilding = { spec: island, building: hitBuilding };
-            repaintSelection();
             repaintHover();
             // Don't switch active-island on a building click — the player is
             // inspecting, not focusing. Active-island stays where it was so
@@ -1116,20 +1126,24 @@ async function main(): Promise<void> {
       if (oceanHit) {
         const targetState = islandStates.get(oceanHit.spec.id);
         if (targetState) {
-          inspector.open({
-            spec: oceanHit.spec,
-            state: targetState,
-            building: oceanHit.building,
-          });
-          selectedSpec = oceanHit.spec;
+          if (e.shiftKey) {
+            toggleSelected(oceanHit.spec, oceanHit.building.id);
+            hoveredBuilding = { spec: oceanHit.spec, building: oceanHit.building };
+            repaintHover();
+            return;
+          }
+          setSingleSelected(oceanHit.spec, oceanHit.building.id);
           hoveredBuilding = { spec: oceanHit.spec, building: oceanHit.building };
-          repaintSelection();
           repaintHover();
           // Same active-island discipline as the land-click branch — the
           // ocean inspector is a non-focusing inspection, no jump.
           return;
         }
       }
+      // §4 empty-space click clears the selection — reached only when the
+      // click missed every building (open ocean or island background), since
+      // the land/ocean building hits early-return above.
+      clearSelection();
       // §3 active-island fallback. Only reached when the click misses every
       // building on the populated island it lands on (or hits open ocean /
       // a discovered-only island). The hit-test ignores discovered-but-not-
@@ -1583,6 +1597,15 @@ async function main(): Promise<void> {
   let hoveredBuilding: { spec: IslandSpec; building: PlacedBuilding } | null = null;
   let selectedSpec: IslandSpec | null = null;
 
+  // §4 multi-select state. `selection` holds the building ids selected on the
+  // single island `selectionSpec`. Selection is always confined to ONE island
+  // (cross-island selects clear first). Size 0 → no inspector; size 1 → the
+  // single inspector; size ≥2 → the multi inspector. `selectedSpec` (used by
+  // the legacy single-inspector code paths and the land-reclamation handler)
+  // tracks `selectionSpec` so existing readers keep working.
+  const selection = new Set<string>();
+  let selectionSpec: IslandSpec | null = null;
+
   /** Paint a footprint outline for `building` on `spec` into `gfx` with the
    *  given style. Mirrors the math in placement-ui.ts's preview painter:
    *  building tiles are in island-local coords; the world-pixel offset
@@ -1644,16 +1667,13 @@ async function main(): Promise<void> {
       hoverLayer.visible = false;
       return;
     }
-    // Suppress the selected building's hover outline — the selection outline
+    // Suppress a selected building's hover outline — the selection outline
     // is more prominent and a duplicate at the same site reads as a flicker.
     // §15.4: compare (islandId, buildingId) pairs so same-local-coord
     // buildings on different islands don't incorrectly suppress each other.
-    const selectedId = inspector.getSelectedBuildingId();
-    const selectedIslandId = inspector.getSelectedIslandId();
     if (
-      selectedId &&
-      selectedId === hoveredBuilding.building.id &&
-      selectedIslandId === hoveredBuilding.spec.id
+      selectionSpec?.id === hoveredBuilding.spec.id &&
+      selection.has(hoveredBuilding.building.id)
     ) {
       hoverLayer.visible = false;
       return;
@@ -1674,23 +1694,104 @@ async function main(): Promise<void> {
 
   function repaintSelection(): void {
     selectionGfx.clear();
-    const selectedId = inspector.getSelectedBuildingId();
-    if (!selectedId || !selectedSpec) {
+    if (selection.size === 0 || !selectionSpec) {
       selectionLayer.visible = false;
       return;
     }
-    const building = selectedSpec.buildings.find((b) => b.id === selectedId);
-    if (!building) {
-      // Stale selection (e.g. demolish removed it). Defensive close.
-      selectionLayer.visible = false;
+    // Iterate the selected ids on `selectionSpec`, painting each footprint.
+    // Prune any id whose building no longer exists (e.g. a demolish removed
+    // it) so the set never carries stale members. The 1-selection visual is
+    // identical to the legacy single-outline (ACCENT solid 3px + 0.12 fill).
+    let painted = 0;
+    for (const id of [...selection]) {
+      const building = selectionSpec.buildings.find((b) => b.id === id);
+      if (!building) {
+        selection.delete(id);
+        continue;
+      }
+      paintBuildingOutline(selectionGfx, selectionSpec, building, VISION_BLUE, 3, 0.12);
+      painted++;
+    }
+    selectionLayer.visible = painted > 0;
+  }
+
+  /** Normalize a sync-or-Promise gateway return into a resolved result so
+   *  callers can read `.ok` / `.reason` uniformly. LOCAL returns a plain
+   *  result (wrapped in a resolved Promise here); REMOTE returns a Promise. */
+  async function runGateway(
+    result: import('./mutation-gateway.js').GatewayReturn,
+  ): Promise<import('./mutation-gateway.js').GatewayResult> {
+    return result instanceof Promise ? await result : result;
+  }
+
+  /** Snapshot the selected buildings + island state for the multi inspector.
+   *  Returns null when the selection isn't a usable ≥1 set on a live island. */
+  function multiTarget(): MultiTarget | null {
+    if (!selectionSpec) return null;
+    const state = islandStates.get(selectionSpec.id);
+    if (!state) return null;
+    const buildings = selectionSpec.buildings.filter((b) => selection.has(b.id));
+    return { spec: selectionSpec, state, buildings };
+  }
+
+  /** Reconcile both inspectors + the outline layer with the current selection.
+   *  size 0 → close both; size 1 → single inspector; size ≥2 → multi panel. */
+  function syncSelectionUi(): void {
+    if (selection.size === 0 || !selectionSpec) {
       inspector.close();
+      inspectorMulti.close();
       selectedSpec = null;
+      repaintSelection();
       return;
     }
-    // ACCENT solid 3px outline + slightly stronger fill alpha than the
-    // hover variant so selection reads as "committed" vs hover's "pending."
-    paintBuildingOutline(selectionGfx, selectedSpec, building, VISION_BLUE, 3, 0.12);
-    selectionLayer.visible = true;
+    const state = islandStates.get(selectionSpec.id);
+    if (!state) {
+      inspector.close();
+      inspectorMulti.close();
+      repaintSelection();
+      return;
+    }
+    if (selection.size === 1) {
+      const id = [...selection][0]!;
+      const building = selectionSpec.buildings.find((b) => b.id === id);
+      inspectorMulti.close();
+      if (building) {
+        inspector.open({ spec: selectionSpec, state, building });
+      } else {
+        inspector.close();
+      }
+    } else {
+      inspector.close();
+      const buildings = selectionSpec.buildings.filter((b) => selection.has(b.id));
+      inspectorMulti.open({ spec: selectionSpec, state, buildings });
+    }
+    selectedSpec = selectionSpec;
+    repaintSelection();
+  }
+
+  /** Replace the selection with a single building on `spec`. */
+  function setSingleSelected(spec: IslandSpec, id: string): void {
+    selection.clear();
+    selection.add(id);
+    selectionSpec = spec;
+    syncSelectionUi();
+  }
+
+  /** Toggle `id` in the selection. A different island clears first (selection
+   *  is always confined to one island). */
+  function toggleSelected(spec: IslandSpec, id: string): void {
+    if (selectionSpec && selectionSpec.id !== spec.id) selection.clear();
+    selectionSpec = spec;
+    if (selection.has(id)) selection.delete(id);
+    else selection.add(id);
+    syncSelectionUi();
+  }
+
+  /** Clear the entire selection and close both inspectors. */
+  function clearSelection(): void {
+    selection.clear();
+    selectionSpec = null;
+    syncSelectionUi();
   }
 
   /** Whether any input mode is armed (drone-launch / settlement-launch /
@@ -1716,11 +1817,9 @@ async function main(): Promise<void> {
           const result = await gatewayResult;
           if (!result.ok) return;
           drainRoutesForBuilding(worldState, target.building.id);
-          inspector.close();
-          selectedSpec = null;
+          clearSelection();
           hoveredBuilding = null;
           repaintHover();
-          repaintSelection();
           rebuildWorldLayers();
         })();
         return;
@@ -1731,19 +1830,15 @@ async function main(): Promise<void> {
       drainRoutesForBuilding(worldState, target.building.id);
       // Close the inspector + clear selection BEFORE the layer rebuild so
       // the stale-selection guard in repaintSelection doesn't fire.
-      inspector.close();
-      selectedSpec = null;
+      clearSelection();
       hoveredBuilding = null;
       repaintHover();
-      repaintSelection();
       rebuildWorldLayers();
     },
     onMove: (target: InspectorTarget) => {
-      inspector.close();
-      selectedSpec = null;
+      clearSelection();
       hoveredBuilding = null;
       repaintHover();
-      repaintSelection();
       placementUi.beginRelocate(target.building);
     },
     onSetActiveFloors: (target: InspectorTarget, newDisabledFloors: number) => {
@@ -1923,6 +2018,110 @@ async function main(): Promise<void> {
     },
   });
 
+  // §4 multi-building inspector — shown when ≥2 buildings are selected. Mounts
+  // in panel Zone L (mutually exclusive with the single inspector in Zone R).
+  // Callbacks loop the same gateway mutations the single inspector uses, then
+  // rebuild the affected render layers and re-open the panel to recompute its
+  // derived labels (fit count, ignore-cap union).
+  const inspectorMulti = mountInspectorMulti(document.body, {
+    onDestroy: (t: MultiTarget) => {
+      void (async () => {
+        // Aggregate refund/scrap preview, summed across the selection (mirrors
+        // the single inspector's previewScrapForBuilding / previewRefundForBuilding,
+        // which are module-private there — replicated locally over the basket).
+        let scrap = 0;
+        const refund: Partial<Record<ResourceId, number>> = {};
+        for (const b of t.buildings) {
+          const def = BUILDING_DEFS[b.defId];
+          const cost = totalInvestedCost(b, def);
+          const costSum = Object.values(cost).reduce((sum, n) => sum + n, 0);
+          scrap += Math.floor(costSum * 0.3);
+          for (const [r, n] of Object.entries(cost) as Array<[ResourceId, number]>) {
+            if (n <= 0) continue;
+            const half = Math.floor(n / 2);
+            if (half > 0) refund[r as ResourceId] = (refund[r as ResourceId] ?? 0) + half;
+          }
+        }
+        const refundStr = Object.entries(refund)
+          .map(([r, n]) => `+${n} ${r.toUpperCase().replace(/_/g, ' ')}`)
+          .join(', ');
+        const n = t.buildings.length;
+        const msg = refundStr
+          ? `Demolish ${n} buildings? Returns ${scrap} scrap and ${refundStr}. This is irreversible.`
+          : `Demolish ${n} buildings? Returns ${scrap} scrap. This is irreversible.`;
+        if (!window.confirm(msg)) return;
+        for (const b of t.buildings) {
+          const r = await runGateway(gateway.demolishBuilding(t.spec.id, b.id));
+          if (!r.ok) continue;
+          drainRoutesForBuilding(worldState, b.id);
+        }
+        clearSelection();
+        rebuildWorldLayers();
+        repaintHover();
+      })();
+    },
+    upgradeFitCount: (t: MultiTarget) => planMassUpgrade(t.state, [...selection]).length,
+    onUpgrade: (t: MultiTarget) => {
+      void (async () => {
+        const ids = planMassUpgrade(t.state, [...selection]);
+        for (const id of ids) {
+          const r = await runGateway(gateway.applyUpgrade(t.spec.id, id));
+          if (!r.ok && r.reason === 'queue-full') break;
+          // Other failures (e.g. raced affordability) skip and continue.
+        }
+        rebuildWorldLayers();
+        buildingAlertsOverlay.invalidate();
+        // Re-open to recompute the "Upgrade (n fit)" label against the now-
+        // depleted slots/inventory. Re-derive the target from live selection.
+        const next = multiTarget();
+        if (next) inspectorMulti.open(next);
+      })();
+    },
+    onEnable: (t: MultiTarget) => {
+      void (async () => {
+        for (const b of t.buildings) {
+          await runGateway(gateway.setBuildingActiveFloors(t.spec.id, b.id, 0));
+        }
+        rebuildWorldLayers();
+        const next = multiTarget();
+        if (next) inspectorMulti.open(next);
+      })();
+    },
+    onDisable: (t: MultiTarget) => {
+      void (async () => {
+        for (const b of t.buildings) {
+          if (activeFloors(b) <= 0) continue;
+          const before = activeFloors(b);
+          const r = await runGateway(
+            gateway.setBuildingActiveFloors(t.spec.id, b.id, rawFloorLevel(b) + 1),
+          );
+          if (!r.ok) continue;
+          if (before > 0 && activeFloors(b) === 0) drainRoutesForBuilding(worldState, b.id);
+        }
+        rebuildWorldLayers();
+        buildingAlertsOverlay.invalidate();
+        const next = multiTarget();
+        if (next) inspectorMulti.open(next);
+      })();
+    },
+    onSetIgnoreCap: (t: MultiTarget, resource: ResourceId, value: boolean) => {
+      void (async () => {
+        for (const b of t.buildings) {
+          const recipe = resolveRecipe(BUILDING_DEFS[b.defId], b, t.spec.terrainAt);
+          if (!recipe?.outputs[resource]) continue;
+          await runGateway(gateway.setIgnoreCap(t.spec.id, b.id, resource, value));
+        }
+        buildingAlertsOverlay.invalidate();
+        const next = multiTarget();
+        if (next) inspectorMulti.open(next);
+      })();
+    },
+    onMove: (_t: MultiTarget) => {
+      // Group relocate is implemented in T11; keep the selection intact.
+      console.warn('group move: implemented in T11');
+    },
+  });
+
   // §3.4 Land Reclamation Hub lobe badges — numbered "#1…#N" overlays at each
   // constituent centre, visible only while the inspector targets a Hub. Lives in
   // screen space so labels stay readable at any zoom; updated each frame below.
@@ -2098,10 +2297,8 @@ async function main(): Promise<void> {
     // §4 inspector: Escape also closes the inspector + clears the
     // selection outline. Idempotent; closing while already hidden is a
     // no-op.
-    if (inspector.isVisible()) {
-      inspector.close();
-      selectedSpec = null;
-      repaintSelection();
+    if (inspector.isVisible() || inspectorMulti.isVisible()) {
+      clearSelection();
     }
   });
 
@@ -2552,6 +2749,12 @@ async function main(): Promise<void> {
     if (selectedSpec) {
       selectedSpec = islandSpecsById.get(selectedSpec.id) ?? null;
     }
+    // §4 keep the multi-select spec pointer fresh after a world re-mint so
+    // repaintSelection paints against current geometry (and prunes by id).
+    if (selectionSpec) {
+      selectionSpec = islandSpecsById.get(selectionSpec.id) ?? null;
+      if (!selectionSpec) selection.clear();
+    }
     if (hoveredBuilding) {
       const spec = islandSpecsById.get(hoveredBuilding.spec.id);
       if (spec) {
@@ -2980,15 +3183,15 @@ async function main(): Promise<void> {
         // hover state points at a building id that no longer resolves (was
         // re-minted during the merge), clear both so repaintSelection's
         // stale-selection guard fires cleanly rather than leaving a ghost outline.
-        const selectedIslandIdNow = inspector.getSelectedIslandId();
-        const selectedBuildingIdNow = inspector.getSelectedBuildingId();
-        if (selectedIslandIdNow !== null && selectedBuildingIdNow !== null) {
-          const owningSpec = islandSpecsById.get(selectedIslandIdNow);
-          const stillExists = owningSpec?.buildings.some((b) => b.id === selectedBuildingIdNow) ?? false;
-          if (!stillExists) {
-            inspector.close();
-            selectedSpec = null;
-          }
+        // §4: if any selected building's id no longer resolves on its owning
+        // spec (re-minted by the merge), clear the whole selection so neither
+        // inspector keeps a ghost target.
+        if (selectionSpec) {
+          const owningSpec = islandSpecsById.get(selectionSpec.id);
+          const allExist =
+            owningSpec != null &&
+            [...selection].every((id) => owningSpec.buildings.some((b) => b.id === id));
+          if (!allExist) clearSelection();
         }
         if (hoveredBuilding) {
           const hovSpec = islandSpecsById.get(hoveredBuilding.spec.id);
