@@ -1057,6 +1057,23 @@ function getDerivationsMemo(
  *          Drives inventory updates and the event finder.
  *   `power`: aggregated W produced/consumed and the resulting power_factor.
  */
+/** Effective inventory for `resolveRecipe` variant selection. `ctx.inventory`
+ *  is a PARTIAL pooled override (§13.3 lattice / shared-network), so a bare
+ *  `ctx?.inventory ?? state.inventory` lets an empty or partial pool HIDE the
+ *  island's own stock — breaking §8.x alt-input variant selection (e.g. a
+ *  Chlor-Alkali Plant with its own mercury never picks the mercury-cell recipe
+ *  on a shared-network island that pools nothing). Merge the pool OVER the
+ *  island's own inventory: pooled values win for shared keys, own stock is kept
+ *  for everything else. Returns the bare `state.inventory` (no allocation) when
+ *  there is no override — the common, non-networked case. Mirrors the per-key
+ *  fallback the heat-fuel path already uses (see the `coalStock` note below). */
+export function recipeInventoryFor(
+  state: IslandState,
+  ctx?: RatesContext,
+): Record<ResourceId, number> {
+  return ctx?.inventory ? { ...state.inventory, ...ctx.inventory } : state.inventory;
+}
+
 export function computeRates(
   state: IslandState,
   ctx?: RatesContext,
@@ -1117,6 +1134,9 @@ export function computeRates(
     activeBonusMul = 1,
     terrainAt,
   } = ctx ?? {};
+  // §8.x alt-input variant selection reads the island's OWN inventory merged
+  // under any partial pooled override (computed once per call, not per building).
+  const recipeInv = recipeInventoryFor(state, ctx);
   // Filter out invalid buildings once so they don't participate in heat,
   // buffs, spaceport checks, or power balance. Under-construction buildings
   // (constructionRemainingMs > 0) are ALSO filtered out — they consume
@@ -1386,7 +1406,7 @@ export function computeRates(
     // to the §6.7 scrap-substitution variant when pig_iron is empty but
     // scrap is on hand (inventory snapshot passed through here).
     const def = defs[b.defId];
-    const recipe = resolveRecipe(def, b, terrainAt, ctx?.inventory ?? state.inventory);
+    const recipe = resolveRecipe(def, b, terrainAt, recipeInv);
     if (!recipe) continue;
     // §4.5 buff-adjacency multiplier — computed once per building from its
     // 4-neighbor footprint border. Captured here so pass 2's nominal-rate
@@ -1754,7 +1774,7 @@ export function computeRates(
       // recipe presence here, so the variant chosen doesn't matter — but we
       // pipe it through `resolveRecipe` for symmetry with pass 1 (no caller
       // confusion about which lookup is "the" lookup).
-      const recipe = resolveRecipe(def, b, terrainAt, ctx?.inventory ?? state.inventory);
+      const recipe = resolveRecipe(def, b, terrainAt, recipeInv);
       // §5.1 throughput-scaled draw: compose the NOMINAL gates that determine
       // how much work the building actually does this tick. Running buildings
       // (baseRate > 0) use the pass-2.5 flow-solver gate g, which subsumes the
@@ -2431,6 +2451,8 @@ export function applySegmentSideEffects(
   maxCap: number,
   utilById: ReadonlyMap<string, number>,
 ): void {
+  // §8.x alt-input variant selection (same merged view as computeRates).
+  const recipeInv = recipeInventoryFor(state, ctx);
   // §13 auto-flip: first local production of ai_core / ascendant_core.
   // Inside the dtSec > 0 branch deliberately — a zero-length forced
   // segment integrates nothing, and a positive rate over zero seconds
@@ -2482,7 +2504,7 @@ export function applySegmentSideEffects(
       if (!has) continue;
     }
 
-    const recipe = resolveRecipe(def, b, ctx?.terrainAt, ctx?.inventory ?? state.inventory);
+    const recipe = resolveRecipe(def, b, ctx?.terrainAt, recipeInv);
     const cyclesThisSegment = recipe
       ? (rateById.get(b.id) ?? 0) * dtSec
       : dtSec / 60;
