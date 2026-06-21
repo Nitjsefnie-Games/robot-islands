@@ -33,6 +33,12 @@ import type { StorageCategory } from './storage-categories.js';
 // are pure types — `import type` strips the edge at compile time.
 import type { Biome, IslandSpec } from './world.js';
 
+/** §6.7 demolition recovery rate: demolishing a building returns
+ *  `floor(SCRAP_RECOVERY_FRACTION × Σ totalInvestedCost)` Scrap. Shared by
+ *  `demolishBuilding` (placement.ts) and the Demolition Yard derived recipe
+ *  (demolition-yard.ts) so the two can never drift. */
+export const SCRAP_RECOVERY_FRACTION = 0.3;
+
 /** SPEC §8 building category. Drives the per-category Specialization passive
  *  buff (§9.4) and the Building Catalog UI grouping. */
 export type BuildingCategory =
