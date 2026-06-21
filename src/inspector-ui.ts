@@ -2541,11 +2541,10 @@ export function mountInspectorUi(
     const credit = previewScrapForBuilding(building);
     demolishBtn.textContent = `▼ DEMOLISH · +${credit} SCRAP`;
 
-    // Move button — relocate fee preview, ocean defs can't relocate, greyed
-    // when the fee is unaffordable.
-    if (def.oceanPlacement === true) {
-      moveBtn.style.display = 'none';
-    } else {
+    // Move button — relocate fee preview, greyed when the fee is unaffordable.
+    // Ocean platforms relocate by cell (the relocate flow is ocean-aware), so
+    // they get the same Move affordance as land buildings.
+    {
       moveBtn.style.display = '';
       const fee = relocateFee(building, def);
       const feeStr = Object.entries(fee)

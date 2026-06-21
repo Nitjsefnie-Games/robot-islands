@@ -92,7 +92,7 @@ export type RelocateResult =
   | { readonly ok: true; readonly charged: Partial<Record<ResourceId, number>> }
   | {
       readonly ok: false;
-      readonly reason: PlacementReason | 'not-found';
+      readonly reason: PlacementReason | OceanPlacementReason | 'not-found';
       readonly missing?: Partial<Record<ResourceId, number>>;
     };
 
@@ -1096,10 +1096,34 @@ export function relocateBuilding(
   newX: number,
   newY: number,
   rotation?: Rotation,
+  world?: WorldState,
 ): RelocateResult {
   const b = spec.buildings.find((bb) => bb.id === id);
   if (!b) return { ok: false, reason: 'not-found' };
   const def = BUILDING_DEFS[b.defId];
+  // §4 ocean platforms relocate by CELL: validate the destination ocean cell
+  // (terrain / land-overlap / anchor-in-range) instead of the land grid, keep
+  // the existing anchor, charge the half relocate fee, and snap b.x/b.y to the
+  // new cell origin. Needs `world` for the ocean validator.
+  if (def.oceanPlacement === true) {
+    if (!world) return { ok: false, reason: 'def-is-ocean' };
+    const cellX = Math.floor((spec.cx + newX) / CELL_SIZE_TILES);
+    const cellY = Math.floor((spec.cy + newY) / CELL_SIZE_TILES);
+    const ov = validateOceanPlacement(world, b.defId, cellX, cellY, world.depthRevealedCells);
+    if (!ov.ok) return { ok: false, reason: ov.reason ?? 'terrain-mismatch' };
+    const oceanFee = relocateFee(b, def);
+    const oceanMissing = affordabilityShortfall(state.inventory, oceanFee);
+    if (Object.keys(oceanMissing).length > 0) {
+      return { ok: false, reason: 'insufficient-resources', missing: oceanMissing };
+    }
+    for (const [r, n] of Object.entries(oceanFee) as Array<[ResourceId, number]>) {
+      state.inventory[r] = (state.inventory[r] ?? 0) - n;
+    }
+    const omut = b as { x: number; y: number };
+    omut.x = cellX * CELL_SIZE_TILES - spec.cx;
+    omut.y = cellY * CELL_SIZE_TILES - spec.cy;
+    return { ok: true, charged: oceanFee };
+  }
   const rot = (rotation ?? b.rotation ?? 0) as Rotation;
   const v = validatePlacement(spec, state, b.defId, newX, newY, rot, DEFAULT_GRAPH, id, true);
   if (!v.ok) {

@@ -1274,6 +1274,40 @@ describe('totalInvestedCost', () => {
   });
 });
 
+describe('relocateBuilding — §4 ocean platform move', () => {
+  it('moves an ocean platform to a new valid cell (charges the half-fee)', () => {
+    const cells = oceanCells([
+      [2, 2, 'shallows'],
+      [5, 5, 'shallows'],
+    ]);
+    const home = nearbyPopulatedIsland();
+    home.buildings = [
+      { id: 'owe', defId: 'open_water_extractor', x: 2 * 16 - home.cx, y: 2 * 16 - home.cy, anchorIslandId: 'home' },
+    ] as never;
+    const world = makeOceanWorld(cells, [home]);
+    const state = makeState(home, 30);
+    const r = relocateBuilding(home, state, 'owe', 5 * 16 - home.cx, 5 * 16 - home.cy, 0, world);
+    expect(r.ok).toBe(true);
+    expect((home.buildings[0] as { x: number }).x).toBe(5 * 16 - home.cx);
+    expect((home.buildings[0] as { y: number }).y).toBe(5 * 16 - home.cy);
+  });
+
+  it('rejects a move onto land/invalid terrain, building unmoved', () => {
+    const cells = oceanCells([[2, 2, 'shallows']]); // (8,8) stays implicit deep — fine; use a land overlap instead
+    const home = nearbyPopulatedIsland();
+    const origX = 2 * 16 - home.cx;
+    home.buildings = [
+      { id: 'owe', defId: 'open_water_extractor', x: origX, y: 2 * 16 - home.cy, anchorIslandId: 'home' },
+    ] as never;
+    const world = makeOceanWorld(cells, [home]);
+    const state = makeState(home, 30);
+    // Move onto the home island's own tiles (cell 0,0) → land-overlap rejection.
+    const r = relocateBuilding(home, state, 'owe', 0 - home.cx, 0 - home.cy, 0, world);
+    expect(r.ok).toBe(false);
+    expect((home.buildings[0] as { x: number }).x).toBe(origX);
+  });
+});
+
 describe('§3 ocean building footprint validation', () => {
   it('rejects Vent Tap placement when footprint extends beyond a vent cluster', () => {
     // Vent Tap is 2×2 cells (`SHAPES.square2`), terrainReqs: ['hydrothermal_vent'].
