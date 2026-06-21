@@ -32,6 +32,7 @@ Legend: **L** = live · **P** = partial · **N** = not implemented.
 | §4.7 Maintenance | P | Operating-time accrual, threshold + 4h linear degrade, auto-maintain materials check, atomic recipe consumption, most-degraded targeting policy. Only buildings with productive recipe outputs accrue operating time — power producers / storage / antennas / drone pads / shipyards skip accrual since their maintenance factor has no effect on output. Eternal Servitor flag is honoured; Servitor Conversion Kit + Reality Forge mechanic (`convertToServitor` in `buildings.ts`, inspector UI button) is L. |
 | §4.8 Construction queue | L | Running slots + queue depth, enqueue when full, FIFO promotion on completion, cancel refund, level badge. |
 | §4.9 Floor upgrades | L | Floors 2–10 cost `ceil(0.8 × placementCost)`; floors >10 use `ceil(0.8 × 1.15^(L−10) × placementCost)`, unbounded. Effect scaling `×(1+L)` is also unbounded. Logistics buildings scale their hosted route's capacity & speed `×(1+L)` instead (§2.4). |
+| §4.10 Mass building actions | L | Client-side multi-select (shift-click toggle + shift-drag box, single-island scope); inspector mass panel (`inspector-multi.ts`) at ≥2 selected. Mass destroy (aggregate refund), upgrade (lowest-floor-first / skip-unaffordable / `freeSlots`-capped, no max-floor), enable/disable, ignore-cap union, all-or-nothing group move (`mass-actions.ts`). No new authoritative op — sequences existing intents. |
 | §5.1 Electrical grid | L | Per-island brownout factor, active-only summing, gating predicate. |
 | §5.2 Heat adjacency | L | M:N floor-scaled aggregation (consumer pools all adjacent sources; free-first then cheapest-coal; finite capacity split proportionally), fuel-burn ∝ delivered heat. All consumers carry a kW `heatDemandKW` (boolean-heat retired); capacity scales 1+L (power-output), demand scales 1+0.5L (power-draw). |
 | §5.3 Inter-island power | L | Per-component binary-gated unified pool: gate passes iff Σ cable capacity ≥ min(Σ per-island surplus, Σ per-island deficit). Unified component shares one brownout `min(1, ΣP/ΣC)`; gate fail = cables inert that tick. T5 Spacetime Anchor route counts as infinite-capacity (always passes). |
@@ -664,6 +665,35 @@ The L>10 curve starts at 92% of a fresh build (floor 11 = 0.8 × 1.15) and grows
 **Group move (rigid-cluster relocate).** The multi-select Move action relocates a whole selected cluster as a **rigid translation**: the anchor (first member) follows the cursor and every other member shifts by the same `(dx, dy)`, preserving each building's relative offset and its own rotation. The drop is **all-or-nothing** — `validateGroupRelocate` (in `mass-actions.ts`) gates the entire cluster on two independent checks: (1) no moved-member-vs-moved-member overlap on post-move world tiles, and (2) every member valid against the island (in-bounds, biome/tier gate, no overlap with a NON-selected building), each validated against a clone with all moving members removed so a sibling's vacated tile reads as free. The ghost tints green only when the whole cluster is valid; an invalid drop is a no-op that stays armed. On commit each member relocates via the same per-building half-fee `relocateBuilding` primitive, so the cluster charges the **summed** half-fees (`groupRelocateFee`). The selection is preserved across the move; outlines repaint at the new positions.
 
 **Floor-disable (active floors).** A building's **active floor count** is `displayedFloorLevel − disabledFloors`, clamped to `[0, displayedFloorLevel]`. `disabledFloors` (0 / absent = every built floor active) counts how many of the BUILT floors, from the top, are switched off. Throughput, power draw and output, storage capacity, and §4.5 cluster contribution all scale by the ACTIVE floor count, not the built count: `activeFloors` / `activeFloorLevel` in `buildings.ts`. Lowering storage capacity immediately **clamps overflow inventory** down to the new cap. A building with **0 active floors** is fully non-operational: it is excluded from cluster participation (`participatesInCluster`), draws/produces no power, runs no recipe, contributes no flow-solver gates, and freezes `operatingMs` accrual (no wear or maintenance degradation). A **partially** floor-disabled building (≥ 1 active floor) is operational and still wears. Switching floors off/on is **free and instantly reversible** via the inspector steppers (−/+ step one floor; Off = all off; Max = all on); each step calls `setBuildingActiveFloors`, which also moves the building's storage-cap contribution. Crossing into **0 active floors** triggers a one-way `drainRoutesForBuilding` call (routes are not restored on re-enable); re-enabling from a partial state never drains. Steppers are hidden while the building is under construction. (The former binary `disabled` flag is removed; old saves fold `disabled === true` into `disabledFloors = floorLevel + 1` at the v23→v24 migration.)
+
+### 4.10 Mass Building Actions
+
+The inspector can act on **many buildings at once** so a player isn't forced to repeat per-building operations across a large island. Mass actions add **no new authoritative operation**: each one is a thin orchestration that **sequences the existing per-building intents** (destroy, upgrade, enable/disable, ignore-cap toggle, relocate) over the selected set. The server therefore re-validates each batched mutation exactly as it would a single one — there is no aggregate "mass" mutation to trust (Appendix C).
+
+**Selection model (client-side UI state).** The selection is **purely a client UI concept** — not persisted, not part of `IslandState`, and never sent as an authoritative entity. It is **scoped to a single island** (selecting a building on a different island starts a fresh selection). It is built two ways:
+
+* **Shift-click** toggles one building in or out of the selection.
+* **Shift-drag** draws a rubber-band box and adds **every building whose footprint intersects the box** (`buildingsInBox` in `mass-actions.ts`).
+
+A plain (non-shift) click is an ordinary **single-select**. Pressing **Escape** or clicking **empty ocean** clears the selection.
+
+**Mass-action panel.** When **≥ 2** buildings are selected the inspector swaps to the multi-select panel (`inspector-multi.ts`), showing the selection **count** and a **type breakdown** (`selectionBreakdown`) above the action buttons below.
+
+**Destroy.** One **aggregate** scrap+refund confirmation (the summed Scrap recovery and 50% material refund across the selection, §6.7), then each building is demolished via the per-building `demolishBuilding` primitive.
+
+**Upgrade.** Queues floor upgrades for as many selected buildings as fit the free build+queue slots:
+
+```
+freeSlots = (parallelBuildSlots − inProgressBuildCount) + (queuedBuildSlots − queuedBuildCount)
+```
+
+(see §4.8 for the slot math). `planMassUpgrade` picks candidates **lowest current floor first** (tie-break: building id), and as it walks them it **skips any building whose upgrade cost (§4.9) can't be paid from the depleting running inventory** — affordability is checked against a running copy that each accepted upgrade decrements, so the n-th pick sees what the first n−1 already spent. There is **no max-floor cap** (`applyUpgrade` has none — §4.9 "No hard cap"). The button reads **"Upgrade (n fit)"** where n is the count the plan will actually enqueue.
+
+**Enable / Disable.** Two separate buttons: **Disable** switches **all floors** of every selected building off (`setBuildingActiveFloors` → 0 active, §4.9 Floor-disable), **Enable** re-enables all floors. (Disabling all floors carries the one-way route-drain of §4.9.)
+
+**Ignore-cap.** Per-resource checkboxes drawn over the **union of the selected buildings' outputs** (`ignoreCapUnion`). Toggling a resource sets the §4.6 ignore-cap override on **every selected building that outputs that resource** (buildings that don't output it are untouched).
+
+**Move.** A rigid-cluster, all-or-nothing group relocate — see the **Group move** paragraph in §4.9, which `validateGroupRelocate` gates. Each moved member pays its **own 50% relocate fee** (the cluster charges the summed half-fees).
 
 \---
 
