@@ -127,6 +127,7 @@ import { computeCableNetworkBalance, drainRoutesForBuilding, routeSourceTile, ti
 import { insertBendOnSegment, pickRouteAt, pickWaypointAt } from './route-bend.js';
 import { RouteBendOverlay } from './route-bend-overlay.js';
 import { crossIslandNeighbors, latticeInventory, latticeStorageCaps } from './lattice.js';
+import { buildingIslandIndex, conduitClusterUnions } from './conduits.js';
 import { mountSettlementUi } from './settlement-ui.js';
 import { mountOrbitalUi } from './orbital-ui.js';
 import { mountWeatherOverlay } from './weather-overlay.js';
@@ -163,6 +164,39 @@ const WHEEL_ZOOM_STEP = 1.0015;
 /** World half-extent (tiles) for the cell-grid overlay. Covers the demo area
  *  plus margin; with R=16 the cell grid still spans many cells. */
 const WORLD_HALF_SIZE_TILES = 250;
+
+/** §4.5 per-island conduit cluster data, computed once per tick. Returns a
+ *  per-island lookup of the union pairs touching that island plus the remote
+ *  (other-island) buildings those pairs reference — the two fields each
+ *  RatesContext threads into `getDerivationsMemo`. When `world.conduitLinks` is
+ *  empty `conduitClusterUnions` returns [], so every island yields
+ *  { pairs: [], remote: [] } and the economy stays byte-identically inert
+ *  (the signature/memo gate those empties out). Mirrors economy-advance.ts. */
+function makeConduitDataFor(
+  world: WorldState,
+): (islandId: string) => { pairs: ReadonlyArray<readonly [string, string]>; remote: PlacedBuilding[] } {
+  const unionsAll = conduitClusterUnions(world);
+  const idxC = buildingIslandIndex(world);
+  const bldById = new Map<string, PlacedBuilding>();
+  if (unionsAll.length > 0)
+    for (const isl of world.islands) for (const b of isl.buildings) bldById.set(b.id, b);
+  const cache = new Map<string, { pairs: ReadonlyArray<readonly [string, string]>; remote: PlacedBuilding[] }>();
+  return (islandId: string) => {
+    const cached = cache.get(islandId);
+    if (cached) return cached;
+    const pairs = unionsAll.filter(([a, b]) => idxC.get(a) === islandId || idxC.get(b) === islandId);
+    const remote = new Map<string, PlacedBuilding>();
+    for (const [a, b] of pairs)
+      for (const id of [a, b])
+        if (idxC.get(id) !== islandId) {
+          const ob = bldById.get(id);
+          if (ob) remote.set(id, ob);
+        }
+    const data = { pairs, remote: [...remote.values()] };
+    cache.set(islandId, data);
+    return data;
+  };
+}
 
 async function main(): Promise<void> {
   const mountEl = document.getElementById('app');
@@ -3088,6 +3122,7 @@ async function main(): Promise<void> {
         if (neighbors) crossIslandById.set(id, neighbors);
       }
     }
+    const conduitDataFor = makeConduitDataFor(worldState);
     const solarBoostByIsland = new Map<string, number>();
     for (const spec of worldState.islands) {
       if (!spec.populated) continue;
@@ -3107,6 +3142,8 @@ async function main(): Promise<void> {
         terrainAt: spec?.terrainAt,
         inventory: isLatticeIsland ? unifiedInv : undefined,
         crossIsland: crossIslandById.get(id),
+        conduitUnions: conduitDataFor(id).pairs,
+        conduitRemoteAttached: conduitDataFor(id).remote,
         caps: isLatticeIsland ? unifiedCaps : undefined,
         geothermalActive: spec?.modifiers.includes('geothermal_active') === true,
         solarBoost: solarBoostByIsland.get(id),
@@ -3131,6 +3168,8 @@ async function main(): Promise<void> {
       terrainAt: postTickActiveP?.terrainAt,
       inventory: postTickLattice ? unifiedInv : undefined,
       crossIsland: crossIslandById.get(postTickActiveS.id),
+      conduitUnions: conduitDataFor(postTickActiveS.id).pairs,
+      conduitRemoteAttached: conduitDataFor(postTickActiveS.id).remote,
       caps: postTickLattice ? unifiedCaps : undefined,
       cableComponent: postTickCableComponent,
       geothermalActive: postTickGeothermal,
@@ -3160,6 +3199,8 @@ async function main(): Promise<void> {
         terrainAt: activeP?.terrainAt,
         inventory: unifiedInv,
         crossIsland: crossIslandById.get(activeS.id),
+        conduitUnions: conduitDataFor(activeS.id).pairs,
+        conduitRemoteAttached: conduitDataFor(activeS.id).remote,
         caps: unifiedCaps,
         cableComponent: activeCableComponent,
         geothermalActive: activeGeothermal,
@@ -3189,6 +3230,7 @@ async function main(): Promise<void> {
         if (neighbors) crossIslandById.set(id, neighbors);
       }
     }
+    const conduitDataFor = makeConduitDataFor(worldState);
 
     const solarBoostByIsland = new Map<string, number>();
     for (const spec of worldState.islands) {
@@ -3240,6 +3282,8 @@ async function main(): Promise<void> {
         terrainAt: spec?.terrainAt,
         inventory: isLatticeIsland ? unifiedInv : sharedInventory,
         crossIsland,
+        conduitUnions: conduitDataFor(s.id).pairs,
+        conduitRemoteAttached: conduitDataFor(s.id).remote,
         caps: isLatticeIsland ? unifiedCaps : sharedCaps,
         cableComponent,
         geothermalActive,

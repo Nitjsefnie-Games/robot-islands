@@ -187,6 +187,17 @@ export interface RatesContext {
    *  as neighbors for buff-adjacency and gate-adjacency despite physical
    *  distance. */
   readonly crossIsland?: ReadonlyArray<PlacedBuilding>;
+  /** §4.5 conduit cluster unions: same-category building-id pairs to union for
+   *  the cluster bonus (from `conduitClusterUnions`, filtered to pairs touching
+   *  THIS island). Threaded into `clusterBonusMuls` so wired producers cluster
+   *  across distance. Empty/absent ⇒ no conduit effect (inert). */
+  readonly conduitUnions?: ReadonlyArray<readonly [string, string]>;
+  /** §4.5 conduit cross-island remotes: buildings on OTHER islands referenced by
+   *  this island's `conduitUnions`. Concatenated into the cluster set so a
+   *  cross-island union resolves (the union-find needs both endpoints present).
+   *  Their resulting bonus is never read (remote buildings produce on their own
+   *  island's tick) — same safety rationale as the under-construction note. */
+  readonly conduitRemoteAttached?: ReadonlyArray<PlacedBuilding>;
   /** §13.3 Omniscient Lattice: unified storage-cap override. When provided,
    *  `cap()` reads from this map instead of the local island storageCaps,
    *  enabling summed caps across the Lattice network. */
@@ -954,6 +965,8 @@ function derivationsSignature(
   state: IslandState,
   geothermalActive: boolean,
   crossIsland: ReadonlyArray<PlacedBuilding> | undefined,
+  conduitUnions: ReadonlyArray<readonly [string, string]> | undefined,
+  conduitRemoteAttached: ReadonlyArray<PlacedBuilding> | undefined,
 ): string {
   const parts: string[] = [
     String(state.level),
@@ -972,6 +985,20 @@ function derivationsSignature(
     parts.push('#x');
     for (const cb of crossIsland) parts.push(`${cb.id},${cb.defId}`);
   }
+  // §4.5 conduit unions / cross-island remotes. Gated on length > 0 EXACTLY as
+  // the `#x` block above so an empty-conduitLinks world produces a byte-
+  // identical signature to the pre-conduit code (inert-when-empty invariant —
+  // protects the catch-up SHA-256 oracle). A change in wiring (the pairs) OR in
+  // a remote building's floor/active state must invalidate this island's memo.
+  if (conduitUnions !== undefined && conduitUnions.length > 0) {
+    parts.push('#cu');
+    for (const [a, b] of conduitUnions) parts.push(`${a},${b}`);
+  }
+  if (conduitRemoteAttached !== undefined && conduitRemoteAttached.length > 0) {
+    parts.push('#cr');
+    for (const rb of conduitRemoteAttached)
+      parts.push(`${rb.id},${rb.floorLevel ?? 0},${activeFloors(rb) <= 0 ? 1 : 0}`);
+  }
   return parts.join(';');
 }
 
@@ -980,8 +1007,16 @@ function getDerivationsMemo(
   defs: DefCatalog,
   geothermalActive: boolean,
   crossIsland: ReadonlyArray<PlacedBuilding> | undefined,
+  conduitUnions: ReadonlyArray<readonly [string, string]> | undefined,
+  conduitRemoteAttached: ReadonlyArray<PlacedBuilding> | undefined,
 ): DerivationsMemo {
-  const signature = derivationsSignature(state, geothermalActive, crossIsland);
+  const signature = derivationsSignature(
+    state,
+    geothermalActive,
+    crossIsland,
+    conduitUnions,
+    conduitRemoteAttached,
+  );
   const hit = derivationsMemoByIsland.get(state.id);
   if (hit !== undefined && hit.signature === signature && hit.defs === defs) {
     return hit;
@@ -992,10 +1027,21 @@ function getDerivationsMemo(
   // the floor being built; the resulting bonus is only ever read for operational
   // buildings (under-construction ones don't produce), so the wider set is safe.
   const clusterBuildings = state.buildings.filter((b) => participatesInCluster(b));
+  // §4.5 conduit unions: concat the cross-island remote attached buildings
+  // (filtered through participatesInCluster to match `clusterBuildings`) so the
+  // union-find in `clusterBonusMuls` can resolve a cross-island pair — both
+  // endpoints must be present in the input set. The returned map covers remote
+  // ids too, but only local operational buildings ever read their bonus.
+  // INERT: when there are no remotes AND no unions we pass the EXACT same
+  // arguments as before (`clusterBuildings`, `defs`, undefined), so the result
+  // and memo signature are byte-identical to the pre-conduit code.
+  const remoteAttached = (conduitRemoteAttached ?? []).filter((b) => participatesInCluster(b));
+  const clusterInput = remoteAttached.length > 0 ? clusterBuildings.concat(remoteAttached) : clusterBuildings;
+  const conduitUnionsArg = conduitUnions !== undefined && conduitUnions.length > 0 ? conduitUnions : undefined;
   const entry: DerivationsMemo = {
     signature,
     defs,
-    clusterMuls: clusterBonusMuls(clusterBuildings, defs),
+    clusterMuls: clusterBonusMuls(clusterInput, defs, conduitUnionsArg),
     exoticRules: skillUnlockedAdjacencyRules(state),
     baseSkillMul: effectiveSkillMultipliers(state),
     buffStack: new Map(),
@@ -1111,7 +1157,7 @@ export function computeRates(
   const validBuildings = state.buildings.filter((b) => isOperationalBuilding(b));
   // §perf-2026-06-10: signature-keyed memo for the adjacency/skill
   // derivations (see the DerivationsMemo block above computeRates).
-  const memo = getDerivationsMemo(state, defs, ctx?.geothermalActive ?? false, ctx?.crossIsland);
+  const memo = getDerivationsMemo(state, defs, ctx?.geothermalActive ?? false, ctx?.crossIsland, ctx?.conduitUnions, ctx?.conduitRemoteAttached);
   // §4.5 cluster-bonus multipliers — labelled once per tick for the whole
   // island; recipe-rate (computeBuffStack) and generator-power both read from
   // this map instead of re-deriving each building's cluster.
@@ -2640,7 +2686,7 @@ export function advanceIsland(
   // accidental mutation in dev. §perf-2026-06-10: read from the
   // signature-keyed memo (clone — the memoized base is never handed out).
   const baseMult = cloneSkillMultipliers(
-    getDerivationsMemo(state, defs, ctx?.geothermalActive ?? false, ctx?.crossIsland).baseSkillMul,
+    getDerivationsMemo(state, defs, ctx?.geothermalActive ?? false, ctx?.crossIsland, ctx?.conduitUnions, ctx?.conduitRemoteAttached).baseSkillMul,
   );
   Object.freeze(baseMult);  // shallow — covers all primitive fields
   // The caller's modifier bundle is stable for the duration of this advance
@@ -2713,7 +2759,7 @@ export function advanceIsland(
     // the signature; the memo hit path makes the steady-state cost a string
     // compare. Clone before layering — layerConditionalBonuses mutates.
     const skillMul = cloneSkillMultipliers(
-      getDerivationsMemo(state, defs, ctx?.geothermalActive ?? false, ctx?.crossIsland).baseSkillMul,
+      getDerivationsMemo(state, defs, ctx?.geothermalActive ?? false, ctx?.crossIsland, ctx?.conduitUnions, ctx?.conduitRemoteAttached).baseSkillMul,
     );
     // Per-segment WALL-clock evaluation (`t + wallOffset`, NOT end-of-advance
     // `nowMs`): a multi-hour offline catch-up must evaluate each segment's
