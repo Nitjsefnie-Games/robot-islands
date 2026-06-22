@@ -744,10 +744,17 @@ export function tickDrones(
 
   let cellsAddedThisTick = 0;
   for (const d of world.drones) {
-    // Terminal-status drones are kept in the array for UI/history but
-    // no longer participate in reveals or weather rolls.
+    // PERF/cleanup: PRUNE drones that were already terminal at the start of this
+    // tick. A terminal drone (returned / lost / stranded / delivered) is fully
+    // processed at its transition tick (cargo, telemetry flush, reveals) and
+    // nothing reads it afterward — the tick, the map repaint, and the drone
+    // ledger all skip terminal drones, and no history UI consumes them. Kept "for
+    // UI/history" they only piled up unbounded in world.drones and got walked
+    // every tick AND every render frame (e.g. 180 dead entries → ~137k
+    // isTerminalDroneStatus calls / 6s of idle play). A drone that goes terminal
+    // DURING this tick is still pushed below, so it persists for its transition
+    // tick and is dropped on the next — its processing is never skipped.
     if (isTerminalDroneStatus(d.status)) {
-      remaining.push(d);
       continue;
     }
 
