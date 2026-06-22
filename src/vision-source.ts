@@ -106,9 +106,32 @@ export function cellIntersectsVision(
  *  Pure. Bounded by each source's own AABB so the scan cost is
  *  O(∑ sourceArea / cellArea) — typically a few hundred cells total even
  *  with many islands and lighthouses. */
+// PERF: visibleCellsFromVision walks every cell of every vision source (and
+// cellIntersectsVision re-tests all sources per cell), and the weather/ocean/
+// hover overlays call it per frame — ~270k cellIntersectsVision calls / 5s of
+// IDLE play, though the result is a pure function of the source set, which only
+// changes when a populated island / lighthouse / weather source appears or moves.
+// Memoize on an exact source signature. The returned Set is read-only to callers
+// (.has lookups), so sharing the cached instance is safe.
+const visibleCellsMemo = new Map<string, Set<string>>();
+const VISIBLE_CELLS_MEMO_CAP = 64;
+
+function visionSourcesKey(sources: ReadonlyArray<VisionSource>): string {
+  let s = '';
+  for (const src of sources) {
+    s += src.kind === 'ellipse'
+      ? `e:${src.cx},${src.cy},${src.offsetX},${src.offsetY},${src.major},${src.minor};`
+      : `c:${src.cx},${src.cy},${src.radius};`;
+  }
+  return s;
+}
+
 export function visibleCellsFromVision(
   sources: ReadonlyArray<VisionSource>,
 ): Set<string> {
+  const key = visionSourcesKey(sources);
+  const cached = visibleCellsMemo.get(key);
+  if (cached !== undefined) return cached;
   const out = new Set<string>();
   for (const src of sources) {
     let minX: number;
@@ -140,6 +163,8 @@ export function visibleCellsFromVision(
       }
     }
   }
+  if (visibleCellsMemo.size >= VISIBLE_CELLS_MEMO_CAP) visibleCellsMemo.clear();
+  visibleCellsMemo.set(key, out);
   return out;
 }
 
