@@ -712,8 +712,11 @@ export interface TickVehiclesResult {
  *      reference the state will hold, so the auto-placed dock + starters
  *      are visible to the economy on the very next tick.
  *
- * All vehicles (including lost and arrived) are kept in `world.vehicles`
- * with their `status` field updated so the UI/history can display them.
+ * A vehicle that goes terminal (lost / arrived) THIS tick has its `status`
+ * field updated and stays in `world.vehicles` for its transition tick (so the
+ * arrival/loss is fully processed); the next `tickVehicles` prunes it, since
+ * nothing reads a terminal vehicle afterward (the UI map + ledger both filter
+ * to non-terminal). It is no longer retained indefinitely "for history".
  *
  * Per the load-bearing invariant in `persistence.test.ts` ("keeps
  * IslandState.buildings === IslandSpec.buildings"), we push all buildings
@@ -810,10 +813,18 @@ export function tickVehicles(
   let cellsAddedThisTick = 0;
 
   for (const v of world.vehicles) {
-    // Terminal-status vehicles are kept for UI/history but no longer
-    // participate in arrival processing.
+    // PERF/cleanup: PRUNE vehicles already terminal at the start of this tick.
+    // A terminal vehicle (lost / arrived) is fully processed at its transition
+    // tick (settlement, scan-buffer flush, reveals) and nothing reads it
+    // afterward — repaintVehicleLayer and repaintLedger (settlement-ui) both
+    // skip terminal vehicles, the §12.3 one-in-flight-per-target dup-check
+    // matches only `active`/undefined, and no history UI consumes them. Kept
+    // "for UI/history" they only piled up unbounded in world.vehicles and got
+    // walked every tick (client+server) and bloated saves. A vehicle that goes
+    // terminal DURING this tick is still pushed to `remaining` below, so it
+    // persists for its transition tick and is dropped on the next — its
+    // processing is never skipped. Mirrors the drone prune (ca49569).
     if (v.status === 'lost' || v.status === 'arrived') {
-      remaining.push(v);
       continue;
     }
 
