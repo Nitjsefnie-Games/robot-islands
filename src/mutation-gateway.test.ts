@@ -747,3 +747,100 @@ describe('makeLocalGateway — setScrapTarget parity', () => {
     expect(result).toEqual({ ok: false, error: 'building is not a demolition_yard' });
   });
 });
+
+function makeHomeWithConduits(defId: 'cluster_conduit' | 'lattice_conduit' = 'cluster_conduit') {
+  const now = Date.now();
+  const { world, islandStates } = createNewGame(now);
+  const home = world.islands.find((s) => s.id === 'home')!;
+  home.buildings.push(
+    { id: 'cc-1', defId, x: 0, y: 0, constructionRemainingMs: 0, placedAt: now },
+    { id: 'cc-2', defId, x: 2, y: 0, constructionRemainingMs: 0, placedAt: now },
+  );
+  islandStates.get('home')!.buildings = home.buildings;
+  return { now, world, islandStates, home };
+}
+
+describe('makeLocalGateway — conduit links', () => {
+  it('addConduitLink wires two valid same-island conduits', () => {
+    const { world, islandStates } = makeHomeWithConduits();
+    const gateway = makeLocalGateway(world, islandStates);
+    const result = unwrapGatewayResult(gateway.addConduitLink('cc-1', 'cc-2'));
+    expect(result.ok).toBe(true);
+    expect(world.conduitLinks).toHaveLength(1);
+    expect(world.conduitLinks[0]).toEqual({ a: 'cc-1', b: 'cc-2' });
+  });
+
+  it('addConduitLink rejects an illegal cross-island non-lattice pair', () => {
+    const now = Date.now();
+    const { world, islandStates } = createNewGame(now);
+    const colony = world.islands.find((s) => s.id !== 'home')!;
+    colony.populated = true;
+    colony.discovered = true;
+    islandStates.set(colony.id, makeInitialIslandState(colony, now));
+    const home = world.islands.find((s) => s.id === 'home')!;
+    home.buildings.push({ id: 'cc-1', defId: 'cluster_conduit', x: 0, y: 0, constructionRemainingMs: 0, placedAt: now });
+    colony.buildings.push({ id: 'cc-2', defId: 'cluster_conduit', x: 0, y: 0, constructionRemainingMs: 0, placedAt: now });
+    islandStates.get('home')!.buildings = home.buildings;
+    islandStates.get(colony.id)!.buildings = colony.buildings;
+
+    const gateway = makeLocalGateway(world, islandStates);
+    const result = unwrapGatewayResult(gateway.addConduitLink('cc-1', 'cc-2'));
+    expect(result.ok).toBe(false);
+    expect((result as { error: string }).error).toBe('cross-island-needs-lattice');
+    expect(world.conduitLinks).toHaveLength(0);
+  });
+
+  it('removeConduitLink drops an existing link', () => {
+    const { world, islandStates } = makeHomeWithConduits();
+    const gateway = makeLocalGateway(world, islandStates);
+    unwrapGatewayResult(gateway.addConduitLink('cc-1', 'cc-2'));
+    const result = unwrapGatewayResult(gateway.removeConduitLink('cc-1', 'cc-2'));
+    expect(result.ok).toBe(true);
+    expect(world.conduitLinks).toHaveLength(0);
+  });
+
+  it('demolishBuilding prunes links touching the demolished conduit', () => {
+    const { world, islandStates, home } = makeHomeWithConduits();
+    home.buildings.push({ id: 'cc-3', defId: 'cluster_conduit', x: 4, y: 0, constructionRemainingMs: 0, placedAt: Date.now() });
+    islandStates.get('home')!.buildings = home.buildings;
+    const gateway = makeLocalGateway(world, islandStates);
+    unwrapGatewayResult(gateway.addConduitLink('cc-1', 'cc-2'));
+    unwrapGatewayResult(gateway.addConduitLink('cc-2', 'cc-3'));
+    expect(world.conduitLinks).toHaveLength(2);
+
+    const demolish = unwrapGatewayResult(gateway.demolishBuilding('home', 'cc-2'));
+    expect(demolish.ok).toBe(true);
+    expect(world.conduitLinks).toHaveLength(0);
+    expect(home.buildings.some((b) => b.id === 'cc-2')).toBe(false);
+  });
+});
+
+describe('makeRemoteGateway — conduit link forwarding', () => {
+  it('forwards add-conduit-link', async () => {
+    let captured: { type: string; payload: unknown } | null = null;
+    const client: GameServerClient = {
+      sendIntent(type: string, payload: unknown) {
+        captured = { type, payload };
+        return Promise.resolve({ seq: 1, ok: true });
+      },
+      close() {},
+    };
+    const gateway = makeRemoteGateway(client);
+    await gateway.addConduitLink('cc-1', 'cc-2');
+    expect(captured).toEqual({ type: 'add-conduit-link', payload: { aId: 'cc-1', bId: 'cc-2' } });
+  });
+
+  it('forwards remove-conduit-link', async () => {
+    let captured: { type: string; payload: unknown } | null = null;
+    const client: GameServerClient = {
+      sendIntent(type: string, payload: unknown) {
+        captured = { type, payload };
+        return Promise.resolve({ seq: 1, ok: true });
+      },
+      close() {},
+    };
+    const gateway = makeRemoteGateway(client);
+    await gateway.removeConduitLink('cc-1', 'cc-2');
+    expect(captured).toEqual({ type: 'remove-conduit-link', payload: { aId: 'cc-1', bId: 'cc-2' } });
+  });
+});
