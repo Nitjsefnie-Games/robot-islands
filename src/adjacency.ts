@@ -20,22 +20,64 @@ import {
   type BuildingDefId,
   type GateRequirement,
 } from './building-defs.js';
+import { CELL_SIZE_TILES } from './constants.js';
 import { activeFloorLevel, type PlacedBuilding } from './buildings.js';
 import { footprintTiles, type Rotation } from './shape-mask.js';
 
+/**
+ * The actual world tiles a building occupies for adjacency purposes.
+ *
+ * For land buildings this is just `footprintTiles` (footprint units == tiles).
+ *
+ * **Ocean platforms (`oceanPlacement: true`) reserve whole stratification
+ * CELLS**, not single tiles: their `footprint` dims are cell-units and `b.x/b.y`
+ * are tile coords offset by whole cells (`cellIdx × CELL_SIZE_TILES`), so
+ * `footprintTiles` alone would return a tiny 1-tile-per-cell footprint sitting
+ * in the corner of the first cell — leaving two platforms in physically
+ * adjacent ocean cells ~CELL_SIZE_TILES tiles apart and never 4-connected. That
+ * is the §4.5 ocean-cluster bug: ocean extractors never earned the per-category
+ * cluster bonus. Expanding each footprint cell to its full CELL_SIZE_TILES tile
+ * block makes the existing tile-space 4-adjacency test capture CELL adjacency,
+ * so platforms in touching cells cluster exactly like adjacent land buildings.
+ * This matches what an ocean platform reserves and renders (`renderBuildings`
+ * draws `shapeWidth × CELL_SIZE_TILES` per cell) and what `findOceanBuildingAt`
+ * hit-tests, so the three views of an ocean footprint finally agree.
+ */
+function adjacencyFootprintTiles(
+  b: PlacedBuilding,
+  defs: Readonly<Record<BuildingDefId, BuildingDef>>,
+): ReadonlyArray<{ readonly x: number; readonly y: number }> {
+  const def = defs[b.defId];
+  const rot = (b.rotation ?? 0) as Rotation;
+  const cells = footprintTiles(def.footprint, b.x, b.y, rot);
+  if (def.oceanPlacement !== true) return cells;
+  const out: { x: number; y: number }[] = [];
+  for (const c of cells) {
+    // `c.x − b.x` / `c.y − b.y` are the normalized cell offsets (0,1,2,…); each
+    // footprint unit is one CELL_SIZE_TILES-wide cell at `b.x + offset × CELL`.
+    const baseX = b.x + (c.x - b.x) * CELL_SIZE_TILES;
+    const baseY = b.y + (c.y - b.y) * CELL_SIZE_TILES;
+    for (let dx = 0; dx < CELL_SIZE_TILES; dx++) {
+      for (let dy = 0; dy < CELL_SIZE_TILES; dy++) {
+        out.push({ x: baseX + dx, y: baseY + dy });
+      }
+    }
+  }
+  return out;
+}
+
 /** All footprint tiles a building occupies, returned as a Set of "x,y" keys
- *  for O(1) membership tests during border-overlap checks. Mirrors the
- *  helper in heat.ts (kept local so the two adjacency resolvers stay
- *  independent — see module header). */
+ *  for O(1) membership tests during border-overlap checks. Ocean platforms are
+ *  expanded to their full cell regions (see `adjacencyFootprintTiles`). Mirrors
+ *  the helper in heat.ts (kept local so the two adjacency resolvers stay
+ *  independent — see module header; heat is unaffected because no ocean def is
+ *  a heat source or sits in a land heat field). */
 export function footprintKeySet(
   b: PlacedBuilding,
   defs: Readonly<Record<BuildingDefId, BuildingDef>>,
 ): Set<string> {
-  const def = defs[b.defId];
-  const rot = (b.rotation ?? 0) as Rotation;
-  const tiles = footprintTiles(def.footprint, b.x, b.y, rot);
   const out = new Set<string>();
-  for (const t of tiles) out.add(`${t.x},${t.y}`);
+  for (const t of adjacencyFootprintTiles(b, defs)) out.add(`${t.x},${t.y}`);
   return out;
 }
 
@@ -69,10 +111,7 @@ export function touchesBorder(
   border: Set<string>,
   defs: Readonly<Record<BuildingDefId, BuildingDef>>,
 ): boolean {
-  const def = defs[other.defId];
-  const rot = (other.rotation ?? 0) as Rotation;
-  const tiles = footprintTiles(def.footprint, other.x, other.y, rot);
-  for (const t of tiles) {
+  for (const t of adjacencyFootprintTiles(other, defs)) {
     if (border.has(`${t.x},${t.y}`)) return true;
   }
   return false;

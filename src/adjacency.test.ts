@@ -354,3 +354,36 @@ describe('clusterBonusMul — §4.5 under-construction contributes previous floo
     expect(clusterBonusMul(c, [a, b, c])).toBeCloseTo(1.05, 9);
   });
 });
+
+describe('§4.5 cluster bonus — ocean platforms cluster by CELL adjacency', () => {
+  // Ocean platforms reserve whole stratification cells: their `footprint` dims
+  // are cell-units and `b.x/b.y` are tile coords offset by whole cells
+  // (`cellIdx × CELL_SIZE_TILES`). `seawater_intake_rig` is a `square2` (2×2
+  // cells) extraction platform. Two platforms in physically adjacent cells must
+  // 4-connect (their cell regions touch) and earn the §4.5 category bonus, just
+  // like two adjacent land extractors — even though their anchor `b.x` values
+  // are CELL_SIZE_TILES (16) tiles apart, not 1.
+  const CELL = 16; // CELL_SIZE_TILES
+  const ocean = (id: string, cellX: number, cellY: number) =>
+    ({ id, defId: 'seawater_intake_rig' as never, x: cellX * 2 * CELL, y: cellY * 2 * CELL }) as never;
+
+  it('two platforms in horizontally adjacent cells cluster (×1.05)', () => {
+    const a = ocean('a', 0, 0); // occupies cells 0..1 → tiles 0..31
+    const b = ocean('b', 1, 0); // occupies cells 2..3 → tiles 32..63 (touches a)
+    expect(clusterBonusMul(a, [a, b])).toBeCloseTo(1.05, 9);
+    expect(clusterBonusMul(b, [a, b])).toBeCloseTo(1.05, 9);
+  });
+
+  it('two platforms in vertically adjacent cells cluster (×1.05)', () => {
+    const a = ocean('a', 0, 0);
+    const b = ocean('b', 0, 1);
+    expect(clusterBonusMul(a, [a, b])).toBeCloseTo(1.05, 9);
+  });
+
+  it('platforms separated by a full cell gap do NOT cluster (×1.0)', () => {
+    const a = ocean('a', 0, 0); // tiles 0..31
+    const c = ocean('c', 2, 0); // tiles 64..95 → a one-platform gap, not adjacent
+    expect(clusterBonusMul(a, [a, c])).toBeCloseTo(1.0, 9);
+    expect(clusterBonusMul(c, [a, c])).toBeCloseTo(1.0, 9);
+  });
+});
