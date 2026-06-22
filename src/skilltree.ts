@@ -1556,12 +1556,29 @@ export function formatNodeMagnitude(node: SkillNode): string {
  * per-island HUD loop light. The graph engine still uses `costToUnlock` /
  * `buyNode` for real purchases.
  */
+// PERF: the island-bar HUD calls this per populated island EVERY frame to light a
+// "skill available" dot — ~92 islands × 60fps, each scanning all ~296 NODE_CATALOG
+// nodes (→ ~200M depthTierEligible/tierForLevel calls in a few seconds of play,
+// the top interaction-lag cost by call count). The result only changes when the
+// island's level, unspent points, or unlocked set changes. Memoize per island id:
+// unlocked nodes are append-only (never un-unlocked), so the set SIZE is a sound
+// proxy for "owned set changed", and (level, points, size) fully determine the
+// tier-eligibility + canSpend(points+ownership) result. Bounded by island count.
+const pickableMemo = new Map<string, { level: number; points: number; size: number; result: boolean }>();
+
 export function hasPickableSkill(state: IslandState): boolean {
-  const t6 = stateT6Unlocked(state);
-  for (const node of NODE_CATALOG) {
-    if (depthTierEligible(state.level, node.depth, t6) && canSpend(state, node.id).ok) return true;
+  const size = state.unlockedNodes.size;
+  const cached = pickableMemo.get(state.id);
+  if (cached && cached.level === state.level && cached.points === state.unspentSkillPoints && cached.size === size) {
+    return cached.result;
   }
-  return false;
+  const t6 = stateT6Unlocked(state);
+  let result = false;
+  for (const node of NODE_CATALOG) {
+    if (depthTierEligible(state.level, node.depth, t6) && canSpend(state, node.id).ok) { result = true; break; }
+  }
+  pickableMemo.set(state.id, { level: state.level, points: state.unspentSkillPoints, size, result });
+  return result;
 }
 
 /** Result of `costToUnlock` — the cheapest edge path to a target node. */
