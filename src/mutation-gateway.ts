@@ -17,7 +17,7 @@ import type { TerrainKind } from './island.js';
 import { canExpandConstituent, expandConstituent, type Axis } from './land-reclamation.js';
 import {
   constructIsland,
-  makeArtificialIdGenerator,
+  artificialIslandId,
   validateConstruction,
   type ConstructResult,
 } from './artificial-island.js';
@@ -594,7 +594,6 @@ export function makeLocalGateway(
       if (!regionDiscoveredOrVisible(world, cx, cy, majorRadius, minorRadius)) {
         return err('in-unknown-space', 'in-unknown-space');
       }
-      const idGenerator = makeArtificialIdGenerator(world);
       const now = nowMsOr(performance.now(), nowMs);
       try {
         const result = constructIsland(
@@ -603,7 +602,7 @@ export function makeLocalGateway(
           founder.spec,
           req,
           { cx, cy },
-          idGenerator(),
+          artificialIslandId(cx, cy),
           now,
           displayName,
         );

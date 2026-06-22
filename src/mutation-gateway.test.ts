@@ -312,7 +312,9 @@ describe('makeLocalGateway — rename / edit-biome / construct-island parity', (
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.value!.newSpec.id).toBe('art-1');
+    // Artificial-island ids are now position-derived (`art-<cx>-<cy>`) so they
+    // can't recycle a number freed by a §3.6 merge — see `artificialIslandId`.
+    expect(result.value!.newSpec.id).toBe('art-100-100');
     expect(result.value!.newSpec.biome).toBe('plains');
   });
 
