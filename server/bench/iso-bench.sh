@@ -35,7 +35,10 @@ SNAP="${SNAP:-/tmp/ri_bench_snapshot.json}"
 SLICE="ri-bench.slice"
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-NCPU="$(nproc)"
+# `nproc --all`, NOT `nproc`: once `setup` confines this shell's slice to 0..N-2,
+# plain `nproc` is cpuset-relative and returns N-1, which would mis-target the
+# isolated core (and the teardown range) on every subsequent invocation.
+NCPU="$(nproc --all)"
 TOPCORE=$((NCPU - 1))           # isolated bench core = last core
 RESTCORES="0-$((NCPU - 2))"     # everything else
 
