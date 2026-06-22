@@ -99,7 +99,7 @@ A systemd unit `robot-islands-dev.service` runs `vite preview --host 0.0.0.0 --p
 The codebase strictly separates **pure math** from **PixiJS rendering** so the simulation is testable without a renderer:
 
 - **Pure layer** (no PixiJS imports): the large majority of `src/` (~80 of ~100 production files) — all game systems (`economy.ts`, `recipes.ts`, `placement.ts`, `drones.ts`, `routes.ts`, the `skilltree-*.ts` family, `vision-source.ts`, …) plus `camera.ts` and `input.ts`.
-- **Render layer** (imports `pixi.js`, ~18 files): `main.ts`, `ocean.ts`, `buildings.ts`, `grid.ts`, the `*-ui.ts` panels, the `*-overlay.ts` overlays, `routes-renderer.ts`, `routes-dash-texture.ts`, `skilltree-graphview.ts`. Note `island.ts` and `world.ts` are **mixed**: they import PixiJS for render helpers but also export the pure functions tests target (`tileInscribedInEllipse`, `computeIslandTiles`, `islandRenderState`).
+- **Render layer** (imports `pixi.js`, ~19 files): `main.ts`, `ocean.ts`, `buildings.ts`, `grid.ts`, the `*-ui.ts` panels, the `*-overlay.ts` overlays (including `conduit-overlay.ts`), `routes-renderer.ts`, `routes-dash-texture.ts`, `skilltree-graphview.ts`. Note `island.ts` and `world.ts` are **mixed**: they import PixiJS for render helpers but also export the pure functions tests target (`tileInscribedInEllipse`, `computeIslandTiles`, `islandRenderState`).
 
 Tests target the pure layer only. Render code is read-only against state.
 

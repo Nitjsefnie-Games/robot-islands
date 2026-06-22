@@ -131,6 +131,7 @@ import { buildingIslandIndex, conduitClusterUnions } from './conduits.js';
 import { mountSettlementUi } from './settlement-ui.js';
 import { mountOrbitalUi } from './orbital-ui.js';
 import { mountWeatherOverlay } from './weather-overlay.js';
+import { mountConduitOverlay } from './conduit-overlay.js';
 import { computeWeatherVisionSources, weatherClockMs } from './weather.js';
 import { mountAntennaOverlay } from './antenna-overlay.js';
 import { mountHoverTooltip } from './hover-tooltip.js';
@@ -2627,6 +2628,11 @@ async function main(): Promise<void> {
   routeBendOverlay = new RouteBendOverlay(TILE_PX);
   world.addChild(routeBendOverlay.layer);
 
+  // §4.5 conduit wiring overlay — thin lines between linked conduits. Sits
+  // above the route geometry so the cluster network reads clearly.
+  const conduitOverlay = mountConduitOverlay();
+  world.addChild(conduitOverlay.layer);
+
   const routesUi = mountRoutesUi(document.body, {
     world: worldState,
     islandStates,
@@ -3637,6 +3643,7 @@ async function main(): Promise<void> {
     );
     satelliteOverlay.refresh();
     antennaOverlay.refresh();
+    conduitOverlay.refresh(worldState);
     buildingAlertsOverlay.refresh(now);
     // §2.7 visual tint shares the same wall-clock anchor as the economy's
     // solar gate (Date.now), so the overlay agrees with the power balance
