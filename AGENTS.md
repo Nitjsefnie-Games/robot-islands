@@ -34,6 +34,42 @@ npm run typecheck      # strict typecheck WITH tests included (tsconfig.test.jso
 npm test               # server vitest only (sets DATABASE_URL=postgresql:///robot_islands_test)
 ```
 
+## Server-sim benchmarking — `server/bench/` (catch-up calc perf)
+
+The authoritative per-account calc is `catchUp` (`server/src/game/runtime.ts`):
+`deserializeWorld` + `advanceWorldEconomy` + `advanceWorldSystems`, all **shared
+pure** functions (so a win here speeds the client too). `server/bench/` profiles
+and benchmarks it against a real save, read-only.
+
+- **`bench/iso-bench.sh`** — the reusable runner. Subcommands:
+  `setup` (confine userspace to cores `0..N-2`, reserve the top core via a
+  cgroup-v2 `AllowedCPUs` cpuset — runtime-only, reverts on reboot),
+  `refresh-db` (freeze a copy of prod into `robot_islands_bench` via a read-only
+  `pg_dump` — the bench NEVER writes prod; the frozen copy keeps live play from
+  drifting the baseline), `run [gapMin] [reps]` (phase breakdown + full bench on
+  the isolated core), `profile [gapMin] [reps]` (writes a `.cpuprofile`),
+  `teardown` (give the core back). Defaults to the largest save (heaviest calc).
+- **Harnesses** (`bench/*.mts`, run via `tsx`): `catchup-bench.mts` (times
+  `catchUp` min/median/max and asserts a **SHA-256 oracle digest** of the
+  advanced world — any behavior-preserving optimization MUST keep it
+  byte-identical; a mismatch aborts), `catchup-phases.mts` (deserialize / economy
+  / world-systems attribution), `catchup-profile.mts` (in-process `node:inspector`
+  CPU profiler around only the warmed reps — `node --cpu-prof` under the tsx ESM
+  loader misattributes everything to the loader worker, so use this instead).
+- **Measurement discipline**: V8 JIT warmup dominates early reps (first rep can be
+  ~2× the warm steady state), so the harness warms up and reports the **min**;
+  cgroup isolation can't evict kernel per-CPU threads / IRQs from the bench core
+  (only `isolcpus`+reboot can), so min-of-reps is the real noise defense.
+
+```bash
+cd server
+bench/iso-bench.sh setup                 # once per session
+bench/iso-bench.sh refresh-db            # re-snapshot prod (optional; copy persists)
+bench/iso-bench.sh run 8 10             # gap=8min, 10 reps
+bench/iso-bench.sh profile 8 6          # -> /tmp/ri-catchup.cpuprofile
+bench/iso-bench.sh teardown              # when done
+```
+
 ## Dev server — serves built `dist/` (vite preview, no HMR)
 
 A systemd unit `robot-islands-dev.service` runs `vite preview --host 0.0.0.0 --port 5173` on port 5173 and is reverse-proxied to `https://islands.nitjsefni.eu/`. It serves the static built bundle from `dist/` — **no HMR**. The browser only sees source changes after a fresh `npm run build` AND a manual page reload (HMR was leaving the tab in a half-applied broken-import state during multi-file edits; preview is the stable alternative). **Do NOT restart the service for code changes** — restart only when `vite.config.ts` or `package.json` deps change. For visual smoke-tests, the page is open in the user's browser via the Daedalus Chrome extension; `mcp__daedalus__screenshot` against the active tab is the standard verification path. After editing source you must `npm run build` and reload the browser tab before screenshotting — the live tab is stale until then.
