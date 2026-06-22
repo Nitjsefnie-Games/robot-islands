@@ -219,8 +219,12 @@ export function clusterBonusMul(
 export function clusterBonusMuls(
   buildings: ReadonlyArray<PlacedBuilding>,
   defs: Readonly<Record<BuildingDefId, BuildingDef>> = BUILDING_DEFS,
+  conduitUnions?: ReadonlyArray<readonly [string, string]>,
 ): Map<string, number> {
-  const sig = clusterLayoutSig(buildings);
+  let sig = clusterLayoutSig(buildings);
+  if (conduitUnions && conduitUnions.length > 0) {
+    for (const [a, b] of conduitUnions) sig += `|c:${a},${b}`;
+  }
   const hit = clusterMemo.get(sig);
   if (hit !== undefined && hit.defs === defs) return hit.result;
 
@@ -264,6 +268,19 @@ export function clusterBonusMuls(
       const j = occupant.get(bt);
       if (j === undefined || j === i || defs[buildings[j]!.defId].category !== cat) continue;
       union(i, j);
+    }
+  }
+
+  // §4.5 conduit unions: merge wired same-category buildings into one component.
+  if (conduitUnions && conduitUnions.length > 0) {
+    const indexById = new Map<string, number>();
+    buildings.forEach((b, i) => indexById.set(b.id, i));
+    for (const [aId, bId] of conduitUnions) {
+      const ia = indexById.get(aId);
+      const ib = indexById.get(bId);
+      if (ia === undefined || ib === undefined) continue; // not in this pass's set
+      if (defs[buildings[ia]!.defId].category !== defs[buildings[ib]!.defId].category) continue;
+      union(ia, ib);
     }
   }
 
