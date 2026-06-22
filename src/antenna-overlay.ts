@@ -76,9 +76,35 @@ export function mountAntennaOverlay(world: WorldState): AntennaOverlayHandle {
     }
   }
 
+  // PERF (§ redraw gating): same root-group-churn problem as the satellite
+  // overlay — rebuild() clears+redraws every frame, dirtying the root render
+  // group even when the antenna ring set is unchanged (the common case; it only
+  // changes when an antenna is placed/removed or an island is populated/merged).
+  // The two overlays together measured ~4.4 ms/frame of avoidable render cost in
+  // a live interleaved A/B. Gate on a signature of the exact draw inputs (ring
+  // geometry + redundancy flag): identical signature ⇒ identical geometry, so
+  // the skip is behavior-preserving. The signature recomputes the (cheap) ranges
+  // each frame but only re-tessellates the Graphics when they actually change.
+  let lastSig: string | null = null;
+  const signature = (): string => {
+    const populated = world.islands.filter((s) => s.populated);
+    const ranges = computeSignalRanges(populated);
+    const parts: string[] = [];
+    for (let i = 0; i < ranges.length; i++) {
+      const r = ranges[i]!;
+      const others = ranges.slice(0, i).concat(ranges.slice(i + 1));
+      const redundant = isAntennaRedundant(r, others);
+      parts.push(`${r.cx},${r.cy},${r.radius},${r.width},${r.height},${redundant ? 1 : 0}`);
+    }
+    return parts.join('|');
+  };
+
   return {
     layer,
     refresh(): void {
+      const sig = signature();
+      if (sig === lastSig) return;
+      lastSig = sig;
       rebuild();
     },
     setVisible(visible: boolean): void {

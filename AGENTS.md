@@ -59,6 +59,13 @@ The codebase strictly separates **pure math** from **PixiJS rendering** so the s
 
 Tests target the pure layer only. Render code is read-only against state.
 
+#### Render-group isolation + redraw gating (per-frame cost)
+
+PixiJS v8 rebuilds a render group's draw instructions whenever any descendant changes, and re-collects/re-batches the **whole** group each frame when it's dirty. Two conventions keep the per-frame cost bounded — both verified by interleaved live A/B (`enableRenderGroup()` toggled on the same loaded scene, render-ms/frame the metric), not by single CDP captures (whose absolute self-time swings wildly with scene activity and is unreliable for before/after):
+
+- **Promote large *static* subtrees to render groups** (`container.enableRenderGroup()`), so a per-frame redraw of any sibling can't force them to be re-walked, and camera pan/zoom moves them by one GPU matrix. Applied to `ocean` (~5.8k sprites), `islands`, `building-alerts`, and the routes static/overlay layers. Do this **judiciously, at the broad layer level only** — render groups don't batch across each other, so grouping many small layers *adds* draw calls and can regress (the `weather-overlay` layer A/B-tested as no-gain → deliberately left ungrouped).
+- **Gate unconditional per-frame overlay rebuilds on a content signature.** An overlay whose `refresh()` does an unconditional `gfx.clear()` + redraw dirties the root render group *every frame* even when it draws nothing — the satellite/antenna overlays cost ~4.4 ms/frame this way on the endgame scene with zero satellites placed. Gate `refresh()` on a string signature of exactly the fields the draw reads (identical signature ⇒ byte-identical geometry ⇒ skipping is behavior-preserving), as `weather-overlay` / `building-alerts` already did. Overlays that set `visible=false` when empty (`sonar-ring`, selection, construction-ghost) self-mitigate and don't need this.
+
 ### Coordinate systems
 
 - **Tile coords** are the unit. Buildings, island geometry, and island centres (`IslandSpec.cx/cy`) are all in tiles.
