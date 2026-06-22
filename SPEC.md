@@ -121,7 +121,7 @@ Drones can fail and never return. Failure modes (per §11.4): fuel exhaustion mi
 * T1 drone: cheap entry option — biofuel-fueled, short range, narrow scan corridor; the most weather-fragile tier
 * T2 drone: modest range, modest scan corridor, biome-type detection at distance
 * T3 drone: long-range expedition, wider scan, multi-target (records all islands within capsule corridor)
-* T4 drone: omnidirectional pulse, launched from a Launch Tower — single disk scan of radius `R\_T4 = 3R` centered on the launch site, where `R` is the stratification cell side length (placeholder: T4 pulse covers a 3-cell-radius disk)
+* T4 drone: very-long-range expedition, scan corridor half-width 10 tiles (between T3's 8 and T5's 12), cryogenic-hydrogen-fueled (§11.7) — same capsule-corridor flight as the other Drone-Pad tiers. **Separately**, a Launch Tower can fire the T4 *omnidirectional pulse* — a single disk scan of radius `R\_T4 = 3R` centered on the launch site, where `R` is the stratification cell side length (placeholder: T4 pulse covers a 3-cell-radius disk). The corridor flight and the pulse are distinct mechanics on distinct buildings (Drone Pad vs Launch Tower).
 
 ### 2.3 Settlement
 
