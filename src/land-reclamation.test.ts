@@ -484,4 +484,22 @@ describe('no-overwrite ledger', () => {
     const last = s.ownershipLedger![s.ownershipLedger!.length - 1]!;
     expect(last).toEqual({ constituent: 0, major: s.majorRadius, minor: s.minorRadius });
   });
+
+  it("grown-vs-grown: a later primary growth does not eat the lobe's earlier reclaimed ring", () => {
+    const s = merged();
+    const st = plentiful();
+    // tile (6,0) is OCEAN initially (primary r5 reaches x=3; lobe r5@11 covers
+    // x=7..14 — neither owns x=6 yet).
+    expect(constituentBiomeAt(s, 6, 0)).toBeUndefined();
+    // 1) grow the LOBE (index 1) toward the primary first — its grown ring (r7)
+    //    newly reclaims tiles x=5,6 and records the claim NOW.
+    expandConstituent(s, st, 1, 'major');
+    expandConstituent(s, st, 1, 'major');
+    const reclaimedByLobe = constituentBiomeAt(s, 6, 0);
+    expect(reclaimedByLobe).toBe('arctic');
+    // 2) now grow the PRIMARY (index 0) over that same region (r5 -> r9, reaching x=7).
+    for (let i = 0; i < 4; i++) expandConstituent(s, st, 0, 'major');
+    // The lobe's earlier-reclaimed tile must STILL be the lobe's (already-placed wins).
+    expect(constituentBiomeAt(s, 6, 0)).toBe('arctic');
+  });
 });

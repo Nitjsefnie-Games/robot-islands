@@ -204,9 +204,12 @@ export function islandInscribedAny(
  * §3.6: when `extras` is supplied, the result is the UNION of tiles inscribed
  * in the primary ellipse (centred at 0,0) plus any tile inscribed in any
  * extra (centred at its offset). Duplicates from constituents that share a
- * tile are removed; the primary's terrain wins for shared tiles (the primary
- * is scanned first). Single-ellipse callers pass `extras` undefined and see
- * identical behaviour to the pre-§3.6 function.
+ * tile are removed: the dedup decides UNION MEMBERSHIP only (a tile appears
+ * once, order irrelevant). The terrain for a shared tile comes from the
+ * `terrainAt` closure (`world.ts` → `constituentOwnerAt`), which resolves
+ * ownership by placement order (§3.6 ownership ledger — "already-placed wins"),
+ * NOT from this scan order. Single-ellipse callers pass `extras` undefined and
+ * see identical behaviour to the pre-§3.6 function.
  */
 export function computeIslandTiles(
   majorRadius: number,
