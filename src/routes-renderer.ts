@@ -61,6 +61,11 @@ export class RouteRenderer {
 
   private readonly entries = new Map<string, RouteRenderState>();
   private _disposed = false;
+  /** Whether overlayGfx (draft + pulses) drew anything last frame — drives the
+   *  empty-clear gate so a frame that draws nothing into an already-empty layer
+   *  skips clear() (and its render-group dirty). Starts true so the first frame
+   *  always clears. */
+  private _overlayHadContent = true;
 
   constructor(
     private readonly resolveIslandPos: IslandPosResolver,
@@ -244,60 +249,71 @@ export class RouteRenderer {
     panelVisible: boolean,
   ): void {
     const g = this.overlayGfx;
-    g.clear();
+    const flags = globalThis as Record<string, unknown>;
+    const instanced = flags.__instChevrons !== false;
 
-    // Draft preview line — only when the panel is open and selection valid.
-    if (panelVisible && draftKey !== '') {
-      // `from|to|buildingId` — the draft starts at the SELECTED source building
-      // (matching where the real route will be drawn / the §2.6 weather path),
-      // falling back to the island centre when no building is chosen yet.
-      const [fromId, toId, buildingId] = draftKey.split('|');
-      if (fromId && toId && fromId !== toId) {
-        const p1 = (buildingId
-          ? this.resolveRouteSourcePos?.({ from: fromId, sourceBuildingId: buildingId } as Route)
-          : null) ?? this.resolveIslandPos(fromId);
-        const p2 = this.resolveIslandPos(toId);
-        if (p1 && p2) {
-          g.moveTo(p1.x, p1.y)
-           .lineTo(p2.x, p2.y)
-           .stroke({ width: 1.5, color: VISION_BLUE, alpha: 0.3 });
+    // overlayGfx holds ONLY the draft preview + arrival pulses (chevrons are
+    // pooled Graphics in pass 2). Decide up front whether either draws anything
+    // this frame, so the empty-clear gate below can skip clear() when there's
+    // nothing to draw and the layer is already empty — an unconditional clear
+    // dirties the routes-overlay render group every frame even when it draws
+    // nothing (the AGENTS.md empty-clear anti-pattern, now applicable because
+    // the chevrons moved out of overlayGfx). `__forceOverlayIdle` is a debug
+    // toggle that pretends nothing draws, to isolate the gate's idle-frame win.
+    const draftSeg = this.draftSegment(draftKey, panelVisible);
+    let anyPulse = false;
+    if (!flags.__forceOverlayIdle) {
+      for (const r of routes) {
+        const entry = this.entries.get(r.id);
+        if (!entry) continue;
+        for (const b of r.inFlight) {
+          const eta = (b.arrivalTime - nowMs) / 1000;
+          if (eta >= 0 && eta <= 2) { anyPulse = true; break; }
         }
+        if (anyPulse) break;
       }
     }
+    const willDraw = draftSeg !== null || anyPulse;
 
-    // §perf: chevrons + pulses. Each chevron used to do its OWN fill()+stroke(),
-    // so a busy save (thousands of in-flight batches) issued thousands of
-    // tessellation INSTRUCTIONS per frame — each paying the per-instruction
-    // toStrokeStyle / toFillStyle / GPU-context setup that dominated steady-state
-    // CPU. Now we accumulate EVERY chevron's triangle into one path and do a
-    // SINGLE fill()+stroke() for all of them (all chevrons share one style),
-    // collapsing those per-instruction costs from O(batches) to O(1). Pulses are
-    // drawn FIRST (they stroke immediately, and are few — at most one per route
-    // with an arrival in the last 2 s) so they don't commit the accumulated
-    // chevron path early.
-
-    // Pass 1: arrival pulses (amber ring on the destination for the last 2 s).
-    for (const r of routes) {
-      const entry = this.entries.get(r.id);
-      if (!entry) continue;
-      let nextEta = Infinity;
-      for (const b of r.inFlight) {
-        const eta = (b.arrivalTime - nowMs) / 1000;
-        if (eta < nextEta) nextEta = eta;
+    // Empty-clear gate (instanced mode only — in legacy mode overlayGfx also
+    // accumulates chevrons below, so it must always clear). Skip the whole
+    // clear+draw block when nothing draws and nothing was drawn last frame.
+    // `__noOverlayGate` is a debug toggle that defeats the gate (always clears)
+    // for live A/B of the gate's idle-frame saving.
+    if (!instanced || willDraw || this._overlayHadContent || flags.__noOverlayGate) {
+      g.clear();
+      if (draftSeg) {
+        g.moveTo(draftSeg.x1, draftSeg.y1)
+         .lineTo(draftSeg.x2, draftSeg.y2)
+         .stroke({ width: 1.5, color: VISION_BLUE, alpha: 0.3 });
       }
-      if (nextEta >= 0 && nextEta <= 2) {
-        const pulse = 1 - nextEta / 2;
-        const radius = 6 + pulse * 4;
-        g.circle(entry.toX, entry.toY, radius)
-         .stroke({ width: 1.5, color: 0xf5a742, alpha: 0.4 + 0.4 * pulse });
+      // Arrival pulses (amber ring on the destination for the last 2 s). Drawn
+      // before the legacy chevron batch so they don't commit its accumulated path
+      // early. Few — at most one per route with an arrival in the last 2 s.
+      if (!flags.__forceOverlayIdle) {
+        for (const r of routes) {
+          const entry = this.entries.get(r.id);
+          if (!entry) continue;
+          let nextEta = Infinity;
+          for (const b of r.inFlight) {
+            const eta = (b.arrivalTime - nowMs) / 1000;
+            if (eta < nextEta) nextEta = eta;
+          }
+          if (nextEta >= 0 && nextEta <= 2) {
+            const pulse = 1 - nextEta / 2;
+            const radius = 6 + pulse * 4;
+            g.circle(entry.toX, entry.toY, radius)
+             .stroke({ width: 1.5, color: 0xf5a742, alpha: 0.4 + 0.4 * pulse });
+          }
+        }
       }
+      this._overlayHadContent = willDraw;
     }
 
     // Pass 2: in-flight chevrons. Instanced path (default) positions pooled
     // Graphics that share `chevronCtx` — no per-frame tessellation. The legacy
     // path (toggle `globalThis.__instChevrons = false`, kept for live A/B and as
     // a fallback) accumulates triangles into `overlayGfx` for one fill+stroke.
-    const instanced = (globalThis as Record<string, unknown>).__instChevrons !== false;
     let anyChevron = false;
     let chevronIdx = 0;
     for (const r of routes) {
@@ -391,6 +407,26 @@ export class RouteRenderer {
       this.chevronPool[i] = gc;
     }
     return gc;
+  }
+
+  /** Resolve the draft-preview segment (panel open + valid distinct endpoints),
+   *  or null when nothing should be drawn. Anchors at the SELECTED source
+   *  building (matching the real route / §2.6 weather path), falling back to the
+   *  island centre. Pure resolve, no drawing — lets paintOverlay's empty-clear
+   *  gate know whether the draft will draw before deciding to clear. */
+  private draftSegment(
+    draftKey: string,
+    panelVisible: boolean,
+  ): { x1: number; y1: number; x2: number; y2: number } | null {
+    if (!panelVisible || draftKey === '') return null;
+    const [fromId, toId, buildingId] = draftKey.split('|');
+    if (!fromId || !toId || fromId === toId) return null;
+    const p1 = (buildingId
+      ? this.resolveRouteSourcePos?.({ from: fromId, sourceBuildingId: buildingId } as Route)
+      : null) ?? this.resolveIslandPos(fromId);
+    const p2 = this.resolveIslandPos(toId);
+    if (!p1 || !p2) return null;
+    return { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y };
   }
 
   /** Append one ▶ chevron's triangle (centred at (cx,cy), pointing along
