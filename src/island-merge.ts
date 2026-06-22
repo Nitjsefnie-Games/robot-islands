@@ -233,8 +233,8 @@ export function performMerge(
   }
 
   // 3. Transfer inventory; absorber's cap clamps the result, dropping
-  //    overflow. Skip if either state is missing (§3.6 implies both islands
-  //    are populated for a merge to make sense).
+  //    overflow. Skip if either state is missing — the absorbed island may be
+  //    non-populated and therefore stateless, and the guard handles that.
   if (absorberState && absorbedState) {
     for (const r of Object.keys(absorbedState.inventory) as ResourceId[]) {
       const cur = absorberState.inventory[r] ?? 0;
@@ -248,8 +248,10 @@ export function performMerge(
   }
 
   // 4. Skill-point refund. Sum unspent + spent on absorbed, add to
-  //    absorber's unspent. Absorbed's unlock set and edge set are
-  //    discarded along with the rest of its state.
+  //    absorber's unspent. The absorbed island may be non-populated and
+  //    stateless (no skill points to refund); the guard handles that.
+  //    Absorbed's unlock set and edge set are discarded along with the rest
+  //    of its state.
   if (absorberState && absorbedState) {
     absorberState.unspentSkillPoints += islandRefundedPoints(absorbedState);
   }
@@ -341,35 +343,35 @@ export function performMerge(
  *   - On combined-tile-count ties, prefer the pair whose lower-id member
  *     is lexicographically smallest (deterministic tiebreak).
  *
- * Only populated islands participate; an unpopulated island has no `state`
- * and §3.6 reasoning ("populated island grows via Land Reclamation Hub
- * until it touches a neighbor") implicitly applies to populated identities.
+ * A merge pair needs at least one populated island; two unpopulated islands
+ * never merge. When both islands are populated the absorber is resolved via
+ * `chooseMergeAbsorber`. When exactly one is populated, it is always the
+ * absorber and the non-populated neighbour becomes a constituent lobe.
  *
- * The reported pair carries `(absorber, absorbed)` resolved via
- * `chooseMergeAbsorber`.
+ * The reported pair carries `(absorber, absorbed)` accordingly.
  */
 type MergeResult = { absorber: IslandSpec; absorbed: IslandSpec } | null;
 
 // PERF: findNextMerge runs every world-systems step (~480× for an 8-min offline
 // catch-up) and its O(N²) islandsOverlap scan dominated catch-up CPU. The scan's
-// result is a pure function of the POPULATED set and each populated island's
-// id + position + ellipse geometry — none of which change between steps except
-// via a merge or a settlement-vehicle population (both of which change the
-// signature). So memoize on an exact signature of exactly those inputs (O(N) to
-// build vs the O(N²) scan it guards): equal signature ⇒ equal scan inputs ⇒ equal
-// result. Correctness note: a non-null result is never served from cache twice —
-// the caller performs the merge that same step, mutating geometry ⇒ the next
-// signature differs ⇒ recompute (which re-reads `states` for the absorber choice).
-// Only null results are reused, and while the signature holds no overlap can
-// appear, so reuse is exact. Single-entry: a catch-up processes one account's
-// run at a time; a different account's ids yield a different signature (miss).
+// result is a pure function of ALL islands' id + geometry + populated bit —
+// none of which change between steps except via a merge or a settlement-vehicle
+// population (both of which change the signature). So memoize on an exact
+// signature of exactly those inputs (O(N) to build vs the O(N²) scan it guards):
+// equal signature ⇒ equal scan inputs ⇒ equal result. Correctness note: a
+// non-null result is never served from cache twice — the caller performs the
+// merge that same step, mutating geometry ⇒ the next signature differs ⇒
+// recompute (which re-reads `states` for the absorber choice). Only null results
+// are reused, and while the signature holds no overlap can appear, so reuse is
+// exact. Single-entry: a catch-up processes one account's run at a time; a
+// different account's ids yield a different signature (miss).
 let _mergeSig: string | null = null;
 let _mergeResult: MergeResult = null;
 
-function mergeSignature(populated: ReadonlyArray<IslandSpec>): string {
+function mergeSignature(islands: ReadonlyArray<IslandSpec>): string {
   let sig = '';
-  for (const s of populated) {
-    sig += `${s.id}:${s.cx},${s.cy},${s.majorRadius},${s.minorRadius}`;
+  for (const s of islands) {
+    sig += `${s.id}:${s.populated ? 1 : 0}:${s.cx},${s.cy},${s.majorRadius},${s.minorRadius}`;
     if (s.extraEllipses) {
       for (const e of s.extraEllipses) sig += `;${e.major},${e.minor},${e.offsetX},${e.offsetY}`;
     }
@@ -383,7 +385,7 @@ export function findNextMerge(
   states: Map<string, IslandState>,
 ): MergeResult {
   const populated = world.islands.filter((s) => s.populated);
-  const sig = mergeSignature(populated);
+  const sig = mergeSignature(world.islands);
   if (sig === _mergeSig) return _mergeResult;
   // Memoize ONLY the (common) no-merge result. A non-null result carries spec
   // references and is consumed by an immediate performMerge that mutates the
@@ -402,23 +404,28 @@ export function findNextMerge(
     /** Lower of `(a.id, b.id)` — drives the tie break. */
     readonly minId: string;
   }
+  // A merge needs >=1 populated island. Scan populated (outer) x all islands
+  // (inner) so cost stays O(P*N); dedupe each unordered pair once.
   const cands: Candidate[] = [];
+  const seen = new Set<string>();
   // Pre-compute tile counts once per island so an N-pair scan stays O(N²)
   // rather than O(N² × islandTileCount).
   const tileCounts = new Map<string, number>();
-  for (const s of populated) tileCounts.set(s.id, islandTileCount(s));
-  for (let i = 0; i < populated.length; i++) {
-    for (let j = i + 1; j < populated.length; j++) {
-      const a = populated[i]!;
-      const b = populated[j]!;
-      if (!islandsOverlap(a, b)) continue;
-      const ta = tileCounts.get(a.id) ?? 0;
-      const tb = tileCounts.get(b.id) ?? 0;
+  for (const s of world.islands) tileCounts.set(s.id, islandTileCount(s));
+  for (const p of populated) {
+    for (const other of world.islands) {
+      if (other.id === p.id) continue;
+      const key = p.id < other.id ? `${p.id}|${other.id}` : `${other.id}|${p.id}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (!islandsOverlap(p, other)) continue;
+      const a = p.id < other.id ? p : other;
+      const b = p.id < other.id ? other : p;
       cands.push({
         a,
         b,
-        combined: ta + tb,
-        minId: a.id < b.id ? a.id : b.id,
+        combined: (tileCounts.get(a.id) ?? 0) + (tileCounts.get(b.id) ?? 0),
+        minId: a.id,
       });
     }
   }
@@ -431,13 +438,24 @@ export function findNextMerge(
     return 0;
   });
   const top = cands[0]!;
-  const sa = states.get(top.a.id);
-  const sb = states.get(top.b.id);
-  // Both states must exist (populated island invariant). If they don't,
-  // skip the merge cleanly — no defaults that would mask the bug.
-  if (!sa || !sb) return cache(null);
-  const decision = chooseMergeAbsorber(top.a, top.b, sa, sb);
-  const absorber = decision.absorber === 'a' ? top.a : top.b;
-  const absorbed = decision.absorber === 'a' ? top.b : top.a;
+  let absorber: IslandSpec;
+  let absorbed: IslandSpec;
+  if (top.a.populated && top.b.populated) {
+    const sa = states.get(top.a.id);
+    const sb = states.get(top.b.id);
+    // Both populated => both must have state (the populated invariant). If a
+    // state is missing, skip cleanly rather than mask the bug.
+    if (!sa || !sb) return cache(null);
+    const decision = chooseMergeAbsorber(top.a, top.b, sa, sb);
+    absorber = decision.absorber === 'a' ? top.a : top.b;
+    absorbed = decision.absorber === 'a' ? top.b : top.a;
+  } else {
+    // Exactly one populated (the scan guarantees >=1). The populated island
+    // owns the surviving identity/state and is always the absorber; the
+    // non-populated neighbour becomes a constituent lobe.
+    absorber = top.a.populated ? top.a : top.b;
+    absorbed = top.a.populated ? top.b : top.a;
+    if (!states.get(absorber.id)) return cache(null);
+  }
   return cache({ absorber, absorbed });
 }
