@@ -840,8 +840,17 @@ export function renderIsland(spec: IslandSpec, state: IslandRenderState = 'visib
     spec.terrainAt ?? (() => 'grass'),
     spec.extraEllipses,
   );
-  c.addChild(renderIslandTiles(tiles));
-  if (spec.buildings.length > 0) c.addChild(renderBuildings(spec.buildings));
+  // Labelled sub-children so the per-island render cache (main.ts) can reuse the
+  // (expensive, geometry-only) terrain while swapping just the buildings child on
+  // a building edit — terrain doesn't depend on buildings.
+  const terrain = renderIslandTiles(tiles);
+  terrain.label = 'island-terrain';
+  c.addChild(terrain);
+  if (spec.buildings.length > 0) {
+    const b = renderBuildings(spec.buildings);
+    b.label = 'island-buildings';
+    c.addChild(b);
+  }
   const px = tileToWorldPx(spec.cx, spec.cy);
   c.position.set(px.x, px.y);
   return c;

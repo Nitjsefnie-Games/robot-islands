@@ -60,7 +60,7 @@ import {
 } from './persistence.js';
 import { mountSettingsUi } from './settings-ui.js';
 import { BUILDING_DEFS } from './building-defs.js';
-import { activeFloors, type PlacedBuilding } from './buildings.js';
+import { activeFloors, renderBuildings, type PlacedBuilding } from './buildings.js';
 import { mountBuildingsUi } from './buildings-ui.js';
 import { mountConstructionUi } from './construction-ui.js';
 import { createConstructionGhostOverlay } from './construction-overlay.js';
@@ -415,6 +415,9 @@ async function main(): Promise<void> {
   // §11 telemetry: the post-island fog overlay masks unrevealed cells of
   // partially-revealed islands so a drone that's only swept half of an
   // island still renders the swept half but leaves the rest dark.
+  // Declared before the first renderIslandLayer() call (below) — it's a const,
+  // so it must be initialized before renderIslandLayer (hoisted) runs at boot.
+  const islandContainerCache = new Map<string, { terrainSig: string; buildingSig: string; container: Container }>();
   let oceanLayer = renderOceanFromState(worldState, WORLD_HALF_SIZE_TILES);
   world.addChild(oceanLayer);
   let islandLayer = renderIslandLayer(worldState);
@@ -550,6 +553,38 @@ async function main(): Promise<void> {
     const visionSources = computeVisionSources(populated);
     return renderOceanFogOverlay(ws.islands, ws.revealedCells, visionSources);
   }
+  // PERF: per-island rendered-container cache, keyed by a signature of exactly
+  // what renderIsland draws (render state + ellipse geometry + biome + terrain
+  // overrides + building layout). rebuildWorldLayers re-bakes the island layer on
+  // every building edit / discovery, and renderIsland tessellates each island's
+  // terrain + buildings (~1.3k renderables, ~240ms for all 92 islands on the
+  // mega-save). But a building move/destroy only changes ONE island — so reuse
+  // the cached container for every unchanged island (re-parenting it into the new
+  // layer, which moves it out of the old layer so the old-layer destroy can't
+  // free it) and re-render only the island that actually changed.
+  // (islandContainerCache is declared above, before the first renderIslandLayer call.)
+  // Terrain depends on geometry + biome + terrain overrides only — NOT buildings.
+  // State is folded in so a vision flip re-renders + re-labels (prior behavior).
+  function islandTerrainSig(spec: IslandSpec, state: string): string {
+    let s = `${state}|${spec.cx},${spec.cy},${spec.majorRadius},${spec.minorRadius},${spec.biome}`;
+    if (spec.extraEllipses) {
+      for (const e of spec.extraEllipses) {
+        s += `|e:${e.major},${e.minor},${e.offsetX},${e.offsetY},${e.biome ?? ''},${e.originId ?? ''}`;
+      }
+    }
+    if (spec.tileOverrides) {
+      for (const k of Object.keys(spec.tileOverrides).sort()) s += `|o:${k}=${spec.tileOverrides[k]}`;
+    }
+    return s;
+  }
+  function islandBuildingSig(spec: IslandSpec): string {
+    let s = '';
+    for (const b of spec.buildings) {
+      s += `|b:${b.id},${b.defId},${b.x},${b.y},${b.rotation ?? 0},${b.floorLevel ?? 0},${(b.constructionRemainingMs ?? 0) > 0 ? 1 : 0},${b.invalid === true ? 1 : 0}`;
+    }
+    return s;
+  }
+
   function renderIslandLayer(ws: WorldState): Container {
     const layer = new Container();
     layer.label = 'islands';
@@ -563,10 +598,47 @@ async function main(): Promise<void> {
     layer.enableRenderGroup();
     const populated = ws.islands.filter((s) => s.populated);
     const visionSources = computeVisionSources(populated);
+    const live = new Set<string>();
     for (const spec of ws.islands) {
       const state = islandRenderState(spec, visionSources);
+      const tSig = islandTerrainSig(spec, state);
+      const bSig = islandBuildingSig(spec);
+      const cached = islandContainerCache.get(spec.id);
+      if (cached && cached.terrainSig === tSig) {
+        // Terrain unchanged → reuse the cached container (re-parenting it into the
+        // new layer; Pixi moves it out of the old layer so the old-layer destroy
+        // won't free it). If only buildings changed, swap JUST the buildings child
+        // — the terrain tiles (the bulk of the cost on a big island) are kept.
+        if (cached.buildingSig !== bSig) {
+          const oldB = cached.container.getChildByLabel('island-buildings');
+          if (oldB) { cached.container.removeChild(oldB); oldB.destroy({ children: true }); }
+          if (spec.buildings.length > 0) {
+            const nb = renderBuildings(spec.buildings);
+            nb.label = 'island-buildings';
+            cached.container.addChild(nb);
+          }
+          cached.buildingSig = bSig;
+        }
+        live.add(spec.id);
+        layer.addChild(cached.container);
+        continue;
+      }
+      // Terrain changed (or first render): full re-render. The previous cached
+      // container (if any) is still a child of the old layer and freed by its destroy.
       const c = renderIsland(spec, state);
-      if (c) layer.addChild(c);
+      if (c) {
+        islandContainerCache.set(spec.id, { terrainSig: tSig, buildingSig: bSig, container: c });
+        live.add(spec.id);
+        layer.addChild(c);
+      } else {
+        // renderIsland returns null for 'unknown' islands — drop any stale entry.
+        islandContainerCache.delete(spec.id);
+      }
+    }
+    // Drop cache entries for islands the world no longer renders; their old
+    // containers ride the old-layer destroy.
+    for (const id of [...islandContainerCache.keys()]) {
+      if (!live.has(id)) islandContainerCache.delete(id);
     }
     return layer;
   }
