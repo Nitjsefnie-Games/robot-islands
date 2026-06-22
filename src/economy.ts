@@ -2641,96 +2641,24 @@ export function applySegmentSideEffects(
   promoteQueuedBuilds(state);
 }
 
-export function advanceIsland(
+/** Compute one integration segment's plan at time `t`: the constant rates `R`
+ *  and every per-segment value the integrator's body consumes, plus the segment
+ *  end `segEndMs` (the soonest boundary at which rates/state change). Extracted
+ *  verbatim from `advanceIsland`'s loop so a cross-tick cache (a future, gated
+ *  optimization) can memoize the WHOLE bundle on the island state — one object,
+ *  so it can't partially miss a field. Behaviour-identical: this is a literal
+ *  move of the loop's compute block, no reordering. All `next*Ms` boundaries are
+ *  ABSOLUTE times, hence t-invariant within the segment. */
+function planSegment(
   state: IslandState,
+  ctx: RatesContext | undefined,
+  defs: DefCatalog,
+  t: number,
   nowMs: number,
-  ctx?: RatesContext,
-  /** §2.7 wall-clock anchor (Date.now()) corresponding to `nowMs`. Production
-   *  callers MUST pass this so the day-night cycle is independent of
-   *  per-page `performance.now()` and survives refreshes (spec: "purely
-   *  time-driven and does not depend on the player's session"). The
-   *  integrator computes a `wallOffset = wallClockNowMs - nowMs` once and
-   *  threads `t + wallOffset` to both `solarMultiplier` (via
-   *  `computeRates(.., solarClockMs)`) AND the segment-boundary helpers
-   *  (`nextPhaseBoundaryMs`, `nextSolarBoundaryMs`) so phase transitions
-   *  inside a multi-hour offline catchup fall on the wall-clock quadrant
-   *  edges, not on the page-local perf-clock quadrant edges.
-   *
-   *  When omitted, falls back to using `nowMs` directly as the wall-clock —
-   *  the long-standing test convention (`nowMs = 12*HOUR ⇒ Night`). */
-  wallClockNowMs?: number,
-): void {
-  const { defs = BUILDING_DEFS } = ctx ?? {};
-  // §2.6 vent: non-stored outputs (co2 only — P4 Phase 1 moved the 6 byproducts
-  // to OUTPUT_CAP_EXEMPT) never sit in island inventory. Drain any stock here —
-  // runtime never writes them (applyRates skips), so the only way a bin is
-  // non-zero is a save written before this behavior; clear it so the bin reads
-  // empty. co2's climate value is the per-island `co2Kg` scalar (untouched),
-  // summed globally by `sumIslandCo2`.
-  for (const r of NON_STORED_OUTPUTS) {
-    if ((state.inventory[r] ?? 0) !== 0) state.inventory[r] = 0;
-  }
-  // §2.7 perf→wall offset. `wallClockNowMs - nowMs` is constant across this
-  // advance call, so each segment's wall-clock time is `t + wallOffset`.
-  // Tests that omit `wallClockNowMs` fall back to `wallOffset = 0` — the
-  // existing "lastTick is the wall clock" convention.
-  const wallOffset = (wallClockNowMs ?? nowMs) - nowMs;
-  if (nowMs <= state.lastTick) {
-    state.lastTick = nowMs;
-    return;
-  }
-  // Per-tick base skill multiplier. unlockedNodes / unlockedEdges
-  // do not mutate during this advanceIsland call (level-ups don't
-  // auto-spend points; spend paths are UI-driven outside the tick),
-  // so this object is constant for the duration. Freeze to catch
-  // accidental mutation in dev. §perf-2026-06-10: read from the
-  // signature-keyed memo (clone — the memoized base is never handed out).
-  const baseMult = cloneSkillMultipliers(
-    getDerivationsMemo(state, defs, ctx?.geothermalActive ?? false, ctx?.crossIsland, ctx?.conduitUnions, ctx?.conduitRemoteAttached).baseSkillMul,
-  );
-  Object.freeze(baseMult);  // shallow — covers all primitive fields
-  // The caller's modifier bundle is stable for the duration of this advance
-  // call. When `high_wind` is active its variance sample changes per second,
-  // so we clamp each integration segment to the next second boundary.
-  const varianceActive = (ctx?.modifierMul ?? IDENTITY_MODIFIER_MULTIPLIERS).outputVariance;
-  // §13.3 Time Lock banking: if the island has at least one Time Lock and
-  // banking is enabled, accumulate offline time into the bank instead of
-  // advancing production.
-  const timeLockCount = state.buildings.filter((b) => b.defId === 'time_lock').length;
-  if (timeLockCount > 0 && state.bankingEnabled) {
-    const maxBank = timeLockCount * 24 * 60; // 24 hours per Lock in minutes
-    const offlineMin = (nowMs - state.lastTick) / 60000;
-    state.timeLockBankedMin = Math.min(maxBank, state.timeLockBankedMin + offlineMin);
-    state.lastTick = nowMs;
-    return; // skip normal advancement — island is paused while banking
-  }
-  // §12.4: shrink starter inventory grace as normal caps catch up.
-  for (const r of Object.keys(state.starterInventoryGrace) as ResourceId[]) {
-    clearGraceIfRedundant(state, r, baseMult);
-  }
-  let t = state.lastTick;
-  if (ctx?.worldSeed) {
-    advanceToxicityRolls(state.buildings, ctx.worldSeed, state.lastTick, nowMs);
-  }
-  // Robotics sub-path bonus: stretches maintenance thresholds (longer
-  // operating-time budget before degradation begins). Read once and reused
-  // across every maintenance check in this advanceIsland call.
-  const maintenanceThresholdMul = baseMult.maintenanceThreshold;
-  // §4.7: attempt auto-maintain BEFORE the first segment too — a save loaded
-  // with materials in inventory and an over-threshold building should
-  // self-heal on the next tick without waiting for the next inventory
-  // boundary. Policy (per pickMostDegradedTarget): only the single
-  // most-degraded building is considered; if its tier recipe isn't fully
-  // in stock, no maintenance fires this pass — the building waits rather
-  // than letting a less-critical building consume the materials.
-  {
-    const target = pickMostDegradedTarget(state.buildings, defs, maintenanceThresholdMul);
-    if (target !== null) {
-      tryAutoMaintain(target, defs[target.defId], state.inventory, t, maintenanceThresholdMul);
-    }
-  }
-  for (let safety = 0; safety < 10000; safety++) {
-    if (t >= nowMs) break;
+  wallOffset: number,
+  baseMult: SkillMultipliers,
+  varianceActive: boolean,
+) {
     // §13.3 acceleration multiplier from Time Lock spend.
     // NB: this overrides any caller-supplied ctx.baseMult — test multiplier
     // injection (e.g. recipeInput) must call computeRates directly, not
@@ -2852,6 +2780,105 @@ export function advanceIsland(
     // Clamp to nowMs; findNextCapEvent already returns nowMs when nothing
     // changes, but if all rates are zero we still need to exit the loop.
     const segEndMs = Math.min(nextEventMs, nextPhaseMs, nextSolarMs, nextAccelMs, nextBatteryMs, nextRotationMs, nextShotMs, nextVarianceMs, nowMs);
+    return { byBuilding, production, consumption, net, skillMul, maxCap, rawBalance, batteryIsLocal, utilById, segEndMs, nextAccelMs };
+}
+
+export function advanceIsland(
+  state: IslandState,
+  nowMs: number,
+  ctx?: RatesContext,
+  /** §2.7 wall-clock anchor (Date.now()) corresponding to `nowMs`. Production
+   *  callers MUST pass this so the day-night cycle is independent of
+   *  per-page `performance.now()` and survives refreshes (spec: "purely
+   *  time-driven and does not depend on the player's session"). The
+   *  integrator computes a `wallOffset = wallClockNowMs - nowMs` once and
+   *  threads `t + wallOffset` to both `solarMultiplier` (via
+   *  `computeRates(.., solarClockMs)`) AND the segment-boundary helpers
+   *  (`nextPhaseBoundaryMs`, `nextSolarBoundaryMs`) so phase transitions
+   *  inside a multi-hour offline catchup fall on the wall-clock quadrant
+   *  edges, not on the page-local perf-clock quadrant edges.
+   *
+   *  When omitted, falls back to using `nowMs` directly as the wall-clock —
+   *  the long-standing test convention (`nowMs = 12*HOUR ⇒ Night`). */
+  wallClockNowMs?: number,
+): void {
+  const { defs = BUILDING_DEFS } = ctx ?? {};
+  // §2.6 vent: non-stored outputs (co2 only — P4 Phase 1 moved the 6 byproducts
+  // to OUTPUT_CAP_EXEMPT) never sit in island inventory. Drain any stock here —
+  // runtime never writes them (applyRates skips), so the only way a bin is
+  // non-zero is a save written before this behavior; clear it so the bin reads
+  // empty. co2's climate value is the per-island `co2Kg` scalar (untouched),
+  // summed globally by `sumIslandCo2`.
+  for (const r of NON_STORED_OUTPUTS) {
+    if ((state.inventory[r] ?? 0) !== 0) state.inventory[r] = 0;
+  }
+  // §2.7 perf→wall offset. `wallClockNowMs - nowMs` is constant across this
+  // advance call, so each segment's wall-clock time is `t + wallOffset`.
+  // Tests that omit `wallClockNowMs` fall back to `wallOffset = 0` — the
+  // existing "lastTick is the wall clock" convention.
+  const wallOffset = (wallClockNowMs ?? nowMs) - nowMs;
+  if (nowMs <= state.lastTick) {
+    state.lastTick = nowMs;
+    return;
+  }
+  // Per-tick base skill multiplier. unlockedNodes / unlockedEdges
+  // do not mutate during this advanceIsland call (level-ups don't
+  // auto-spend points; spend paths are UI-driven outside the tick),
+  // so this object is constant for the duration. Freeze to catch
+  // accidental mutation in dev. §perf-2026-06-10: read from the
+  // signature-keyed memo (clone — the memoized base is never handed out).
+  const baseMult = cloneSkillMultipliers(
+    getDerivationsMemo(state, defs, ctx?.geothermalActive ?? false, ctx?.crossIsland, ctx?.conduitUnions, ctx?.conduitRemoteAttached).baseSkillMul,
+  );
+  Object.freeze(baseMult);  // shallow — covers all primitive fields
+  // The caller's modifier bundle is stable for the duration of this advance
+  // call. When `high_wind` is active its variance sample changes per second,
+  // so we clamp each integration segment to the next second boundary.
+  const varianceActive = (ctx?.modifierMul ?? IDENTITY_MODIFIER_MULTIPLIERS).outputVariance;
+  // §13.3 Time Lock banking: if the island has at least one Time Lock and
+  // banking is enabled, accumulate offline time into the bank instead of
+  // advancing production.
+  const timeLockCount = state.buildings.filter((b) => b.defId === 'time_lock').length;
+  if (timeLockCount > 0 && state.bankingEnabled) {
+    const maxBank = timeLockCount * 24 * 60; // 24 hours per Lock in minutes
+    const offlineMin = (nowMs - state.lastTick) / 60000;
+    state.timeLockBankedMin = Math.min(maxBank, state.timeLockBankedMin + offlineMin);
+    state.lastTick = nowMs;
+    return; // skip normal advancement — island is paused while banking
+  }
+  // §12.4: shrink starter inventory grace as normal caps catch up.
+  for (const r of Object.keys(state.starterInventoryGrace) as ResourceId[]) {
+    clearGraceIfRedundant(state, r, baseMult);
+  }
+  let t = state.lastTick;
+  if (ctx?.worldSeed) {
+    advanceToxicityRolls(state.buildings, ctx.worldSeed, state.lastTick, nowMs);
+  }
+  // Robotics sub-path bonus: stretches maintenance thresholds (longer
+  // operating-time budget before degradation begins). Read once and reused
+  // across every maintenance check in this advanceIsland call.
+  const maintenanceThresholdMul = baseMult.maintenanceThreshold;
+  // §4.7: attempt auto-maintain BEFORE the first segment too — a save loaded
+  // with materials in inventory and an over-threshold building should
+  // self-heal on the next tick without waiting for the next inventory
+  // boundary. Policy (per pickMostDegradedTarget): only the single
+  // most-degraded building is considered; if its tier recipe isn't fully
+  // in stock, no maintenance fires this pass — the building waits rather
+  // than letting a less-critical building consume the materials.
+  {
+    const target = pickMostDegradedTarget(state.buildings, defs, maintenanceThresholdMul);
+    if (target !== null) {
+      tryAutoMaintain(target, defs[target.defId], state.inventory, t, maintenanceThresholdMul);
+    }
+  }
+  for (let safety = 0; safety < 10000; safety++) {
+    if (t >= nowMs) break;
+    // §perf-2026-06-22: the per-segment compute (rates + every boundary that
+    // bounds the segment) is extracted to `planSegment` so a future cross-tick
+    // cache can memoize the whole bundle. Behaviour-identical to the inline
+    // block it replaced — same calls, same order.
+    const { byBuilding, production, consumption, net, skillMul, maxCap, rawBalance, batteryIsLocal, utilById, segEndMs, nextAccelMs } =
+      planSegment(state, ctx, defs, t, nowMs, wallOffset, baseMult, varianceActive);
     const dtSec = (segEndMs - t) / 1000;
     if (dtSec > 0) {
       applyRates(state, net, dtSec, ctx?.caps, baseMult);
