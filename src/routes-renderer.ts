@@ -9,7 +9,7 @@
 //   overlayLayer   — per-frame chevrons + pulses + draft preview (cheap
 //                    primitives, rebuilt every update; not cached).
 
-import { Container, Graphics } from 'pixi.js';
+import { Container, Graphics, GraphicsContext } from 'pixi.js';
 import type { Route } from './routes.js';
 import { VISION_BLUE } from './world.js';
 import { TILE_PX } from './island.js';
@@ -39,6 +39,25 @@ export class RouteRenderer {
   readonly animatedLayer = new Container();
   readonly overlayLayer = new Container();
   private readonly overlayGfx = new Graphics();
+
+  // PERF (§ chevron instancing): the in-flight chevrons animate every frame, so
+  // the old paintOverlay accumulated all chevron triangles into `overlayGfx` and
+  // re-tessellated them on every clear()+redraw — a per-frame geometry rebuild
+  // whose cost scales with the in-flight bot count (the dominant render-ms cost
+  // on a busy transport scene; live A/B confirmed routes-overlay as the top
+  // render layer). Instead we tessellate ONE unit chevron into a SHARED
+  // GraphicsContext (`chevronCtx`) and instance it across a pool of Graphics:
+  // each frame we only set per-instance position/rotation (a matrix write, no
+  // re-tessellation, no GPU geometry re-upload). Pixi v8 shares one tessellated
+  // geometry across every Graphics built on the same context, so this is
+  // byte-for-byte the same vector output as the old path — only the per-frame
+  // CPU changes. Unit chevron points along +x (matches appendChevronPath with
+  // u=(1,0), p=(0,1), c=origin → tip (6,0), base (-4,±4)); rotation orients it.
+  private readonly chevronCtx = new GraphicsContext()
+    .poly([6, 0, -4, 4, -4, -4])
+    .fill({ color: VISION_BLUE, alpha: 0.85 })
+    .stroke({ width: 1, color: 0xf5a742, alpha: 0.6 });
+  private readonly chevronPool: Graphics[] = [];
 
   private readonly entries = new Map<string, RouteRenderState>();
   private _disposed = false;
@@ -274,8 +293,13 @@ export class RouteRenderer {
       }
     }
 
-    // Pass 2: accumulate every in-flight chevron's triangle into ONE path.
+    // Pass 2: in-flight chevrons. Instanced path (default) positions pooled
+    // Graphics that share `chevronCtx` — no per-frame tessellation. The legacy
+    // path (toggle `globalThis.__instChevrons = false`, kept for live A/B and as
+    // a fallback) accumulates triangles into `overlayGfx` for one fill+stroke.
+    const instanced = (globalThis as Record<string, unknown>).__instChevrons !== false;
     let anyChevron = false;
+    let chevronIdx = 0;
     for (const r of routes) {
       const entry = this.entries.get(r.id);
       if (!entry) continue;
@@ -316,15 +340,57 @@ export class RouteRenderer {
         const cy = p1.y + (p2.y - p1.y) * segT;
         const ux = segLen > 0 ? (p2.x - p1.x) / segLen : 0;
         const uy = segLen > 0 ? (p2.y - p1.y) / segLen : 0;
-        this.appendChevronPath(g, cx, cy, ux, uy);
-        anyChevron = true;
+        if (instanced) {
+          const gc = this.acquireChevron(chevronIdx++);
+          gc.position.set(cx, cy);
+          gc.rotation = Math.atan2(uy, ux);
+          gc.visible = true;
+        } else {
+          this.appendChevronPath(g, cx, cy, ux, uy);
+          anyChevron = true;
+        }
       }
     }
-    // ONE fill + ONE stroke for ALL chevrons (every chevron has the same style).
-    if (anyChevron) {
-      g.fill({ color: VISION_BLUE, alpha: 0.85 })
-       .stroke({ width: 1, color: 0xf5a742, alpha: 0.6 });
+    if (instanced) {
+      // Hide pooled chevrons beyond the live in-flight count.
+      for (let i = chevronIdx; i < this.chevronPool.length; i++) {
+        this.chevronPool[i]!.visible = false;
+      }
+      // Bound the pool: an offline-catch-up burst can momentarily put thousands
+      // of bots in flight, growing the pool to that peak. Left untrimmed, the
+      // hidden tail is carried through collectRenderables (and memory) forever.
+      // Trim back toward current need + slack so steady state stays small; the
+      // slack absorbs normal frame-to-frame variation without destroy/recreate
+      // thrash. Trimmed instances were hidden, so this is behavior-neutral.
+      const cap = chevronIdx + 64;
+      if (this.chevronPool.length > cap) {
+        for (let i = cap; i < this.chevronPool.length; i++) this.chevronPool[i]!.destroy();
+        this.chevronPool.length = cap;
+      }
+    } else {
+      // Legacy path: hide the whole instanced pool, then ONE fill + ONE stroke
+      // for ALL accumulated chevrons (every chevron shares the same style).
+      for (const gc of this.chevronPool) gc.visible = false;
+      if (anyChevron) {
+        g.fill({ color: VISION_BLUE, alpha: 0.85 })
+         .stroke({ width: 1, color: 0xf5a742, alpha: 0.6 });
+      }
     }
+  }
+
+  /** Lazily grow the instanced-chevron pool. Each instance is a Graphics built
+   *  on the SHARED `chevronCtx`, so they all reuse one tessellated geometry and
+   *  cost only a per-frame transform write. Parented under `overlayLayer` (after
+   *  `overlayGfx`) so chevrons render on top of pulses/draft, matching the
+   *  legacy z-order (pulses pass 1 → chevrons pass 2). */
+  private acquireChevron(i: number): Graphics {
+    let gc = this.chevronPool[i];
+    if (!gc) {
+      gc = new Graphics(this.chevronCtx);
+      this.overlayLayer.addChild(gc);
+      this.chevronPool[i] = gc;
+    }
+    return gc;
   }
 
   /** Append one ▶ chevron's triangle (centred at (cx,cy), pointing along
@@ -358,6 +424,9 @@ export class RouteRenderer {
     this.staticLayer.destroy({ children: true });
     this.animatedLayer.destroy({ children: true });
     this.overlayLayer.destroy({ children: true });
+    // Pooled chevrons are destroyed with overlayLayer's children, but the
+    // shared context they were built on is externally owned — free it too.
+    this.chevronCtx.destroy();
   }
 
   /** Test-only accessor — Phase 4 introspects the per-route cacheKey to
