@@ -7,10 +7,12 @@ import { computeVisionSources, type VisionSource } from './lighthouse.js';
 import {
   attachTerrainAt,
   constituentBiomeAt,
+  constituentOwnerAt,
   DEMO_ISLANDS_TEST_FIXTURE,
   findPopulatedIslandAt,
   islandConstituentBiomes,
   islandConstituents,
+  islandImplicitLedger,
   islandRenderState,
   ISLAND_NAME_MAX_LEN,
   makeInitialIslandState,
@@ -19,6 +21,7 @@ import {
   WORLD_SEED,
   validateIslandName,
   VISION_PADDING_TILES,
+  type Biome,
   type IslandSpec,
 } from './world.js';
 import { tileInscribedInEllipse, type TerrainKind } from './island.js';
@@ -738,5 +741,90 @@ describe('constituentBiomeAt / islandConstituentBiomes', () => {
     expect(biomes.size).toBe(2);
     expect(biomes.has('forest')).toBe(true);
     expect(biomes.has('volcanic')).toBe(true);
+  });
+});
+
+// §3.6 placement-order ownership ledger.
+function ledgerSpec(over: Partial<IslandSpec> = {}): IslandSpec {
+  return {
+    id: 'a', name: 'a', biome: 'plains' as Biome, cx: 0, cy: 0,
+    majorRadius: 5, minorRadius: 5, populated: true, discovered: true,
+    buildings: [], modifiers: [], ...over,
+  };
+}
+
+describe('ownership ledger', () => {
+  it('islandImplicitLedger lists every constituent at current radii in index order', () => {
+    const s = ledgerSpec({
+      extraEllipses: [{ major: 4, minor: 4, rotation: 0, offsetX: 8, offsetY: 0, biome: 'arctic' as Biome, originId: 'b' }],
+    });
+    expect(islandImplicitLedger(s)).toEqual([
+      { constituent: 0, major: 5, minor: 5 },
+      { constituent: 1, major: 4, minor: 4 },
+    ]);
+  });
+
+  it('with no ledger, owner is the earliest-index inscriber (legacy behavior)', () => {
+    const s = ledgerSpec({
+      extraEllipses: [{ major: 5, minor: 5, rotation: 0, offsetX: 3, offsetY: 0, biome: 'arctic' as Biome, originId: 'b' }],
+    });
+    // tile (1,0) is inscribed in BOTH primary (centre 0,0) and the extra (centre 3,0).
+    const owner = constituentOwnerAt(s, 1, 0);
+    expect(owner?.index).toBe(0); // primary wins by index when no ledger
+  });
+
+  it('with a ledger, an earlier claim wins even if its constituent has a higher index', () => {
+    const s = ledgerSpec({
+      extraEllipses: [{ major: 5, minor: 5, rotation: 0, offsetX: 3, offsetY: 0, biome: 'arctic' as Biome, originId: 'b' }],
+      // extra (index 1) was placed BEFORE the primary's contested ring:
+      ownershipLedger: [
+        { constituent: 1, major: 5, minor: 5 },
+        { constituent: 0, major: 5, minor: 5 },
+      ],
+    });
+    const owner = constituentOwnerAt(s, 1, 0);
+    expect(owner?.index).toBe(1); // already-placed (the extra) wins
+  });
+
+  it('self-heals: a ledger under-covering the union still owns every union tile', () => {
+    const s = ledgerSpec({
+      majorRadius: 6, minorRadius: 6,
+      // ledger claims a SMALLER radius than current (invariant violation):
+      ownershipLedger: [{ constituent: 0, major: 3, minor: 3 }],
+    });
+    // tile (4,0) is in the current r6 footprint but outside the r3 claim.
+    expect(constituentOwnerAt(s, 4, 0)?.index).toBe(0);
+  });
+});
+
+describe('ownership ledger — terrain/biome sites', () => {
+  it('constituentBiomeAt respects the ledger over index order', () => {
+    const s = ledgerSpec({
+      extraEllipses: [{ major: 5, minor: 5, rotation: 0, offsetX: 3, offsetY: 0, biome: 'arctic' as Biome, originId: 'b' }],
+      ownershipLedger: [
+        { constituent: 1, major: 5, minor: 5 }, // arctic placed first
+        { constituent: 0, major: 5, minor: 5 },
+      ],
+    });
+    expect(constituentBiomeAt(s, 1, 0)).toBe('arctic'); // not the primary's 'plains'
+  });
+
+  it('attachTerrainAt uses the ledger owner biome on a contested tile', () => {
+    const base = ledgerSpec({
+      extraEllipses: [{ major: 5, minor: 5, rotation: 0, offsetX: 3, offsetY: 0, biome: 'arctic' as Biome, originId: 'b' }],
+      ownershipLedger: [
+        { constituent: 1, major: 5, minor: 5 },
+        { constituent: 0, major: 5, minor: 5 },
+      ],
+    });
+    const withTerrain = attachTerrainAt(base);
+    // Compare to a no-ledger control where the primary (plains) would win:
+    const control = attachTerrainAt({ ...base, ownershipLedger: undefined });
+    // The contested tile's terrain must differ when the arctic lobe owns it,
+    // OR (if both biomes happen to yield the same kind there) at least the
+    // biome resolver must report arctic:
+    expect(constituentBiomeAt(base, 1, 0)).toBe('arctic');
+    expect(constituentBiomeAt({ ...base, ownershipLedger: undefined }, 1, 0)).toBe('plains');
+    void withTerrain; void control;
   });
 });

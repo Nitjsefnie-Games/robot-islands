@@ -98,6 +98,15 @@ export const BIOME_MAX_RADII: Readonly<
 
 export type IslandRenderState = 'visible' | 'discovered' | 'unknown';
 
+/** §3.6 one ownership claim in `IslandSpec.ownershipLedger`. `constituent`
+ *  indexes `islandConstituents(spec)` (0 = primary, N = extraEllipses[N-1]);
+ *  (major,minor) are that constituent's radii AT THE TIME of this claim. */
+export interface OwnershipClaim {
+  readonly constituent: number;
+  readonly major: number;
+  readonly minor: number;
+}
+
 export interface IslandSpec {
   readonly id: string;
   /** Player-mutable display name. Initialized to the same string as `id`
@@ -189,6 +198,20 @@ export interface IslandSpec {
    *  absorbed lobes, which never use the hand layout). Added in the v28→v29
    *  migration; readers treat absent as "no locked base layout". */
   baseLayoutRadius?: number;
+  /** §3.6 placement-order ownership ledger. Append-only list of ownership
+   *  CLAIMS in the order constituents were placed/grown: each entry says
+   *  "constituent `c` inscribed the ring up to (major,minor) at this point in
+   *  time." Resolves overlap precedence by placement TIME ("already-placed
+   *  wins") so a growing constituent never overwrites a sibling's existing land.
+   *  `constituent` indexes `islandConstituents(spec)` (0 = primary). ABSENT ⇒
+   *  the implicit baseline (`islandImplicitLedger`): constituents in index order
+   *  at current radii — identical to the pre-ledger "earliest-index wins" rule,
+   *  so single-ellipse and never-grown merged islands store nothing and legacy
+   *  saves behave unchanged. A constituent may appear multiple times (baseline +
+   *  one per later growth); only CONSECUTIVE same-constituent claims coalesce.
+   *  Invariant: the last claim per constituent equals its current radii. Rides
+   *  the `serializeWorld` spread (SerializedIslandSpec omits only terrainAt). */
+  ownershipLedger?: ReadonlyArray<OwnershipClaim>;
 }
 
 /** §3.6 constituent ellipse view — the primary ellipse re-expressed as the
@@ -226,16 +249,53 @@ export function islandConstituents(spec: IslandSpec): ConstituentEllipse[] {
   return out;
 }
 
-/** §3.6 multibiome: the biome of the constituent that owns tile (x,y) in
- *  island-local coords — the EARLIEST constituent (primary, then merge order)
- *  whose ellipse inscribes the tile, matching attachTerrainAt's terrain
- *  precedence and the computeIslandTiles dedup. Returns undefined when no
- *  constituent inscribes the tile (outside the footprint). Pure. */
-export function constituentBiomeAt(spec: IslandSpec, x: number, y: number): Biome | undefined {
-  for (const c of islandConstituents(spec)) {
-    if (tileInscribedInEllipse(x - c.offsetX, y - c.offsetY, c.major, c.minor)) return c.biome;
+/** §3.6 the implicit ownership baseline: every constituent claimed at its
+ *  CURRENT radii in index order. This is what an absent `ownershipLedger`
+ *  means (legacy "earliest-index wins"). Pure. */
+export function islandImplicitLedger(spec: IslandSpec): OwnershipClaim[] {
+  return islandConstituents(spec).map((c, i) => ({
+    constituent: i, major: c.major, minor: c.minor,
+  }));
+}
+
+/** §3.6 the constituent that OWNS island-local tile (x, y) by placement order
+ *  ("already-placed wins"), plus its index, or undefined when no constituent
+ *  inscribes the tile. Walks `ownershipLedger` (first claim whose ellipse
+ *  inscribes the tile wins); when the ledger is absent OR under-covers the
+ *  current union, falls back to the current-radii index walk so a union tile is
+ *  never left unowned. The owner's CURRENT radii (c.major/c.minor) — not the
+ *  claim radii — drive terrain generation; only ownership is historical. Pure. */
+export function constituentOwnerAt(
+  spec: IslandSpec, x: number, y: number,
+): { ellipse: ConstituentEllipse; index: number } | undefined {
+  const constituents = islandConstituents(spec);
+  const ledger = spec.ownershipLedger;
+  if (ledger && ledger.length > 0) {
+    for (const claim of ledger) {
+      const c = constituents[claim.constituent];
+      if (!c) continue; // defensive: stale index
+      if (tileInscribedInEllipse(x - c.offsetX, y - c.offsetY, claim.major, claim.minor)) {
+        return { ellipse: c, index: claim.constituent };
+      }
+    }
+    // fall through: ledger under-covers the union (invariant violation) → self-heal
+  }
+  for (let i = 0; i < constituents.length; i++) {
+    const c = constituents[i]!;
+    if (tileInscribedInEllipse(x - c.offsetX, y - c.offsetY, c.major, c.minor)) {
+      return { ellipse: c, index: i };
+    }
   }
   return undefined;
+}
+
+/** §3.6 multibiome: the biome of the constituent that owns tile (x,y) in
+ *  island-local coords, resolved by placement order via `constituentOwnerAt`
+ *  (the ownership ledger — "already-placed wins"), independent of the
+ *  `computeIslandTiles` dedup order. Returns undefined when no constituent
+ *  inscribes the tile (outside the footprint). Pure. */
+export function constituentBiomeAt(spec: IslandSpec, x: number, y: number): Biome | undefined {
+  return constituentOwnerAt(spec, x, y)?.ellipse.biome;
 }
 
 /** The set of distinct constituent biomes on `spec` (primary + absorbed lobes).
@@ -283,27 +343,21 @@ export function attachTerrainAt<B extends Omit<IslandSpec, 'terrainAt'>>(base: B
       const k = overrides[`${x},${y}`];
       if (k !== undefined) return k;
     }
-    // §3.6 per-constituent terrain. Each constituent generates terrain under
-    // its OWN biome/seed in its OWN local frame, so an absorbed lobe keeps the
-    // terrain (incl. resource veins) it had as a standalone island, and growing
-    // a constituent pulls new terrain from THAT constituent — not the absorber.
-    // "Already placed wins": constituents are walked in age order (primary,
-    // then merge order), and the FIRST that inscribes the tile owns it — the
-    // same precedence as the `computeIslandTiles` dedup, so the tile set and its
-    // terrain never disagree on a shared (overlap) tile.
-    const constituents = islandConstituents(spec);
-    for (let i = 0; i < constituents.length; i++) {
-      const c = constituents[i]!;
+    // §3.6 per-constituent terrain, resolved by placement order ("already-placed
+    // wins") via the ownership ledger — a grown constituent never overwrites a
+    // sibling's existing terrain. Each constituent generates terrain under its
+    // OWN biome/seed in its OWN local frame, so an absorbed lobe keeps the terrain
+    // (incl. resource veins) it had as a standalone island. The OWNER's current
+    // radii drive the boundary predicate; only ownership of a contested tile is
+    // historical.
+    const owner = constituentOwnerAt(spec, x, y);
+    if (owner) {
+      const c = owner.ellipse;
       const lx = x - c.offsetX;
       const ly = y - c.offsetY;
-      if (!tileInscribedInEllipse(lx, ly, c.major, c.minor)) continue;
-      // §3.7 hand-placed base layout (home): the PRIMARY constituent of an
-      // island that carries `baseLayoutRadius` uses the locked `defaultTerrainAt`
-      // layout WITHIN that radius, and procedural biome terrain BEYOND it (so
-      // growth past the original footprint isn't all grass). Scoped to the
-      // primary (i === 0) ONLY — absorbed lobes (i > 0) never use the hand
-      // layout, so merged-in islands keep their own §3.6 terrain untouched.
-      if (i === 0 && spec.baseLayoutRadius !== undefined &&
+      // §3.7 hand-placed base layout (home): only the PRIMARY (index 0) within
+      // baseLayoutRadius uses the locked layout; absorbed lobes never do.
+      if (owner.index === 0 && spec.baseLayoutRadius !== undefined &&
           tileInscribedInEllipse(lx, ly, spec.baseLayoutRadius, spec.baseLayoutRadius)) {
         return defaultTerrainAt(lx, ly);
       }
