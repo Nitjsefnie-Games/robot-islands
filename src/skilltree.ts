@@ -1395,8 +1395,9 @@ export function skillUnlockedAdjacencyRules(
   graph: Graph = DEFAULT_GRAPH,
 ): ReadonlyArray<ExoticAdjacencyRule> {
   const rules: ExoticAdjacencyRule[] = [];
+  const byId = graphById(graph);
   for (const nodeId of state.unlockedNodes) {
-    const node = graph.nodes.find((n) => n.id === nodeId);
+    const node = byId.get(nodeId as string);
     if (node?.effect.kind === 'exoticAdjacency' && node.effect.effect.kind === 'pairBoost') {
       rules.push({ pair: node.effect.effect.pair, recipeRateBonus: node.effect.effect.recipeRateBonus });
     }
@@ -1511,8 +1512,9 @@ export function hasBiomeBypass(
   defId: BuildingDefId,
   graph: Graph = DEFAULT_GRAPH,
 ): boolean {
+  const byId = graphById(graph);
   for (const nodeId of state.unlockedNodes) {
-    const node = graph.nodes.find((n) => n.id === nodeId);
+    const node = byId.get(nodeId as string);
     if (node?.effect.kind === 'biomeBypass' && node.effect.buildings.includes(defId)) return true;
   }
   return false;
@@ -1523,8 +1525,9 @@ export function effectiveTierShift(
   defId: BuildingDefId,
   graph: Graph = DEFAULT_GRAPH,
 ): number {
+  const byId = graphById(graph);
   for (const nodeId of state.unlockedNodes) {
-    const node = graph.nodes.find((n) => n.id === nodeId);
+    const node = byId.get(nodeId as string);
     if (node?.effect.kind === 'tierBypass' && node.effect.buildings.includes(defId)) {
       return node.effect.tierShift;
     }
