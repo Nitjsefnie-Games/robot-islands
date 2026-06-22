@@ -13,6 +13,7 @@ import { loadSnapshot } from '../src/game/persistence.js';
 import { deserializeWorld } from '../../src/persistence.js';
 import { islandsOverlap } from '../../src/world.js';
 import { findNextMerge } from '../../src/island-merge.js';
+import { computeRates } from '../../src/economy.js';
 
 const URL = process.env.DATABASE_URL ?? 'postgresql:///robot_islands';
 const USER = process.env.BENCH_USER ?? 'aee50add-e972-4b6b-9710-9325ff6a2711';
@@ -54,6 +55,16 @@ const benches: Bench[] = [
     unitsPerCall: 1,
     run: () => findNextMerge(world, islandStates),
   },
+  ...(() => {
+    // computeRates is non-mutating, so it loops cleanly on a real island state.
+    // ctx-less path: exercises the 4-pass + flow-solve structure (the 25%
+    // self-time hotspot) without reconstructing the full RatesContext — a
+    // per-function signal, with the e2e economy phase as the representative check.
+    const big = [...islandStates.values()].sort((a, b) => b.buildings.length - a.buildings.length)[0];
+    return big
+      ? [{ name: 'computeRates:biggest-island', unitsPerCall: 1, run: () => computeRates(big) }]
+      : [];
+  })(),
 ];
 
 function time(b: Bench): { nsPerCall: number; nsPerUnit: number } {
