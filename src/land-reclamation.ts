@@ -23,7 +23,7 @@ import { inv } from './economy.js';
 import { islandInscribedAny, tileInscribedInEllipse } from './island.js';
 import { LAND_TILE_COST } from './building-defs.js';
 import type { ResourceId } from './recipes.js';
-import { BIOME_MAX_RADII, recordGrowthClaim, type Biome, type IslandSpec } from './world.js';
+import { BIOME_MAX_RADII, islandImplicitLedger, recordGrowthClaim, type Biome, type IslandSpec } from './world.js';
 
 /** Which ellipse semi-axis to grow on an expansion. */
 export type Axis = 'major' | 'minor';
@@ -245,6 +245,16 @@ export function expandConstituent(
 ): void {
   const guard = canExpandConstituent(spec, state, index, axis);
   if (!guard.ok) return;
+  // §3.6 Materialize the ownership baseline at PRE-growth radii, BEFORE mutating
+  // the radius. If we let recordGrowthClaim do it post-mutation, the grown
+  // constituent's baseline entry would carry grown radii and appear BEFORE higher-
+  // index siblings in the ledger walk, stealing tiles they already own — exactly
+  // the bug this feature exists to prevent. Pre-materializing here means the
+  // baseline entries capture the current (pre-growth) footprint; recordGrowthClaim
+  // then only appends/coalesces the single new grown-ring claim at the end.
+  if (!spec.ownershipLedger) {
+    spec.ownershipLedger = islandImplicitLedger(spec);
+  }
   // Pre-expansion radius drives the cost (matches the cost-preview text in the
   // inspector). The post-mutation radius is `current + 1` per §3.4 ("adds 1 to
   // either the major or the minor radius").

@@ -485,6 +485,30 @@ describe('no-overwrite ledger', () => {
     expect(last).toEqual({ constituent: 0, major: s.majorRadius, minor: s.minorRadius });
   });
 
+  it('growing a non-last middle lobe does NOT overwrite a higher-index lobe (3-constituent regression)', () => {
+    // Three constituents: c0 plains r5@(0,0), c1 arctic r5@(11,0), c2 desert r5@(18,0).
+    // c2 owns tile (15,0) at r5 (c1-r5 does NOT cover x=15; c2-r5 does).
+    // After c1 grows major r5→r6, c1-r6 also inscribes (15,0).
+    // Bug: without pre-mutation baseline, c1's baseline entry carries post-growth radii
+    // {1,6,5} and appears before c2's {2,5,5} in the ledger walk → c1 steals (15,0).
+    // Fix: baseline materialized PRE-mutation keeps {1,5,5} before {2,5,5}; c2 still owns (15,0).
+    const s = makeSpec({
+      biome: 'plains' as Biome, majorRadius: 5, minorRadius: 5,
+      buildings: [hubBuilding()],
+      extraEllipses: [
+        { major: 5, minor: 5, rotation: 0, offsetX: 11, offsetY: 0, biome: 'arctic' as Biome, originId: 'c1' },
+        { major: 5, minor: 5, rotation: 0, offsetX: 18, offsetY: 0, biome: 'desert' as Biome, originId: 'c2' },
+      ],
+    });
+    const st = plentiful();
+    // c2 owns (15,0) before any growth (c1-r5 only reaches x=14; c2-r5@18 covers x=14..21).
+    expect(constituentBiomeAt(s, 15, 0)).toBe('desert');
+    // Grow the MIDDLE lobe c1 once (r5→r6) — its grown ring reaches x=15.
+    expandConstituent(s, st, 1, 'major');
+    // c2 must still own (15,0) — its pre-growth baseline claim was recorded BEFORE c1's growth.
+    expect(constituentBiomeAt(s, 15, 0)).toBe('desert');
+  });
+
   it("grown-vs-grown: a later primary growth does not eat the lobe's earlier reclaimed ring", () => {
     const s = merged();
     const st = plentiful();
