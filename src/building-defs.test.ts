@@ -83,6 +83,9 @@ const KNOWN_DEF_IDS: ReadonlyArray<BuildingDefId> = [
   'genesis_chamber',
   'universe_editor',
   'lattice_node',
+  // Task 1 — conduit infrastructure (forward-compat for cluster-bonus wiring).
+  'cluster_conduit',
+  'lattice_conduit',
   // §11.6 / §13.3
   'path_drone_foundry',
   'probability_engine',
@@ -464,6 +467,47 @@ describe('BUILDING_DEFS catalog', () => {
       expect(RECIPES.motor_assembly).toBeDefined();
       expect(RECIPES.motor_assembly!.inputs).toEqual({ magnet: 1, wire: 4, steel: 1 });
       expect(RECIPES.motor_assembly!.outputs).toEqual({ electric_motor: 1 });
+    });
+  });
+
+  describe('cluster_conduit (T2 same-island wiring)', () => {
+    it('is a T2 logistics def with the mandated cost and no recipe/power', () => {
+      const def = BUILDING_DEFS.cluster_conduit;
+      expect(def).toBeDefined();
+      expect(def.displayName).toBe('Cluster Conduit');
+      expect(def.category).toBe('logistics');
+      expect(def.tier).toBe(2);
+      expect(def.footprint).toEqual(SHAPES.single);
+      expect(def.placementCost).toEqual({
+        steel_beam: 800,
+        concrete: 500,
+        wire: 120,
+        microchip: 25,
+        gear: 40,
+      });
+      expect(def.power).toBeUndefined();
+      expect(RECIPES.cluster_conduit).toBeUndefined();
+    });
+  });
+
+  describe('lattice_conduit (T5 cross-island wiring)', () => {
+    it('is a T5 logistics def with the mandated cost and no recipe/power', () => {
+      const def = BUILDING_DEFS.lattice_conduit;
+      expect(def).toBeDefined();
+      expect(def.displayName).toBe('Lattice Conduit');
+      expect(def.category).toBe('logistics');
+      expect(def.tier).toBe(5);
+      expect(def.footprint).toEqual(SHAPES.square2);
+      expect(def.placementCost).toEqual({
+        steel_beam: 2800,
+        microchip: 450,
+        wire: 220,
+        exotic_alloy: 90,
+        reality_anchor: 50,
+        ai_core: 30,
+      });
+      expect(def.power).toBeUndefined();
+      expect(RECIPES.lattice_conduit).toBeUndefined();
     });
   });
 

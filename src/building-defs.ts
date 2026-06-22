@@ -104,6 +104,9 @@ export type BuildingDefId =
   // enables the inspector's "expand ellipse" action; the building has no
   // recipe and consumes no power continuously.
   | 'land_reclamation_hub'
+  // Task 1 — conduit infrastructure (forward-compat for cluster-bonus wiring).
+  | 'cluster_conduit'
+  | 'lattice_conduit'
   // New T3
   | 'electric_arc_furnace'
   | 'vault'
@@ -1714,6 +1717,34 @@ export const BUILDING_DEFS: Readonly<Record<BuildingDefId, BuildingDef>> = {
     // 15000 concrete + 10000 stone + 5000 iron_ingot + 400 gear + 3000 clay = 33.8 t.
     placementCost: { concrete: 15000, stone: 10000, iron_ingot: 5000, gear: 400, clay: 3000 },
     glyph: '⊕',
+  },
+  // Task 1 — cluster_conduit: T2 same-island wiring infrastructure.
+  // No recipe, no power; purely connectivity for the forthcoming cluster bonus.
+  cluster_conduit: {
+    id: 'cluster_conduit',
+    displayName: 'Cluster Conduit',
+    category: 'logistics',
+    tier: 2,
+    footprint: SHAPES.single,
+    fill: 0x5a7a8a, // muted steel-cyan
+    stroke: 0x1a2a3a,
+    // BOM source: vernacular utility trench + junction box — scaled T2 logistics basket.
+    placementCost: { steel_beam: 800, concrete: 500, wire: 120, microchip: 25, gear: 40 },
+    glyph: '⌁',
+  },
+  // Task 1 — lattice_conduit: T5 cross-island wiring infrastructure.
+  // No recipe, no power; purely connectivity for the forthcoming lattice bonus.
+  lattice_conduit: {
+    id: 'lattice_conduit',
+    displayName: 'Lattice Conduit',
+    category: 'logistics',
+    tier: 5,
+    footprint: SHAPES.square2,
+    fill: 0x70c0a0, // mint-teal, sibling to lattice_node
+    stroke: 0x204030,
+    // BOM source: extrapolated from T5 lattice_node analog; scaled cross-island relay basket.
+    placementCost: { steel_beam: 2800, microchip: 450, wire: 220, exotic_alloy: 90, reality_anchor: 50, ai_core: 30 },
+    glyph: '⧉',
   },
   // §8.9 T2 special: Terrain Modifier (2x2). Clears or converts tiles per
   // §8.9. The tile-conversion mechanic is a separate UI action; this def
