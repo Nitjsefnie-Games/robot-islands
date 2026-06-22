@@ -1,0 +1,350 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Design spec — Populated islands absorb non-populated neighbors</title>
+  <style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: var(--sans);
+      background: var(--ivory);
+      color: var(--gray-700);
+      line-height: 1.58;
+      padding: 56px 32px 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { margin: 0 auto; max-width: 960px; }
+    header.page-head { margin-bottom: 40px; max-width: 840px; }
+    .eyebrow {
+      font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em;
+      text-transform: uppercase; color: var(--gray-500); margin-bottom: 12px;
+    }
+    h1 {
+      font-family: var(--serif); font-weight: 500; font-size: 38px;
+      line-height: 1.14; color: var(--slate); margin-bottom: 18px; letter-spacing: -0.01em;
+    }
+    .context-box {
+      background: var(--gray-150); border: var(--border); border-radius: var(--radius);
+      padding: 16px 20px; font-size: 14.5px; color: var(--gray-700);
+    }
+    .context-box .label {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); display: block; margin-bottom: 6px;
+    }
+    .toc {
+      font-family: var(--mono); font-size: 12.5px; color: var(--gray-500);
+      margin: 24px 0 0; display: flex; flex-wrap: wrap; gap: 6px 18px;
+    }
+    .toc a { color: var(--gray-500); text-decoration: none; }
+    .toc a:hover { color: var(--clay); }
+    .summary {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin: 40px 0 56px;
+    }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell {
+      background: var(--white); border: var(--border); border-radius: var(--radius); padding: 18px 20px;
+    }
+    .summary .k {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.06em; color: var(--gray-500); margin-bottom: 6px;
+    }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent  { color: var(--clay); }
+    .summary .v.ok      { color: var(--olive); }
+    .decision {
+      background: var(--white); border: var(--border); border-left: 4px solid var(--clay);
+      border-radius: var(--radius); padding: 22px 26px; margin-bottom: 56px;
+    }
+    .decision .d-tag {
+      font-family: var(--mono); font-size: 11px; text-transform: uppercase;
+      letter-spacing: 0.07em; color: var(--clay); margin-bottom: 8px;
+    }
+    .decision .d-head {
+      font-family: var(--serif); font-size: 22px; font-weight: 500;
+      color: var(--slate); margin-bottom: 10px; letter-spacing: -0.01em;
+    }
+    .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 800px; }
+    .decision .d-body + .d-body { margin-top: 8px; }
+    section { margin-bottom: 60px; }
+    .sec-head { display: flex; align-items: baseline; gap: 14px; margin-bottom: 8px; }
+    .sec-head .num {
+      font-family: var(--mono); font-size: 12px; background: var(--oat);
+      color: var(--slate); padding: 3px 9px; border-radius: 8px;
+    }
+    .sec-head h2 {
+      font-family: var(--serif); font-weight: 500; font-size: 26px;
+      color: var(--slate); letter-spacing: -0.01em;
+    }
+    .sec-intro { font-size: 14.5px; color: var(--gray-500); max-width: 760px; margin-bottom: 24px; }
+    p.body { font-size: 14.5px; max-width: 800px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+    ul.body { font-size: 14.5px; max-width: 800px; margin: 0 0 14px 22px; }
+    ul.body li { margin: 6px 0; }
+    ul.body li strong { color: var(--slate); }
+    code {
+      font-family: var(--mono); font-size: 0.88em; background: var(--gray-150);
+      border: 1px solid var(--gray-300); border-radius: 5px; padding: 1px 5px; color: #C9B98A;
+    }
+    .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    @media (max-width: 820px) { .compare { grid-template-columns: 1fr; } }
+    .compare .col { background: var(--white); border: var(--border); border-radius: var(--radius); overflow: hidden; }
+    .compare .col-head {
+      padding: 12px 18px; font-family: var(--mono); font-size: 11.5px;
+      text-transform: uppercase; letter-spacing: 0.06em; border-bottom: var(--border);
+    }
+    .compare .col.bad  .col-head { background: #2E211C; color: var(--rust); }
+    .compare .col.good .col-head { background: #232A1C; color: var(--olive); }
+    .compare .col-body { padding: 16px 18px; font-size: 13.5px; }
+    .compare .col-body ul { list-style: none; }
+    .compare .col-body li { margin: 7px 0; padding-left: 18px; position: relative; }
+    .compare .col.bad  li:before { content: '\2715'; position: absolute; left: 0; color: var(--rust); }
+    .compare .col.good li:before { content: '\2713'; position: absolute; left: 0; color: var(--olive); }
+    .changes { display: flex; flex-direction: column; gap: 12px; }
+    .change {
+      background: var(--white); border: var(--border); border-radius: var(--radius);
+      padding: 16px 20px; display: grid; grid-template-columns: 240px 1fr; gap: 4px 24px;
+    }
+    @media (max-width: 720px) { .change { grid-template-columns: 1fr; } }
+    .change .file { font-family: var(--mono); font-size: 12.5px; color: var(--clay); word-break: break-all; }
+    .change .what { font-size: 14px; color: var(--gray-700); }
+    .change .what .lead { color: var(--slate); font-weight: 600; }
+    .checklist { display: flex; flex-direction: column; gap: 10px; max-width: 800px; }
+    .check {
+      display: flex; gap: 12px; align-items: flex-start; background: var(--white);
+      border: var(--border); border-radius: 10px; padding: 12px 16px;
+    }
+    .check .box { width: 18px; height: 18px; border-radius: 5px; border: 2px solid var(--gray-500); flex-shrink: 0; margin-top: 2px; }
+    .check .ck-text { font-size: 14px; color: var(--gray-700); }
+    .check .ck-text strong { color: var(--slate); }
+    .risks { border: var(--border); border-radius: var(--radius); overflow: hidden; background: var(--white); }
+    .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: var(--border); }
+    .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: var(--border); }
+    @media (max-width: 780px) { .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); } }
+    .risks .head {
+      background: var(--gray-150); font-weight: 600; color: var(--slate);
+      font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em;
+    }
+    .sev { display: inline-block; font-family: var(--mono); font-size: 11px; padding: 2px 8px; border-radius: 6px; font-weight: 600; }
+    .sev.low  { background: #2D3A24; color: #B6CC96; }
+    .deferred { display: flex; flex-direction: column; gap: 14px; max-width: 840px; }
+    .defer {
+      background: var(--white); border: var(--border); border-left: 4px solid var(--gray-500);
+      border-radius: 10px; padding: 16px 20px;
+    }
+    .defer .dt { font-weight: 600; font-size: 15px; color: var(--slate); margin-bottom: 4px; }
+    .defer .dd { font-size: 13.5px; color: var(--gray-500); }
+    .footer { color: var(--gray-500); font-size: 13px; margin-top: 64px; padding-top: 22px; border-top: 1px solid var(--gray-300); }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Design spec · robot-islands · SPEC §3.6</div>
+      <h1>Populated islands absorb non-populated neighbors on contact</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        A populated island can grow via the Land Reclamation Hub until its tile footprint
+        <em>touches</em> a neighbor — but the merge engine considers only <code>populated</code>
+        islands, so a discovered-or-undiscovered unsettled neighbor is invisible to it and the
+        growing footprint can overlap an unsettled island with nothing happening. This spec
+        decides that such contact triggers a merge: the populated island absorbs the neighbor.
+      </div>
+      <nav class="toc">
+        <a href="#s1">01 Background</a>
+        <a href="#s2">02 Before vs after</a>
+        <a href="#s3">03 Rules</a>
+        <a href="#s4">04 Change inventory</a>
+        <a href="#s5">05 Tests &amp; verification</a>
+        <a href="#s6">06 Risks</a>
+        <a href="#s7">07 Out of scope</a>
+      </nav>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Scope</div><div class="v accent">1 system</div></div>
+      <div class="cell"><div class="k">Files touched</div><div class="v">3</div></div>
+      <div class="cell"><div class="k">Risk</div><div class="v ok">Low</div></div>
+      <div class="cell"><div class="k">Track</div><div class="v">direct to master</div></div>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision</div>
+      <div class="d-head">A merge fires when two footprints touch and at least one island is populated; the populated island is always the absorber.</div>
+      <div class="d-body">The non-populated neighbor is folded in as a new constituent lobe,
+        contributing exactly what it has — <strong>land area, biome, terrain seed, and
+        ownership-ledger lobe</strong> — and nothing else. Two unpopulated islands never merge.
+        The existing populated-vs-populated "larger absorbs smaller" rule is unchanged; it governs
+        only that case.</div>
+      <div class="d-body">Eligibility is geometric contact, <em>independent of the
+        <code>discovered</code> flag</em>. In practice the neighbor is essentially always already
+        discovered before contact (a populated island's vision halo extends 10 tiles past its
+        ellipse, well beyond its footprint), but skipping the flag check keeps the rule simple.</div>
+    </div>
+
+    <section id="s1">
+      <div class="sec-head"><span class="num">01</span><h2>Background</h2></div>
+      <p class="sec-intro">Why the current behavior is a gap, and why the fix is small.</p>
+      <p class="body"><code>findNextMerge</code> (<code>src/island-merge.ts:381</code>) filters to
+        <code>world.islands.filter(s =&gt; s.populated)</code> before scanning for overlaps, so an
+        unsettled neighbor is never a merge candidate. §3.6 silently assumes both parties are
+        populated and never states the precondition.</p>
+      <p class="body">The fix is contained because <code>performMerge</code>
+        (<code>:121</code>) is <strong>already state-safe</strong>: every step that reads the absorbed
+        island's <code>IslandState</code> — inventory transfer (<code>:238</code>), skill refund
+        (<code>:253</code>), storage credit (<code>:224</code>) — is guarded by
+        <code>absorbedState &amp;&amp;</code>, and an unpopulated island has no
+        buildings/routes/drones to migrate. The settlement-vehicle interplay is also already handled:
+        a settler in transit to the absorbed island is retargeted to the absorber (step 7,
+        <code>:292</code>) and consumed cleanly on arrival at the populated absorber
+        (<code>tickVehicles</code>, <code>src/settlement.ts:896</code>).</p>
+    </section>
+
+    <section id="s2">
+      <div class="sec-head"><span class="num">02</span><h2>Before vs after</h2></div>
+      <p class="sec-intro">Behavior when a populated island grows to touch an unsettled neighbor.</p>
+      <div class="compare">
+        <div class="col bad">
+          <div class="col-head">Before</div>
+          <div class="col-body"><ul>
+            <li>Only <code>populated</code> islands are merge candidates.</li>
+            <li>A growing footprint overlaps an unsettled neighbor — nothing happens.</li>
+            <li>§3.6 leaves the populated/unpopulated case undefined.</li>
+          </ul></div>
+        </div>
+        <div class="col good">
+          <div class="col-head">After</div>
+          <div class="col-body"><ul>
+            <li>Contact with any island merges, if ≥1 party is populated.</li>
+            <li>The populated island absorbs the neighbor as a new lobe (biome + terrain preserved).</li>
+            <li>Two unpopulated islands still never merge.</li>
+          </ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="s3">
+      <div class="sec-head"><span class="num">03</span><h2>Rules</h2></div>
+      <p class="sec-intro">The precondition and absorber-selection, stated explicitly.</p>
+      <ul class="body">
+        <li>A merge requires <strong>≥1 populated</strong> island; two unpopulated islands never merge.</li>
+        <li><strong>Both populated:</strong> larger absorbs smaller, level tiebreak — unchanged (<code>chooseMergeAbsorber</code>).</li>
+        <li><strong>Exactly one populated:</strong> the populated island is the absorber regardless of relative size.</li>
+        <li>The absorbed non-populated neighbor transfers only its <strong>land / biome / terrain-seed / ownership-ledger lobe</strong>; it has no inventory, skill points, level, buildings, or routes to carry.</li>
+        <li>Eligibility is geometric contact, independent of the <code>discovered</code> flag.</li>
+        <li>Merging stays permanent (§3.6 "Joining is permanent").</li>
+      </ul>
+    </section>
+
+    <section id="s4">
+      <div class="sec-head"><span class="num">04</span><h2>Change inventory</h2></div>
+      <p class="sec-intro">Every file the implementation touches, and the precise change.</p>
+      <div class="changes">
+        <div class="change">
+          <div class="file">src/island-merge.ts:381 — findNextMerge</div>
+          <div class="what"><span class="lead">Widen the candidate scan.</span> Scan pairs where ≥1
+            island is populated (iterate <code>populated × world.islands</code>, dedupe each pair) so
+            cost stays O(P·N), not O(N²). Resolve the absorber: both populated → existing
+            <code>chooseMergeAbsorber</code>; exactly one → the populated island. Relax the
+            <code>!sa || !sb</code> bail to require only the absorber's state.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/island-merge.ts:369 — mergeSignature</div>
+          <div class="what"><span class="lead">Cover every participant.</span> Include each
+            participating island's id + ellipse geometry + a populated bit, so a stale null isn't
+            served after an unsettled target appears/changes. Only null results are cached; non-null
+            results are consumed immediately, preserving correctness.</div>
+        </div>
+        <div class="change">
+          <div class="file">src/island-merge.ts:121,236,253,344 — performMerge / comments</div>
+          <div class="what"><span class="lead">No behavioral change; fix stale comments.</span>
+            Update the comments asserting "both islands are populated" to reflect that the absorbed
+            island may be stateless.</div>
+        </div>
+        <div class="change">
+          <div class="file">SPEC.md §3.6 (:448, :454)</div>
+          <div class="what"><span class="lead">State the precondition.</span> ≥1 populated required;
+            both-populated keeps "larger absorbs smaller"; one-populated → populated absorbs
+            regardless of size, transferring only land/biome/terrain-seed/ledger; eligibility is
+            geometric, not gated on <code>discovered</code>.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="s5">
+      <div class="sec-head"><span class="num">05</span><h2>Tests &amp; verification</h2></div>
+      <p class="sec-intro">New and updated coverage in <code>src/island-merge.test.ts</code>, plus build/test gates.</p>
+      <div class="checklist">
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Invert the existing skip test (:788).</strong> A populated island absorbs a touching unpopulated island.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Lobe preserves biome + terrain seed.</strong> The appended constituent carries the absorbed island's <code>originId</code>.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Undiscovered island absorbed on contact.</strong> No <code>discovered</code> gate.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Two unpopulated islands do NOT merge.</strong> ≥1-populated precondition holds.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>Settler in transit to the absorbed island.</strong> Retargeted to the absorber and consumed cleanly (no crash, counts as arrival).</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong><code>npx vitest run src/island-merge.test.ts</code></strong> green; client suite green; <code>npm run build</code> clean under strict.</div></div>
+      </div>
+    </section>
+
+    <section id="s6">
+      <div class="sec-head"><span class="num">06</span><h2>Risks</h2></div>
+      <div class="risks">
+        <div class="row">
+          <div class="cell head">Risk</div><div class="cell head">Sev</div><div class="cell head">Mitigation</div>
+        </div>
+        <div class="row">
+          <div class="cell">Memoized null served stale after an unsettled target appears/changes.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Signature spans every participant (id + geometry + populated bit); unpopulated geometry is static so the common case is unaffected.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Candidate scan cost grows on large saves.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">O(P²) → O(P·N) with small P; null-result memo still elides the per-step rescan during catch-up.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="s7">
+      <div class="sec-head"><span class="num">07</span><h2>Out of scope</h2></div>
+      <p class="sec-intro">Explicitly deferred — considered, not missed.</p>
+      <div class="deferred">
+        <div class="defer">
+          <div class="dt">Adding the absorbed undiscovered lobe's footprint to <code>revealedCells</code></div>
+          <div class="dd">Cosmetically moot — the merged island is populated, so it renders <code>'visible'</code> regardless. Left untouched unless a fog inconsistency surfaces.</div>
+        </div>
+        <div class="defer">
+          <div class="dt">Un-merge / settling a lobe back out</div>
+          <div class="dd">Merging stays permanent, consistent with §3.6.</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <p>Design spec · generated 2026-06-22 · robot-islands SPEC §3.6 (Joining) · relates to: 2026-06-20-grow-absorbed-ellipse, 2026-06-22-land-reclamation-no-overwrite</p>
+    </div>
+
+  </div>
+</body>
+</html>
