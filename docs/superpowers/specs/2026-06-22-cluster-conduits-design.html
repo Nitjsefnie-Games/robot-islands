@@ -402,13 +402,14 @@
 
       <h3>2.1 Buildings</h3>
       <table class="tbl">
-        <thead><tr><th>Building</th><th>Scope</th><th>Tier gate</th><th>Cost (placeholder)</th><th>Notes</th></tr></thead>
+        <thead><tr><th>Building</th><th>Scope</th><th>Tier</th><th>Footprint</th><th>Placement cost (tunable placeholder)</th><th>Notes</th></tr></thead>
         <tbody>
-          <tr><td class="slate">Cluster Conduit</td><td>Same-island wiring</td><td>T2–T3</td><td>Moderate (steel/concrete)</td><td>Wires only to other conduits on the same island.</td></tr>
-          <tr><td class="slate">Lattice Conduit</td><td>Cross-island wiring</td><td>T5</td><td>Substantially higher (exotic/endgame)</td><td>Wires to conduits on any island; also works locally. Main throttle on cross-island snowballing.</td></tr>
+          <tr><td class="slate">Cluster Conduit</td><td>Same-island wiring</td><td>T2–T3</td><td>1×1</td><td><code>steel_beam 800, concrete 500, wire 120, microchip 25, gear 40</code></td><td>Wires only to other conduits on the same island.</td></tr>
+          <tr><td class="slate">Lattice Conduit</td><td>Cross-island wiring</td><td>T5</td><td>2×2</td><td><code>steel_beam 2800, microchip 450, wire 220, exotic_alloy 90, reality_anchor 50, ai_core 30</code></td><td>Wires to conduits on any island; also works locally. Main throttle on cross-island snowballing.</td></tr>
         </tbody>
       </table>
-      <p class="body" style="margin-top:14px">Both are pure connectivity infrastructure: they run no recipe and produce/consume no power, so they are <strong>never cluster members</strong> themselves.</p>
+      <p class="body" style="margin-top:14px"><strong>Cost magnitude — "real commitment".</strong> The Lattice Conduit sits at/above a full Lattice Node's BOM, and because a cross-island wire needs a Lattice Conduit at <strong>both</strong> endpoints, bridging two islands costs <strong>×2</strong> — a genuine endgame investment keeping cross-island clustering rare and deliberate. Both BOMs are placeholders tuned in <code>building-defs.ts</code> per the repo convention.</p>
+      <p class="body">Both are pure connectivity infrastructure: they run no recipe and produce/consume no power, so they are <strong>never cluster members</strong> themselves.</p>
 
       <h3>2.2 Attachment</h3>
       <p class="body">A building is <strong>attached</strong> to a conduit iff it is <strong>4-adjacent</strong> to the conduit's footprint — the exact <code>borderTiles</code> / <code>touchesBorder</code> test used everywhere else (and the same definition the Lattice Node uses). No new range/radius concept.</p>

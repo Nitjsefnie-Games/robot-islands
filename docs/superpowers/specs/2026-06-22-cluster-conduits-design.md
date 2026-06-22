@@ -18,10 +18,12 @@ Balance lives entirely in **build cost + tier gate** — no upkeep, no power dra
 
 ### 2.1 Buildings
 
-| Building | Scope | Tier gate | Cost (placeholder) | Notes |
-|---|---|---|---|---|
-| Cluster Conduit | Same-island wiring | T2–T3 | Moderate (steel/concrete) | Wires only to other conduits on the **same island**. |
-| Lattice Conduit | Cross-island wiring | T5 | Substantially higher (exotic/endgame materials) | Wires to conduits on **any** island; also works locally. Main throttle on cross-island snowballing. |
+| Building | Scope | Tier gate | Footprint | Placement cost (tunable placeholder) | Notes |
+|---|---|---|---|---|---|
+| Cluster Conduit | Same-island wiring | T2–T3 | 1×1 | `steel_beam 800, concrete 500, wire 120, microchip 25, gear 40` | Wires only to other conduits on the **same island**. |
+| Lattice Conduit | Cross-island wiring | T5 | 2×2 | `steel_beam 2800, microchip 450, wire 220, exotic_alloy 90, reality_anchor 50, ai_core 30` | Wires to conduits on **any** island; also works locally. Main throttle on cross-island snowballing. |
+
+**Cost magnitude — "real commitment" (per design decision).** The Lattice Conduit is set at/above a full Lattice Node's BOM (`steel_beam 2500, microchip 400, wire 200, exotic_alloy 80, reality_anchor 40, ai_core 30`), and because a cross-island wire requires a Lattice Conduit at **both** endpoints (§2.3), bridging two islands costs **×2** — a genuine endgame investment that keeps cross-island clustering rare and deliberate. The Cluster Conduit is a meaningful mid-game cost but placeable enough to build a same-island network. Both BOMs are placeholders tuned in `building-defs.ts` per the repo convention (cf. the Lattice Node's `// §14 placeholder — tune in Appendix A`).
 
 Both are pure connectivity infrastructure: they run no recipe and produce/consume no power, so they are **never cluster members** themselves (they bridge other buildings; their own §4.5 bonus is moot).
 
