@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Robot Islands — render-perf benchmark (2026-06-22)</title>
+  <style>
+    :root {
+      --ivory:#1B1A17; --slate:#F5F3EC; --clay:#D97757; --oat:#3A352B;
+      --olive:#8FA56E; --rust:#E08B7F; --warn:#E0B47F;
+      --gray-150:#2E2C27; --gray-300:#3A3833; --gray-500:#8F8D82; --gray-700:#CFCCC2; --white:#252420;
+      --serif:ui-serif,Georgia,'Times New Roman',serif;
+      --sans:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+      --mono:ui-monospace,'SF Mono',Menlo,Monaco,monospace;
+      --radius:12px; --border:1.5px solid var(--gray-300);
+    }
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:var(--sans);background:var(--ivory);color:var(--gray-700);
+      line-height:1.58;padding:56px 32px 120px;-webkit-font-smoothing:antialiased;}
+    .page{margin:0 auto;max-width:1080px;}
+    header.page-head{margin-bottom:36px;max-width:980px;}
+    .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:0.08em;
+      text-transform:uppercase;color:var(--gray-500);margin-bottom:12px;}
+    h1{font-family:var(--serif);font-weight:500;font-size:38px;line-height:1.14;
+      color:var(--slate);margin-bottom:18px;letter-spacing:-0.01em;}
+    .lede{font-size:16px;color:var(--gray-700);max-width:880px;}
+    .lede b{color:var(--slate);}
+    .method{background:var(--white);border:var(--border);border-radius:var(--radius);
+      padding:18px 22px;margin:26px 0 18px;}
+    .method .label{font-family:var(--mono);font-size:11px;text-transform:uppercase;
+      letter-spacing:0.06em;color:var(--gray-500);margin-bottom:10px;}
+    .method .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;font-size:13.5px;}
+    @media (max-width:860px){.method .grid{grid-template-columns:repeat(2,1fr);}}
+    .method .cell .k{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;
+      letter-spacing:0.05em;color:var(--gray-500);margin-bottom:3px;}
+    .method .cell .v{color:var(--slate);font-weight:600;}
+    .noise{background:#2E211C;border:1.5px solid #5C3D2E;border-radius:var(--radius);
+      padding:14px 20px;margin-bottom:40px;font-size:14px;color:var(--gray-700);display:flex;gap:12px;max-width:980px;}
+    .noise .glyph{color:var(--warn);font-weight:700;}
+    .noise b{color:var(--warn);}
+    section{margin-bottom:56px;}
+    .sec-head{display:flex;align-items:baseline;gap:14px;margin-bottom:8px;}
+    .sec-head .num{font-family:var(--mono);font-size:12px;background:var(--oat);color:var(--slate);
+      padding:3px 9px;border-radius:8px;}
+    .sec-head h2{font-family:var(--serif);font-weight:500;font-size:26px;color:var(--slate);letter-spacing:-0.01em;}
+    .sec-intro{font-size:14.5px;color:var(--gray-500);max-width:860px;margin-bottom:24px;}
+    code{font-family:var(--mono);font-size:0.88em;background:var(--gray-150);
+      border:1px solid var(--gray-300);border-radius:5px;padding:1px 5px;color:#C9B98A;}
+    .stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:8px;}
+    @media (max-width:860px){.stat-row{grid-template-columns:repeat(2,1fr);}}
+    .stat{background:var(--white);border:var(--border);border-radius:var(--radius);padding:16px 18px;}
+    .stat .v{font-family:var(--mono);font-size:26px;color:var(--slate);font-weight:600;line-height:1;}
+    .stat .v.bad{color:var(--rust);} .stat .v.warn{color:var(--warn);}
+    .stat .k{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:0.05em;
+      color:var(--gray-500);margin-top:8px;}
+    .tbl{width:100%;border:var(--border);border-radius:var(--radius);
+      border-collapse:separate;border-spacing:0;overflow:hidden;font-size:13.5px;}
+    .tbl th,.tbl td{text-align:left;padding:11px 16px;border-bottom:1px solid var(--gray-300);vertical-align:top;}
+    .tbl th{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:0.05em;
+      color:var(--gray-500);background:var(--gray-150);font-weight:600;}
+    .tbl tr:last-child td{border-bottom:none;}
+    .tbl td.slate{color:var(--slate);font-weight:600;}
+    .tbl td.num{font-family:var(--mono);font-size:13px;text-align:right;font-variant-numeric:tabular-nums;}
+    .tag{display:inline-block;font-family:var(--mono);font-size:10px;padding:1px 7px;border-radius:999px;letter-spacing:0.03em;}
+    .tag.render{background:#2A3340;color:#9DC0E0;} .tag.app{background:#2D3A24;color:var(--olive);}
+    .tag.native{background:var(--gray-150);color:var(--gray-500);border:1px solid var(--gray-300);}
+    .diagram-wrap{background:var(--white);border:var(--border);border-radius:var(--radius);
+      padding:22px;margin:8px 0 22px;overflow-x:auto;}
+    .diagram-cap{font-family:var(--mono);font-size:11px;color:var(--gray-500);
+      text-transform:uppercase;letter-spacing:0.06em;margin-bottom:14px;}
+    svg{display:block;max-width:100%;} svg text{font-family:var(--mono);font-size:11px;fill:var(--gray-700);}
+    svg text.ax{fill:var(--gray-500);font-size:10.5px;}
+    .cand{background:var(--white);border:var(--border);border-radius:var(--radius);margin-bottom:18px;overflow:hidden;}
+    .cand-head{display:flex;align-items:center;gap:12px;padding:14px 20px;background:var(--gray-150);
+      border-bottom:var(--border);flex-wrap:wrap;}
+    .cand-head .cid{font-family:var(--mono);font-size:12px;color:var(--gray-500);}
+    .cand-head .ct{font-family:var(--serif);font-size:17px;color:var(--slate);flex:1;min-width:200px;}
+    .pill{display:inline-block;font-family:var(--mono);font-size:10.5px;padding:2px 9px;border-radius:999px;letter-spacing:0.04em;}
+    .pill.hi{background:#4A2A1C;color:var(--rust);} .pill.med{background:#3A3320;color:var(--warn);}
+    .pill.lo{background:#2D3A24;color:var(--olive);}
+    .cand-body{padding:14px 20px;display:grid;grid-template-columns:1fr 1fr;gap:14px 28px;font-size:13.5px;}
+    @media (max-width:820px){.cand-body{grid-template-columns:1fr;}}
+    .cand-body .bk{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:0.07em;
+      color:var(--gray-500);margin-bottom:5px;}
+    .cand-body .bv strong{color:var(--slate);}
+    .decide{display:flex;gap:10px;padding:0 20px 16px;flex-wrap:wrap;}
+    .decide .opt{background:var(--ivory);border:var(--border);border-radius:8px;padding:7px 14px;cursor:pointer;
+      font-family:var(--mono);font-size:12px;color:var(--gray-700);position:relative;user-select:none;}
+    .decide .opt input{position:absolute;opacity:0;pointer-events:none;}
+    .decide .opt:hover{border-color:var(--clay);}
+    .decide .opt[data-selected="true"]{border-color:var(--clay);color:var(--clay);
+      background:#1F1D1A;box-shadow:0 0 0 1px var(--clay) inset;}
+    .selections{background:var(--white);border:var(--border);border-left:4px solid var(--clay);
+      border-radius:var(--radius);padding:22px 26px;margin-top:40px;position:sticky;bottom:22px;}
+    .selections h3{font-family:var(--serif);font-size:20px;color:var(--slate);margin-bottom:12px;}
+    .sel-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 22px;font-size:13px;margin-bottom:16px;}
+    @media (max-width:720px){.sel-grid{grid-template-columns:1fr;}}
+    .sel-row{display:flex;justify-content:space-between;gap:12px;}
+    .sel-row .k{color:var(--gray-500);font-family:var(--mono);font-size:12px;}
+    .sel-row .v{color:var(--slate);font-weight:600;}
+    .actions{display:flex;gap:10px;flex-wrap:wrap;}
+    button.action{font-family:var(--mono);font-size:12px;padding:9px 16px;background:var(--ivory);
+      color:var(--clay);border:1.5px solid var(--clay);border-radius:8px;cursor:pointer;letter-spacing:0.04em;}
+    button.action:hover{background:#2A2521;}
+    .toast{font-family:var(--mono);font-size:11.5px;color:var(--olive);margin-left:8px;opacity:0;transition:opacity 200ms ease;}
+    .toast.show{opacity:1;}
+    .footer{color:var(--gray-500);font-size:13px;margin-top:64px;padding-top:22px;border-top:1px solid var(--gray-300);}
+    .toc{font-family:var(--mono);font-size:12.5px;color:var(--gray-500);margin:22px 0 0;}
+    .toc a{color:var(--clay);text-decoration:none;margin-right:16px;}
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Benchmark · Robot Islands client · CPU profile · 2026-06-22</div>
+      <h1>The browser lag is the render loop re-tessellating Graphics every frame</h1>
+      <p class="lede">A 3-second frame-timing sample on the production (minified) build shows real stutter:
+        <b>mean 48 FPS</b> with <b>~20% of frames over 32 ms</b> and spikes to <b>101 ms</b>. An 8-second CPU
+        profile on a non-minified, source-mapped build pins the cost: roughly <b>17% of main-thread time goes to
+        Pixi re-building Graphics geometry</b> (<code>buildLine</code>/<code>triangulate</code>/<code>packQuadAttributes</code>)
+        <i>every frame</i>, because per-frame overlay <code>clear()</code>+redraw marks their GraphicsContexts dirty.
+        Add a per-frame HUD recompute (~8%) and a 5 Hz snapshot rate-solve on the main thread (~5%), and the
+        frame budget is spent before any real work. None of it is GPU-bound.</p>
+      <div class="toc">
+        <a href="#m">Method</a><a href="#headline">Headline</a><a href="#budget">Frame budget</a>
+        <a href="#tree">Call tree</a><a href="#causes">Root causes</a><a href="#fixes">Fixes</a>
+      </div>
+    </header>
+
+    <div class="method" id="m">
+      <div class="label">Method · how this was measured</div>
+      <div class="grid">
+        <div class="cell"><div class="k">Frame-timing</div><div class="v">3 s rAF sample, prod build</div></div>
+        <div class="cell"><div class="k">CPU profile</div><div class="v">8 s, 200 µs interval, 12,778 samples</div></div>
+        <div class="cell"><div class="k">Build profiled</div><div class="v">vite <code>--minify false --sourcemap</code></div></div>
+        <div class="cell"><div class="k">Viewport / mode</div><div class="v">3440×1271, DPR 1, REMOTE, idle</div></div>
+      </div>
+    </div>
+
+    <div class="noise">
+      <span class="glyph">±</span>
+      <span><b>Read these numbers as structural, not exact.</b> The CPU profile ran on the <i>non-minified</i> bundle,
+        so absolute JS-execution percentages run a little hot versus the production build the user normally sees;
+        the <i>relative</i> breakdown and the structural findings (per-frame rebuilds, full scene-graph traversal)
+        are build-independent. It is a single idle capture — no interaction-heavy trace — so hit-test / hover costs
+        are a floor, not a ceiling. Percentages are self-time share of the 9.0 s captured window.</span>
+    </div>
+
+    <!-- 1 HEADLINE -->
+    <section id="headline">
+      <div class="sec-head"><span class="num">1</span><h2>Headline — frame timing (production build)</h2></div>
+      <p class="sec-intro">Measured with a <code>requestAnimationFrame</code> sampler over 3 s on the live tab,
+        before switching to the profiling build. 60 FPS is a 16.7 ms budget; anything over ~33 ms is a dropped frame
+        the eye reads as a hitch.</p>
+      <div class="stat-row">
+        <div class="stat"><div class="v warn">48.2</div><div class="k">mean FPS</div></div>
+        <div class="stat"><div class="v">16.7 ms</div><div class="k">median frame</div></div>
+        <div class="stat"><div class="v warn">33.5 ms</div><div class="k">p95 frame</div></div>
+        <div class="stat"><div class="v bad">101 ms</div><div class="k">worst frame</div></div>
+      </div>
+      <div class="stat-row">
+        <div class="stat"><div class="v bad">29 / 145</div><div class="k">frames &gt; 32 ms (≈20%)</div></div>
+        <div class="stat"><div class="v">20.7 ms</div><div class="k">mean frame</div></div>
+        <div class="stat"><div class="v">3440 px</div><div class="k">canvas width (ultrawide)</div></div>
+        <div class="stat"><div class="v">22%</div><div class="k">CPU idle headroom</div></div>
+      </div>
+      <p class="sec-intro" style="margin-top:18px">The median is a clean 60 FPS — calm frames are fine. The lag is
+        the <b>tail</b>: roughly one frame in five blows the budget, and the worst is 6× over. That signature
+        (good median, fat tail) points at periodic work landing on top of a per-frame baseline, not a uniformly
+        heavy renderer.</p>
+    </section>
+
+    <!-- 2 BUDGET -->
+    <section id="budget">
+      <div class="sec-head"><span class="num">2</span><h2>Where the main thread goes</h2></div>
+      <p class="sec-intro">Self-time share of the 9.0 s idle profile, grouped into top-level buckets. Idle +
+        V8 overhead are not work the game controls; everything below them is.</p>
+      <div class="diagram-wrap">
+        <div class="diagram-cap">Main-thread self-time by bucket (% of 9.0 s)</div>
+        <svg viewBox="0 0 860 430" role="img" aria-label="Self-time by bucket">
+          <!-- axis -->
+          <line x1="300" y1="20" x2="300" y2="390" stroke="#3A3833" stroke-width="1"/>
+          <text x="300" y="408" text-anchor="start" class="ax">0%</text>
+          <text x="520" y="408" text-anchor="middle" class="ax">10%</text>
+          <text x="740" y="408" text-anchor="middle" class="ax">20%</text>
+          <line x1="520" y1="20" x2="520" y2="390" stroke="#2E2C27" stroke-width="1"/>
+          <line x1="740" y1="20" x2="740" y2="390" stroke="#2E2C27" stroke-width="1"/>
+          <!-- bars: x scale 22px per % from x=300; row h 36, bar h 22 -->
+          <!-- idle 22.3 -->
+          <g><text x="292" y="42" text-anchor="end">idle (headroom)</text>
+            <rect x="300" y="29" width="491" height="22" fill="#3A3833"/><text x="797" y="45">22.3%</text></g>
+          <!-- program 17.6 -->
+          <g><text x="292" y="78" text-anchor="end">V8 / program overhead</text>
+            <rect x="300" y="65" width="387" height="22" fill="#3A3833"/><text x="693" y="81">17.6%</text></g>
+          <!-- graphics rebuild 17.0 -->
+          <g><text x="292" y="114" text-anchor="end">Pixi: Graphics re-tessellation</text>
+            <rect x="300" y="101" width="374" height="22" fill="#D97757"/><text x="680" y="117">17.0%</text></g>
+          <!-- scene traversal 8.6 -->
+          <g><text x="292" y="150" text-anchor="end">Pixi: scene-graph traversal</text>
+            <rect x="300" y="137" width="189" height="22" fill="#E08B7F"/><text x="495" y="153">8.6%</text></g>
+          <!-- HUD 7.7 -->
+          <g><text x="292" y="186" text-anchor="end">HUD recompute (per frame)</text>
+            <rect x="300" y="173" width="169" height="22" fill="#E0B47F"/><text x="475" y="189">7.7%</text></g>
+          <!-- GPU exec 7.5 -->
+          <g><text x="292" y="222" text-anchor="end">Pixi: GPU draw execution</text>
+            <rect x="300" y="209" width="165" height="22" fill="#9DC0E0"/><text x="471" y="225">7.5%</text></g>
+          <!-- server snapshot 4.9 -->
+          <g><text x="292" y="258" text-anchor="end">Server snapshot → computeRates</text>
+            <rect x="300" y="245" width="108" height="22" fill="#E0B47F"/><text x="414" y="261">4.9%</text></g>
+          <!-- pointer+hover 3.6 -->
+          <g><text x="292" y="294" text-anchor="end">Pointer hit-test + hover</text>
+            <rect x="300" y="281" width="79" height="22" fill="#E0B47F"/><text x="385" y="297">3.6%</text></g>
+          <!-- GC 2.0 -->
+          <g><text x="292" y="330" text-anchor="end">Garbage collection</text>
+            <rect x="300" y="317" width="44" height="22" fill="#3A3833"/><text x="350" y="333">2.0%</text></g>
+          <!-- other 8.8 -->
+          <g><text x="292" y="366" text-anchor="end">other / uncategorized</text>
+            <rect x="300" y="353" width="194" height="22" fill="#2E2C27"/><text x="500" y="369">8.8%</text></g>
+        </svg>
+      </div>
+      <p class="sec-intro">Orange/red bars are app-controllable render cost. The two Pixi buckets +
+        HUD + snapshot solve together are <b>~38%</b> of the main thread — and they recur every frame regardless of
+        whether anything changed.</p>
+    </section>
+
+    <!-- 3 CALL TREE -->
+    <section id="tree">
+      <div class="sec-head"><span class="num">3</span><h2>The hot path</h2></div>
+      <p class="sec-intro">Top inclusive-time chain from the profile. The tell is that geometry-build functions
+        (<code>buildLine</code>, <code>triangulate</code>, <code>buildSimpleUvs</code>) appear <i>inside</i>
+        <code>collectRenderablesSimple</code> — i.e. Pixi is re-tessellating Graphics during render collection,
+        which only happens when a GraphicsContext is dirty.</p>
+      <table class="tbl">
+        <thead><tr><th>Frame</th><th style="text-align:right">incl</th><th style="text-align:right">self</th><th>layer</th><th>note</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">_tick → update → render</td><td class="num">47.6%</td><td class="num">—</td><td><span class="tag render">pixi</span></td><td>Pixi ticker auto-render</td></tr>
+          <tr><td class="slate">&nbsp;&nbsp;collectRenderablesWithEffects</td><td class="num">25.6%</td><td class="num">0.5%</td><td><span class="tag render">pixi</span></td><td>walk scene graph + build dirty contexts</td></tr>
+          <tr><td class="slate">&nbsp;&nbsp;&nbsp;&nbsp;updateGpuContext → buildLine</td><td class="num">3.7%</td><td class="num">3.7%</td><td><span class="tag render">pixi</span></td><td>stroke re-tessellation</td></tr>
+          <tr><td class="slate">&nbsp;&nbsp;&nbsp;&nbsp;triangulate</td><td class="num">2.7%</td><td class="num">2.7%</td><td><span class="tag render">pixi</span></td><td>earcut <b>fill</b> tessellation → filled shapes rebuild</td></tr>
+          <tr><td class="slate">&nbsp;&nbsp;&nbsp;&nbsp;break + packQuadAttributes</td><td class="num">~7%</td><td class="num">~7%</td><td><span class="tag render">pixi</span></td><td>batch geometry packing</td></tr>
+          <tr><td class="slate">&nbsp;&nbsp;execute (bind/upload/draw)</td><td class="num">7.5%</td><td class="num">—</td><td><span class="tag render">pixi</span></td><td>GPU command submission</td></tr>
+          <tr><td class="slate">HUD (anon) → update</td><td class="num">7.7%</td><td class="num">~2%</td><td><span class="tag app">app</span></td><td><code>hud.ts</code> per-frame rebuild; DOM writes gated, compute is not</td></tr>
+          <tr><td class="slate">onMessage → applyRemoteSnapshot → computeRates</td><td class="num">4.9%</td><td class="num">—</td><td><span class="tag app">app</span></td><td>5 Hz snapshot re-runs the power/rates solve on main thread</td></tr>
+          <tr><td class="slate">_onPointerMove → hitTestMoveRecursive</td><td class="num">2.1%</td><td class="num">—</td><td><span class="tag render">pixi</span></td><td>deep recursive hit-test over interactive scene</td></tr>
+          <tr><td class="slate">drainHover → tileInfoForHover → visibleCellsFromVision</td><td class="num">1.5%</td><td class="num">—</td><td><span class="tag app">app</span></td><td>hover recomputes visible vision cells</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- 4 CAUSES -->
+    <section id="causes">
+      <div class="sec-head"><span class="num">4</span><h2>Root causes</h2></div>
+      <p class="sec-intro">Verified by reading the render-layer source against the profile, not inferred from names alone.</p>
+      <table class="tbl">
+        <thead><tr><th>#</th><th>Cause</th><th>Evidence</th><th style="text-align:right">~cost</th></tr></thead>
+        <tbody>
+          <tr><td class="num">1</td><td class="slate">Per-frame Graphics <code>clear()</code>+redraw marks GraphicsContexts dirty</td>
+            <td><code>routes-renderer.ts</code> <code>paintOverlay</code> clears + redraws chevrons / arrival-pulse / draft every frame; the <code>*-overlay.ts</code> family (construction, building-alerts, antenna, satellite, route-bend) all <code>clear()</code> too. Each clear forces re-tessellation. <code>triangulate</code>+<code>buildSimpleUvs</code> in the trace confirm <b>filled</b> shapes rebuild, not just lines.</td><td class="num">~17%</td></tr>
+          <tr><td class="num">2</td><td class="slate">Whole scene graph re-collected every frame</td>
+            <td><code>collectRenderablesSimple</code> recurses with high self-time; static layers (islands, buildings, ocean) aren't cached as a render group, so Pixi walks all of them each frame even when nothing moved.</td><td class="num">~9%</td></tr>
+          <tr><td class="num">3</td><td class="slate">HUD recomputes unconditionally per frame</td>
+            <td><code>hud.ts</code> samples sparklines and rebuilds rate strings every frame; DOM writes are change-gated but the compute that feeds them runs at frame rate, not the 5 Hz the data changes at.</td><td class="num">~8%</td></tr>
+          <tr><td class="num">4</td><td class="slate">5 Hz snapshot re-solves rates on the main thread</td>
+            <td><code>applyRemoteSnapshot → refreshRetainedRates → computeRates</code>. Periodic, lands on top of a render frame — the most likely source of the <b>101 ms</b> tail spikes.</td><td class="num">~5%</td></tr>
+          <tr><td class="num">5</td><td class="slate">Interactive hit-test + hover walk the full scene</td>
+            <td>Every <code>pointermove</code> deep-recurses <code>hitTestMoveRecursive</code> over all interactive children; hover then recomputes visible vision cells. Cheap at idle, scales with cursor motion.</td><td class="num">~4%</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- 5 FIXES -->
+    <section id="fixes">
+      <div class="sec-head"><span class="num">5</span><h2>Recommended fixes</h2></div>
+      <p class="sec-intro">Ordered by value ÷ risk. F1 alone should recover most of the dropped frames. Pick a
+        disposition per fix; the panel at the bottom copies the set as a prompt to kick off the work.</p>
+
+      <article class="cand">
+        <div class="cand-head"><span class="cid">F1</span><span class="ct">Gate overlay redraws on actual change</span><span class="pill hi">high value · low risk</span></div>
+        <div class="cand-body">
+          <div><div class="bk">Change</div><div class="bv">In <code>routes-renderer.paintOverlay</code> and the <code>*-overlay.ts</code> family, skip the <code>clear()</code>+redraw when the inputs (chevron phase bucket, alert/antenna/satellite sets, draft key) are unchanged since last frame — the same signature-gate pattern already used for the HUD DOM writes. For genuinely animated glyphs (chevrons), animate a cached sprite's transform instead of re-tessellating Graphics.</div></div>
+          <div><div class="bk">Expected</div><div class="bv"><strong>Removes most of the ~17%</strong> geometry-rebuild cost; eliminates the per-frame dirty flag that drives <code>collectRenderables</code> rebuilds.</div></div>
+        </div>
+        <div class="decide" data-picker="F1-gate-overlay-redraws">
+          <label class="opt"><input type="radio" name="F1" value="apply" checked>apply</label>
+          <label class="opt"><input type="radio" name="F1" value="investigate">investigate first</label>
+          <label class="opt"><input type="radio" name="F1" value="reject">reject</label>
+        </div>
+      </article>
+
+      <article class="cand">
+        <div class="cand-head"><span class="cid">F2</span><span class="ct">Cache static layers as a render group</span><span class="pill med">medium value · medium risk</span></div>
+        <div class="cand-body">
+          <div><div class="bk">Change</div><div class="bv">Mark the static world layers (islands, buildings, ocean/fog) so Pixi doesn't re-collect them every frame — a render group / <code>cacheAsTexture</code> that only invalidates on <code>rebuildWorldLayers()</code>. Also set <code>interactiveChildren=false</code> on layers that don't need hit-testing to cut F5's cost.</div></div>
+          <div><div class="bk">Expected</div><div class="bv">Cuts the ~9% scene-traversal bucket and shrinks the hit-test walk. Risk: cache invalidation must track every state that mutates those layers.</div></div>
+        </div>
+        <div class="decide" data-picker="F2-cache-static-layers">
+          <label class="opt"><input type="radio" name="F2" value="apply">apply</label>
+          <label class="opt"><input type="radio" name="F2" value="investigate" checked>investigate first</label>
+          <label class="opt"><input type="radio" name="F2" value="reject">reject</label>
+        </div>
+      </article>
+
+      <article class="cand">
+        <div class="cand-head"><span class="cid">F3</span><span class="ct">Throttle HUD recompute to the 5 Hz tick</span><span class="pill med">medium value · low risk</span></div>
+        <div class="cand-body">
+          <div><div class="bk">Change</div><div class="bv">The HUD numbers only change at the economy cadence (<code>ECONOMY_TICK_MS</code>). Drive the HUD recompute off the same <code>shouldTick</code> gate the economy uses instead of every rAF frame; keep camera/cursor UI per-frame.</div></div>
+          <div><div class="bk">Expected</div><div class="bv">Drops the ~8% HUD bucket to ~⅙ of itself. Low risk — the retained-outputs pattern already decouples display from compute.</div></div>
+        </div>
+        <div class="decide" data-picker="F3-throttle-hud">
+          <label class="opt"><input type="radio" name="F3" value="apply" checked>apply</label>
+          <label class="opt"><input type="radio" name="F3" value="investigate">investigate first</label>
+          <label class="opt"><input type="radio" name="F3" value="reject">reject</label>
+        </div>
+      </article>
+
+      <article class="cand">
+        <div class="cand-head"><span class="cid">F4</span><span class="ct">Keep the snapshot rate-solve off the render frame</span><span class="pill med">medium value · medium risk</span></div>
+        <div class="cand-body">
+          <div><div class="bk">Change</div><div class="bv">Investigate whether <code>refreshRetainedRates → computeRates</code> on each snapshot can reuse the server-sent rates instead of re-solving locally, or be scheduled so it doesn't coincide with a render frame. This targets the 101 ms tail specifically.</div></div>
+          <div><div class="bk">Expected</div><div class="bv">Flattens the worst-frame spikes. Risk: client/server rate parity must stay exact — needs care against the §15 trust-surface.</div></div>
+        </div>
+        <div class="decide" data-picker="F4-snapshot-solve">
+          <label class="opt"><input type="radio" name="F4" value="apply">apply</label>
+          <label class="opt"><input type="radio" name="F4" value="investigate" checked>investigate first</label>
+          <label class="opt"><input type="radio" name="F4" value="reject">reject</label>
+        </div>
+      </article>
+
+      <article class="cand">
+        <div class="cand-head"><span class="cid">F0</span><span class="ct">Restore the minified production build</span><span class="pill lo">housekeeping</span></div>
+        <div class="cand-body">
+          <div><div class="bk">Change</div><div class="bv">The dev service currently serves the 2.4 MB non-minified profiling bundle. Rebuild with <code>npm run build</code> so users get the normal minified bundle back.</div></div>
+          <div><div class="bk">Status</div><div class="bv"><strong>Done as part of this benchmark</strong> unless you want the profiling build left up for further tracing — say which.</div></div>
+        </div>
+        <div class="decide" data-picker="F0-restore-minified">
+          <label class="opt"><input type="radio" name="F0" value="apply" checked>restore minified</label>
+          <label class="opt"><input type="radio" name="F0" value="keep">keep profiling build</label>
+        </div>
+      </article>
+    </section>
+
+    <div class="selections">
+      <h3>Fix dispositions</h3>
+      <div class="sel-grid" id="selGrid"></div>
+      <div class="actions">
+        <button class="action" id="copyJson">Copy as JSON</button>
+        <button class="action" id="copyPrompt">Copy as prompt</button>
+        <span class="toast" id="toast"></span>
+      </div>
+    </div>
+
+    <div class="footer">
+      <p>Render-perf benchmark · generated 2026-06-22 · client commit 1fb9807 · profile: 8 s @ 200 µs,
+        12,778 samples, non-minified+sourcemap build, REMOTE/idle, 3440×1271 · frame-timing: 3 s rAF, prod build.
+        Percentages are self-time share of the captured window; treat as structural, not exact.</p>
+    </div>
+  </div>
+
+  <script>
+    (function () {
+      const state = {};
+      const strips = document.querySelectorAll('.decide');
+      strips.forEach((strip) => {
+        const name = strip.dataset.picker;
+        if (!name) return;
+        strip.querySelectorAll('input[type=radio]').forEach((r) => {
+          if (r.checked) state[name] = r.value;
+          r.addEventListener('change', () => { if (r.checked) { state[name] = r.value; render(); } });
+          r.closest('.opt').addEventListener('click', (e) => {
+            if (e.target.tagName === 'INPUT') return;
+            r.checked = true; state[name] = r.value; render();
+          });
+        });
+      });
+      function render() {
+        strips.forEach((strip) => {
+          strip.querySelectorAll('.opt').forEach((opt) => {
+            const r = opt.querySelector('input[type=radio]');
+            opt.dataset.selected = (r && r.checked) ? 'true' : 'false';
+          });
+        });
+        const grid = document.getElementById('selGrid');
+        if (!grid) return;
+        grid.innerHTML = '';
+        Object.entries(state).forEach(([k, v]) => {
+          const row = document.createElement('div');
+          row.className = 'sel-row';
+          row.innerHTML = '<span class="k">' + k + '</span><span class="v">' + v + '</span>';
+          grid.appendChild(row);
+        });
+      }
+      const toast = document.getElementById('toast');
+      function flash(msg) { if (!toast) return; toast.textContent = msg; toast.classList.add('show');
+        setTimeout(() => toast.classList.remove('show'), 1600); }
+      function clip(text, label) {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).then(() => flash(label), () => fallback(text, label));
+        } else { fallback(text, label); }
+      }
+      function fallback(text, label) {
+        const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta);
+        ta.select(); try { document.execCommand('copy'); } catch (_) {} document.body.removeChild(ta); flash(label);
+      }
+      document.getElementById('copyJson').addEventListener('click', () =>
+        clip(JSON.stringify(state, null, 2), '✓ JSON copied'));
+      document.getElementById('copyPrompt').addEventListener('click', () => {
+        const lines = Object.entries(state).map(([k, v]) => '- ' + k + ': ' + v);
+        clip('Implement these Robot Islands render-perf fixes (update SPEC.md in the same change where behavior shifts; re-benchmark after each):\n' + lines.join('\n'), '✓ Prompt copied');
+      });
+      render();
+    })();
+  </script>
+</body>
+</html>

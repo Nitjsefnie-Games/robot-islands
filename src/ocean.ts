@@ -91,6 +91,18 @@ export function renderOcean(
 ): Container {
   const layer = new Container();
   layer.label = 'ocean';
+  // PERF (§ render-group isolation): the ocean is the largest subtree in the
+  // scene (~5.8k static gradient sprites) and changes only when vision/discovery
+  // flips (a full rebuildWorldLayers). Without its own render group, every
+  // per-frame redraw of any sibling overlay dirties the root group and forces
+  // Pixi to re-collect + re-batch all ~8.5k world renderables each frame
+  // (the `collectRenderablesSimple` / `packQuadAttributes` hot path in the
+  // CPU profile). Promoting the ocean to a render group isolates its draw
+  // instructions: they are built once and reused, and camera pan/zoom moves
+  // it via a single GPU-level matrix instead of re-walking every sprite
+  // (Pixi 8 Container render-group semantics, verified in Container.d.ts).
+  // Behavior is identical — same sprites, same z-order, same visuals.
+  layer.enableRenderGroup();
 
   // Tier C — unknown ocean. Solid rect; floor of the scene, everything paints over it.
   const halfPx = halfSizeTiles * TILE_PX;

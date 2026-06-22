@@ -543,6 +543,14 @@ async function main(): Promise<void> {
   function renderIslandLayer(ws: WorldState): Container {
     const layer = new Container();
     layer.label = 'islands';
+    // PERF (§ render-group isolation): same rationale as the ocean layer — the
+    // island/building subtree (~1.3k renderables) is static between discovery
+    // events (it's rebuilt only by rebuildWorldLayers, never per-frame; building
+    // alerts/construction visuals live in the throttled building-alerts layer,
+    // not here). Isolating its draw instructions keeps a per-frame sibling
+    // redraw from forcing a re-collect/re-batch of every building, and pans it
+    // via a single GPU matrix. Behavior identical.
+    layer.enableRenderGroup();
     const populated = ws.islands.filter((s) => s.populated);
     const visionSources = computeVisionSources(populated);
     for (const spec of ws.islands) {

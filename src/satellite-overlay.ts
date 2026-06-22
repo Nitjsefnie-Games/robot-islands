@@ -120,9 +120,34 @@ export function mountSatelliteOverlay(world: WorldState): SatelliteOverlayHandle
     }
   };
 
+  // PERF (§ redraw gating): rebuild() does an unconditional gfx.clear()+redraw,
+  // which dirties the root render group EVERY frame and forces Pixi to re-collect
+  // the whole (non-grouped) world — even with zero satellites/debris (the common
+  // case). A live interleaved A/B on the endgame scene (render-ms/frame, ~±2.4%
+  // noise) showed this overlay + the antenna overlay together cost ~4.4 ms/frame
+  // (~63% of render time) purely from that per-frame churn. Gate on a signature
+  // of exactly the fields rebuild() draws from: identical signature ⇒ byte-
+  // identical geometry, so skipping the redraw is behavior-preserving. Satellites
+  // move only at tick cadence, so this caps redraws at the tick rate (≤5 Hz)
+  // instead of the frame rate, and skips them entirely when nothing is in orbit.
+  let lastSig: string | null = null;
+  const signature = (): string => {
+    const parts: string[] = [];
+    for (const d of world.debrisFields) parts.push(`d${d.cellX},${d.cellY},${d.fragments}`);
+    for (const s of world.satellites) {
+      parts.push(
+        `s${s.x},${s.y},${s.variant},${s.coverageRadius},${s.commRange},${s.rHalf ?? ''},${s.pendingRepairDroneId ?? ''}`,
+      );
+    }
+    return parts.join('|');
+  };
+
   return {
     layer,
     refresh(): void {
+      const sig = signature();
+      if (sig === lastSig) return;
+      lastSig = sig;
       rebuild();
     },
   };
