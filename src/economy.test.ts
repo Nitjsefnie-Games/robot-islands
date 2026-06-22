@@ -78,7 +78,7 @@ const EQUINOX_MIDNIGHT = new Date('2026-03-20T00:00:00Z').getTime();
  *  get non-zero multiplier at noon. */
 function dayWorld(): import('./world.js').WorldState {
   return {
-    islands: [], drones: [], routes: [], vehicles: [],
+    islands: [], drones: [], routes: [], conduitLinks: [], vehicles: [],
     revealedCells: new Set(), satellites: [], repairDrones: [],
     debrisFields: [],
     latticeActive: false, latticeNodeIslands: [],

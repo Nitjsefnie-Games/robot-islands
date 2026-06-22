@@ -144,7 +144,7 @@ export interface SerializedWorld {
   readonly drones: ReadonlyArray<SerializedDrone>;
   readonly routes: ReadonlyArray<Route>;
   /** §4.5 cluster-conduit edge list. Empty on pre-v32 saves; v31→v32 migration backfills []. */
-  readonly conduitLinks: ReadonlyArray<import('./world.js').ConduitLink>;
+  readonly conduitLinks?: ReadonlyArray<import('./world.js').ConduitLink>;
   readonly vehicles: ReadonlyArray<SerializedVehicle>;
   readonly revealedCells?: ReadonlyArray<string>;
   /** §14.2 satellite fleet. */

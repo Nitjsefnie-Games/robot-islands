@@ -28,6 +28,7 @@ function makeTestWorld(over: Partial<WorldState> = {}): WorldState {
     islandStates: new Map([['home', state]]),
     drones: [],
     routes: [],
+    conduitLinks: [],
     vehicles: [],
     revealedCells: new Set(),
     satellites: [],

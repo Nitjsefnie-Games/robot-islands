@@ -104,6 +104,7 @@ function makeWorld(opts: {
     seed: 'test',
     drones: [],
     routes,
+    conduitLinks: [],
     vehicles: [],
     revealedCells: new Set(),
     satellites: [],
