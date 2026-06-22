@@ -32,7 +32,7 @@ import {
   type BuildingDefId,
   type GateRequirement,
 } from './building-defs.js';
-import { clusterBonusMul, gateSatisfied } from './adjacency.js';
+import { clusterBonusMuls, gateSatisfied } from './adjacency.js';
 import { shapeHeight, shapeWidth } from './shape-mask.js';
 import { affordabilityShortfall, applyRelabelStorageCap, countQueuedUpgrades, formatShortfall, inProgressBuildCount, parallelBuildSlots, queuedBuildCount, queuedBuildSlots, relocateFee, topUpgradeLevel, totalInvestedCost, upgradeCost } from './placement.js';
 import { upgradeConstructionMs } from './construction.js';
@@ -73,6 +73,7 @@ import { editIslandBiome, UNIVERSE_EDITOR_COST } from './universe-editor.js';
 import {
   addConduitLink,
   attachedBuildings,
+  conduitClusterDataFor,
   eligibleWireTargets,
   isConduit,
   removeConduitLink,
@@ -1181,19 +1182,40 @@ export function mountInspectorUi(
     paint();
   });
 
+  /** Signature of what `renderConduitUi` last rendered, so paint() can skip the
+   *  DOM rebuild when nothing changed. Without this gate the × buttons and the
+   *  wire-to <select> are destroyed + recreated on every paint (which runs at
+   *  the inspector refresh rate), making them unclickable — the element loses
+   *  identity mid-click — and resetting the dropdown selection every frame. */
+  let lastConduitSig: string | null = null;
+
   /** Render the conduit wire-to UI for the currently-targeted conduit building.
-   *  Called from `paint()` only. */
+   *  Called from `paint()` only. Gated on a content signature (see above). */
   function renderConduitUi(b: PlacedBuilding): void {
     conduitSection.wrap.style.display = '';
     const attached = attachedBuildings(b.id, deps.world);
+    const links = deps.world.conduitLinks
+      .map((l) => (l.a === b.id ? l.b : l.b === b.id ? l.a : null))
+      .filter((x): x is string => x !== null);
+    const targets = eligibleWireTargets(deps.world, b.id);
+    const labelOf = (id: string): string => {
+      const f = findBuildingAndIsland(deps.world, id);
+      return f ? conduitLinkLabel(f.building, f.island) : id;
+    };
+    const sig = `${b.id}|att:${attached.length}|links:${links
+      .map((id) => `${id}~${labelOf(id)}`)
+      .join(',')}|tg:${targets.map((t) => `${t.id}~${t.label}`).join(',')}`;
+    // Identical signature ⇒ identical DOM ⇒ skipping the rebuild is
+    // behaviour-preserving AND keeps the buttons/select interactive.
+    if (sig === lastConduitSig) return;
+    lastConduitSig = sig;
+
     conduitAttachedCount.textContent = `Attached buildings: ${attached.length}`;
 
     while (conduitLinksList.firstChild) {
       conduitLinksList.removeChild(conduitLinksList.firstChild);
     }
-    for (const link of deps.world.conduitLinks) {
-      const otherId = link.a === b.id ? link.b : link.b === b.id ? link.a : null;
-      if (otherId === null) continue;
+    for (const otherId of links) {
       const found = findBuildingAndIsland(deps.world, otherId);
       const row = document.createElement('div');
       styled(
@@ -1238,7 +1260,6 @@ export function mountInspectorUi(
       conduitLinksList.appendChild(row);
     }
 
-    const targets = eligibleWireTargets(deps.world, b.id);
     conduitWireSelect.innerHTML = '';
     for (const t of targets) {
       const opt = document.createElement('option');
@@ -2050,11 +2071,17 @@ export function mountInspectorUi(
     const skillMul: SkillMultipliers = effectiveSkillMultipliers(state);
     // §4.5/#35: include under-construction buildings (they bridge the cluster
     // and contribute their completed-floor capacity); exclude only invalid/disabled.
-    const clusterMul = clusterBonusMul(
-      building,
-      state.buildings.filter(participatesInCluster),
-      BUILDING_DEFS,
-    );
+    // §4.5 conduits: fold in this island's conduit union pairs + any cross-island
+    // remote attached buildings, exactly as the per-tick economy does
+    // (economy-advance.ts) — otherwise the displayed bonus omits conduit links
+    // even though production already applies them.
+    const clusterBuildings = state.buildings.filter(participatesInCluster);
+    const conduitData = conduitClusterDataFor(deps.world, state.id);
+    const clusterInput = conduitData.remote.length > 0
+      ? clusterBuildings.concat(conduitData.remote)
+      : clusterBuildings;
+    const clusterMul =
+      clusterBonusMuls(clusterInput, BUILDING_DEFS, conduitData.pairs).get(building.id) ?? 1;
     let captureEffectiveRate = 0;
     if (!recipe) {
       recipeStatus.textContent = '— no recipe';

@@ -219,3 +219,34 @@ export function conduitClusterUnions(
   }
   return pairs;
 }
+
+/**
+ * Per-island §4.5 conduit cluster data: the union pairs that touch `islandId`
+ * plus the remote (other-island) attached buildings those pairs reference (for
+ * cross-island wiring). Feed both into `clusterBonusMuls(buildings.concat(remote),
+ * defs, pairs)` to get conduit-aware multipliers. This is the same derivation the
+ * per-tick economy does inline (`economy-advance.ts` / `main.ts`); exposed here so
+ * non-hot callers (e.g. the inspector display) match production without
+ * duplicating the logic. Returns `{ pairs: [], remote: [] }` when there are no
+ * conduit links.
+ */
+export function conduitClusterDataFor(
+  world: WorldState,
+  islandId: string,
+  defs: Readonly<Record<BuildingDefId, BuildingDef>> = BUILDING_DEFS,
+): { pairs: ReadonlyArray<readonly [string, string]>; remote: PlacedBuilding[] } {
+  const all = conduitClusterUnions(world, defs);
+  if (all.length === 0) return { pairs: [], remote: [] };
+  const idx = buildingIslandIndex(world);
+  const pairs = all.filter(([a, b]) => idx.get(a) === islandId || idx.get(b) === islandId);
+  const byId = new Map<string, PlacedBuilding>();
+  for (const isl of world.islands) for (const b of isl.buildings) byId.set(b.id, b);
+  const remote = new Map<string, PlacedBuilding>();
+  for (const [a, b] of pairs)
+    for (const id of [a, b])
+      if (idx.get(id) !== islandId) {
+        const ob = byId.get(id);
+        if (ob) remote.set(id, ob);
+      }
+  return { pairs, remote: [...remote.values()] };
+}

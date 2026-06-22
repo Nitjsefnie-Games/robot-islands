@@ -17,6 +17,7 @@ import {
   conduitComponents,
   attachedBuildings,
   conduitClusterUnions,
+  conduitClusterDataFor,
   eligibleWireTargets,
 } from './conduits.js';
 import type { PlacedBuilding } from './buildings.js';
@@ -329,6 +330,38 @@ describe('conduitClusterUnions', () => {
       [], // no links → each conduit is its own (empty) component; nothing wires
     );
     expect(conduitClusterUnions(w)).toHaveLength(0);
+  });
+});
+
+describe('conduitClusterDataFor (per-island, drives the inspector display)', () => {
+  it('returns the same-island pairs touching the island, with no remote', () => {
+    const w = makeWorld(
+      [
+        {
+          id: 'isl-1',
+          buildings: [
+            b('cc1', 'cluster_conduit', 0, 0),
+            b('cc2', 'cluster_conduit', 10, 0),
+            b('pa', 'cell_press', 1, 0),
+            b('pb', 'cell_press', 11, 0),
+          ],
+        },
+      ],
+      [{ a: 'cc1', b: 'cc2' }],
+    );
+    const data = conduitClusterDataFor(w, 'isl-1');
+    expect(data.pairs.map((p) => [...p].sort())).toEqual([['pa', 'pb']]);
+    expect(data.remote).toHaveLength(0);
+  });
+
+  it('is empty when there are no conduit links (inert)', () => {
+    const w = makeWorld(
+      [{ id: 'isl-1', buildings: [b('cc1', 'cluster_conduit', 0, 0), b('pa', 'cell_press', 1, 0)] }],
+      [],
+    );
+    const data = conduitClusterDataFor(w, 'isl-1');
+    expect(data.pairs).toHaveLength(0);
+    expect(data.remote).toHaveLength(0);
   });
 });
 
