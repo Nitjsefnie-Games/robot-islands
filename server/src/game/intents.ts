@@ -21,7 +21,7 @@ import { renameIsland, validateIslandName, type Biome } from '../../../src/world
 import { editIslandBiome } from '../../../src/universe-editor.js';
 import {
   constructIsland,
-  makeArtificialIdGenerator,
+  artificialIslandId,
   validateConstruction,
 } from '../../../src/artificial-island.js';
 import { BUILDING_DEFS, ALL_BUILDING_DEF_IDS, type BuildingDefId } from '../../../src/building-defs.js';
@@ -922,7 +922,7 @@ export const INTENTS: Record<string, IntentHandler> = {
       if (!regionDiscoveredOrVisible(game.world, cx, cy, majorRadius, minorRadius)) {
         return { ok: false, error: 'in-unknown-space' };
       }
-      const id = makeArtificialIdGenerator(game.world)();
+      const id = artificialIslandId(cx, cy);
       let name: string | undefined;
       if (typeof displayName === 'string') {
         const v = validateIslandName(displayName);

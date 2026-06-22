@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest';
 import {
   computeConstructionCost,
   constructIsland,
+  artificialIslandId,
   maxRadiusForFounderLevel,
   maxRadiiForConstruction,
   validateBuildingPlacement,
@@ -104,6 +105,36 @@ const PC_BUILDING: PlacedBuilding = {
   x: -4,
   y: -4,
 };
+
+describe('artificialIslandId (position-based id — anti-recycling)', () => {
+  it('formats as art-<cx>-<cy>, including negatives', () => {
+    expect(artificialIslandId(-248, -89)).toBe('art--248--89');
+    expect(artificialIslandId(5, 12)).toBe('art-5-12');
+    expect(artificialIslandId(0, 0)).toBe('art-0-0');
+  });
+
+  it('distinct positions yield distinct ids (so distinct terrain seeds)', () => {
+    // The id doubles as the terrain seed (spec.id -> tileHash01). Position
+    // uniqueness (overlap is rejected at placement) guarantees seed uniqueness.
+    const ids = new Set([
+      artificialIslandId(5, 5),
+      artificialIslandId(6, 5),
+      artificialIslandId(5, 6),
+      artificialIslandId(-5, 5),
+    ]);
+    expect(ids.size).toBe(4);
+  });
+
+  it('does NOT recycle a merged-away id: a rebuild at a NEW position gets a new id', () => {
+    // Regression for "every artificial island has the same terrain": the old
+    // sequence minters reused a number freed when an island was absorbed by a
+    // §3.6 merge (its id surviving only as extraEllipses[].originId). A
+    // position id at a different location is inherently different.
+    const merged = artificialIslandId(10, 10);   // later absorbed + removed from world.islands
+    const rebuilt = artificialIslandId(11, 10);  // next construction, different spot
+    expect(rebuilt).not.toBe(merged);
+  });
+});
 
 describe('computeConstructionCost', () => {
   it('returns sensible numbers for a 4×4 Plains island', () => {

@@ -13,6 +13,7 @@
 import {
   computeConstructionCost,
   constructIsland,
+  artificialIslandId,
   maxRadiiForConstruction,
   type ConstructionRequirements,
 } from './artificial-island.js';
@@ -645,11 +646,10 @@ export function mountConstructionUi(
       constructBtn.disabled = true;
     }
 
-    // Name placeholder previews the to-be-allocated `art-N` id, so the
-    // player can see what the default would look like before deciding to
-    // type a custom name. `constructionCounter + 1` is the next id that
-    // `nextArtificialId` would mint — readback only, no mutation.
-    nameInput.placeholder = `art-${constructionCounter + 1}`;
+    // Name placeholder previews the to-be-allocated position id `art-<cx>-<cy>`
+    // (see `artificialIslandId`), so the player sees the default before deciding
+    // to type a custom name. Position-derived → no counter readback needed.
+    nameInput.placeholder = artificialIslandId(candidate.cx, candidate.cy);
   }
 
   function paintCostRow(el: HTMLSpanElement, need: number, have: number): void {
@@ -704,7 +704,7 @@ export function mountConstructionUi(
       return;
     }
 
-    const id = nextArtificialId();
+    const id = artificialIslandId(candidate.cx, candidate.cy);
     const result = constructIsland(
       options.world.seed,
       state,

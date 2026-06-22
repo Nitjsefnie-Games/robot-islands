@@ -2676,7 +2676,7 @@ describe('construct-island', () => {
     expect(ack).toMatchObject({ ok: true, seq: 2 });
 
     const world = await worldSnap(uid);
-    const artificial = world.islands.find((s: any) => s.id === 'art-1');
+    const artificial = world.islands.find((s: any) => s.id === 'art-100-100');
     expect(artificial).toBeTruthy();
     expect(artificial.name).toBe('Artificial One');
     expect(artificial.biome).toBe('plains');
@@ -2830,7 +2830,7 @@ describe('construct-island', () => {
     expect(ack).toMatchObject({ ok: true, seq: 11 });
 
     const world = await worldSnap(uid);
-    const artificial = world.islands.find((s: any) => s.id === 'art-1');
+    const artificial = world.islands.find((s: any) => s.id === 'art-100-100');
     expect(artificial).toBeTruthy();
     expect(artificial.biome).toBe('plains');
   });

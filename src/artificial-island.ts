@@ -240,6 +240,28 @@ export function makeArtificialIdGenerator(world: WorldState): () => string {
   };
 }
 
+/**
+ * Mint an artificial-island id from its construction POSITION: `art-<cx>-<cy>`.
+ *
+ * Position-derived (not a counter / not a scan of the live island list) so the
+ * id — which doubles as the island's terrain seed (`spec.id` → `tileHash01` in
+ * `biomes.ts`) — is unique per location and CANNOT be recycled. The old
+ * sequence-based minters (`makeArtificialIdGenerator`, `nextArtificialId`)
+ * derived the next `art-N` by scanning only `world.islands[].id`; when an
+ * artificial island was absorbed by a §3.6 merge it was removed from that list
+ * (its id surviving only as `extraEllipses[].originId`), so the number was
+ * recycled and the next-built island reused the same id → same terrain seed →
+ * identical terrain. A position id sidesteps that entirely: two artificial
+ * islands can never share a position (placement overlap is rejected), so they
+ * can never share an id or a terrain seed. No migration — existing `art-N`
+ * saves keep their ids; only newly-constructed islands use this form.
+ *
+ * `cx`/`cy` are integer tile coords; negatives render as e.g. `art--248--89`.
+ */
+export function artificialIslandId(cx: number, cy: number): string {
+  return `art-${cx}-${cy}`;
+}
+
 /** Exported for the UI's "next radius cap" indicator. Returns the maximum
  *  major OR minor radius the founder's tier allows. T3 caps at 8; T4 at 12;
  *  T5 at 16. Returns 0 for founders below T3 (artificial construction is
