@@ -2,7 +2,7 @@
 
 import type { ResourceId } from './recipes.js';
 import type { Graph } from './skilltree-graph.js';
-import { DEFAULT_GRAPH, tierForLevel } from './skilltree.js';
+import { DEFAULT_GRAPH, graphById, tierForLevel } from './skilltree.js';
 import type { WorldState } from './world.js';
 import { networkedIslandIds } from './network-consciousness.js';
 
@@ -32,6 +32,7 @@ export function computeSharedNetworkState(
   graph: Graph = DEFAULT_GRAPH,
 ): SharedNetworkState {
   const networked = networkedIslandIds(world);
+  const byId = graphById(graph);
   const sharedInventory = new Map<ResourceId, number>();
   const sharedStorageCap = new Map<ResourceId, number>();
   const inventoryHolders = new Map<ResourceId, Set<string>>();
@@ -48,7 +49,7 @@ export function computeSharedNetworkState(
 
     if (!state) continue;
     for (const nodeId of state.unlockedNodes) {
-      const node = graph.nodes.find((n) => n.id === nodeId);
+      const node = byId.get(nodeId as string);
       if (node?.effect.kind !== 'crossIslandShared') continue;
       const shape = node.effect.shape;
       switch (shape.kind) {

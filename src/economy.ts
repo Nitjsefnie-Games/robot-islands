@@ -40,7 +40,7 @@ import {
 import { advanceToxicityRolls, TOXICITY_DURATION_MS, toxicityMultiplier } from './reactor-toxicity.js';
 import { makeSeededRng } from './rng.js';
 import { nextRotateOutputBoundaryMs, resolveRecipe, resolveRotatingOutput, XP_WEIGHT, type Recipe, type ResourceId } from './recipes.js';
-import { cloneSkillMultipliers, effectiveSkillMultipliers, skillPointsForLevelUp, type NodeId, effectiveTierShift, tierForLevel, skillUnlockedAdjacencyRules, type SkillMultipliers, DEFAULT_GRAPH, type ConditionalEffectCondition, type ExoticAdjacencyRule } from './skilltree.js';
+import { cloneSkillMultipliers, effectiveSkillMultipliers, skillPointsForLevelUp, type NodeId, effectiveTierShift, tierForLevel, skillUnlockedAdjacencyRules, type SkillMultipliers, DEFAULT_GRAPH, graphById, type ConditionalEffectCondition, type ExoticAdjacencyRule } from './skilltree.js';
 import { solveFlow, type FlowBuildingSpec } from './flow-solver.js';
 import { solveBrownoutFactor, type PowerSample } from './flow-power-fixpoint.js';
 import type { CrystalId, EdgeId, Graph } from './skilltree-graph.js';
@@ -764,8 +764,9 @@ export function layerConditionalBonuses(
   graph: Graph = DEFAULT_GRAPH,
   nowMs?: number,
 ): void {
+  const byId = graphById(graph);
   for (const nodeId of state.unlockedNodes) {
-    const node = graph.nodes.find((n) => n.id === nodeId);
+    const node = byId.get(nodeId as string);
     if (!node || node.effect.kind !== 'conditionalBonus') continue;
     if (!evaluateConditionalEffectCondition(node.effect.condition, state, world, nowMs)) continue;
     const effect = node.effect;
