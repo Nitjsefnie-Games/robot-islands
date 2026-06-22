@@ -1,0 +1,542 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cluster Conduits — design spec</title>
+  <style>
+    :root {
+      --ivory:    #1B1A17;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --rust:     #E08B7F;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+
+      --radius: 12px;
+      --border: 1.5px solid var(--gray-300);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--sans);
+      background: var(--ivory);
+      color: var(--gray-700);
+      line-height: 1.58;
+      padding: 56px 32px 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .page { margin: 0 auto; max-width: 920px; }
+
+    header.page-head { margin-bottom: 40px; max-width: 840px; }
+    .eyebrow {
+      font-family: var(--mono);
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--gray-500);
+      margin-bottom: 12px;
+    }
+    h1 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 38px;
+      line-height: 1.14;
+      color: var(--slate);
+      margin-bottom: 18px;
+      letter-spacing: -0.01em;
+    }
+    .context-box {
+      background: var(--gray-150);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      font-size: 14.5px;
+      color: var(--gray-700);
+    }
+    .context-box .label {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    nav.toc {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 22px;
+      margin-bottom: 48px;
+      font-size: 13.5px;
+    }
+    nav.toc .label {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      margin-bottom: 10px;
+    }
+    nav.toc ol { list-style: none; display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px 24px; }
+    @media (max-width: 720px) { nav.toc ol { grid-template-columns: 1fr; } }
+    nav.toc a { color: var(--gray-700); text-decoration: none; }
+    nav.toc a:hover { color: var(--clay); }
+    nav.toc .n { font-family: var(--mono); color: var(--gray-500); margin-right: 8px; }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 48px;
+    }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+    }
+    .summary .k {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      margin-bottom: 6px;
+    }
+    .summary .v { font-size: 17px; color: var(--slate); font-weight: 600; }
+    .summary .v.accent  { color: var(--clay); }
+    .summary .v.ok      { color: var(--olive); }
+
+    .decision {
+      background: var(--white);
+      border: var(--border);
+      border-left: 4px solid var(--clay);
+      border-radius: var(--radius);
+      padding: 22px 26px;
+      margin-bottom: 56px;
+    }
+    .decision .d-tag {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.07em;
+      color: var(--clay);
+      margin-bottom: 8px;
+    }
+    .decision .d-head {
+      font-family: var(--serif);
+      font-size: 22px;
+      font-weight: 500;
+      color: var(--slate);
+      margin-bottom: 10px;
+      letter-spacing: -0.01em;
+    }
+    .decision .d-body { font-size: 14.5px; color: var(--gray-700); max-width: 760px; }
+    .decision .d-body + .d-body { margin-top: 8px; }
+
+    section { margin-bottom: 60px; }
+    .sec-head {
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+      margin-bottom: 8px;
+    }
+    .sec-head .num {
+      font-family: var(--mono);
+      font-size: 12px;
+      background: var(--oat);
+      color: var(--slate);
+      padding: 3px 9px;
+      border-radius: 8px;
+    }
+    .sec-head h2 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 26px;
+      color: var(--slate);
+      letter-spacing: -0.01em;
+    }
+    .sec-head h3 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 19px;
+      color: var(--slate);
+      margin: 26px 0 10px;
+    }
+    .sec-intro {
+      font-size: 14.5px;
+      color: var(--gray-500);
+      max-width: 760px;
+      margin-bottom: 24px;
+    }
+    p.body { font-size: 14.5px; max-width: 800px; margin-bottom: 14px; }
+    p.body strong { color: var(--slate); }
+    ul.body { font-size: 14.5px; max-width: 800px; margin: 0 0 14px 22px; }
+    ul.body li { margin: 6px 0; }
+    ul.body strong { color: var(--slate); }
+    code {
+      font-family: var(--mono);
+      font-size: 0.88em;
+      background: var(--gray-150);
+      border: 1px solid var(--gray-300);
+      border-radius: 5px;
+      padding: 1px 5px;
+      color: #C9B98A;
+    }
+
+    .tbl {
+      width: 100%;
+      border: var(--border);
+      border-radius: var(--radius);
+      border-collapse: separate;
+      border-spacing: 0;
+      overflow: hidden;
+      font-size: 13.5px;
+    }
+    .tbl th, .tbl td {
+      text-align: left;
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--gray-300);
+      vertical-align: top;
+    }
+    .tbl th {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--gray-500);
+      background: var(--gray-150);
+      font-weight: 600;
+    }
+    .tbl tr:last-child td { border-bottom: none; }
+    .tbl td { color: var(--gray-700); }
+    .tbl td.slate { color: var(--slate); font-weight: 600; }
+    .tbl tbody tr:hover { background: var(--gray-150); }
+
+    .compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+    @media (max-width: 820px) { .compare { grid-template-columns: 1fr; } }
+    .compare .col {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .compare .col-head {
+      padding: 12px 18px;
+      font-family: var(--mono);
+      font-size: 11.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      border-bottom: var(--border);
+    }
+    .compare .col.bad  .col-head { background: #2E211C; color: var(--rust); }
+    .compare .col.good .col-head { background: #232A1C; color: var(--olive); }
+    .compare .col-body { padding: 16px 18px; font-size: 13.5px; }
+    .compare .col-body ul { list-style: none; }
+    .compare .col-body li { margin: 7px 0; padding-left: 18px; position: relative; }
+    .compare .col.bad  li:before { content: '\2715'; position: absolute; left: 0; color: var(--rust); }
+    .compare .col.good li:before { content: '\2713'; position: absolute; left: 0; color: var(--olive); }
+
+    .changes { display: flex; flex-direction: column; gap: 12px; }
+    .change {
+      background: var(--white);
+      border: var(--border);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      gap: 4px 24px;
+    }
+    @media (max-width: 720px) { .change { grid-template-columns: 1fr; } }
+    .change .file {
+      font-family: var(--mono);
+      font-size: 12.5px;
+      color: var(--clay);
+      word-break: break-all;
+    }
+    .change .what { font-size: 14px; color: var(--gray-700); }
+    .change .what .lead { color: var(--slate); font-weight: 600; }
+
+    .checklist { display: flex; flex-direction: column; gap: 10px; max-width: 800px; }
+    .check {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      background: var(--white);
+      border: var(--border);
+      border-radius: 10px;
+      padding: 12px 16px;
+    }
+    .check .box {
+      width: 18px; height: 18px;
+      border-radius: 5px;
+      border: 2px solid var(--gray-500);
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+    .check .ck-text { font-size: 14px; color: var(--gray-700); }
+    .check .ck-text strong { color: var(--slate); }
+
+    .risks {
+      border: var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--white);
+    }
+    .risks .row { display: grid; grid-template-columns: 1.6fr 90px 1.6fr; }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: var(--border); }
+    .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: var(--border); }
+    @media (max-width: 780px) {
+      .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); }
+    }
+    .risks .head {
+      background: var(--gray-150);
+      font-weight: 600;
+      color: var(--slate);
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .sev {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-weight: 600;
+    }
+    .sev.high { background: #4A2A1C; color: #F0B79C; }
+    .sev.med  { background: var(--oat);  color: var(--slate); }
+    .sev.low  { background: #2D3A24; color: #B6CC96; }
+
+    .deferred { display: flex; flex-direction: column; gap: 14px; max-width: 840px; }
+    .defer {
+      background: var(--white);
+      border: var(--border);
+      border-left: 4px solid var(--gray-500);
+      border-radius: 10px;
+      padding: 16px 20px;
+    }
+    .defer .dt { font-weight: 600; font-size: 15px; color: var(--slate); margin-bottom: 4px; }
+    .defer .dd { font-size: 13.5px; color: var(--gray-500); }
+
+    .footer {
+      color: var(--gray-500);
+      font-size: 13px;
+      margin-top: 64px;
+      padding-top: 22px;
+      border-top: 1px solid var(--gray-300);
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Design spec · robot-islands</div>
+      <h1>Cluster Conduits — wiring the §4.5 cluster bonus across distance</h1>
+      <div class="context-box">
+        <span class="label">Context</span>
+        Today the §4.5 cluster bonus is earned only between buildings that physically touch (4-connected) on the same island; the §13.3 Lattice Node deliberately never carries it. This spec adds two infrastructure buildings — a same-island <strong>Cluster Conduit</strong> and a cross-island <strong>Lattice Conduit</strong> — that let the player wire conduits into a transitive network so distant same-category buildings cluster at full strength.
+      </div>
+    </header>
+
+    <nav class="toc">
+      <div class="label">Sections</div>
+      <ol>
+        <li><span class="n">01</span><a href="#s1">Problem &amp; decision</a></li>
+        <li><span class="n">02</span><a href="#s2">Player-facing model</a></li>
+        <li><span class="n">03</span><a href="#s3">Architecture</a></li>
+        <li><span class="n">04</span><a href="#s4">Change inventory</a></li>
+        <li><span class="n">05</span><a href="#s5">Verification</a></li>
+        <li><span class="n">06</span><a href="#s6">Risks</a></li>
+        <li><span class="n">07</span><a href="#s7">Out of scope</a></li>
+      </ol>
+    </nav>
+
+    <div class="summary">
+      <div class="cell"><div class="k">New buildings</div><div class="v accent">2</div></div>
+      <div class="cell"><div class="k">Schema bump</div><div class="v">v31 → v32</div></div>
+      <div class="cell"><div class="k">Attenuation</div><div class="v ok">None (full strength)</div></div>
+      <div class="cell"><div class="k">Upkeep</div><div class="v ok">None</div></div>
+    </div>
+
+    <div class="decision">
+      <div class="d-tag">Decision</div>
+      <div class="d-head">Add Cluster Conduit (same-island) and Lattice Conduit (cross-island); buildings 4-adjacent to wired conduits cluster at full strength.</div>
+      <div class="d-body">Wires form a transitive network; a wire-connected component of conduits pools its attached buildings, and the existing per-category union still applies. The Lattice Conduit is the <strong>only</strong> carrier of the §4.5 cluster bonus across islands — the §13.3 Lattice Node carries gating adjacency and exotic pairs but never this term. Balance lives entirely in build cost + tier gate.</div>
+      <div class="d-body">Deliberately does <em>not</em> attenuate remote contributions, add upkeep, or carry gating adjacency (heat/cooling/wastewater) over conduits.</div>
+    </div>
+
+    <section id="s1">
+      <div class="sec-head"><span class="num">01</span><h2>Problem &amp; decision</h2></div>
+      <p class="sec-intro">Why the cluster bonus can't currently reach across distance, and what we're adding.</p>
+      <p class="body">The §4.5 cluster bonus — the floor-weighted, same-category, linear-uncapped multiplier — is earned <strong>only</strong> between buildings that physically touch (4-connected) on the <strong>same island</strong>. <code>clusterBonusMuls</code> in <code>adjacency.ts</code> runs a per-island union-find over same-category 4-adjacent buildings; the §13.3 cross-island Lattice Node deliberately does <strong>not</strong> feed this term.</p>
+      <p class="body">There is currently no way to earn the cluster bonus between far-apart buildings, on one island or across islands. <strong>Decision:</strong> two new infrastructure buildings let the player wire conduits into a transitive network so same-category buildings 4-adjacent to any conduit in one network cluster together at full strength, no attenuation. The Lattice Conduit is the only cross-island carrier of the §4.5 bonus.</p>
+    </section>
+
+    <section id="s2">
+      <div class="sec-head"><span class="num">02</span><h2>Player-facing model</h2></div>
+      <p class="sec-intro">The two buildings, how buildings attach, how wires compose, and the bonus semantics.</p>
+
+      <h3>2.1 Buildings</h3>
+      <table class="tbl">
+        <thead><tr><th>Building</th><th>Scope</th><th>Tier gate</th><th>Cost (placeholder)</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">Cluster Conduit</td><td>Same-island wiring</td><td>T2–T3</td><td>Moderate (steel/concrete)</td><td>Wires only to other conduits on the same island.</td></tr>
+          <tr><td class="slate">Lattice Conduit</td><td>Cross-island wiring</td><td>T5</td><td>Substantially higher (exotic/endgame)</td><td>Wires to conduits on any island; also works locally. Main throttle on cross-island snowballing.</td></tr>
+        </tbody>
+      </table>
+      <p class="body" style="margin-top:14px">Both are pure connectivity infrastructure: they run no recipe and produce/consume no power, so they are <strong>never cluster members</strong> themselves.</p>
+
+      <h3>2.2 Attachment</h3>
+      <p class="body">A building is <strong>attached</strong> to a conduit iff it is <strong>4-adjacent</strong> to the conduit's footprint — the exact <code>borderTiles</code> / <code>touchesBorder</code> test used everywhere else (and the same definition the Lattice Node uses). No new range/radius concept.</p>
+
+      <h3>2.3 Wiring</h3>
+      <p class="body">The player explicitly links conduit → conduit (routes-style click-to-link UI). Wires form an arbitrary graph.</p>
+      <ul class="body">
+        <li><strong>Transitive network:</strong> a wire-connected <em>component</em> of conduits pools all of its attached buildings. Within that pool the existing <strong>per-category</strong> rule still applies — a Smelter attached to A clusters with a Smelter attached to wired B, but never with a Power building attached to B.</li>
+        <li><strong>Wire legality:</strong> a wire is "cross-island" iff its two endpoints sit on different islands. A same-island Cluster Conduit may only participate in same-island wires; a <strong>cross-island wire requires a Lattice Conduit at both endpoints.</strong> A Lattice Conduit also functions locally, so one network can mix both building types.</li>
+        <li>Invalid wire attempts (illegal cross-island wire, self-link, duplicate) are rejected and tinted red.</li>
+      </ul>
+
+      <h3>2.4 Bonus semantics</h3>
+      <p class="body">Wired neighbours count <strong>exactly</strong> like physical neighbours in <code>mul_i = 1 + rate × (K − c_i)</code>: a wired building contributes its floor-capacity <code>c = 1 + floorLevel</code> to the cluster's <code>K</code>, with no attenuation, regardless of distance or island. The bonus stays linear and uncapped; cost + tier are the only throttles.</p>
+    </section>
+
+    <section id="s3">
+      <div class="sec-head"><span class="num">03</span><h2>Architecture</h2></div>
+      <p class="sec-intro">The bonus comes from one place — <code>clusterBonusMuls</code>. We inject extra union pairs from the conduit network; the cross-island case reuses the existing <code>ctx.crossIsland</code> plumbing.</p>
+
+      <div class="compare">
+        <div class="col bad">
+          <div class="col-head">Rejected — global all-islands pass</div>
+          <div class="col-body"><ul>
+            <li>Replaces per-island cluster computation with one global pass.</li>
+            <li>Rewrites the per-island memoization + signature discipline.</li>
+            <li>Higher risk to the catch-up perf work (bench oracle).</li>
+          </ul></div>
+        </div>
+        <div class="col good">
+          <div class="col-head">Chosen — crossIsland-injection</div>
+          <div class="col-body"><ul>
+            <li>Keeps <code>clusterBonusMuls</code> per-island; one new additive arg.</li>
+            <li>Cross-island attached buildings fed via existing <code>ctx.crossIsland</code> plumbing.</li>
+            <li>Preserves memo/signature discipline; inert when no links.</li>
+          </ul></div>
+        </div>
+      </div>
+
+      <h3>3.1 Data model &amp; persistence</h3>
+      <ul class="body">
+        <li>New world field <code>World.conduitLinks: ConduitLink[]</code>, <code>ConduitLink = { a: string; b: string }</code> referencing conduit building IDs (globally unique per <code>world.ts</code>). Order-insensitive; deduped.</li>
+        <li>Schema bump <strong>v31 → v32</strong>: <code>SerializedSnapshotV31</code>, <code>migrateV31toV32</code> (defaults <code>conduitLinks: []</code>), <code>loadWorld</code> dispatch, add <code>32</code> to <code>SUPPORTED_LOAD_VERSIONS</code>. <code>makeInitialWorld</code> seeds <code>[]</code>.</li>
+      </ul>
+
+      <h3>3.2 Cluster computation</h3>
+      <p class="body"><code>clusterBonusMuls(buildings, defs, conduitUnions?)</code> gains an optional <code>conduitUnions: ReadonlyArray&lt;readonly [string, string]&gt;</code> — pairs of building IDs to union <strong>when same-category</strong> (cross-category pairs ignored, preserving the per-category invariant). A new pure helper (<code>conduitClusterUnions</code>) derives them: resolve each conduit's attached set → find wire-graph components → per component, per category, emit union pairs chaining that category's attached buildings.</p>
+
+      <h3>3.3 Same-island vs cross-island</h3>
+      <ul class="body">
+        <li><strong>Same-island:</strong> attached buildings already live in the island's <code>clusterBuildings</code> set, so derived unions plug straight into the existing per-island call (<code>economy.ts</code> ~line 997). Only the new arg changes.</li>
+        <li><strong>Cross-island:</strong> the per-island pass must see attached buildings reachable through cross-island wires on other islands. Reuse <code>ctx.crossIsland</code> (already threaded <code>EconomyCtx → getDerivationsMemo → derivationsSignature</code>): feed conduit-reachable remote attached buildings into the island's cluster set + union pairs so they contribute to <code>K</code>. Must be included in the derivations signature so the memo invalidates when links or remote members change. This is the one genuinely new path.</li>
+      </ul>
+    </section>
+
+    <section id="s4">
+      <div class="sec-head"><span class="num">04</span><h2>Change inventory</h2></div>
+      <p class="sec-intro">Every file the implementation touches.</p>
+      <div class="changes">
+        <div class="change"><div class="file">src/building-defs.ts</div><div class="what"><span class="lead">Add the two defs.</span> <code>cluster_conduit</code> + <code>lattice_conduit</code> defIds, footprint, tier gate, cost, category (logistics/special; not a recipe/power cluster contributor).</div></div>
+        <div class="change"><div class="file">src/adjacency.ts</div><div class="what"><span class="lead">Accept conduit unions.</span> <code>clusterBonusMuls</code> takes optional <code>conduitUnions</code>; add <code>conduitClusterUnions</code> deriving pairs from attached sets + wire components.</div></div>
+        <div class="change"><div class="file">src/economy.ts</div><div class="what"><span class="lead">Derive &amp; thread unions.</span> Derive <code>conduitUnions</code> per island; pass into <code>clusterBonusMuls</code>; extend <code>crossIsland</code> handling + derivations signature for remote attached buildings.</div></div>
+        <div class="change"><div class="file">src/world.ts</div><div class="what"><span class="lead">World field.</span> Add <code>conduitLinks</code> to <code>World</code>; seed empty in <code>makeInitialWorld</code>; <code>ConduitLink</code> type.</div></div>
+        <div class="change"><div class="file">src/persistence.ts</div><div class="what"><span class="lead">v32 migration.</span> Bump; <code>SerializedSnapshotV31</code>, <code>migrateV31toV32</code>, dispatch, <code>SUPPORTED_LOAD_VERSIONS</code>, (de)serialize <code>conduitLinks</code>.</div></div>
+        <div class="change"><div class="file">src/conduits.ts (new, optional)</div><div class="what"><span class="lead">Pure helpers.</span> Wire-graph components, attached-set resolution, <code>canWire(a,b)</code> legality, link add/remove/dedup. Keeps <code>adjacency.ts</code> focused.</div></div>
+        <div class="change"><div class="file">src/input.ts</div><div class="what"><span class="lead">Wiring action.</span> New <code>wire-conduit</code> action + key binding for wiring mode.</div></div>
+        <div class="change"><div class="file">src/conduit-wiring-ui.ts (new)</div><div class="what"><span class="lead">Wiring interaction.</span> Pick conduit A → B, validity tint, commit/cancel.</div></div>
+        <div class="change"><div class="file">src/conduit-overlay.ts (new, render)</div><div class="what"><span class="lead">Draw wires.</span> Signature-gated <code>refresh()</code> per the per-frame redraw discipline.</div></div>
+        <div class="change"><div class="file">src/inspector-ui.ts</div><div class="what"><span class="lead">Conduit panel.</span> Attached buildings + wire count.</div></div>
+        <div class="change"><div class="file">SPEC.md</div><div class="what"><span class="lead">Spec + catalog.</span> New §4.5 sub-section (cluster-conduit rule + "only cross-island carrier" distinction vs §13.3); §8 catalog; tier-table rows.</div></div>
+      </div>
+    </section>
+
+    <section id="s5">
+      <div class="sec-head"><span class="num">05</span><h2>Verification</h2></div>
+      <p class="sec-intro">Concrete, runnable checks.</p>
+      <div class="checklist">
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>npx vitest run src/adjacency.test.ts</strong> — same-island wire unions distant same-category buildings; cross-category attached do not bridge; transitive A–B–C; cross-island injection contributes to K; legality (same-island conduit can't form a cross-island wire; cross-island needs Lattice Conduits both ends).</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>npx vitest run src/persistence.test.ts</strong> — v31 fixture migrates to v32 with empty <code>conduitLinks</code>; v32 round-trips identity.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>cd server &amp;&amp; npx tsc --noEmit</strong> and root <strong>npm run build</strong> — clean under strict.</div></div>
+        <div class="check"><div class="box"></div><div class="ck-text"><strong>server/bench/catchup-bench.mts</strong> — a save without conduit links keeps its SHA-256 oracle digest byte-identical (feature is inert when <code>conduitLinks</code> is empty).</div></div>
+      </div>
+    </section>
+
+    <section id="s6">
+      <div class="sec-head"><span class="num">06</span><h2>Risks</h2></div>
+      <div class="risks">
+        <div class="row">
+          <div class="cell head">Risk</div><div class="cell head">Sev</div><div class="cell head">Mitigation</div>
+        </div>
+        <div class="row">
+          <div class="cell">Full-strength cross-island clustering snowballs late game.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Accepted as intended endgame power; Lattice Conduit cost + T5 gate are the throttle. Tunable via <code>CATEGORY_ADJACENCY_RATE</code> + cost.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Cross-island injection breaks per-island memo / catch-up perf.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Include conduit links + remote attached set in the derivations signature; verify with the bench oracle (inert when no links).</div>
+        </div>
+        <div class="row">
+          <div class="cell">Cluster computation cost grows (union-find is O(N²)).</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Conduit unions add O(wires + attached) edges, not new pairwise scans; existing scan unchanged; per-tick memo amortizes.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Dangling links after a conduit is demolished/relocated.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Demolish/relocate prunes any <code>conduitLinks</code> referencing that building ID (same lifecycle hook routes use).</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="s7">
+      <div class="sec-head"><span class="num">07</span><h2>Out of scope</h2></div>
+      <p class="sec-intro">Explicitly deferred — considered, not missed.</p>
+      <div class="deferred">
+        <div class="defer"><div class="dt">Attenuation / per-conduit capacity caps</div><div class="dd">Rejected; full strength per design decision.</div></div>
+        <div class="defer"><div class="dt">Per-wire or per-conduit upkeep (power draw)</div><div class="dd">Rejected; upfront build cost only.</div></div>
+        <div class="defer"><div class="dt">Radius-based attachment</div><div class="dd">Rejected in favour of 4-adjacency (reuses existing test, no new range concept).</div></div>
+        <div class="defer"><div class="dt">Carrying gating adjacency (heat/cooling/wastewater) over conduits</div><div class="dd">Out of scope; conduits carry the §4.5 cluster bonus only. Cross-island gating remains the §13.3 Lattice Node's job.</div></div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <p>Design spec · robot-islands · 2026-06-22 · relates to SPEC.md §4.4 / §4.5 / §13.3</p>
+    </div>
+
+  </div>
+</body>
+</html>
