@@ -45,6 +45,7 @@ import { resolveShot } from './terrain-modifier.js';
 import { islandInscribedAny } from './island.js';
 import type { ResourceId } from './recipes.js';
 import type { PlacedBuilding } from './buildings.js';
+import { buildingIslandIndex, conduitClusterUnions } from './conduits.js';
 import type { IslandSpec, WorldState } from './world.js';
 
 /** Render-side side-effect hooks. Optional — the server passes none, so the
@@ -129,6 +130,34 @@ export function advanceWorldEconomy(
     }
   }
 
+  // §4.5 conduit cluster unions, once per tick. When `world.conduitLinks` is
+  // empty `conduitClusterUnions` returns [], so every island's conduitData is
+  // { pairs: [], remote: [] } and the economy is byte-identically inert
+  // (gated on length > 0 in derivationsSignature/getDerivationsMemo).
+  const conduitUnionsAll = conduitClusterUnions(world);
+  const conduitIdxC = buildingIslandIndex(world);
+  const conduitBldById = new Map<string, PlacedBuilding>();
+  if (conduitUnionsAll.length > 0)
+    for (const isl of world.islands) for (const b of isl.buildings) conduitBldById.set(b.id, b);
+  const conduitDataCache = new Map<string, { pairs: ReadonlyArray<readonly [string, string]>; remote: PlacedBuilding[] }>();
+  const conduitDataFor = (islandId: string): { pairs: ReadonlyArray<readonly [string, string]>; remote: PlacedBuilding[] } => {
+    const cached = conduitDataCache.get(islandId);
+    if (cached) return cached;
+    const pairs = conduitUnionsAll.filter(
+      ([a, b]) => conduitIdxC.get(a) === islandId || conduitIdxC.get(b) === islandId,
+    );
+    const remote = new Map<string, PlacedBuilding>();
+    for (const [a, b] of pairs)
+      for (const id of [a, b])
+        if (conduitIdxC.get(id) !== islandId) {
+          const ob = conduitBldById.get(id);
+          if (ob) remote.set(id, ob);
+        }
+    const data = { pairs, remote: [...remote.values()] };
+    conduitDataCache.set(islandId, data);
+    return data;
+  };
+
   // §14.3 Mirror Sat: per-island aggregate solar boost, once per tick.
   const solarBoostByIsland = new Map<string, number>();
   for (const spec of world.islands) {
@@ -153,6 +182,8 @@ export function advanceWorldEconomy(
       terrainAt: spec?.terrainAt,
       inventory: isLatticeIsland ? unifiedInv : undefined,
       crossIsland: crossIslandById.get(id),
+      conduitUnions: conduitDataFor(id).pairs,
+      conduitRemoteAttached: conduitDataFor(id).remote,
       caps: isLatticeIsland ? unifiedCaps : undefined,
       geothermalActive: spec?.modifiers.includes('geothermal_active') === true,
       solarBoost: solarBoostByIsland.get(id),
@@ -182,6 +213,8 @@ export function advanceWorldEconomy(
       activeBonusMul: activeBonusMul(world),
       terrainAt: spec?.terrainAt,
       crossIsland: crossIslandById.get(s.id),
+      conduitUnions: conduitDataFor(s.id).pairs,
+      conduitRemoteAttached: conduitDataFor(s.id).remote,
       cableComponent: cableBalances.get(s.id),
       geothermalActive: spec?.modifiers.includes('geothermal_active') === true,
       solarBoost: solarBoostByIsland.get(s.id),
@@ -264,6 +297,8 @@ export function advanceWorldEconomy(
       terrainAt: spec?.terrainAt,
       inventory: isLatticeIsland ? unifiedInv : sharedInventory,
       crossIsland,
+      conduitUnions: conduitDataFor(s.id).pairs,
+      conduitRemoteAttached: conduitDataFor(s.id).remote,
       caps: isLatticeIsland ? unifiedCaps : sharedCaps,
       cableComponent,
       geothermalActive,
