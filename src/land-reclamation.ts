@@ -23,7 +23,7 @@ import { inv } from './economy.js';
 import { islandInscribedAny, tileInscribedInEllipse } from './island.js';
 import { LAND_TILE_COST } from './building-defs.js';
 import type { ResourceId } from './recipes.js';
-import { BIOME_MAX_RADII, type Biome, type IslandSpec } from './world.js';
+import { BIOME_MAX_RADII, recordGrowthClaim, type Biome, type IslandSpec } from './world.js';
 
 /** Which ellipse semi-axis to grow on an expansion. */
 export type Axis = 'major' | 'minor';
@@ -267,4 +267,9 @@ export function expandConstituent(
       minor: axis === 'minor' ? e.minor + 1 : e.minor,
     };
   }
+  // §3.6 record the post-growth radii as a placement-order ownership claim so
+  // the grown ring yields to any constituent that already holds those tiles.
+  const grownMajor = index === 0 ? spec.majorRadius : spec.extraEllipses![index - 1]!.major;
+  const grownMinor = index === 0 ? spec.minorRadius : spec.extraEllipses![index - 1]!.minor;
+  recordGrowthClaim(spec, index, grownMajor, grownMinor);
 }
