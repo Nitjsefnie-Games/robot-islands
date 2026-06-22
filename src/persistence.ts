@@ -76,7 +76,7 @@ export const STORAGE_KEY_DISPLAY = 'robot-islands:save';
 
 /** Current schema version. `loadWorld` rejects (returns null) any
  *  snapshot whose `v` is not strictly equal to this. */
-export const SCHEMA_VERSION = 31 as const;
+export const SCHEMA_VERSION = 32 as const;
 
 /** Versions that loadWorld accepts. The walker (loadWorld) chains
  *  migrateV<N>toV<N+1> functions from the lowest known version up to
@@ -84,7 +84,7 @@ export const SCHEMA_VERSION = 31 as const;
  *
  *  See AGENTS.md → "Persistence migrations" for the full "bump = migrate"
  *  policy from v7 onward. */
-export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31]);
+export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32]);
 
 // ---------------------------------------------------------------------------
 // Serialized shapes
@@ -143,6 +143,8 @@ export interface SerializedWorld {
   readonly seed?: string;
   readonly drones: ReadonlyArray<SerializedDrone>;
   readonly routes: ReadonlyArray<Route>;
+  /** §4.5 cluster-conduit edge list. Empty on pre-v32 saves; v31→v32 migration backfills []. */
+  readonly conduitLinks: ReadonlyArray<import('./world.js').ConduitLink>;
   readonly vehicles: ReadonlyArray<SerializedVehicle>;
   readonly revealedCells?: ReadonlyArray<string>;
   /** §14.2 satellite fleet. */
@@ -598,6 +600,18 @@ export function migrateV29toV30(s: SerializedSnapshotV29): SaveSnapshot {
 
 export type SerializedSnapshotV30 = Omit<SaveSnapshot, 'v'> & { readonly v: 30 };
 
+export type SerializedSnapshotV31 = Omit<SaveSnapshot, 'v'> & { readonly v: 31 };
+
+/** v31 → v32: introduce §4.5 cluster conduits. Old saves have no conduit
+ *  links; default `world.conduitLinks` to empty so the feature is inert. */
+export function migrateV31toV32(s: SerializedSnapshotV31): SaveSnapshot {
+  return {
+    ...s,
+    v: 32 as const,
+    world: { ...s.world, conduitLinks: (s.world as { conduitLinks?: unknown }).conduitLinks ?? [] },
+  } as unknown as SaveSnapshot;
+}
+
 /** v30 → v31: split the terrain-discriminated `mine` building into dedicated
  *  `iron_mine` (ore vein) / `coal_mine` (coal vein) buildings. Each placed mine
  *  is reclassified by its footprint terrain — any coal tile → coal_mine, else
@@ -989,6 +1003,8 @@ export function serializeWorld(
           })),
         };
       }),
+      // §4.5 cluster-conduit edges: plain {a,b} objects, direct copy.
+      conduitLinks: world.conduitLinks,
       // Vehicles: drop the runtime-only scan buffer (Set → not JSON-safe;
       // rehydrated empty on load). doomedAtMs / weatherRolled round-trip as-is.
       vehicles: world.vehicles.map(({ scanBuffer: _sb, ...rest }) => {
@@ -1138,6 +1154,9 @@ export function deserializeWorld(
   if ((snapshot as unknown as { v: number }).v === 30) {
     snapshot = migrateV30toV31(snapshot as unknown as SerializedSnapshotV30);
   }
+  if ((snapshot as unknown as { v: number }).v === 31) {
+    snapshot = migrateV31toV32(snapshot as unknown as SerializedSnapshotV31);
+  }
 
   if (snapshot.v !== SCHEMA_VERSION) {
     throw new Error(
@@ -1231,6 +1250,7 @@ export function deserializeWorld(
         dispatchTime: b.dispatchTime + perfShift,
       })),
     })),
+    conduitLinks: [...(snapshot.world.conduitLinks ?? [])],
     vehicles: snapshot.world.vehicles.map((v) => ({
       ...v,
       launchTime: v.launchTime + perfShift,
