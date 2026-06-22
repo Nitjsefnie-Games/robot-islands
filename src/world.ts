@@ -37,6 +37,14 @@ import type { OceanCellSpec } from './ocean-cell.js';
 import { generateOceanTerrain, seedOceanTerrainForIslands } from './ocean-gen.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import type { Route } from './routes.js';
+
+/** §4.5 cluster-conduit edge: a pair of conduit building ids that are
+ *  linked for a forthcoming cluster-bonus wiring feature. Stored on World
+ *  and persisted; game logic ignores it until later tasks. */
+export interface ConduitLink {
+  readonly a: string; // conduit building id
+  readonly b: string; // conduit building id
+}
 import { RESOURCE_STORAGE_CATEGORY, baselineCap, storageBaseFor } from './storage-categories.js';
 import { pointInVision, type VisionSource } from './vision-source.js';
 import { generateCellIslands, generateWorld } from './world-gen.js';
@@ -1019,6 +1027,9 @@ export interface WorldState {
    *  module dependency points `routes.ts → world.ts`; the type-only import
    *  keeps the back-edge cycle-free. */
   routes: Route[];
+  /** §4.5 cluster-conduit edge list. Mutable: a later task reassigns it
+   *  when links change. Empty list is fully inert. */
+  conduitLinks: ConduitLink[];
   /** Mutable: §12 settlement vehicles in flight (ships + helicopters). Each
    *  vehicle is consumed on arrival — list grows on dispatch, shrinks on
    *  tick when arrival fires. Same type-only-import discipline as drones
@@ -1196,7 +1207,7 @@ export function makeInitialWorld(_nowMs: number, seed: string = WORLD_SEED): Wor
   // Ocean-layer §5 — depth visibility starts empty. Sonar Buoys and Scanner
   // Sat upgrades populate it as the player builds those revealers.
   const depthRevealedCells = new Set<string>();
-  return { islands, drones: [], routes: [], vehicles: [], revealedCells, seed, satellites: [], repairDrones: [], debrisFields: [], tutorialState: { completed: new Set(), current: 'place_solar' }, latticeActive: false, latticeNodeIslands: [], activeBonusMs: 0, tradeOffers: [], commPackets: [], totalCo2Kg: 0, playerLat: null, playerLon: null, generatedCells, oceanCells, depthRevealedCells, recentBuildAttempts: new Set(), recentBuildAttemptTs: new Map() };
+  return { islands, drones: [], routes: [], conduitLinks: [], vehicles: [], revealedCells, seed, satellites: [], repairDrones: [], debrisFields: [], tutorialState: { completed: new Set(), current: 'place_solar' }, latticeActive: false, latticeNodeIslands: [], activeBonusMs: 0, tradeOffers: [], commPackets: [], totalCo2Kg: 0, playerLat: null, playerLon: null, generatedCells, oceanCells, depthRevealedCells, recentBuildAttempts: new Set(), recentBuildAttemptTs: new Map() };
 }
 
 /**
