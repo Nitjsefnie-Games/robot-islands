@@ -223,6 +223,7 @@ describe('mountHud DOM persistence', () => {
       seed: 'test',
       drones: [],
       routes: [],
+      conduitLinks: [],
       vehicles: [],
       revealedCells: new Set(),
       satellites: [],
@@ -331,7 +332,7 @@ describe('mountHud DOM persistence', () => {
 describe('mountHud subtitle tier (#134 T6 surfacing)', () => {
   function makeMinimalWorld(): WorldState {
     return {
-      islands: [], seed: 'test', drones: [], routes: [], vehicles: [],
+      islands: [], seed: 'test', drones: [], routes: [], conduitLinks: [], vehicles: [],
       revealedCells: new Set(), satellites: [], repairDrones: [], debrisFields: [],
       latticeActive: false, latticeNodeIslands: [], commPackets: [],
       oceanCells: new Map(), depthRevealedCells: new Set(), totalCo2Kg: 0,
@@ -380,6 +381,7 @@ describe('mountHud retained DOM (perf: change-gated writes, no per-frame rebuild
       seed: 'test',
       drones: [],
       routes: [],
+      conduitLinks: [],
       vehicles: [],
       revealedCells: new Set(),
       satellites: [],

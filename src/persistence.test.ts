@@ -79,6 +79,7 @@ import {
   type SerializedSnapshotV28,
   type SerializedSnapshotV29,
   type SerializedSnapshotV30,
+  type SerializedSnapshotV31,
   type SerializedIslandStateV11,
   type SerializedWorld,
 } from './persistence.js';

@@ -99,6 +99,7 @@ function freshWorld(islands: IslandSpec[] = []): WorldState {
     islands,
     drones: [],
     routes: [],
+    conduitLinks: [],
     vehicles: [],
     revealedCells: new Set(),
     satellites: [],

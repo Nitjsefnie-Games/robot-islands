@@ -35,6 +35,7 @@ function makeWorld(islands: IslandSpec[]): WorldState {
     islands,
     drones: [],
     routes: [],
+    conduitLinks: [],
     vehicles: [],
     revealedCells: new Set<string>(),
     seed: 'sonar-test',

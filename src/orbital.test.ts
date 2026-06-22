@@ -629,6 +629,7 @@ function makeBfsWorld(opts: {
     islands: opts.islands,
     drones: [],
     routes: [],
+    conduitLinks: [],
     vehicles: [],
     revealedCells: new Set(),
     seed: '0',

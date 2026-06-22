@@ -112,7 +112,7 @@ function makeState(over: Partial<IslandState> = {}): IslandState {
 }
 
 function makeWorld(islands: IslandSpec[]): WorldState {
-  return { islands: [...islands], drones: [], routes: [], vehicles: [], revealedCells: new Set(), satellites: [], repairDrones: [],
+  return { islands: [...islands], drones: [], routes: [], conduitLinks: [], vehicles: [], revealedCells: new Set(), satellites: [], repairDrones: [],
     debrisFields: [], latticeActive: false, latticeNodeIslands: [],
     commPackets: [], totalCo2Kg: 0, playerLat: null, playerLon: null, seed: 'test-seed', oceanCells: new Map(), depthRevealedCells: new Set(), recentBuildAttempts: new Set(), recentBuildAttemptTs: new Map() };
 }
