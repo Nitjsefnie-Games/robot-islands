@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cross-tick rate cache — investigation (negative result)</title>
+  <style>
+    :root {
+      --ivory:#1B1A17; --slate:#F5F3EC; --clay:#D97757; --oat:#3A352B; --olive:#8FA56E;
+      --rust:#E08B7F; --warn:#E0B47F; --gray-150:#2E2C27; --gray-300:#3A3833;
+      --gray-500:#8F8D82; --gray-700:#CFCCC2; --white:#252420;
+      --serif:ui-serif,Georgia,'Times New Roman',serif; --sans:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+      --mono:ui-monospace,'SF Mono',Menlo,Monaco,monospace; --radius:12px; --border:1.5px solid var(--gray-300);
+    }
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family:var(--sans); background:var(--ivory); color:var(--gray-700); line-height:1.58;
+      padding:56px 32px 120px; -webkit-font-smoothing:antialiased; }
+    .page { margin:0 auto; max-width:1080px; }
+    header.page-head { margin-bottom:36px; max-width:980px; }
+    .eyebrow { font-family:var(--mono); font-size:12px; letter-spacing:0.08em; text-transform:uppercase;
+      color:var(--gray-500); margin-bottom:12px; }
+    h1 { font-family:var(--serif); font-weight:500; font-size:38px; line-height:1.14; color:var(--slate);
+      margin-bottom:18px; letter-spacing:-0.01em; }
+    .method { background:var(--white); border:var(--border); border-radius:var(--radius); padding:18px 22px; margin-bottom:18px; }
+    .method .label { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.06em;
+      color:var(--gray-500); margin-bottom:10px; }
+    .method .grid { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; font-size:13.5px; }
+    @media (max-width:860px){ .method .grid { grid-template-columns:repeat(2,1fr); } }
+    .method .cell .k { font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:0.05em;
+      color:var(--gray-500); margin-bottom:3px; }
+    .method .cell .v { color:var(--slate); font-weight:600; }
+    .noise { background:#2E211C; border:1.5px solid #5C3D2E; border-radius:var(--radius); padding:14px 20px;
+      margin-bottom:40px; font-size:14px; color:var(--gray-700); display:flex; gap:12px; max-width:980px; }
+    .noise .glyph { color:var(--warn); font-weight:700; } .noise b { color:var(--warn); }
+    section { margin-bottom:48px; }
+    .sec-head { display:flex; align-items:baseline; gap:14px; margin-bottom:8px; }
+    .sec-head .num { font-family:var(--mono); font-size:12px; background:var(--oat); color:var(--slate);
+      padding:3px 9px; border-radius:8px; }
+    .sec-head h2 { font-family:var(--serif); font-weight:500; font-size:26px; color:var(--slate); letter-spacing:-0.01em; }
+    .sec-intro { font-size:14.5px; color:var(--gray-500); max-width:840px; margin-bottom:24px; }
+    p { margin-bottom:14px; max-width:900px; font-size:14.5px; }
+    code { font-family:var(--mono); font-size:0.88em; background:var(--gray-150); border:1px solid var(--gray-300);
+      border-radius:5px; padding:1px 5px; color:#C9B98A; }
+    .tbl { width:100%; border:var(--border); border-radius:var(--radius); border-collapse:separate;
+      border-spacing:0; overflow:hidden; font-size:13.5px; margin-bottom:14px; }
+    .tbl th, .tbl td { text-align:left; padding:11px 16px; border-bottom:1px solid var(--gray-300); vertical-align:top; }
+    .tbl th { font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:0.05em;
+      color:var(--gray-500); background:var(--gray-150); font-weight:600; }
+    .tbl tr:last-child td { border-bottom:none; }
+    .tbl td.slate { color:var(--slate); font-weight:600; }
+    .tbl td.num { font-family:var(--mono); font-size:13px; text-align:right; font-variant-numeric:tabular-nums; }
+    .sig { display:inline-block; font-family:var(--mono); font-size:10.5px; padding:2px 8px; border-radius:999px; letter-spacing:0.04em; }
+    .sig.real { background:#2D3A24; color:var(--olive); } .sig.lose { background:#4A2A1C; color:var(--rust); }
+    .sig.noise { background:var(--gray-150); color:var(--gray-500); border:1px solid var(--gray-300); }
+    ul { margin:0 0 14px 22px; font-size:14.5px; max-width:880px; } li { margin-bottom:7px; }
+    .verdict { background:var(--white); border:var(--border); border-left:4px solid var(--rust);
+      border-radius:var(--radius); padding:20px 24px; margin-top:8px; }
+    .verdict h3 { font-family:var(--serif); font-size:20px; color:var(--slate); margin-bottom:10px; }
+    .footer { color:var(--gray-500); font-size:13px; margin-top:64px; padding-top:22px; border-top:1px solid var(--gray-300); }
+    .footer code { color:var(--gray-700); }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="page-head">
+      <div class="eyebrow">Robot Islands · server perf · branch perf/cross-tick-rate-cache</div>
+      <h1>Cross-tick rate cache — investigation &amp; negative result</h1>
+    </header>
+
+    <div class="method">
+      <div class="label">Method · what was built and how it was gated</div>
+      <div class="grid">
+        <div class="cell"><div class="k">Target</div><div class="v">computeRates/tick floor</div></div>
+        <div class="cell"><div class="k">Save</div><div class="v">migtest v32 · 110 islands · 893 bldg</div></div>
+        <div class="cell"><div class="k">Correctness gate</div><div class="v">cached == uncached, byte-identical</div></div>
+        <div class="cell"><div class="k">Oracle</div><div class="v">b8b6a364 (unchanged, flag-off)</div></div>
+      </div>
+    </div>
+
+    <div class="noise">
+      <span class="glyph">!</span>
+      <span><b>The oracle cannot gate a cross-tick cache.</b> One <code>catchUp</code> call never hits the
+        reuse path, so byte-identity of the one-shot is necessary but not sufficient. The decisive gate is a
+        <b>cached-vs-uncached multi-call</b> harness (<code>rate-cache-check.mts</code>) that advances the real
+        world in many small steps with the cache ON vs OFF and asserts byte-identical output.</span>
+    </div>
+
+    <section>
+      <div class="sec-head"><span class="num">1</span><h2>What the cache does</h2></div>
+      <p class="sec-intro">The premise of the "10×" lever.</p>
+      <p><code>advanceIsland</code> recomputes the full per-segment plan (<code>computeRates</code> + eight
+        boundary calcs) on every advance call. For a persistent in-memory world (client per-frame, server
+        hot-world), if a tick lands inside the same segment the previous call ended in, that recompute is
+        redundant: rates are constant until <code>naturalSegEnd</code> (all boundaries are <em>absolute</em>
+        times), so the next call could reuse them — byte-identical to recomputing. Implemented as a
+        <code>WeakMap&lt;IslandState&gt;</code> of the segment plan, keyed on a <code>ctxSig</code> of the
+        rate-affecting context, with a guard that skips any island owning a conditionalBonus node (those read
+        other islands' live state).</p>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">2</span><h2>Results</h2></div>
+      <p class="sec-intro">Correct, but no benefit.</p>
+      <table class="tbl">
+        <thead><tr><th>Dimension</th><th style="text-align:right">Result</th><th>Verdict</th><th>Note</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">Behaviour (cached vs uncached)</td><td class="num">byte-identical</td>
+            <td><span class="sig real">correct</span></td><td>500 varied steps + 600 steps (~43 min), digests equal.</td></tr>
+          <tr><td class="slate">Speedup (1s ticks)</td><td class="num">0.98×</td>
+            <td><span class="sig lose">no win</span></td><td>Slightly slower — pure overhead.</td></tr>
+          <tr><td class="slate">Cache hit rate</td><td class="num">0.0%</td>
+            <td><span class="sig lose">no win</span></td><td>0 hits / 26,100 reuse opportunities over 300 ticks.</td></tr>
+          <tr><td class="slate">Tail segments cached</td><td class="num">0</td>
+            <td><span class="sig noise">root cause</span></td><td><code>tailSet=0, tailDrop=17400</code> — never a multi-tick segment.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">3</span><h2>Root cause</h2></div>
+      <ul>
+        <li><b>Proximate:</b> <code>findNextCapEvent</code> returns its <code>nowMs</code> horizon when no
+          event is pending, so <code>naturalSegEnd</code> is clamped to <code>nowMs</code> every tick →
+          nothing is ever cacheable (<code>tailSet=0</code>).</li>
+        <li><b>Fundamental — the premise was wrong:</b> an idle <em>player</em> is not an idle
+          <em>economy</em>. A developed save keeps producing/consuming, and bins hit caps/zero
+          <b>sub-second</b>, so the piecewise integrator's segments are genuinely short (≈ tick-length or
+          shorter) regardless of player idleness. <code>computeRates</code> per tick is <b>real work, not a
+          redundant recompute.</b></li>
+      </ul>
+    </section>
+
+    <div class="verdict">
+      <h3>Verdict — abandoned (do not enable)</h3>
+      <p style="margin-bottom:8px">The cache is correct but delivers ~nothing on a realistic active save and
+        adds complexity to the hottest function. <b>Phase 2 cache reverted; the byte-identical
+        <code>planSegment</code> refactor (Phase 1, commit <code>1466233</code>) is kept</b> as a clean
+        structural improvement. Master untouched.</p>
+      <p style="margin-bottom:0"><b>If revisited:</b> the benefit is bounded by the fraction of islands in a
+        quiescent steady-state (full/pinned bins, no pending event). It could pay on a maxed-out endgame save,
+        but only after fixing the <code>findNextCapEvent</code> horizon so steady islands get a far
+        <code>naturalSegEnd</code> — and even then it does nothing for mid-development economies. The
+        alternative lever (server hot-world, ~38%, independent of segment length) does not have this failure
+        mode but carries an <code>advanceWorldSystems</code> cadence-verification cost.</p>
+    </div>
+
+    <div class="footer">
+      <p>Robot Islands · 2026-06-22 · branch <code>perf/cross-tick-rate-cache</code> ·
+        kept: <code>1466233</code> (planSegment refactor), <code>incremental-check.mts</code> (FP-equivalence harness).
+        Gates: oracle <code>b8b6a364</code> · cached-vs-uncached byte-identical.</p>
+    </div>
+  </div>
+</body>
+</html>
