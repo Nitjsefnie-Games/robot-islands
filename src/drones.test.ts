@@ -10,6 +10,8 @@ import {
   DRONE_T5_SPEED_TILES_PER_SEC,
   DRONE_TIER_EFFICIENCY,
   DRONE_TIER_SCAN_RADIUS,
+  DRONE_TIER_SPEED_FACTOR,
+  droneSpeedForTier,
   effectiveDroneScanRadius,
   T4_PULSE_FUEL_COST,
   _resetDroneIdCounter,
@@ -353,8 +355,24 @@ describe('dispatchDrone', () => {
     // Range = 20 * 3 = 60 tiles, outbound = 30 tiles.
     expect(d.outboundTiles).toBe(30);
     // Travel time = 60 / 0.5 = 120s → return at 1000 + 120_000. (rebalanced step #19)
+    // T1 speed factor is 1.0, so this baseline is unchanged by §11.5 speed scaling.
     expect(d.expectedReturnTime).toBe(1000 + 120_000);
     expect(d.scanRadius).toBe(DRONE_TIER_SCAN_RADIUS[1]);
+  });
+
+  it('§11.5: a higher-tier straight-line drone flies faster (per-tier speed factor)', () => {
+    const world = freshWorld();
+    const home = makeIslandState({ level: 50 }); // islandTier 5
+    home.inventory.plasma_charge = 50; // fuelForTier(5)
+    // fuel 10 × efficiency 15 = 150-tile round trip; speed = 0.5 × 1.32 = 0.66.
+    const result = dispatchDrone(world, home, 0, 0, 1, 0, 10, 0, undefined, 5);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    const range = 10 * DRONE_TIER_EFFICIENCY[5];
+    const expected = (range / droneSpeedForTier(5, false)) * 1000;
+    expect(result.drone.expectedReturnTime).toBeCloseTo(expected, 0);
+    // Strictly faster than the old flat-0.5 speed would have produced.
+    expect(result.drone.expectedReturnTime).toBeLessThan((range / 0.5) * 1000);
   });
 
   it('§11.5: bakes the Robotics droneScanRadius skill into the scan corridor', () => {
@@ -1108,6 +1126,44 @@ describe('drone constants', () => {
   });
 });
 
+describe('§11.5 per-tier drone speed factor', () => {
+  it('has the locked +8%/tier multiplicative factor table', () => {
+    expect(DRONE_TIER_SPEED_FACTOR[1]).toBeCloseTo(1.0);
+    expect(DRONE_TIER_SPEED_FACTOR[2]).toBeCloseTo(1.08);
+    expect(DRONE_TIER_SPEED_FACTOR[3]).toBeCloseTo(1.16);
+    expect(DRONE_TIER_SPEED_FACTOR[4]).toBeCloseTo(1.24);
+    expect(DRONE_TIER_SPEED_FACTOR[5]).toBeCloseTo(1.32);
+    expect(DRONE_TIER_SPEED_FACTOR[6]).toBeCloseTo(1.4);
+  });
+
+  it('droneSpeedForTier scales the straight-line base (0.5) by the factor', () => {
+    expect(droneSpeedForTier(1, false)).toBeCloseTo(0.5);
+    expect(droneSpeedForTier(4, false)).toBeCloseTo(0.62);
+    expect(droneSpeedForTier(6, false)).toBeCloseTo(0.7);
+  });
+
+  it('droneSpeedForTier scales the path-mode base (0.8) by the factor', () => {
+    expect(droneSpeedForTier(1, true)).toBeCloseTo(0.8);
+    expect(droneSpeedForTier(4, true)).toBeCloseTo(0.992);
+    expect(droneSpeedForTier(6, true)).toBeCloseTo(1.12);
+  });
+
+  it('speed is strictly increasing with tier in both modes', () => {
+    for (const mode of [false, true]) {
+      for (let t = 1; t < 6; t++) {
+        expect(droneSpeedForTier((t + 1) as never, mode)).toBeGreaterThan(
+          droneSpeedForTier(t as never, mode),
+        );
+      }
+    }
+  });
+
+  it('T1 is unchanged from the legacy flat speeds (back-compat)', () => {
+    expect(droneSpeedForTier(1, false)).toBe(DRONE_SPEED_TILES_PER_SEC);
+    expect(droneSpeedForTier(1, true)).toBe(DRONE_T5_SPEED_TILES_PER_SEC);
+  });
+});
+
 describe('dispatchDrone — §11.7 tier-matched fuel', () => {
   function freshWorld(): WorldState {
     return {
@@ -1419,8 +1475,11 @@ describe('T5 path-drawn drone', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.drone.outboundTiles).toBeCloseTo(60);
-    // Path-mode speed is tier-independent.
-    expect(result.drone.expectedReturnTime).toBe(1000 + 75_000);
+    // §11.5: path-mode speed is now tier-scaled (T5 = 0.8 × 1.32 = 1.056).
+    expect(result.drone.expectedReturnTime).toBeCloseTo(
+      1000 + (60 / droneSpeedForTier(5, true)) * 1000,
+      0,
+    );
   });
 
   it('straight-line dispatch with selectedTier=5 stays round-trip', () => {
@@ -1434,7 +1493,11 @@ describe('T5 path-drawn drone', () => {
     if (!result.ok) return;
     expect(result.drone.waypoints.length).toBe(0);
     expect(result.drone.outboundTiles).toBe(75); // 150 tiles round-trip / 2
-    expect(result.drone.expectedReturnTime).toBe(1000 + (150 / DRONE_SPEED_TILES_PER_SEC) * 1000);
+    // §11.5: straight-line speed is now tier-scaled (T5 = 0.5 × 1.32 = 0.66).
+    expect(result.drone.expectedReturnTime).toBeCloseTo(
+      1000 + (150 / droneSpeedForTier(5, false)) * 1000,
+      0,
+    );
   });
 
   it('droneCurrentPosition follows waypoints one-way and stops at the terminus', () => {
@@ -1461,11 +1524,11 @@ describe('T5 path-drawn drone', () => {
     };
     // At launch
     expect(droneCurrentPosition(drone, 0)).toEqual({ x: 0, y: 0 });
-    // Halfway along path: 10 tiles → at (10, 0)
-    const halfPathMs = (10 / DRONE_T5_SPEED_TILES_PER_SEC) * 1000;
+    // Halfway along path: 10 tiles → at (10, 0). §11.5: tier-5 path speed.
+    const halfPathMs = (10 / droneSpeedForTier(5, true)) * 1000;
     expect(droneCurrentPosition(drone, halfPathMs)).toEqual({ x: 10, y: 0 });
     // Terminus: 20 tiles → at (10, 10)
-    const terminusMs = (20 / DRONE_T5_SPEED_TILES_PER_SEC) * 1000;
+    const terminusMs = (20 / droneSpeedForTier(5, true)) * 1000;
     expect(droneCurrentPosition(drone, terminusMs)).toEqual({ x: 10, y: 10 });
     // After arrival the drone stays at the terminus.
     expect(droneCurrentPosition(drone, 50_000)).toEqual({ x: 10, y: 10 });

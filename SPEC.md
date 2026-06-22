@@ -116,7 +116,7 @@ Drones travel in real time. They scan for islands within a corridor along their 
 
 Drones can fail and never return. Failure modes (per §11.4): fuel exhaustion mid-journey, or destruction by weather (per-cell roll, see §2.6). Fuel is a real game resource produced by infrastructure on the launching island; fuel grade matches the launching island's tier per §11.7.
 
-**Drone tiers.** Drone Pad (T2) gates drone launches; once built, the player can launch any drone tier from T1 up to the launching island's current tier. T1 drones are the entry option (biofuel-fueled, short range); higher tiers cost richer fuel grades but fly farther and are more weather-rugged:
+**Drone tiers.** Drone Pad (T2) gates drone launches; once built, the player can launch any drone tier from T1 up to the launching island's current tier. T1 drones are the entry option (biofuel-fueled, short range); higher tiers cost richer fuel grades but fly farther, scan wider, are more weather-rugged, and travel slightly faster. **Flight speed scales +8% per tier** (`base × (1 + 0.08·(tier−1))`, i.e. T1 ×1.0 → T6 ×1.40), applied to both flight modes: straight-line round-trip (base 0.5 tiles/s → 0.50…0.70) and path-drawn one-way (base 0.8 tiles/s → 0.80…1.12). The boost is a small convenience, not a primary tier lever — range (fuel efficiency), scan corridor, and weather survivability remain the dominant per-tier gains:
 
 * T1 drone: cheap entry option — biofuel-fueled, short range, narrow scan corridor; the most weather-fragile tier
 * T2 drone: modest range, modest scan corridor, biome-type detection at distance

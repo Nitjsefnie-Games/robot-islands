@@ -131,10 +131,27 @@ export function effectiveDroneScanRadius(state: IslandState, tier: DroneTier): n
   return DRONE_TIER_SCAN_RADIUS[tier] * effectiveSkillMultipliers(state).droneScanRadius;
 }
 
-/** Path-mode flight speed (tier-independent). Path-drawn drones fly faster
- *  than straight-line drones because they do not reserve fuel/battery for a
- *  return leg; the speed is the same regardless of which tier is selected. */
+/** Path-mode base flight speed. Path-drawn drones fly faster than straight-
+ *  line drones because they do not reserve fuel/battery for a return leg. This
+ *  is the T1 baseline; higher tiers scale it by `DRONE_TIER_SPEED_FACTOR`. */
 export const DRONE_T5_SPEED_TILES_PER_SEC = 0.8;
+
+/** §11.5 per-tier flight-speed multiplier: a small +8%/tier boost
+ *  (`1 + 0.08·(tier−1)`) so higher-tier drones traverse faster. Applies to
+ *  BOTH flight modes (it scales the straight-line and path-mode base speeds).
+ *  T1 = 1.0 keeps the legacy flat speeds unchanged. */
+export const DRONE_TIER_SPEED_FACTOR: Record<DroneTier, number> = {
+  1: 1.0, 2: 1.08, 3: 1.16, 4: 1.24, 5: 1.32, 6: 1.4,
+};
+
+/** §11.5 effective flight speed (tiles/sec) for a drone of `tier` in the given
+ *  mode. Single source of truth shared by `dispatchDrone` (travel-time + range)
+ *  the per-tick `droneSpeed`, and the launch-UI ETA readout so the displayed
+ *  flight time can't drift from the actual flight. Pure. */
+export function droneSpeedForTier(tier: DroneTier, isPathMode: boolean): number {
+  const base = isPathMode ? DRONE_T5_SPEED_TILES_PER_SEC : DRONE_SPEED_TILES_PER_SEC;
+  return base * DRONE_TIER_SPEED_FACTOR[tier];
+}
 export const DRONE_T5_WEATHER_MULTIPLIER = 0.5;
 
 /** §2.6 weather vulnerability multiplier per drone tier. */
@@ -483,7 +500,7 @@ export function dispatchDrone(
   const originSkill = effectiveSkillMultipliers(origin);
   const fuelEffMul = originSkill.droneFuelEfficiency;
   const efficiency = DRONE_TIER_EFFICIENCY[resolvedTier] * fuelEffMul;
-  const speed = isPathDrawn ? DRONE_T5_SPEED_TILES_PER_SEC : DRONE_SPEED_TILES_PER_SEC;
+  const speed = droneSpeedForTier(resolvedTier, isPathDrawn);
   const scanRadius = effectiveDroneScanRadius(origin, resolvedTier);
   const tier: DroneTier = resolvedTier;
 
@@ -617,9 +634,9 @@ export interface TickDronesResult {
  * corridor of a freshly-launched drone starts at its launching island.
  */
 function droneSpeed(d: Drone): number {
-  // Speed is mode-based, not tier-based: path-drawn (one-way) flights use the
-  // faster path speed; straight-line round-trip flights use the simple speed.
-  return d.waypoints.length >= 2 ? DRONE_T5_SPEED_TILES_PER_SEC : DRONE_SPEED_TILES_PER_SEC;
+  // Speed is mode-based (path-drawn one-way flights use the faster path base)
+  // AND tier-scaled (§11.5 +8%/tier via DRONE_TIER_SPEED_FACTOR).
+  return droneSpeedForTier(d.tier, d.waypoints.length >= 2);
 }
 
 /** Helper: find undiscovered islands whose footprint intersects a set of cell keys. */

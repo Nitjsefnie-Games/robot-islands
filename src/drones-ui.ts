@@ -13,9 +13,8 @@ import type { IslandState } from './economy.js';
 import { mountPanel, Zone } from './ui-zones.js';
 import { inv } from './economy.js';
 import {
-  DRONE_SPEED_TILES_PER_SEC,
-  DRONE_T5_SPEED_TILES_PER_SEC,
   DRONE_TIER_EFFICIENCY,
+  droneSpeedForTier,
   effectiveDroneScanRadius,
   MAX_FUEL_PER_DRONE,
   T4_PULSE_FUEL_COST,
@@ -932,10 +931,10 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
       : (maxLaunchFuel * currentEfficiency) / 2;
     ensurePainted(dist > outbound ? RETICLE_WARN : RETICLE_OK);
     // ETA prediction — one-way for Path mode (#117), round-trip for Simple.
-    // Path speed is tier-independent.
+    // Speed is the §11.5 per-tier value for the selected tier + mode.
     const etaSec = pathMode
-      ? dist / DRONE_T5_SPEED_TILES_PER_SEC
-      : (2 * dist) / DRONE_SPEED_TILES_PER_SEC;
+      ? dist / droneSpeedForTier(selectedTier, true)
+      : (2 * dist) / droneSpeedForTier(selectedTier, false);
     if (dist > outbound) {
       etaStat.valueEl.textContent = `${etaSec.toFixed(0)}s · out of range`;
       etaStat.valueEl.style.color = 'var(--ri-warn)';
@@ -1216,8 +1215,8 @@ export function mountDronesUi(parentEl: HTMLElement, deps: DroneUiDeps): DroneUi
     fuelStat.valueEl.style.color = maxLaunchFuel > 0 ? 'var(--ri-fg-1)' : 'var(--ri-warn)';
     rangeStat.valueEl.textContent = `${maxOutbound.toFixed(0)} t max`;
     const maxFlightSec = pathMode
-      ? (maxLaunchFuel * currentEfficiency) / DRONE_T5_SPEED_TILES_PER_SEC
-      : (maxLaunchFuel * currentEfficiency) / DRONE_SPEED_TILES_PER_SEC;
+      ? (maxLaunchFuel * currentEfficiency) / droneSpeedForTier(selectedTier, true)
+      : (maxLaunchFuel * currentEfficiency) / droneSpeedForTier(selectedTier, false);
     etaStat.valueEl.textContent = `${maxFlightSec.toFixed(0)}s max`;
 
     // DIST / PATH row update. §11.1: distance + path length measured from the
