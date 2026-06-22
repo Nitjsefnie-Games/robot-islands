@@ -70,6 +70,13 @@ import {
   type WorldState,
 } from './world.js';
 import { editIslandBiome, UNIVERSE_EDITOR_COST } from './universe-editor.js';
+import {
+  addConduitLink,
+  attachedBuildings,
+  eligibleWireTargets,
+  isConduit,
+  removeConduitLink,
+} from './conduits.js';
 import { type MutationGateway } from './mutation-gateway.js';
 import { mountPanel, Zone } from './ui-zones.js';
 import { fmtPower } from './format.js';
@@ -1107,6 +1114,141 @@ export function mountInspectorUi(
     }
   }
 
+  // §4.5 Conduit links section — shown only for cluster_conduit / lattice_conduit.
+  const conduitSection = makeSection('Conduit Links');
+  const conduitAttachedCount = document.createElement('span');
+  styled(
+    conduitAttachedCount,
+    [`color: ${'var(--ri-fg-1)'}`, 'font-size: 11px', 'letter-spacing: 0.02em'].join(';'),
+  );
+  conduitSection.body.appendChild(conduitAttachedCount);
+  const conduitLinksList = document.createElement('div');
+  styled(conduitLinksList, ['display: flex', 'flex-direction: column', 'gap: 3px'].join(';'));
+  conduitSection.body.appendChild(conduitLinksList);
+  const conduitWireRow = document.createElement('div');
+  styled(conduitWireRow, ['display: flex', 'gap: 6px', 'align-items: center', 'padding-top: 4px'].join(';'));
+  const conduitWireSelect = document.createElement('select');
+  styled(
+    conduitWireSelect,
+    [
+      'flex: 1 1 auto',
+      `color: ${'var(--ri-fg-1)'}`,
+      `background: ${'rgba(24, 29, 39, 0.6)'}`,
+      `border: 1px solid ${'var(--ri-border-strong)'}`,
+      'border-radius: 2px',
+      'padding: 2px 4px',
+      'font-family: ui-monospace, monospace',
+      'font-size: 10.5px',
+      'letter-spacing: 0.02em',
+    ].join(';'),
+  );
+  const conduitWireBtn = makeExpandButton();
+  conduitWireBtn.textContent = 'Add link';
+  conduitWireRow.appendChild(conduitWireSelect);
+  conduitWireRow.appendChild(conduitWireBtn);
+  conduitSection.body.appendChild(conduitWireRow);
+
+  function findBuildingAndIsland(
+    world: WorldState,
+    id: string,
+  ): { building: PlacedBuilding; island: IslandSpec } | undefined {
+    for (const isl of world.islands) {
+      const b = isl.buildings.find((x) => x.id === id);
+      if (b) return { building: b, island: isl };
+    }
+    return undefined;
+  }
+
+  function conduitLinkLabel(b: PlacedBuilding, island: IslandSpec): string {
+    return `${BUILDING_DEFS[b.defId].displayName} (${island.name ?? island.id} @${b.x},${b.y})`;
+  }
+
+  conduitWireBtn.addEventListener('click', () => {
+    const target = resolveTarget();
+    if (!target) { close(); return; }
+    const targetId = conduitWireSelect.value;
+    if (!targetId) return;
+    if (deps.gateway) {
+      const gatewayResult = deps.gateway.addConduitLink(target.building.id, targetId);
+      if (gatewayResult instanceof Promise) {
+        void gatewayResult;
+      } else if (!gatewayResult.ok) {
+        return;
+      }
+    } else {
+      addConduitLink(deps.world, target.building.id, targetId);
+    }
+    paint();
+  });
+
+  /** Render the conduit wire-to UI for the currently-targeted conduit building.
+   *  Called from `paint()` only. */
+  function renderConduitUi(b: PlacedBuilding): void {
+    conduitSection.wrap.style.display = '';
+    const attached = attachedBuildings(b.id, deps.world);
+    conduitAttachedCount.textContent = `Attached buildings: ${attached.length}`;
+
+    while (conduitLinksList.firstChild) {
+      conduitLinksList.removeChild(conduitLinksList.firstChild);
+    }
+    for (const link of deps.world.conduitLinks) {
+      const otherId = link.a === b.id ? link.b : link.b === b.id ? link.a : null;
+      if (otherId === null) continue;
+      const found = findBuildingAndIsland(deps.world, otherId);
+      const row = document.createElement('div');
+      styled(
+        row,
+        ['display: flex', 'justify-content: space-between', 'align-items: center', 'gap: 6px'].join(';'),
+      );
+      const labelSpan = document.createElement('span');
+      labelSpan.textContent = found ? conduitLinkLabel(found.building, found.island) : otherId;
+      styled(labelSpan, [`color: ${'var(--ri-fg-1)'}`, 'font-size: 11px'].join(';'));
+      const removeBtn = document.createElement('button');
+      removeBtn.textContent = '×';
+      styled(
+        removeBtn,
+        [
+          'background: transparent',
+          `color: ${'var(--ri-warn)'}`,
+          `border: 1px solid ${'rgba(232, 93, 74, 0.4)'}`,
+          'padding: 0 5px',
+          'cursor: pointer',
+          'font-family: ui-monospace, monospace',
+          'font-size: 13px',
+          'border-radius: 2px',
+        ].join(';'),
+      );
+      removeBtn.addEventListener('click', () => {
+        const target = resolveTarget();
+        if (!target) { close(); return; }
+        if (deps.gateway) {
+          const gatewayResult = deps.gateway.removeConduitLink(target.building.id, otherId);
+          if (gatewayResult instanceof Promise) {
+            void gatewayResult;
+          } else if (!gatewayResult.ok) {
+            return;
+          }
+        } else {
+          removeConduitLink(deps.world, target.building.id, otherId);
+        }
+        paint();
+      });
+      row.appendChild(labelSpan);
+      row.appendChild(removeBtn);
+      conduitLinksList.appendChild(row);
+    }
+
+    const targets = eligibleWireTargets(deps.world, b.id);
+    conduitWireSelect.innerHTML = '';
+    for (const t of targets) {
+      const opt = document.createElement('option');
+      opt.value = t.id;
+      opt.textContent = t.label;
+      conduitWireSelect.appendChild(opt);
+    }
+    conduitWireRow.style.display = targets.length === 0 ? 'none' : 'flex';
+  }
+
   // Heat section (§5.2) — only shown when the def is a heat consumer
   // (`requiresHeat`) OR a heat source (`heatSource`). For a consumer, shows
   // whether an adjacent source is currently assigned. For a source, shows
@@ -1697,6 +1839,7 @@ export function mountInspectorUi(
   body.appendChild(gateSection.wrap);
   body.appendChild(storageSection.wrap);
   body.appendChild(scrapTargetSection.wrap);
+  body.appendChild(conduitSection.wrap);
   body.appendChild(heatSection.wrap);
   body.appendChild(floorSection.wrap);
   body.appendChild(maintenanceSection.wrap);
@@ -2066,6 +2209,13 @@ export function mountInspectorUi(
       renderScrapTargetUi(building, target);
     } else {
       scrapTargetSection.wrap.style.display = 'none';
+    }
+
+    // §4.5 Conduit links section.
+    if (isConduit(building.defId)) {
+      renderConduitUi(building);
+    } else {
+      conduitSection.wrap.style.display = 'none';
     }
 
     // Heat section (§5.2). Shown only for heat consumers / heat sources.

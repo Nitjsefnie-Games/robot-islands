@@ -135,6 +135,36 @@ export function conduitComponents(world: WorldState): string[][] {
   return [...comps.values()];
 }
 
+/** A conduit that `eligibleWireTargets` may propose wiring to. */
+export interface WireTarget {
+  readonly id: string;
+  readonly label: string;
+  readonly islandId: string;
+}
+
+/** All conduits the given conduit may legally wire to right now (canWire ok),
+ *  across all islands. `label` is a human string (displayName + a short
+ *  island/coord hint). */
+export function eligibleWireTargets(
+  world: WorldState,
+  conduitId: string,
+  defs: Readonly<Record<BuildingDefId, BuildingDef>> = BUILDING_DEFS,
+): WireTarget[] {
+  const out: WireTarget[] = [];
+  for (const isl of world.islands) {
+    for (const b of isl.buildings) {
+      if (b.id === conduitId) continue;
+      if (!isConduit(b.defId)) continue;
+      if (!canWire(world, conduitId, b.id).ok) continue;
+      const def = defs[b.defId];
+      const islandName = isl.name ?? isl.id;
+      const label = `${def.displayName} (${islandName} @${b.x},${b.y})`;
+      out.push({ id: b.id, label, islandId: isl.id });
+    }
+  }
+  return out;
+}
+
 /**
  * Buildings attached to a single conduit (§4.4 border test): same-island,
  * 4-adjacent to the conduit footprint, `participatesInCluster`, and not itself
