@@ -32,6 +32,7 @@ import { ALL_RESOURCES, type ResourceId } from './recipes.js';
 import {
   attachTerrainAt,
   findPopulatedIslandAt,
+  islandImplicitLedger,
   islandsOverlap,
   islandTileCount,
   type IslandSpec,
@@ -921,5 +922,57 @@ describe('islandTileCount', () => {
     });
     const lone = makeSpec({ id: 'b', majorRadius: 5, minorRadius: 5 });
     expect(islandTileCount(a)).toBe(islandTileCount(lone));
+  });
+});
+
+describe('merge ownership ledger', () => {
+  function twoTouchingIslands(): {
+    world: WorldState; states: Map<string, IslandState>; a: IslandSpec; b: IslandSpec;
+  } {
+    // `a` is the larger absorber (r10), `b` a smaller adjacent lobe (r5) just
+    // touching it. performMerge is called directly with (a, b) as (absorber,
+    // absorbed), so the geometry only needs to be a plausible merge layout.
+    const a = makeSpec({ id: 'a', cx: 0, cy: 0, majorRadius: 10, minorRadius: 10 });
+    const b = makeSpec({ id: 'b', cx: 20, cy: 0, majorRadius: 5, minorRadius: 5, biome: 'arctic' });
+    const world = makeWorld([a, b]);
+    const states = new Map<string, IslandState>([
+      ['a', makeState({ id: 'a' })],
+      ['b', makeState({ id: 'b' })],
+    ]);
+    return { world, states, a, b };
+  }
+
+  it('merging two never-grown islands leaves the ledger absent', () => {
+    const { world, states, a, b } = twoTouchingIslands();
+    performMerge(world, states, a, b);
+    expect(a.ownershipLedger).toBeUndefined();
+  });
+
+  it('merging when the absorbed island has a ledger appends remapped claims', () => {
+    const { world, states, a, b } = twoTouchingIslands();
+    // b was grown before being absorbed → it carries a ledger of its own.
+    b.ownershipLedger = [{ constituent: 0, major: b.majorRadius, minor: b.minorRadius }];
+    const preConstituents = 1 + (a.extraEllipses?.length ?? 0); // a's constituent count
+    performMerge(world, states, a, b);
+    // a now has a ledger; b's constituent 0 maps to a's index = preConstituents.
+    expect(a.ownershipLedger).toBeDefined();
+    const last = a.ownershipLedger![a.ownershipLedger!.length - 1]!;
+    expect(last.constituent).toBe(preConstituents);
+    // a's own pre-merge constituents are materialized as the baseline prefix.
+    expect(a.ownershipLedger!.slice(0, preConstituents)).toEqual(
+      islandImplicitLedger(a).slice(0, preConstituents),
+    );
+  });
+
+  it('merging when only the absorber has a ledger appends the absorbed implicit baseline', () => {
+    const { world, states, a, b } = twoTouchingIslands();
+    a.ownershipLedger = islandImplicitLedger(a);
+    const preConstituents = 1 + (a.extraEllipses?.length ?? 0);
+    performMerge(world, states, a, b);
+    const last = a.ownershipLedger![a.ownershipLedger!.length - 1]!;
+    // b's single constituent (its implicit baseline) lands at the absorber's
+    // next free index.
+    expect(last.constituent).toBe(preConstituents);
+    expect(last).toEqual({ constituent: preConstituents, major: 5, minor: 5 });
   });
 });

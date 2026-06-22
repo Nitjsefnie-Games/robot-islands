@@ -16,6 +16,7 @@ import { creditStorageCaps } from './placement.js';
 import { cap } from './storage-cap.js';
 import { nodeById } from './skilltree.js';
 import {
+  appendAbsorbedLedger,
   islandsOverlap,
   islandTileCount,
   type IslandSpec,
@@ -129,6 +130,11 @@ export function performMerge(
   const offsetX = absorbed.cx - absorber.cx;
   const offsetY = absorbed.cy - absorber.cy;
 
+  // §3.6 ownership-ledger maintenance: the absorbed primary lands at this
+  // absorber constituent index (1 primary + current extras). Captured BEFORE
+  // the extraEllipses append below.
+  const ledgerBaseIndex = 1 + (absorber.extraEllipses?.length ?? 0);
+
   // 1. Append absorbed's primary ellipse as a new extra on absorber.
   if (!absorber.extraEllipses) {
     absorber.extraEllipses = [];
@@ -161,6 +167,10 @@ export function performMerge(
       });
     }
   }
+
+  // §3.6 fold the absorbed island's ownership claims into the absorber's ledger
+  // (remapped by +ledgerBaseIndex). No-op when neither side has a ledger.
+  appendAbsorbedLedger(absorber, absorbed, ledgerBaseIndex);
 
   // 2. Shift absorbed's buildings into absorber's local frame. Build fresh
   //    PlacedBuilding objects because `x` / `y` are `readonly` on the type.
