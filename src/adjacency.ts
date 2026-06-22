@@ -132,6 +132,31 @@ function clusterFloorCapacity(b: PlacedBuilding): number {
   return Math.max(0, activeFloorLevel(b) + (underConstruction ? 0 : 1));
 }
 
+// PERF: clusterBonusMuls is an O(N²) border walk (touchesBorder over building
+// pairs) that was the top interaction-lag cost — it's re-run for EVERY island on
+// every server snapshot (`refreshRetainedRates` → `computeRates`) and once per
+// frame by the open buff panel, even though its result is a pure function of the
+// island's building LAYOUT (which only changes on place/move/demolish/floor/
+// construction). So a single building edit re-derived adjacency for all ~80
+// unchanged islands and every repaint. Memoize on an exact layout signature of
+// exactly the fields the walk reads: per building, id + defId (category +
+// footprint shape) + x/y/rotation (footprint position) + clusterFloorCapacity
+// (the floor/construction contribution). Equal signature ⇒ equal layout ⇒ equal
+// result; the changed island gets a fresh signature ⇒ recompute. Keyed by
+// signature (not object identity) because each deserialize/snapshot builds fresh
+// building objects. The returned Map is treated read-only by callers.
+interface ClusterMemoEntry { readonly defs: Readonly<Record<BuildingDefId, BuildingDef>>; readonly result: Map<string, number>; }
+const clusterMemo = new Map<string, ClusterMemoEntry>();
+const CLUSTER_MEMO_CAP = 256;
+
+function clusterLayoutSig(buildings: ReadonlyArray<PlacedBuilding>): string {
+  let sig = '';
+  for (const b of buildings) {
+    sig += `${b.id},${b.defId},${b.x},${b.y},${b.rotation ?? 0},${clusterFloorCapacity(b)};`;
+  }
+  return sig;
+}
+
 /**
  * §4.5 per-building cluster-bonus multiplier. A building's *cluster* is the
  * maximal set of same-category buildings connected through 4-neighbour links
@@ -170,8 +195,13 @@ export function clusterBonusMuls(
   buildings: ReadonlyArray<PlacedBuilding>,
   defs: Readonly<Record<BuildingDefId, BuildingDef>> = BUILDING_DEFS,
 ): Map<string, number> {
+  const sig = clusterLayoutSig(buildings);
+  const hit = clusterMemo.get(sig);
+  if (hit !== undefined && hit.defs === defs) return hit.result;
+
   const n = buildings.length;
-  const borders = buildings.map((b) => borderTiles(footprintKeySet(b, defs)));
+  const footprints = buildings.map((b) => footprintKeySet(b, defs));
+  const borders = footprints.map((fp) => borderTiles(fp));
 
   // Union-find over building indices.
   const parent = Array.from({ length: n }, (_, i) => i);
@@ -192,12 +222,23 @@ export function clusterBonusMuls(
     if (ra !== rb) parent[ra] = rb;
   };
 
+  // PERF: O(N) spatial adjacency instead of the old O(N²) pairwise touchesBorder
+  // scan — the home island has ~470 buildings, so N² ≈ 220k checks per recompute
+  // (re-run on every building edit, where the changed layout forces a fresh
+  // recompute that the memo can't skip). Build a tile→owning-building index over
+  // every footprint tile, then for each building look up only its OWN border
+  // tiles' occupants and union same-category neighbours. Identical clusters:
+  // building j neighbours i iff some tile of j lies in i's border (exactly the
+  // old `touchesBorder(j, borders[i])`), which is the same as "i's border tile
+  // is occupied by j". Real placements never overlap, so each tile has one owner.
+  const occupant = new Map<string, number>();
+  for (let i = 0; i < n; i++) for (const t of footprints[i]!) occupant.set(t, i);
   for (let i = 0; i < n; i++) {
     const cat = defs[buildings[i]!.defId].category;
-    for (let j = i + 1; j < n; j++) {
-      if (defs[buildings[j]!.defId].category !== cat) continue;
-      // 4-adjacency is mutual for non-overlapping footprints (real placements never overlap), so testing one direction (j vs i's border) suffices.
-      if (touchesBorder(buildings[j]!, borders[i]!, defs)) union(i, j);
+    for (const bt of borders[i]!) {
+      const j = occupant.get(bt);
+      if (j === undefined || j === i || defs[buildings[j]!.defId].category !== cat) continue;
+      union(i, j);
     }
   }
 
@@ -222,6 +263,8 @@ export function clusterBonusMuls(
     const K = compCap.get(find(i)) ?? 1;
     out.set(b.id, 1 + rate * (K - clusterFloorCapacity(b)));
   }
+  if (clusterMemo.size >= CLUSTER_MEMO_CAP) clusterMemo.clear();
+  clusterMemo.set(sig, { defs, result: out });
   return out;
 }
 

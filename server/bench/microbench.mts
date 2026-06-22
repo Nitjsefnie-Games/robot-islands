@@ -14,6 +14,7 @@ import { deserializeWorld } from '../../src/persistence.js';
 import { islandsOverlap } from '../../src/world.js';
 import { findNextMerge } from '../../src/island-merge.js';
 import { computeRates } from '../../src/economy.js';
+import { clusterBonusMuls } from '../../src/adjacency.js';
 
 const URL = process.env.DATABASE_URL ?? 'postgresql:///robot_islands';
 const USER = process.env.BENCH_USER ?? 'aee50add-e972-4b6b-9710-9325ff6a2711';
@@ -63,6 +64,26 @@ const benches: Bench[] = [
     const big = [...islandStates.values()].sort((a, b) => b.buildings.length - a.buildings.length)[0];
     return big
       ? [{ name: 'computeRates:biggest-island', unitsPerCall: 1, run: () => computeRates(big) }]
+      : [];
+  })(),
+  ...(() => {
+    // The adjacency cluster walk on the biggest island (~470 buildings on the
+    // mega-save) — the O(N²)→O(N) target. The result is memoized on a layout
+    // signature, so to measure the actual RECOMPUTE (the per-edit cost, not the
+    // cache hit) we bump one building's coordinate each call → fresh signature →
+    // cache miss. Representative of "you just moved a building on home".
+    const big = [...islandStates.values()].sort((a, b) => b.buildings.length - a.buildings.length)[0];
+    let k = 0;
+    return big
+      ? [{
+          name: `clusterBonusMuls:${big.buildings.length}b(recompute)`,
+          unitsPerCall: 1,
+          run: () => {
+            const bs = big.buildings.slice();
+            bs[0] = { ...bs[0], y: (bs[0] as any).y + (k++) } as typeof bs[0];
+            return clusterBonusMuls(bs);
+          },
+        }]
       : [];
   })(),
 ];
