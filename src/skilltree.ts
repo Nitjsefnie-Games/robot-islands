@@ -473,14 +473,26 @@ export const NODE_CATALOG = FULL_CATALOG;
 
 const DEFAULT_CATALOG: Catalog = buildCatalog(NODE_CATALOG);
 const _adjCache = new WeakMap<Graph, Map<NodeId, NodeId[]>>();
-const _byIdCache = new WeakMap<Graph, Map<string, SkillNode>>();
+const _byIdCache = new WeakMap<Graph, { len: number; byId: Map<string, SkillNode> }>();
 
-function graphById(graph: Graph): Map<string, SkillNode> {
+/** Node-by-id index for a graph, memoized on the graph's identity (the catalog
+ *  graph is static, so the index is built once and reused). Replaces O(nodes)
+ *  `graph.nodes.find(n => n.id === id)` linear scans in hot per-building /
+ *  per-segment paths (layerConditionalBonuses, hasStructuralEffect, network
+ *  sharing) with an O(1) lookup. Behaviour-identical: node ids are unique
+ *  across the catalog, so first-match `.find` and the Map entry agree.
+ *
+ *  The cache is keyed on graph identity AND `nodes.length` — node arrays are
+ *  only ever appended to (and only in tests, which graft a synthetic node then
+ *  pop it; production catalogs are static), so a length change is a sound
+ *  "graph mutated" proxy that rebuilds the index, keeping the memo in step with
+ *  an in-place push/pop instead of going stale (the §02 size-as-proxy pattern). */
+export function graphById(graph: Graph): Map<string, SkillNode> {
   const cached = _byIdCache.get(graph);
-  if (cached !== undefined) return cached;
+  if (cached !== undefined && cached.len === graph.nodes.length) return cached.byId;
   const byId = new Map<string, SkillNode>();
   for (const n of graph.nodes) byId.set(n.id as string, n);
-  _byIdCache.set(graph, byId);
+  _byIdCache.set(graph, { len: graph.nodes.length, byId });
   return byId;
 }
 

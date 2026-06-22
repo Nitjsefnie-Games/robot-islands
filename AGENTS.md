@@ -48,14 +48,21 @@ and benchmarks it against a real save, read-only.
   `pg_dump` — the bench NEVER writes prod; the frozen copy keeps live play from
   drifting the baseline), `run [gapMin] [reps]` (phase breakdown + full bench on
   the isolated core), `profile [gapMin] [reps]` (writes a `.cpuprofile`),
-  `teardown` (give the core back). Defaults to the largest save (heaviest calc).
+  `callcount [gapMin] [reps]` (per-function **call counts** — the redundant-recompute
+  lens), `teardown` (give the core back). Defaults to the largest save (heaviest calc).
 - **Harnesses** (`bench/*.mts`, run via `tsx`): `catchup-bench.mts` (times
   `catchUp` min/median/max and asserts a **SHA-256 oracle digest** of the
   advanced world — any behavior-preserving optimization MUST keep it
   byte-identical; a mismatch aborts), `catchup-phases.mts` (deserialize / economy
   / world-systems attribution), `catchup-profile.mts` (in-process `node:inspector`
   CPU profiler around only the warmed reps — `node --cpu-prof` under the tsx ESM
-  loader misattributes everything to the loader worker, so use this instead).
+  loader misattributes everything to the loader worker, so use this instead),
+  `catchup-callcount.mts` (same in-process Session but V8 **precise coverage**
+  with `callCount` — aggregates per-function invocation counts over project
+  `src/` functions, disaggregating anonymous closures by source offset + a head
+  snippet via `Debugger.getScriptSource`; CPU time finds expensive leaves, call
+  count finds redundant-recompute blowups a cheap-but-millions-of-times function
+  hides — e.g. an O(nodes) `graph.nodes.find` re-run per building per segment).
 - **Measurement discipline**: V8 JIT warmup dominates early reps (first rep can be
   ~2× the warm steady state), so the harness warms up and reports the **min**;
   cgroup isolation can't evict kernel per-CPU threads / IRQs from the bench core
@@ -67,6 +74,7 @@ bench/iso-bench.sh setup                 # once per session
 bench/iso-bench.sh refresh-db            # re-snapshot prod (optional; copy persists)
 bench/iso-bench.sh run 8 10             # gap=8min, 10 reps
 bench/iso-bench.sh profile 8 6          # -> /tmp/ri-catchup.cpuprofile
+bench/iso-bench.sh callcount 8 6        # per-function call counts, top-30
 bench/iso-bench.sh teardown              # when done
 ```
 

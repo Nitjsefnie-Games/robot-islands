@@ -21,6 +21,7 @@
 #   bench/iso-bench.sh refresh-db       # re-freeze the copy DB from production (read-only dump)
 #   bench/iso-bench.sh run [gapMin] [reps]      # phases + full catchUp bench on the isolated core
 #   bench/iso-bench.sh profile [gapMin] [reps]  # full bench under --cpu-prof; prints the .cpuprofile path
+#   bench/iso-bench.sh callcount [gapMin] [reps] # per-function call counts (precise coverage) — top callers
 #   bench/iso-bench.sh teardown         # give the reserved core back to userspace
 #
 # Env overrides: PROD_DB (default robot_islands), BENCH_DB (robot_islands_bench),
@@ -107,6 +108,17 @@ case "$cmd" in
     iso env BENCH_SNAPSHOT_FILE="$SNAP" BENCH_USER="$USER_ID" BENCH_PROFILE_OUT="$OUT" \
         npx tsx "$HERE/catchup-profile.mts" "$GAP" "$REPS"
     echo "cpuprofile -> $OUT"
+    ;;
+  callcount)
+    GAP="${1:-8}"; REPS="${2:-6}"
+    USER_ID="${BENCH_USER:-$(pick_user)}"
+    [ -f "$SNAP" ] || DATABASE_URL="postgresql:///$BENCH_DB" BENCH_USER="$USER_ID" \
+        BENCH_SNAPSHOT_FILE="$SNAP" BENCH_DUMP=1 npx tsx "$HERE/catchup-bench.mts" "$GAP" 1 >/dev/null
+    # V8 precise-coverage call counts (per-function invocation counts) — finds
+    # redundant-recompute blowups that CPU time hides. In-process inspector
+    # Session (not node --cpu-prof — misattributes under the tsx loader).
+    iso env BENCH_SNAPSHOT_FILE="$SNAP" BENCH_USER="$USER_ID" \
+        npx tsx "$HERE/catchup-callcount.mts" "$GAP" "$REPS"
     ;;
   *) echo "unknown command: $cmd" >&2; exit 1 ;;
 esac
