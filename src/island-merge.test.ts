@@ -975,4 +975,37 @@ describe('merge ownership ledger', () => {
     expect(last.constituent).toBe(preConstituents);
     expect(last).toEqual({ constituent: preConstituents, major: 5, minor: 5 });
   });
+
+  it('recursively-merged absorbed ledger: multi-entry ledger remapped by +baseIndex preserving order', () => {
+    // b is a recursively-merged island: it has extraEllipses (a lobe at offset 7,0)
+    // AND a non-trivial ownershipLedger with ≥2 entries representing growth history.
+    // After performMerge(world, states, a, b):
+    //   b's constituent 0 (its primary) → a's index preConstituents (=1).
+    //   b's constituent 1 (its lobe)    → a's index preConstituents+1 (=2).
+    // appendAbsorbedLedger must remap each entry's `constituent` by +baseIndex and
+    // preserve internal order.
+    const { world, states, a, b } = twoTouchingIslands();
+    // Give b a lobe constituent (minor extra ellipse at +7,0 offset).
+    b.extraEllipses = [{ major: 3, minor: 3, rotation: 0, offsetX: 7, offsetY: 0, biome: 'forest', originId: 'b-lobe' }];
+    // b's ledger: 2 entries — first the lobe (placed first), then b's own primary
+    // (placed second, grown once). Non-trivial: constituent 1 appears before 0.
+    b.ownershipLedger = [
+      { constituent: 1, major: 3, minor: 3 }, // lobe placed first
+      { constituent: 0, major: 5, minor: 5 }, // primary placed second (at pre-growth radii)
+      { constituent: 0, major: 6, minor: 5 }, // primary's growth claim
+    ];
+    const preConstituents = 1 + (a.extraEllipses?.length ?? 0); // = 1 (a has no extras)
+    performMerge(world, states, a, b);
+    expect(a.ownershipLedger).toBeDefined();
+    const led = a.ownershipLedger!;
+    // The absorbed entries come after a's materialized baseline (1 entry: {0, a.major, a.minor}).
+    // Absorbed entry 0: {constituent:1,..} → remapped to {preConstituents+1=2, 3, 3}
+    // Absorbed entry 1: {constituent:0,..} → remapped to {preConstituents+0=1, 5, 5}
+    // Absorbed entry 2: {constituent:0,..} → remapped to {preConstituents+0=1, 6, 5}
+    const absorbedSlice = led.slice(preConstituents); // entries beyond a's baseline
+    expect(absorbedSlice).toHaveLength(3); // b's 3 ledger entries
+    expect(absorbedSlice[0]).toEqual({ constituent: preConstituents + 1, major: 3, minor: 3 });
+    expect(absorbedSlice[1]).toEqual({ constituent: preConstituents + 0, major: 5, minor: 5 });
+    expect(absorbedSlice[2]).toEqual({ constituent: preConstituents + 0, major: 6, minor: 5 });
+  });
 });
