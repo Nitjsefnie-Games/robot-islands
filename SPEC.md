@@ -262,11 +262,11 @@ Current-weather visibility also follows general vision: any cell revealed by a *
 
 Visibility is extended by:
 
-* Weather Station (T2): +3 cells from this island
-* Advanced Weather Station (T3): +6 cells, plus 1-cycle ahead forecasting
+* Weather Station (T2): a circle of radius `baseline (5 tiles) + 3` **centred on the station building** (not the island centre)
+* Advanced Weather Station (T3): a circle of radius `baseline (5 tiles) + 6` centred on the station building, plus a 1-cycle-ahead forecast circle at the same position
 * Lighthouse (any tier): current weather across its full vision circle (current-cycle only, no forecast)
 
-When multiple weather stations are placed on the same island their visibility bonuses **stack additively** (e.g. one Weather Station + one Advanced Weather Station = baseline + 9 cells). The Advanced Weather Station's forecast layer covers the same radius as its current-cycle reveal — the T3 station's gift is the temporal lookahead, not extra spatial range beyond what its `+6` already provides. Because cell dwell varies (30 min – 4 h, no fixed cycle length), "1-cycle ahead" is sampled at the dwell midpoint (~2 real-time hours) so the forecast lands one typical dwell into the future.
+**Weather-station visibility is anchored to the station building, like a Lighthouse** — each station emits its own circle at its building position, so a station placed anywhere on a large merged island (whose geometric centre `cx/cy` may sit far from any building) reveals weather around *itself*. Stations therefore no longer fold into a single summed circle at the island centre: multiple stations on one island emit **separate** building-anchored circles (place them at different corners to cover the areas you care about), and the island also keeps its inherent baseline circle (radius 5 tiles, at the centre). The Advanced Weather Station's forecast circle covers the same radius as its current-cycle circle — the T3 station's gift is the temporal lookahead, not extra spatial range beyond what its `+6` already provides. Because cell dwell varies (30 min – 4 h, no fixed cycle length), "1-cycle ahead" is sampled at the dwell midpoint (~2 real-time hours) so the forecast lands one typical dwell into the future.
 
 **Vehicle vulnerability multipliers:**
 
@@ -1129,8 +1129,8 @@ The recipe ties T6 launch fuel back to the T4 antimatter chain — a player who 
 |-|-|-|-|
 |Land Reclamation Hub|3x3|T2|Expands island grid|
 |Terrain Modifier|2x2|T2|Clears or converts tiles|
-|Weather Station|2x2|T2|Extends weather visibility +3 cells from this island|
-|Advanced Weather Station|2x2|T3|Extends visibility +6 cells, adds 1-cycle forecasting|
+|Weather Station|2x2|T2|Weather-visibility circle (baseline 5 + 3 tiles) centred on the station building (§2.6)|
+|Advanced Weather Station|2x2|T3|Weather circle (baseline 5 + 6 tiles) centred on the station building, adds a 1-cycle forecast circle at the same position (§2.6)|
 |Platform Constructor|4x4|T3|Builds artificial islands|
 |Patron Hub|2x2|T3|Manages funneling routes outbound|
 |Launch Tower|3x3|T4|T4 omnidirectional drone pulse|

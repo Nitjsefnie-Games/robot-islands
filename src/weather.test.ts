@@ -287,56 +287,89 @@ describe('§2.6 computeWeatherVisionSources', () => {
     expect(sources.forecast.length).toBe(0);
   });
 
-  it('T2 Weather Station extends the per-island circle by +3 tiles', () => {
+  it('T2 Weather Station emits a circle at its building position, radius base+3', () => {
     const islands = [
       makeIsland('a', 0, 0, [{ id: 'ws', defId: 'weather_station_t2', x: 0, y: 0 }]),
     ];
     const sources = computeWeatherVisionSources(islands);
-    const circle = sources.current.find((s) => s.kind === 'circle');
-    expect(circle && circle.kind === 'circle' && circle.radius).toBe(
-      BASE_WEATHER_VISIBILITY_TILES + 3,
+    // square2 footprint → centre offset +0.5 from the building's NW tile.
+    const station = sources.current.find(
+      (s) => s.kind === 'circle' && s.radius === BASE_WEATHER_VISIBILITY_TILES + 3,
     );
+    expect(station && station.kind === 'circle' && station.cx).toBe(0.5);
+    expect(station && station.kind === 'circle' && station.cy).toBe(0.5);
+    // The island's inherent base circle is still present, at the centre.
+    expect(
+      sources.current.some(
+        (s) =>
+          s.kind === 'circle' &&
+          s.radius === BASE_WEATHER_VISIBILITY_TILES &&
+          s.cx === 0 &&
+          s.cy === 0,
+      ),
+    ).toBe(true);
     expect(sources.forecast.length).toBe(0);
   });
 
-  it('T3 Advanced Weather Station extends by +6 tiles AND emits a forecast circle', () => {
+  it('T3 Advanced Weather Station emits current + forecast circles at its building position, radius base+6', () => {
     const islands = [
       makeIsland('a', 0, 0, [
         { id: 'aws', defId: 'advanced_weather_station_t3', x: 0, y: 0 },
       ]),
     ];
     const sources = computeWeatherVisionSources(islands);
-    const circle = sources.current.find((s) => s.kind === 'circle');
-    expect(circle && circle.kind === 'circle' && circle.radius).toBe(
-      BASE_WEATHER_VISIBILITY_TILES + 6,
-    );
+    const r = BASE_WEATHER_VISIBILITY_TILES + 6;
+    const station = sources.current.find((s) => s.kind === 'circle' && s.radius === r);
+    expect(station && station.kind === 'circle' && station.cx).toBe(0.5);
+    expect(station && station.kind === 'circle' && station.cy).toBe(0.5);
     expect(sources.forecast.length).toBe(1);
     const fcCircle = sources.forecast[0];
-    expect(fcCircle && fcCircle.kind === 'circle' && fcCircle.radius).toBe(
-      BASE_WEATHER_VISIBILITY_TILES + 6,
-    );
-    expect(fcCircle && fcCircle.kind === 'circle' && fcCircle.cx).toBe(0);
-    expect(fcCircle && fcCircle.kind === 'circle' && fcCircle.cy).toBe(0);
+    expect(fcCircle && fcCircle.kind === 'circle' && fcCircle.radius).toBe(r);
+    expect(fcCircle && fcCircle.kind === 'circle' && fcCircle.cx).toBe(0.5);
+    expect(fcCircle && fcCircle.kind === 'circle' && fcCircle.cy).toBe(0.5);
   });
 
-  it('both stations on one island: bonuses STACK (5 + 3 + 6 = 14)', () => {
+  it('a station on a large merged island reveals weather around ITSELF, not the island centre', () => {
+    // Regression (#merged-weather): merged islands have spec.cx/cy at an
+    // arbitrary interior point far from where the player placed the station.
+    // The station's current + forecast circles must follow the building.
     const islands = [
-      makeIsland('a', 0, 0, [
-        { id: 'ws', defId: 'weather_station_t2', x: 0, y: 0 },
-        { id: 'aws', defId: 'advanced_weather_station_t3', x: 2, y: 0 },
+      makeIsland('merged', 0, 0, [
+        { id: 'aws', defId: 'advanced_weather_station_t3', x: 50, y: 40 },
       ]),
     ];
     const sources = computeWeatherVisionSources(islands);
-    const circle = sources.current.find((s) => s.kind === 'circle');
-    expect(circle && circle.kind === 'circle' && circle.radius).toBe(
-      BASE_WEATHER_VISIBILITY_TILES + 3 + 6,
-    );
-    // Forecast circle matches the full radius — the T3 station's spatial
-    // gift extends to the forecast layer too.
+    const r = BASE_WEATHER_VISIBILITY_TILES + 6;
+    const station = sources.current.find((s) => s.kind === 'circle' && s.radius === r);
+    expect(station && station.kind === 'circle' && station.cx).toBe(50.5);
+    expect(station && station.kind === 'circle' && station.cy).toBe(40.5);
     const fc = sources.forecast[0];
-    expect(fc && fc.kind === 'circle' && fc.radius).toBe(
-      BASE_WEATHER_VISIBILITY_TILES + 3 + 6,
+    expect(fc && fc.kind === 'circle' && fc.cx).toBe(50.5);
+    expect(fc && fc.kind === 'circle' && fc.cy).toBe(40.5);
+  });
+
+  it('both stations on one island emit SEPARATE circles, each at its own building', () => {
+    const islands = [
+      makeIsland('a', 0, 0, [
+        { id: 'ws', defId: 'weather_station_t2', x: 0, y: 0 },
+        { id: 'aws', defId: 'advanced_weather_station_t3', x: 20, y: 0 },
+      ]),
+    ];
+    const sources = computeWeatherVisionSources(islands);
+    const t2 = sources.current.find(
+      (s) => s.kind === 'circle' && s.radius === BASE_WEATHER_VISIBILITY_TILES + 3,
     );
+    const t3 = sources.current.find(
+      (s) => s.kind === 'circle' && s.radius === BASE_WEATHER_VISIBILITY_TILES + 6,
+    );
+    expect(t2 && t2.kind === 'circle' && t2.cx).toBe(0.5);
+    expect(t3 && t3.kind === 'circle' && t3.cx).toBe(20.5);
+    // The old summed (5 + 3 + 6 = 14) single circle no longer exists.
+    expect(sources.current.some((s) => s.kind === 'circle' && s.radius === 14)).toBe(false);
+    // Only the AWS emits a forecast circle, at the AWS position.
+    expect(sources.forecast.length).toBe(1);
+    const fc = sources.forecast[0];
+    expect(fc && fc.kind === 'circle' && fc.cx).toBe(20.5);
   });
 
   it('station on one island does NOT extend a neighbouring island', () => {
@@ -347,20 +380,21 @@ describe('§2.6 computeWeatherVisionSources', () => {
       makeIsland('b', 100, 0, []),
     ];
     const sources = computeWeatherVisionSources(islands);
-    const circles = sources.current.filter((s) => s.kind === 'circle');
-    expect(circles.length).toBe(2);
-    // Sort by cx so the assertion order is deterministic.
-    const byCx = [...circles].sort(
-      (l, r) => (l.kind === 'circle' ? l.cx : 0) - (r.kind === 'circle' ? r.cx : 0),
+    // island a: base circle (r=5 @ centre) + AWS circle (r=11 @ building).
+    const aws = sources.current.find(
+      (s) => s.kind === 'circle' && s.radius === BASE_WEATHER_VISIBILITY_TILES + 6,
     );
-    const a = byCx[0];
-    const b = byCx[1];
-    expect(a && a.kind === 'circle' && a.radius).toBe(BASE_WEATHER_VISIBILITY_TILES + 6);
-    expect(b && b.kind === 'circle' && b.radius).toBe(BASE_WEATHER_VISIBILITY_TILES);
-    // Only the AWS-bearing island emits a forecast source.
+    expect(aws && aws.kind === 'circle' && aws.cx).toBe(0.5);
+    // island b gets only its base circle — no extended circle anywhere near it.
+    expect(
+      sources.current.some(
+        (s) => s.kind === 'circle' && s.radius > BASE_WEATHER_VISIBILITY_TILES && s.cx > 50,
+      ),
+    ).toBe(false);
+    // Only the AWS-bearing island emits a forecast source, at the AWS position.
     expect(sources.forecast.length).toBe(1);
     const fc = sources.forecast[0];
-    expect(fc && fc.kind === 'circle' && fc.cx).toBe(0);
+    expect(fc && fc.kind === 'circle' && fc.cx).toBe(0.5);
   });
 
   it('skips unpopulated islands entirely', () => {
