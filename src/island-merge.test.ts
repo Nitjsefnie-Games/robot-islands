@@ -730,6 +730,44 @@ describe('performMerge', () => {
 
     expect(world.latticeNodeIslands).toEqual(['a']);
   });
+
+  it('absorbed unpopulated lobe keeps its biome and terrain seed', () => {
+    const a = makeSpec({ id: 'a', cx: 0, cy: 0, majorRadius: 2, minorRadius: 2, biome: 'plains' });
+    const b = makeSpec({ id: 'b', cx: 2, cy: 0, majorRadius: 2, minorRadius: 2, populated: false, biome: 'volcanic' });
+    const world = makeWorld([a, b]);
+    const states = new Map<string, IslandState>([['a', makeState({ id: 'a' })]]);
+    performMerge(world, states, a, b);
+    const lobe = a.extraEllipses!.at(-1)!;
+    expect(lobe.biome).toBe('volcanic');
+    expect(lobe.originId).toBe('b');
+    expect(world.islands.find((s) => s.id === 'b')).toBeUndefined();
+  });
+
+  it('retargets a settler in transit to an absorbed UNPOPULATED island', () => {
+    const a = makeSpec({ id: 'a', cx: 0, cy: 0, majorRadius: 2, minorRadius: 2 });
+    const b = makeSpec({ id: 'b', cx: 2, cy: 0, majorRadius: 2, minorRadius: 2, populated: false });
+    const world = makeWorld([a, b]);
+    const v: SettlementVehicle = {
+      id: nextVehicleId(),
+      kind: 'ship',
+      tier: 1,
+      from: 'origin-x',
+      target: 'b',
+      fuelLoaded: 10,
+      foundationKitCount: 1,
+      speed: 1,
+      launchTime: 0,
+      expectedArrivalTime: 100_000,
+      weatherMultiplier: 1,
+      fuelResource: 'biofuel',
+      failureRate: 0.02,
+      scanBuffer: new Set<string>(),
+    };
+    world.vehicles.push(v);
+    const states = new Map<string, IslandState>([['a', makeState({ id: 'a' })]]);
+    performMerge(world, states, a, b);
+    expect(world.vehicles[0]?.target).toBe('a');
+  });
 });
 
 describe('findNextMerge', () => {
@@ -785,11 +823,33 @@ describe('findNextMerge', () => {
     expect(ids).toEqual(['a', 'b']);
   });
 
-  it('skips unpopulated islands (no merge between populated and unpopulated)', () => {
-    const a = makeSpec({ id: 'a', cx: 0, cy: 0, majorRadius: 10, minorRadius: 10 });
-    const b = makeSpec({ id: 'b', cx: 15, cy: 0, majorRadius: 10, minorRadius: 10, populated: false });
+  it('populated island absorbs a touching unpopulated neighbour', () => {
+    const a = makeSpec({ id: 'a', cx: 0, cy: 0, majorRadius: 2, minorRadius: 2 });
+    const b = makeSpec({ id: 'b', cx: 2, cy: 0, majorRadius: 2, minorRadius: 2, populated: false });
     const world = makeWorld([a, b]);
     const states = new Map<string, IslandState>([['a', makeState({ id: 'a' })]]);
+    const res = findNextMerge(world, states);
+    expect(res).not.toBeNull();
+    expect(res!.absorber.id).toBe('a');
+    expect(res!.absorbed.id).toBe('b');
+  });
+
+  it('absorbs an undiscovered neighbour on contact (no discovered gate)', () => {
+    const a = makeSpec({ id: 'a', cx: 0, cy: 0, majorRadius: 2, minorRadius: 2 });
+    const b = makeSpec({ id: 'b', cx: 2, cy: 0, majorRadius: 2, minorRadius: 2, populated: false, discovered: false });
+    const world = makeWorld([a, b]);
+    const states = new Map<string, IslandState>([['a', makeState({ id: 'a' })]]);
+    const res = findNextMerge(world, states);
+    expect(res).not.toBeNull();
+    expect(res!.absorber.id).toBe('a');
+    expect(res!.absorbed.id).toBe('b');
+  });
+
+  it('does NOT merge two non-populated islands even when touching', () => {
+    const a = makeSpec({ id: 'a', cx: 0, cy: 0, majorRadius: 2, minorRadius: 2, populated: false });
+    const b = makeSpec({ id: 'b', cx: 2, cy: 0, majorRadius: 2, minorRadius: 2, populated: false });
+    const world = makeWorld([a, b]);
+    const states = new Map<string, IslandState>();
     expect(findNextMerge(world, states)).toBeNull();
   });
 });
