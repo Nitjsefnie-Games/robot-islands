@@ -17,6 +17,7 @@ import {
   conduitComponents,
   attachedBuildings,
   conduitClusterUnions,
+  eligibleWireTargets,
 } from './conduits.js';
 import type { PlacedBuilding } from './buildings.js';
 import type { ConduitLink, WorldState } from './world.js';
@@ -30,7 +31,7 @@ const b = (id: string, defId: string, x: number, y: number): PlacedBuilding =>
  *  (islands[].id, islands[].buildings, conduitLinks). Everything else is cast
  *  away — the conduit helpers never touch it. */
 function makeWorld(
-  islands: ReadonlyArray<{ id: string; buildings: PlacedBuilding[] }>,
+  islands: ReadonlyArray<{ id: string; name?: string; buildings: PlacedBuilding[] }>,
   conduitLinks: ConduitLink[] = [],
 ): WorldState {
   return { islands, conduitLinks } as unknown as WorldState;
@@ -328,5 +329,65 @@ describe('conduitClusterUnions', () => {
       [], // no links → each conduit is its own (empty) component; nothing wires
     );
     expect(conduitClusterUnions(w)).toHaveLength(0);
+  });
+});
+
+
+describe('eligibleWireTargets', () => {
+  const makeTargetsWorld = (links: ConduitLink[] = []) =>
+    makeWorld(
+      [
+        {
+          id: 'isl-1',
+          name: 'Alpha',
+          buildings: [
+            b('cc1', 'cluster_conduit', 0, 0),
+            b('cc2', 'cluster_conduit', 5, 0),
+            b('lc1', 'lattice_conduit', 10, 0),
+          ],
+        },
+        {
+          id: 'isl-2',
+          name: 'Beta',
+          buildings: [
+            b('cc3', 'cluster_conduit', 0, 0),
+            b('lc2', 'lattice_conduit', 5, 0),
+          ],
+        },
+      ],
+      links,
+    );
+
+  it('lists another same-island conduit as eligible', () => {
+    const w = makeTargetsWorld();
+    const targets = eligibleWireTargets(w, 'cc1');
+    expect(targets.map((t) => t.id).sort()).toEqual(['cc2', 'lc1']);
+  });
+
+  it('does NOT list a cross-island cluster_conduit', () => {
+    const w = makeTargetsWorld();
+    const targets = eligibleWireTargets(w, 'cc1');
+    expect(targets.some((t) => t.id === 'cc3')).toBe(false);
+  });
+
+  it('DOES list another cross-island lattice_conduit', () => {
+    const w = makeTargetsWorld();
+    const targets = eligibleWireTargets(w, 'lc1');
+    expect(targets.some((t) => t.id === 'lc2')).toBe(true);
+  });
+
+  it('excludes an already-linked pair (canWire returns duplicate)', () => {
+    const w = makeTargetsWorld([{ a: 'cc1', b: 'cc2' }]);
+    const targets = eligibleWireTargets(w, 'cc1');
+    expect(targets.some((t) => t.id === 'cc2')).toBe(false);
+    expect(targets.some((t) => t.id === 'lc1')).toBe(true);
+  });
+
+  it('labels include displayName + island name + coords', () => {
+    const w = makeTargetsWorld();
+    const lc1 = eligibleWireTargets(w, 'cc2').find((t) => t.id === 'lc1');
+    expect(lc1?.label).toContain('Lattice Conduit');
+    expect(lc1?.label).toContain('Alpha');
+    expect(lc1?.label).toContain('@10,0');
   });
 });
