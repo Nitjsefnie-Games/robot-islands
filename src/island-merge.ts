@@ -338,11 +338,53 @@ export function performMerge(
  * The reported pair carries `(absorber, absorbed)` resolved via
  * `chooseMergeAbsorber`.
  */
+type MergeResult = { absorber: IslandSpec; absorbed: IslandSpec } | null;
+
+// PERF: findNextMerge runs every world-systems step (~480× for an 8-min offline
+// catch-up) and its O(N²) islandsOverlap scan dominated catch-up CPU. The scan's
+// result is a pure function of the POPULATED set and each populated island's
+// id + position + ellipse geometry — none of which change between steps except
+// via a merge or a settlement-vehicle population (both of which change the
+// signature). So memoize on an exact signature of exactly those inputs (O(N) to
+// build vs the O(N²) scan it guards): equal signature ⇒ equal scan inputs ⇒ equal
+// result. Correctness note: a non-null result is never served from cache twice —
+// the caller performs the merge that same step, mutating geometry ⇒ the next
+// signature differs ⇒ recompute (which re-reads `states` for the absorber choice).
+// Only null results are reused, and while the signature holds no overlap can
+// appear, so reuse is exact. Single-entry: a catch-up processes one account's
+// run at a time; a different account's ids yield a different signature (miss).
+let _mergeSig: string | null = null;
+let _mergeResult: MergeResult = null;
+
+function mergeSignature(populated: ReadonlyArray<IslandSpec>): string {
+  let sig = '';
+  for (const s of populated) {
+    sig += `${s.id}:${s.cx},${s.cy},${s.majorRadius},${s.minorRadius}`;
+    if (s.extraEllipses) {
+      for (const e of s.extraEllipses) sig += `;${e.major},${e.minor},${e.offsetX},${e.offsetY}`;
+    }
+    sig += '|';
+  }
+  return sig;
+}
+
 export function findNextMerge(
   world: WorldState,
   states: Map<string, IslandState>,
-): { absorber: IslandSpec; absorbed: IslandSpec } | null {
+): MergeResult {
   const populated = world.islands.filter((s) => s.populated);
+  const sig = mergeSignature(populated);
+  if (sig === _mergeSig) return _mergeResult;
+  // Memoize ONLY the (common) no-merge result. A non-null result carries spec
+  // references and is consumed by an immediate performMerge that mutates the
+  // geometry; never serve it from cache, so there is no way to hand a stale
+  // spec to a later call (e.g. a hypothetical non-merging inspector). The 480
+  // redundant per-step scans during catch-up are all null, so this keeps the win.
+  const cache = (r: MergeResult): MergeResult => {
+    _mergeSig = r === null ? sig : null;
+    _mergeResult = null;
+    return r;
+  };
   interface Candidate {
     readonly a: IslandSpec;
     readonly b: IslandSpec;
@@ -370,7 +412,7 @@ export function findNextMerge(
       });
     }
   }
-  if (cands.length === 0) return null;
+  if (cands.length === 0) return cache(null);
   // Sort: largest combined first, then lower minId first.
   cands.sort((p, q) => {
     if (p.combined !== q.combined) return q.combined - p.combined;
@@ -383,9 +425,9 @@ export function findNextMerge(
   const sb = states.get(top.b.id);
   // Both states must exist (populated island invariant). If they don't,
   // skip the merge cleanly — no defaults that would mask the bug.
-  if (!sa || !sb) return null;
+  if (!sa || !sb) return cache(null);
   const decision = chooseMergeAbsorber(top.a, top.b, sa, sb);
   const absorber = decision.absorber === 'a' ? top.a : top.b;
   const absorbed = decision.absorber === 'a' ? top.b : top.a;
-  return { absorber, absorbed };
+  return cache({ absorber, absorbed });
 }
