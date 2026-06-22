@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Robot Islands — render-perf optimizer run (2026-06-22)</title>
+  <style>
+    :root {
+      --ivory:#1B1A17; --slate:#F5F3EC; --clay:#D97757; --oat:#3A352B;
+      --olive:#8FA56E; --rust:#E08B7F; --warn:#E0B47F;
+      --gray-150:#2E2C27; --gray-300:#3A3833; --gray-500:#8F8D82; --gray-700:#CFCCC2; --white:#252420;
+      --serif:ui-serif,Georgia,'Times New Roman',serif;
+      --sans:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif;
+      --mono:ui-monospace,'SF Mono',Menlo,Monaco,monospace;
+      --radius:12px; --border:1.5px solid var(--gray-300);
+    }
+    *{margin:0;padding:0;box-sizing:border-box;}
+    body{font-family:var(--sans);background:var(--ivory);color:var(--gray-700);line-height:1.58;padding:56px 32px 120px;-webkit-font-smoothing:antialiased;}
+    .page{margin:0 auto;max-width:1080px;}
+    .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:0.08em;text-transform:uppercase;color:var(--gray-500);margin-bottom:12px;}
+    h1{font-family:var(--serif);font-weight:500;font-size:36px;line-height:1.14;color:var(--slate);margin-bottom:18px;letter-spacing:-0.01em;}
+    .lede{font-size:16px;color:var(--gray-700);max-width:880px;} .lede b{color:var(--slate);}
+    .method{background:var(--white);border:var(--border);border-radius:var(--radius);padding:18px 22px;margin:26px 0 18px;}
+    .method .label{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:0.06em;color:var(--gray-500);margin-bottom:10px;}
+    .method .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;font-size:13.5px;}
+    @media (max-width:860px){.method .grid{grid-template-columns:repeat(2,1fr);}}
+    .method .cell .k{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:0.05em;color:var(--gray-500);margin-bottom:3px;}
+    .method .cell .v{color:var(--slate);font-weight:600;}
+    .noise{background:#2E211C;border:1.5px solid #5C3D2E;border-radius:var(--radius);padding:14px 20px;margin-bottom:40px;font-size:14px;color:var(--gray-700);display:flex;gap:12px;max-width:980px;}
+    .noise .glyph{color:var(--warn);font-weight:700;} .noise b{color:var(--warn);}
+    section{margin-bottom:52px;}
+    .sec-head{display:flex;align-items:baseline;gap:14px;margin-bottom:8px;}
+    .sec-head .num{font-family:var(--mono);font-size:12px;background:var(--oat);color:var(--slate);padding:3px 9px;border-radius:8px;}
+    .sec-head h2{font-family:var(--serif);font-weight:500;font-size:25px;color:var(--slate);letter-spacing:-0.01em;}
+    .sec-intro{font-size:14.5px;color:var(--gray-500);max-width:860px;margin-bottom:22px;}
+    code{font-family:var(--mono);font-size:0.88em;background:var(--gray-150);border:1px solid var(--gray-300);border-radius:5px;padding:1px 5px;color:#C9B98A;}
+    .cand{background:var(--white);border:var(--border);border-radius:var(--radius);margin-bottom:16px;overflow:hidden;}
+    .cand-head{display:flex;align-items:center;gap:12px;padding:13px 20px;background:var(--gray-150);border-bottom:var(--border);flex-wrap:wrap;}
+    .cand-head .cid{font-family:var(--mono);font-size:12px;color:var(--gray-500);}
+    .cand-head .ct{font-family:var(--serif);font-size:17px;color:var(--slate);flex:1;min-width:200px;}
+    .pill{display:inline-block;font-family:var(--mono);font-size:10.5px;padding:2px 9px;border-radius:999px;letter-spacing:0.04em;}
+    .pill.keep{background:#2D3A24;color:var(--olive);} .pill.revert{background:#4A2A1C;color:var(--rust);} .pill.skip{background:var(--gray-150);color:var(--gray-500);border:1px solid var(--gray-300);}
+    .cand-body{padding:14px 20px;display:grid;grid-template-columns:1fr 1fr;gap:14px 28px;font-size:13.5px;}
+    @media (max-width:820px){.cand-body{grid-template-columns:1fr;}}
+    .cand-body .bk{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:0.07em;color:var(--gray-500);margin-bottom:5px;}
+    .cand-body .bv strong{color:var(--slate);} .cand-body .bv .num{font-family:var(--mono);color:var(--olive);}
+    .tbl{width:100%;border:var(--border);border-radius:var(--radius);border-collapse:separate;border-spacing:0;overflow:hidden;font-size:13.5px;}
+    .tbl th,.tbl td{text-align:left;padding:10px 16px;border-bottom:1px solid var(--gray-300);vertical-align:top;}
+    .tbl th{font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:0.05em;color:var(--gray-500);background:var(--gray-150);font-weight:600;}
+    .tbl tr:last-child td{border-bottom:none;} .tbl td.slate{color:var(--slate);font-weight:600;}
+    .tbl td.num{font-family:var(--mono);text-align:right;font-variant-numeric:tabular-nums;}
+    .stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:8px 0;}
+    @media (max-width:860px){.stat-row{grid-template-columns:repeat(2,1fr);}}
+    .stat{background:var(--white);border:var(--border);border-radius:var(--radius);padding:16px 18px;}
+    .stat .v{font-family:var(--mono);font-size:24px;color:var(--slate);font-weight:600;line-height:1;} .stat .v.good{color:var(--olive);}
+    .stat .k{font-family:var(--mono);font-size:10.5px;text-transform:uppercase;letter-spacing:0.05em;color:var(--gray-500);margin-top:8px;}
+    .footer{color:var(--gray-500);font-size:13px;margin-top:60px;padding-top:22px;border-top:1px solid var(--gray-300);}
+    .toc{font-family:var(--mono);font-size:12.5px;color:var(--gray-500);margin:22px 0 0;}
+    .toc a{color:var(--clay);text-decoration:none;margin-right:16px;}
+    a.cm{color:var(--clay);text-decoration:none;font-family:var(--mono);font-size:12px;}
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="eyebrow">Optimizer run · Robot Islands client · render layer · 2026-06-22</div>
+    <h1>Two behavior-identical render wins; the rest is below the noise floor</h1>
+    <p class="lede">Operated the <b>optimizer</b> persona for 5 profile→target→change→measure→keep/revert cycles
+      on the loaded mega-save (level 87, 746 B XP, ~3.2 k in-flight transport bots). Method: live interleaved
+      A/B without reload — wrap <code>renderer.render</code> for render-ms, flip a runtime flag between configs in
+      the same ~3 s window so scene drift cancels. Behavior gate: the <b>3717 client tests</b> + screenshot/structural
+      equivalence. <b>Result: the per-frame route-chevron re-tessellation was the dominant render cost; instancing it
+      cut render ~1.5 ms, and a now-applicable empty-clear gate saves another ~0.5 ms per idle frame.</b> After those,
+      every remaining target is below the noise floor in the reproducible scene (65.8% CPU idle) or can't be made
+      byte-identical.</p>
+    <div class="toc">
+      <a href="#m">Method</a><a href="#base">Baseline</a><a href="#iters">Iterations</a><a href="#final">Final</a><a href="#left">Left on the table</a>
+    </div>
+
+    <div class="method" id="m">
+      <div class="label">Method · pinned before any change (optimizer step 0)</div>
+      <div class="grid">
+        <div class="cell"><div class="k">Metric</div><div class="v">render-ms/frame ↓ (median)</div></div>
+        <div class="cell"><div class="k">Harness</div><div class="v">live interleaved A/B, no reload</div></div>
+        <div class="cell"><div class="k">Behavior gate</div><div class="v">3717 client tests + screenshot</div></div>
+        <div class="cell"><div class="k">Scene</div><div class="v">REMOTE, 3440×1271, endgame save</div></div>
+      </div>
+    </div>
+
+    <div class="noise" id="base">
+      <span class="glyph">±</span>
+      <span><b>Noise floor: 0.1 ms</b> (render-median spread over 6 interleaved baseline rounds on the calm scene;
+        0.3 ms once mild scene drift is included). A change is kept only when its A/B delta clears this and the
+        behavior gate stays identical. Render-ms swings with transport traffic (4.9 ms calm → 16.7 ms at first
+        load), so only <i>interleaved</i> A/B within one window is trusted — never an across-time before/after.</span>
+    </div>
+
+    <section id="iters">
+      <div class="sec-head"><span class="num">1</span><h2>The five cycles</h2></div>
+      <p class="sec-intro">One optimization per cycle, biggest profiled target first. Two kept, one reverted on a
+        measured regression, two not pursued (behavior-changing or sub-noise).</p>
+
+      <article class="cand">
+        <div class="cand-head"><span class="cid">1</span><span class="ct">Drop the routes-overlay render group</span><span class="pill revert">reverted · regression</span></div>
+        <div class="cand-body">
+          <div><div class="bk">Hypothesis</div><div class="bv">The top render layer (<code>routes-overlay</code>) changes every frame, so its render-group rebuild looked like pure overhead — removing it might let the content batch with siblings.</div></div>
+          <div><div class="bk">Measured</div><div class="bv">GROUP 4.50 ms vs NO-GROUP 4.67 ms — removing it <strong>regressed −0.17 ms</strong> (every run separated). The group localizes the per-frame dirty; without it the parent re-collects. <strong>Reverted.</strong></div></div>
+        </div>
+      </article>
+
+      <article class="cand">
+        <div class="cand-head"><span class="cid">2</span><span class="ct">Instance route-flow chevrons via a shared GraphicsContext</span><span class="pill keep">kept · <a class="cm" href="https://github.com/Nitjsefnie-Games/robot-islands/commit/b9b329c">b9b329c</a></span></div>
+        <div class="cand-body">
+          <div><div class="bk">Root cause</div><div class="bv">One ▶ chevron per in-flight bot (~3.2 k here) slides along its route every frame. <code>paintOverlay</code> accumulated all of them into one <code>Graphics</code> and <code>clear()</code>+re-tessellated the whole batch each frame — cost scales with bot count. A content-signature gate can't help: the geometry genuinely moves.</div></div>
+          <div><div class="bk">Change + measured</div><div class="bv">Tessellate ONE unit chevron into a shared <code>GraphicsContext</code>, pool a <code>Graphics(ctx)</code> per instance, write only per-frame position/rotation (Pixi v8 reuses the one geometry). <span class="num">instanced 2.07 ms vs legacy 3.53 ms → −1.47 ms</span>, every run below legacy. Byte-identical vector output (screenshot A/B). Pool trimmed so catch-up bursts don't strand hidden children.</div></div>
+        </div>
+      </article>
+
+      <article class="cand">
+        <div class="cand-head"><span class="cid">3</span><span class="ct">Gate the now-empty overlayGfx clear()</span><span class="pill keep">kept · <a class="cm" href="https://github.com/Nitjsefnie-Games/robot-islands/commit/6c5e082">6c5e082</a></span></div>
+        <div class="cand-body">
+          <div><div class="bk">Opportunity unlocked by #2</div><div class="bv">With chevrons moved to pooled Graphics, <code>overlayGfx</code> holds only the draft preview + arrival pulses — usually nothing — yet still ran an unconditional <code>clear()</code> every frame, dirtying the render group for no draw (the AGENTS.md empty-clear anti-pattern, finally applicable).</div></div>
+          <div><div class="bk">Change + measured</div><div class="bv">Resolve draft/pulse eligibility up front; skip the clear+draw block when nothing draws and nothing drew last frame. Skipping a provably-empty clear can't change pixels — behavior-identical. A/B under forced-idle: <span class="num">always-clear 1.5 ms vs gated 1.0 ms → −0.5 ms per idle frame</span>. Amortizes small on this constant-traffic save (~12% idle frames), ≈0.5 ms/frame on a normal quiet-route save.</div></div>
+        </div>
+      </article>
+
+      <article class="cand">
+        <div class="cand-head"><span class="cid">4</span><span class="ct">Pool the per-frame drone-dot rebuild</span><span class="pill skip">not pursued · sub-noise</span></div>
+        <div class="cand-body">
+          <div><div class="bk">Target</div><div class="bv"><code>repaintDroneLayer</code> <code>destroy()</code>s + recreates every drone's Container/Graphics each frame. Measured with 5–6 live drones dispatched for the test.</div></div>
+          <div><div class="bk">Measured → verdict</div><div class="bv">Full cost ~<span class="num">0.27 ms / 5 drones</span> (~0.05 ms each): render 0.2 ms, alloc/GC only 0.066 ms (V8 absorbs it). The instanceable part is just the body; the trail is irreducibly per-frame-variable (many alpha-ramped dots). Sub-noise at realistic drone counts — the code's "O(small), cheap" assumption holds. <strong>Not worth the refactor risk</strong> (probe reverted).</div></div>
+        </div>
+      </article>
+
+      <article class="cand">
+        <div class="cand-head"><span class="cid">5</span><span class="ct">Per-frame JS: HUD recompute / pulse rings / 5 Hz economy tick</span><span class="pill skip">not pursued · behavior or scope</span></div>
+        <div class="cand-body">
+          <div><div class="bk">Evaluated</div><div class="bv"><strong>HUD throttle to 5 Hz</strong> — would change the per-frame sparkline sampling window (behavior change). <strong>Pulse-ring instancing</strong> — the ring's stroke width is constant while its radius animates, so a scaled shared context isn't byte-identical. <strong>5 Hz snapshot <code>computeRates</code></strong> (the 6.6 ms ticker-JS spike) — under the 16.6 ms budget here; optimizing the core economy solver over the mega-world is a careful separate effort, not a safe quick win.</div></div>
+          <div><div class="bk">Verdict</div><div class="bv">Each either breaks the behavior invariant or sits below the noise floor in the reproducible scene. Per the optimizer rule (preserve behavior; don't chase sub-noise), the loop stops here.</div></div>
+        </div>
+      </article>
+    </section>
+
+    <section id="final">
+      <div class="sec-head"><span class="num">2</span><h2>Final state</h2></div>
+      <p class="sec-intro">After #2 + #3, <code>routes-overlay</code> dropped from the top render layer (1.2–3.8 ms) to ~0.
+        On the loaded scene the renderer sits at render 1.8 ms + ticker-JS 1.8 ms with 65.8% CPU idle — smooth 60 FPS.
+        Both wins scale with transport traffic, so the gain is largest exactly in the busy state that caused the felt lag.</p>
+      <div class="stat-row">
+        <div class="stat"><div class="v good">−1.47 ms</div><div class="k">chevron instancing (render)</div></div>
+        <div class="stat"><div class="v good">−0.5 ms</div><div class="k">empty-clear gate (per idle frame)</div></div>
+        <div class="stat"><div class="v">1.8 ms</div><div class="k">render/frame now (was top-heavy)</div></div>
+        <div class="stat"><div class="v good">3717/3717</div><div class="k">client tests pass</div></div>
+      </div>
+      <p class="sec-intro" style="margin-top:16px">Both changes committed to <code>master</code> and pushed
+        (linear history, <code>b9b329c</code> → <code>6c5e082</code>), with the instancing convention added to AGENTS.md.
+        The legacy paths survive behind documented debug toggles (<code>__instChevrons</code>, <code>__noOverlayGate</code>)
+        for future live A/B, alongside an opt-in <code>localStorage.ri_debug</code> handle that exposes
+        <code>__app</code>/<code>__world</code> so the harness survives reloads.</p>
+    </section>
+
+    <section id="left">
+      <div class="sec-head"><span class="num">3</span><h2>Left on the table</h2></div>
+      <table class="tbl">
+        <thead><tr><th>Target</th><th>Why deferred</th><th>Revisit when</th></tr></thead>
+        <tbody>
+          <tr><td class="slate">Drone-body instancing</td><td>Sub-noise at realistic drone counts (~0.05 ms each); trail can't be cleanly instanced.</td><td>Endgame saves with many simultaneous drones.</td></tr>
+          <tr><td class="slate">Pulse-ring instancing</td><td>Constant stroke width vs animating radius → a scaled shared context isn't byte-identical.</td><td>If many simultaneous arrivals make pulse tessellation a measured cost.</td></tr>
+          <tr><td class="slate">HUD recompute throttle</td><td>Per-frame sparkline sampling makes a 5 Hz throttle a behavior change.</td><td>Split sparkline sampling from the rate/DOM recompute first.</td></tr>
+          <tr><td class="slate">5 Hz snapshot <code>computeRates</code></td><td>Under budget in the reproducible scene; core-solver change needs its own careful pass.</td><td>If heavy-state frame spikes (the 101 ms tail) are reproduced and traced to it.</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <div class="footer">
+      <p>Optimizer run · 2026-06-22 · client <code>master</code> @ <code>6c5e082</code> · harness: live interleaved render-ms
+        A/B (no reload), 200-sample blocks, 0.1 ms noise floor · behavior gate: 3717 client tests + screenshot/structural
+        equivalence · 2 kept · 1 reverted (regression) · 2 not pursued (behavior / sub-noise).</p>
+    </div>
+  </div>
+</body>
+</html>
