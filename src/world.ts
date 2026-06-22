@@ -507,11 +507,11 @@ const TOUCH_OFFSETS: ReadonlyArray<readonly [number, number]> = [
 ];
 
 export function islandsOverlap(a: IslandSpec, b: IslandSpec): boolean {
-  const ba = islandWorldAabb(a);
-  const bb = islandWorldAabb(b);
+  fillAabb(a, _aabbA);
+  fillAabb(b, _aabbB);
   if (
-    ba.maxX + 1 < bb.minX || bb.maxX + 1 < ba.minX ||
-    ba.maxY + 1 < bb.minY || bb.maxY + 1 < ba.minY
+    _aabbA.maxX + 1 < _aabbB.minX || _aabbB.maxX + 1 < _aabbA.minX ||
+    _aabbA.maxY + 1 < _aabbB.minY || _aabbB.maxY + 1 < _aabbA.minY
   ) {
     return false;
   }
@@ -630,20 +630,33 @@ function islandWorldTileSet(spec: IslandSpec): ReadonlySet<string> {
 }
 
 /** Conservative world-space bounding box over every constituent ellipse — the
- *  cheap broad-phase reject for islandsOverlap (no rasterization). */
-function islandWorldAabb(
-  spec: IslandSpec,
-): { minX: number; maxX: number; minY: number; maxY: number } {
-  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-  for (const c of islandConstituents(spec)) {
-    const cx = spec.cx + c.offsetX;
-    const cy = spec.cy + c.offsetY;
-    if (cx - c.major < minX) minX = cx - c.major;
-    if (cx + c.major > maxX) maxX = cx + c.major;
-    if (cy - c.minor < minY) minY = cy - c.minor;
-    if (cy + c.minor > maxY) maxY = cy + c.minor;
+ *  cheap broad-phase reject for islandsOverlap (no rasterization).
+ *
+ *  PERF: writes into a caller-supplied object instead of returning a fresh one.
+ *  islandsOverlap (the ONLY caller) is synchronous and non-reentrant, so two
+ *  reused module-level scratch bounds avoid a per-pair heap allocation — this is
+ *  the broad-phase reject hit ~3M times per offline catch-up (O(N²) pairs ×
+ *  findNextMerge's per-step rescan). The fields are read directly rather than via
+ *  islandConstituents(), which itself allocates an array + object-spreads each
+ *  call. Identical AABB (primary at (cx,cy) with the spec radii, plus any
+ *  extraEllipses at their offsets). */
+interface Aabb { minX: number; maxX: number; minY: number; maxY: number; }
+const _aabbA: Aabb = { minX: 0, maxX: 0, minY: 0, maxY: 0 };
+const _aabbB: Aabb = { minX: 0, maxX: 0, minY: 0, maxY: 0 };
+function fillAabb(spec: IslandSpec, out: Aabb): void {
+  const { cx, cy } = spec;
+  let minX = cx - spec.majorRadius, maxX = cx + spec.majorRadius;
+  let minY = cy - spec.minorRadius, maxY = cy + spec.minorRadius;
+  if (spec.extraEllipses) {
+    for (const e of spec.extraEllipses) {
+      const ex = cx + e.offsetX, ey = cy + e.offsetY;
+      if (ex - e.major < minX) minX = ex - e.major;
+      if (ex + e.major > maxX) maxX = ex + e.major;
+      if (ey - e.minor < minY) minY = ey - e.minor;
+      if (ey + e.minor > maxY) maxY = ey + e.minor;
+    }
   }
-  return { minX, maxX, minY, maxY };
+  out.minX = minX; out.maxX = maxX; out.minY = minY; out.maxY = maxY;
 }
 
 /**

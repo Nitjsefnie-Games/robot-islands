@@ -85,6 +85,14 @@ case "$cmd" in
     iso env BENCH_SNAPSHOT_FILE="$SNAP" BENCH_USER="$USER_ID" \
         npx tsx "$HERE/catchup-bench.mts" "$GAP" "$REPS"
     ;;
+  micro)
+    NAME="${1:-}"
+    USER_ID="${BENCH_USER:-$(pick_user)}"
+    [ -f "$SNAP" ] || DATABASE_URL="postgresql:///$BENCH_DB" BENCH_USER="$USER_ID" \
+        BENCH_SNAPSHOT_FILE="$SNAP" BENCH_DUMP=1 npx tsx "$HERE/catchup-bench.mts" 8 1 >/dev/null
+    iso env BENCH_SNAPSHOT_FILE="$SNAP" BENCH_USER="$USER_ID" \
+        npx tsx "$HERE/microbench.mts" "$NAME"
+    ;;
   profile)
     GAP="${1:-8}"; REPS="${2:-6}"
     USER_ID="${BENCH_USER:-$(pick_user)}"
