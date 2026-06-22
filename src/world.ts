@@ -279,6 +279,33 @@ export function recordGrowthClaim(
   spec.ownershipLedger = ledger;
 }
 
+/** §3.6 merge maintenance: fold `absorbed`'s ownership claims into `absorber`'s
+ *  ledger. `baseIndex` is the absorber constituent index the absorbed PRIMARY
+ *  landed at (= absorber's constituent count before the absorbed constituents
+ *  were appended). No-op when neither island has a ledger (the merged spec's
+ *  implicit baseline is already correct — merge introduces no overlap). When
+ *  either has one, the absorber gets a materialized baseline if needed, then
+ *  the absorbed claims (its ledger, else its implicit baseline) are appended
+ *  with `constituent` shifted by `+baseIndex`. Mutates `absorber.ownershipLedger`.
+ *  Call AFTER the absorbed constituents were appended to `absorber.extraEllipses`
+ *  (so `islandImplicitLedger(absorber)` is filtered to `< baseIndex` to capture
+ *  only the absorber's own pre-merge constituents). */
+export function appendAbsorbedLedger(
+  absorber: IslandSpec, absorbed: IslandSpec, baseIndex: number,
+): void {
+  if (!absorber.ownershipLedger && !absorbed.ownershipLedger) return;
+  const ledger: OwnershipClaim[] = absorber.ownershipLedger
+    ? [...absorber.ownershipLedger]
+    : islandImplicitLedger(absorber).filter((c) => c.constituent < baseIndex);
+  const absorbedClaims = absorbed.ownershipLedger
+    ? absorbed.ownershipLedger
+    : islandImplicitLedger(absorbed);
+  for (const claim of absorbedClaims) {
+    ledger.push({ constituent: claim.constituent + baseIndex, major: claim.major, minor: claim.minor });
+  }
+  absorber.ownershipLedger = ledger;
+}
+
 /** §3.6 the constituent that OWNS island-local tile (x, y) by placement order
  *  ("already-placed wins"), plus its index, or undefined when no constituent
  *  inscribes the tile. Walks `ownershipLedger` (first claim whose ellipse
