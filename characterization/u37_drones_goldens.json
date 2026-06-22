@@ -14,7 +14,7 @@
       "1": 2,
       "2": 4,
       "3": 8,
-      "4": 0,
+      "4": 10,
       "5": 12,
       "6": 16
     },
@@ -267,7 +267,7 @@
       "speed": 0.8,
       "at_ms": 6250,
       "pos": {
-        "x": 5,
+        "x": 6.6000000000000005,
         "y": 0
       }
     },
@@ -566,7 +566,7 @@
             "trip_half_tiles": 30,
             "scan_half_width": 4,
             "launch_at_ms": 1000,
-            "return_at_ms": 121000,
+            "return_at_ms": 112111.1111111111,
             "tier": 2,
             "fuel_units": 10,
             "fuel_kind": "diesel",
@@ -668,7 +668,7 @@
             "trip_half_tiles": 75,
             "scan_half_width": 12,
             "launch_at_ms": 1000,
-            "return_at_ms": 301000,
+            "return_at_ms": 228272.72727272726,
             "tier": 5,
             "fuel_units": 10,
             "fuel_kind": "plasma_charge",
@@ -731,7 +731,7 @@
             "trip_half_tiles": 20,
             "scan_half_width": 12,
             "launch_at_ms": 1000,
-            "return_at_ms": 26000,
+            "return_at_ms": 19939.393939393936,
             "tier": 5,
             "fuel_units": 10,
             "fuel_kind": "plasma_charge",
