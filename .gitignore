@@ -9,3 +9,6 @@ scripts/__pycache__/
 
 # session handoff docs — local only, never committed
 **/*handoff*
+
+# subagent-driven-development scratch (ledger, task reports) — local only
+.superpowers/
