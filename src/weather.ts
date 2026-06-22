@@ -496,14 +496,16 @@ export function computeWeatherVisionSources(
         offsetY: c.offsetY,
       });
     }
-    // 2) Per-island weather circle: baseline + station stack.
-    const stationBonus = weatherStationRangeBonusTiles(spec);
-    const radius = BASE_WEATHER_VISIBILITY_TILES + stationBonus;
+    // 2) Per-island base weather circle — the island's inherent baseline,
+    //    centred on the island. Weather stations no longer fold into this
+    //    summed circle; each emits its own building-anchored circle in (2c)
+    //    so a station on a large merged island reveals weather around ITSELF
+    //    rather than around the merge's arbitrary geometric centre.
     current.push({
       kind: 'circle',
       cx: spec.cx,
       cy: spec.cy,
-      radius,
+      radius: BASE_WEATHER_VISIBILITY_TILES,
     });
     // 2b) Lighthouse circles — current-weather visibility follows general
     //     vision (§2.6 / §vision): wherever a Lighthouse reveals the map you
@@ -523,16 +525,24 @@ export function computeWeatherVisionSources(
         radius: lhRadius,
       });
     }
-    // 3) Forecast circle (Advanced Weather Station only). Same radius as
-    //    the current-cycle circle — the station unlocks a temporal lookup,
-    //    not a wider spatial range.
-    if (hasForecastStation(spec)) {
-      forecast.push({
-        kind: 'circle',
-        cx: spec.cx,
-        cy: spec.cy,
-        radius,
-      });
+    // 2c) Weather-station circles — each anchored to its OWN building
+    //     position (like a Lighthouse), radius = baseline + that station's
+    //     own bonus. An Advanced Weather Station ALSO emits a forecast circle
+    //     at the same position (same radius — the T3 station's gift is the
+    //     temporal lookahead, not extra spatial range). Operational-gated to
+    //     match the Lighthouse loop above.
+    for (const b of spec.buildings) {
+      if (!isOperationalBuilding(b)) continue;
+      const bonus = WEATHER_STATION_RANGE_BONUS_TILES[b.defId];
+      if (bonus === undefined) continue;
+      const def = BUILDING_DEFS[b.defId];
+      const bx = spec.cx + b.x + (shapeWidth(def.footprint) - 1) / 2;
+      const by = spec.cy + b.y + (shapeHeight(def.footprint) - 1) / 2;
+      const radius = BASE_WEATHER_VISIBILITY_TILES + bonus;
+      current.push({ kind: 'circle', cx: bx, cy: by, radius });
+      if (FORECAST_DEF_IDS.has(b.defId)) {
+        forecast.push({ kind: 'circle', cx: bx, cy: by, radius });
+      }
     }
   }
   return { current, forecast };
