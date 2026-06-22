@@ -157,6 +157,31 @@ function clusterLayoutSig(buildings: ReadonlyArray<PlacedBuilding>): string {
   return sig;
 }
 
+// PERF: memoized tile→building-INDEX occupancy over an island's buildings, so
+// collectNeighbors (called per building by the §4.5 buff/gate adjacency) finds a
+// building's physical neighbours via its own border tiles in O(border) instead
+// of an O(N) scan of every building — turning the per-building exotic/gate
+// adjacency over a 470-building island from O(N²) into O(N). Keyed by the same
+// layout signature (order-sensitive), so a cached index i maps to the current
+// array's `all[i]`; equal signature ⇒ equal layout+order ⇒ correct resolution.
+const occIndexMemo = new Map<string, { readonly defs: Readonly<Record<BuildingDefId, BuildingDef>>; readonly tileToIdx: Map<string, number> }>();
+
+function occupancyIndex(
+  all: ReadonlyArray<PlacedBuilding>,
+  defs: Readonly<Record<BuildingDefId, BuildingDef>>,
+): Map<string, number> {
+  const sig = clusterLayoutSig(all);
+  const hit = occIndexMemo.get(sig);
+  if (hit !== undefined && hit.defs === defs) return hit.tileToIdx;
+  const tileToIdx = new Map<string, number>();
+  for (let i = 0; i < all.length; i++) {
+    for (const t of footprintKeySet(all[i]!, defs)) tileToIdx.set(t, i);
+  }
+  if (occIndexMemo.size >= CLUSTER_MEMO_CAP) occIndexMemo.clear();
+  occIndexMemo.set(sig, { defs, tileToIdx });
+  return tileToIdx;
+}
+
 /**
  * §4.5 per-building cluster-bonus multiplier. A building's *cluster* is the
  * maximal set of same-category buildings connected through 4-neighbour links
@@ -328,10 +353,17 @@ export function collectNeighbors(
   const border = borderTiles(fp);
   const neighbors: PlacedBuilding[] = [];
   const seen = new Set<string>();
-  for (const other of all) {
-    if (other.id === building.id) continue;
-    if (seen.has(other.id)) continue;
-    if (!touchesBorder(other, border, defs)) continue;
+  // O(border) physical-neighbour lookup via the memoized occupancy index: a
+  // building is a neighbour iff it occupies one of this building's border tiles
+  // (exactly the old `touchesBorder(other, border)`). Border-tile order differs
+  // from the old all-scan order, but callers use the set (some()/count), not the
+  // order. `seen` dedups a multi-tile neighbour spanning several border tiles.
+  const occ = occupancyIndex(all, defs);
+  for (const bt of border) {
+    const j = occ.get(bt);
+    if (j === undefined) continue;
+    const other = all[j]!;
+    if (other.id === building.id || seen.has(other.id)) continue;
     seen.add(other.id);
     neighbors.push(other);
   }
