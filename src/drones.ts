@@ -105,14 +105,16 @@ export const DRONE_TIER_EFFICIENCY: Record<DroneTier, number> = {
   1: 3, 2: 6, 3: 9, 4: 12, 5: 15, 6: 18,
 };
 export const DRONE_SPEED_TILES_PER_SEC = 0.5; // idle-game scale
-// §11.5 per-tier scan corridor half-width in tiles. T4 is the omni-pulse
-// (uses T4_PULSE_RADIUS_TILES below, not a corridor) — slot is 0 / unused.
+// §11.5 per-tier scan corridor half-width in tiles. A Drone-Pad-launched T4
+// flies a corridor like every other tier (10 = between T3's 8 and T5's 12);
+// the T4 omnidirectional pulse (T4_PULSE_RADIUS_TILES below, fired from a
+// Launch Tower via `firePulse`) is a SEPARATE mechanic, not this table.
 // Doubles T1 → T3 per spec ("2W" ratio); T6 = 16 (design-spec locked).
 export const DRONE_TIER_SCAN_RADIUS: Record<DroneTier, number> = {
   1: 2,
   2: 4,
   3: 8,
-  4: 0,
+  4: 10,
   5: 12,
   6: 16,
 };

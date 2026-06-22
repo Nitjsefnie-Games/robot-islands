@@ -1102,7 +1102,7 @@ describe('drone constants', () => {
     expect(DRONE_TIER_SCAN_RADIUS[1]).toBe(2);
     expect(DRONE_TIER_SCAN_RADIUS[2]).toBe(4);
     expect(DRONE_TIER_SCAN_RADIUS[3]).toBe(8);
-    expect(DRONE_TIER_SCAN_RADIUS[4]).toBe(0);
+    expect(DRONE_TIER_SCAN_RADIUS[4]).toBe(10);
     expect(DRONE_TIER_SCAN_RADIUS[5]).toBe(12);
     expect(DRONE_TIER_SCAN_RADIUS[6]).toBe(16);
   });
