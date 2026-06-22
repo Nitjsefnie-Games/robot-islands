@@ -187,6 +187,16 @@ async function main(): Promise<void> {
   world.label = 'world';
   app.stage.addChild(world);
 
+  // Opt-in debug handles for live render profiling / A/B benchmarking — gated
+  // on `localStorage.ri_debug` so production sessions never get them. Survives
+  // reloads (localStorage), unlike a console-set global, so a render-perf A/B
+  // harness can wrap `__app.renderer.render` and toggle layer flags without a
+  // page reload between configs. Display-only handles; no authoritative state.
+  if (localStorage.getItem('ri_debug') === '1') {
+    (globalThis as Record<string, unknown>).__app = app;
+    (globalThis as Record<string, unknown>).__world = world;
+  }
+
   // Load UI prefs (camera + active-island + open-panel) in parallel with
   // world; applied below after the camera is constructed.
   const restoredPrefs = await loadPrefs();
