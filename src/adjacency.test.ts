@@ -355,6 +355,26 @@ describe('clusterBonusMul — §4.5 under-construction contributes previous floo
   });
 });
 
+describe('clusterBonusMuls — §4.5 conduit union pairs (same-category gated)', () => {
+  const place = (id: string, defId: string, x: number, y: number) =>
+    ({ id, defId: defId as never, x, y, floorLevel: 1 }) as unknown as PlacedBuilding;
+
+  it('same-category distant buildings cluster when wired by conduitUnions', () => {
+    const a = place('a', 'iron_mine', 0, 0);
+    const b = place('b', 'iron_mine', 10, 0);
+    expect(clusterBonusMuls([a, b]).get(a.id)).toBe(1);
+    expect(clusterBonusMuls([a, b], BUILDING_DEFS, [[a.id, b.id]]).get(a.id)).toBeCloseTo(1.1, 9);
+    expect(clusterBonusMuls([a, b], BUILDING_DEFS, [[a.id, b.id]]).get(b.id)).toBeCloseTo(1.1, 9);
+  });
+
+  it('different-category conduit pair is ignored by the category guard', () => {
+    const a = place('a', 'iron_mine', 0, 0);
+    const b = place('b', 'workshop', 10, 0);
+    expect(clusterBonusMuls([a, b], BUILDING_DEFS, [[a.id, b.id]]).get(a.id)).toBe(1);
+    expect(clusterBonusMuls([a, b], BUILDING_DEFS, [[a.id, b.id]]).get(b.id)).toBe(1);
+  });
+});
+
 describe('§4.5 cluster bonus — ocean platforms cluster by CELL adjacency', () => {
   // Ocean platforms reserve whole stratification cells: their `footprint` dims
   // are cell-units and `b.x/b.y` are tile coords offset by whole cells
