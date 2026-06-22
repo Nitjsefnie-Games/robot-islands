@@ -258,6 +258,27 @@ export function islandImplicitLedger(spec: IslandSpec): OwnershipClaim[] {
   }));
 }
 
+/** §3.6 record a Land Reclamation growth of constituent `index` to (major,minor)
+ *  in the ownership ledger. Materializes the implicit baseline first when the
+ *  ledger is absent (so the pre-growth footprint keeps its existing ownership),
+ *  then appends the new claim — coalescing only when the LAST entry is the same
+ *  constituent (a run of growths on one constituent is one logical claim).
+ *  Mutates `spec.ownershipLedger`. Pure w.r.t. everything else. */
+export function recordGrowthClaim(
+  spec: IslandSpec, index: number, major: number, minor: number,
+): void {
+  const ledger: OwnershipClaim[] = spec.ownershipLedger
+    ? [...spec.ownershipLedger]
+    : islandImplicitLedger(spec);
+  const last = ledger[ledger.length - 1];
+  if (last && last.constituent === index) {
+    ledger[ledger.length - 1] = { constituent: index, major, minor };
+  } else {
+    ledger.push({ constituent: index, major, minor });
+  }
+  spec.ownershipLedger = ledger;
+}
+
 /** §3.6 the constituent that OWNS island-local tile (x, y) by placement order
  *  ("already-placed wins"), plus its index, or undefined when no constituent
  *  inscribes the tile. Walks `ownershipLedger` (first claim whose ellipse

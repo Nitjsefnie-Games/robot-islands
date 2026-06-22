@@ -13,7 +13,7 @@ import {
   landReclamationCost,
 } from './land-reclamation.js';
 import { LAND_TILE_COST } from './building-defs.js';
-import type { Biome, IslandSpec } from './world.js';
+import { constituentBiomeAt, type Biome, type IslandSpec } from './world.js';
 
 // Fixtures
 
@@ -441,5 +441,47 @@ describe('canExpandConstituent / expandConstituent — absorbed lobes', () => {
     // Mutation on a bad index is a safe no-op (does not throw, does not mutate).
     expect(() => expandConstituent(spec, st, 5, 'major')).not.toThrow();
     expect(spec.majorRadius).toBe(10);
+  });
+});
+
+describe('no-overwrite ledger', () => {
+  // Merged island: plains primary (r5 @ 0,0) + adjacent arctic lobe (r5 @ 11,0).
+  // The lobe owns tiles x=7..14 at y=0; the primary grown by +4 major (r9) reaches
+  // x up to 7 — so tile (7,0) is owned by the lobe yet reached by the grown primary.
+  function merged(): IslandSpec {
+    return makeSpec({
+      biome: 'plains' as Biome, majorRadius: 5, minorRadius: 5,
+      buildings: [hubBuilding()],
+      extraEllipses: [{ major: 5, minor: 5, rotation: 0, offsetX: 11, offsetY: 0, biome: 'arctic' as Biome, originId: 'lobe' }],
+    });
+  }
+  function plentiful(): IslandState {
+    return makeState({ steel_beam: 10_000_000, concrete: 100_000_000 });
+  }
+
+  it('growing the primary toward the lobe does NOT overwrite the lobe biome', () => {
+    const s = merged();
+    const st = plentiful();
+    // tile (7,0) is owned by the arctic lobe before any growth (primary r5 only
+    // reaches x=3; lobe r5@11 covers x=7..14).
+    const beforeOwner = constituentBiomeAt(s, 7, 0);
+    expect(beforeOwner).toBe('arctic');
+    // Grow primary major repeatedly so its ring reaches the lobe's tiles (r5 -> r9).
+    for (let i = 0; i < 4; i++) expandConstituent(s, st, 0, 'major');
+    // A tile that the lobe already owned must STILL report the lobe's biome.
+    expect(constituentBiomeAt(s, 7, 0)).toBe(beforeOwner);
+    expect(constituentBiomeAt(s, 7, 0)).toBe('arctic');
+  });
+
+  it('expandConstituent materializes a baseline then appends a coalescing claim', () => {
+    const s = merged();
+    const st = plentiful();
+    expandConstituent(s, st, 0, 'major'); // 1st growth → baseline [0,1] + claim {0,..}
+    const len1 = s.ownershipLedger!.length;
+    expandConstituent(s, st, 0, 'minor'); // consecutive same constituent → coalesce
+    expect(s.ownershipLedger!.length).toBe(len1); // coalesced, no new entry
+    // last claim equals current primary radii (invariant):
+    const last = s.ownershipLedger![s.ownershipLedger!.length - 1]!;
+    expect(last).toEqual({ constituent: 0, major: s.majorRadius, minor: s.minorRadius });
   });
 });
