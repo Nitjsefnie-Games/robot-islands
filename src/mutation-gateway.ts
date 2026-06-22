@@ -78,6 +78,12 @@ import { editIslandBiome } from './universe-editor.js';
 import { renameIsland } from './world.js';
 import type { Biome, IslandSpec, WorldState } from './world.js';
 import { positionIsFree, regionDiscoveredOrVisible } from './construction-gate.js';
+import {
+  addConduitLink as addConduitLinkPure,
+  canWire,
+  pruneConduitLinksForBuilding,
+  removeConduitLink as removeConduitLinkPure,
+} from './conduits.js';
 
 // ── Result shape ─────────────────────────────────────────────────────────────
 
@@ -217,6 +223,10 @@ export interface MutationGateway {
   bindCrystal(islandId: string, socketId: string, crystalId: CrystalId): GatewayReturn;
   unbindCrystal(islandId: string, socketId: string): GatewayReturn;
   tierReset(islandId: string, nowMs: number): GatewayReturn;
+
+  // §4.5 conduit links
+  addConduitLink(aId: string, bId: string): GatewayReturn;
+  removeConduitLink(aId: string, bId: string): GatewayReturn;
 
   // §6 routes
   createRoute(
@@ -393,7 +403,10 @@ export function makeLocalGateway(
     demolishBuilding(islandId, buildingId) {
       const island = resolveIsland(islandId);
       if (!island) return err('unknown island');
-      return fromOutcome(demolishBuilding(island.spec, island.state, buildingId));
+      const r = demolishBuilding(island.spec, island.state, buildingId);
+      if (!r.ok) return fromOutcome(r);
+      pruneConduitLinksForBuilding(world, buildingId);
+      return ok();
     },
 
     relocateBuilding(islandId, buildingId, x, y, rotation) {
@@ -835,6 +848,18 @@ export function makeLocalGateway(
       return ok();
     },
 
+    addConduitLink(aId, bId) {
+      const result = canWire(world, aId, bId);
+      if (!result.ok) return err(result.reason ?? 'cannot wire');
+      addConduitLinkPure(world, aId, bId);
+      return ok();
+    },
+
+    removeConduitLink(aId, bId) {
+      removeConduitLinkPure(world, aId, bId);
+      return ok();
+    },
+
     retargetRoute(routeId, toIslandId) {
       const r = retargetRoutePure(world, routeId, toIslandId);
       return r.ok ? ok() : err(r.error);
@@ -1127,6 +1152,12 @@ export function makeRemoteGateway(client: GameServerClient): MutationGateway {
     },
     deleteRoute(routeId) {
       return send('delete-route', { routeId });
+    },
+    addConduitLink(aId, bId) {
+      return send('add-conduit-link', { aId, bId });
+    },
+    removeConduitLink(aId, bId) {
+      return send('remove-conduit-link', { aId, bId });
     },
     retargetRoute(routeId, toIslandId) {
       return send('retarget-route', { routeId, toIslandId });

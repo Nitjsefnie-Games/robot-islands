@@ -1999,6 +1999,101 @@ describe('bind-crystal / unbind-crystal', () => {
   });
 });
 
+async function aUserWithConduits(
+  now: number,
+  opts: { crossIsland?: boolean } = {},
+): Promise<{ uid: string; homeConduitIds: string[] }> {
+  const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
+    const home = world.islands.find((s: any) => s.id === 'home');
+    const state = islandStates.get('home');
+    home.buildings.push(
+      { id: 'cc-1', defId: 'cluster_conduit', x: 0, y: 0, constructionRemainingMs: 0, placedAt: now },
+      { id: 'cc-2', defId: 'cluster_conduit', x: 2, y: 0, constructionRemainingMs: 0, placedAt: now },
+    );
+    state.buildings = home.buildings;
+    if (opts.crossIsland) {
+      const colony = world.islands.find((s: any) => s.id === COLONY_ID);
+      colony.populated = true;
+      colony.discovered = true;
+      colony.buildings.push({ id: 'cc-colony', defId: 'cluster_conduit', x: 0, y: 0, constructionRemainingMs: 0, placedAt: now });
+      islandStates.set(COLONY_ID, makeInitialIslandState(colony, now));
+      islandStates.get(COLONY_ID)!.buildings = colony.buildings;
+    }
+  });
+  return { uid, homeConduitIds: ['cc-1', 'cc-2'] };
+}
+
+describe('conduit-link intents', () => {
+  it('add-conduit-link: wires two valid same-island conduits', async () => {
+    const now = Date.now();
+    const { uid } = await aUserWithConduits(now);
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'add-conduit-link', payload: { aId: 'cc-1', bId: 'cc-2' }, seq: 2 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 2 });
+
+    const links = (await worldSnap(uid)).conduitLinks;
+    expect(links).toHaveLength(1);
+    expect(links[0]).toEqual({ a: 'cc-1', b: 'cc-2' });
+  });
+
+  it('add-conduit-link: rejects an illegal cross-island non-lattice pair', async () => {
+    const now = Date.now();
+    const { uid } = await aUserWithConduits(now, { crossIsland: true });
+    await expectRejectNoChange(
+      uid,
+      { type: 'add-conduit-link', payload: { aId: 'cc-1', bId: 'cc-colony' }, seq: 2 },
+      now,
+    );
+  });
+
+  it('remove-conduit-link: drops an existing link', async () => {
+    const now = Date.now();
+    const { uid } = await aUserWithConduits(now);
+    const add = await applyIntent(
+      pool, uid,
+      { type: 'add-conduit-link', payload: { aId: 'cc-1', bId: 'cc-2' }, seq: 2 },
+      now,
+    );
+    expect(add.ok).toBe(true);
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'remove-conduit-link', payload: { aId: 'cc-1', bId: 'cc-2' }, seq: 3 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 3 });
+
+    const links = (await worldSnap(uid)).conduitLinks;
+    expect(links).toHaveLength(0);
+  });
+
+  it('demolish-building on a conduit prunes its links', async () => {
+    const now = Date.now();
+    const { uid } = await aUserWithConduits(now);
+    const add = await applyIntent(
+      pool, uid,
+      { type: 'add-conduit-link', payload: { aId: 'cc-1', bId: 'cc-2' }, seq: 2 },
+      now,
+    );
+    expect(add.ok).toBe(true);
+
+    const ack = await applyIntent(
+      pool, uid,
+      { type: 'demolish-building', payload: { islandId: 'home', buildingId: 'cc-1' }, seq: 3 },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: true, seq: 3 });
+
+    const links = (await worldSnap(uid)).conduitLinks;
+    expect(links).toHaveLength(0);
+    const buildings = await homeBuildings(uid);
+    expect(buildings.some((b) => b.id === 'cc-1')).toBe(false);
+  });
+});
+
 describe('tier-reset', () => {
   it('legal: resets a T3+ island to level 1 and deducts cost', async () => {
     const now = Date.now();

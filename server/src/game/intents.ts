@@ -102,6 +102,12 @@ import {
 import { CELL_SIZE_TILES } from '../../../src/constants.js';
 import { applyActiveBonusDelta } from '../../../src/active-bonus.js';
 import { completeTutorialStep, skipAll, restart } from '../../../src/tutorial.js';
+import {
+  addConduitLink as addConduitLinkPure,
+  canWire,
+  pruneConduitLinksForBuilding,
+  removeConduitLink as removeConduitLinkPure,
+} from '../../../src/conduits.js';
 
 export type IntentResult =
   | { ok: true }
@@ -326,6 +332,7 @@ export const INTENTS: Record<string, IntentHandler> = {
       // Mirror LOCAL: a transport building's routes drain when the building is
       // removed — in-flight cargo finishes, then tickRoutes prunes them.
       drainRoutesForBuilding(game.world, buildingId);
+      pruneConduitLinksForBuilding(game.world, buildingId);
       return { ok: true };
     },
   },
@@ -976,6 +983,36 @@ export const INTENTS: Record<string, IntentHandler> = {
       } else {
         route.draining = true;
       }
+      return { ok: true };
+    },
+  },
+
+  // add-conduit-link — §4.5 wire two conduit buildings. Player supplies
+  // { aId, bId }. The pure `canWire` checks existence, conduit-ness, duplicate,
+  // and cross-island lattice rules; the handler forwards its reason on failure.
+  'add-conduit-link': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { aId, bId } = payload;
+      if (typeof aId !== 'string') return { ok: false, error: 'aId must be a string' };
+      if (typeof bId !== 'string') return { ok: false, error: 'bId must be a string' };
+      const result = canWire(game.world, aId, bId);
+      if (!result.ok) return { ok: false, error: result.reason ?? 'cannot wire' };
+      addConduitLinkPure(game.world, aId, bId);
+      return { ok: true };
+    },
+  },
+
+  // remove-conduit-link — §4.5 unwires two conduit buildings. Player supplies
+  // { aId, bId }. Removal is order-insensitive and silently no-ops when the
+  // link does not exist, matching LOCAL behavior.
+  'remove-conduit-link': {
+    apply(game: LiveGame, payload: unknown): IntentResult {
+      if (!isRecord(payload)) return { ok: false, error: 'malformed payload' };
+      const { aId, bId } = payload;
+      if (typeof aId !== 'string') return { ok: false, error: 'aId must be a string' };
+      if (typeof bId !== 'string') return { ok: false, error: 'bId must be a string' };
+      removeConduitLinkPure(game.world, aId, bId);
       return { ok: true };
     },
   },
