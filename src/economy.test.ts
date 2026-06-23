@@ -1020,6 +1020,31 @@ describe('§5.3 cable network — computeRates honours cableComponent.unified', 
     });
     expect(state.batteryStoredWs).toBe(0);
   });
+
+  it('battery a hair below cap with a power surplus does not freeze the integrator (§13.3 battery-full anti-freeze)', () => {
+    // Regression (live home-island freeze, 2026-06-23): a battery 0.01 Ws below
+    // cap with a power surplus gives fillTimeSec ≈ 0, so the battery segment
+    // boundary lands at ~t — femtosecond segments that exhaust the 10k safety
+    // counter and accrue NOTHING. The boundary must clamp to ≥ t+1ms (mirrors
+    // findNextCapEvent's Fix 3.6 and the empty-side BATTERY_EMPTY_THRESHOLD_WS).
+    const state = makeState({
+      buildings: [
+        { id: 'bb1', defId: 'battery_bank', x: 0, y: 0 },
+        { id: 'wt1', defId: 'wind_turbine', x: 10, y: 0 }, // ~100 kW → surplus
+        { id: 'm1', defId: 'iron_mine', x: 20, y: 0 },     // ~25 kW, makes iron_ore
+      ],
+      batteryStoredWs: 5_000 * 3600 - 1e-6, // a sliver below the battery_bank cap
+      storageCaps: blankCaps(100_000),
+    });
+    // Realistic perf-clock magnitude: at t≈1.78e12 ms, `t + femtoseconds` rounds
+    // back to t (FP precision), so the unclamped boundary makes segEndMs == t and
+    // dtSec == 0 — the charge never applies and the freeze is permanent. (At t=0
+    // the tiny boundary IS representable, so the bug would NOT reproduce.)
+    const NOW = 1_782_000_000_000;
+    state.lastTick = NOW;
+    advanceIsland(state, NOW + 60_000); // 60 s — must integrate, not femto-freeze
+    expect(state.inventory.iron_ore ?? 0).toBeGreaterThan(0);
+  });
 });
 
 describe('power (§5.1)', () => {

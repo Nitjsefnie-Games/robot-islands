@@ -2782,11 +2782,19 @@ export function advanceIsland(
     } else if (rawBalance > 0 && maxCap > 0 && state.batteryStoredWs < maxCap) {
       const surplus = rawBalance;
       const fillTimeSec = (maxCap - state.batteryStoredWs) / surplus;
-      nextBatteryMs = t + fillTimeSec * 1000;
+      // Anti-freeze (mirrors findNextCapEvent's Fix 3.6): a battery a hair below
+      // cap with a large surplus gives fillTimeSec ≈ 0, landing this boundary at
+      // ~t. That makes femtosecond segments that exhaust the 10k safety counter
+      // and accrue nothing (the §13.3 battery-full freeze). Clamp to ≥ t+1ms so
+      // the segment integrates, applyRates pins batteryStoredWs to maxCap, and
+      // the next segment sees exact-full (guard below fails ⇒ no recurring event).
+      nextBatteryMs = Math.max(t + fillTimeSec * 1000, t + 1);
     } else if (rawBalance < 0 && state.batteryStoredWs >= BATTERY_EMPTY_THRESHOLD_WS && maxCap > 0) {
       const deficit = -rawBalance;
       const depletionTimeSec = state.batteryStoredWs / deficit;
-      nextBatteryMs = t + depletionTimeSec * 1000;
+      // Same anti-freeze clamp as the fill branch: a near-empty battery draining
+      // gives depletionTimeSec ≈ 0 → land at ≥ t+1ms so the segment progresses.
+      nextBatteryMs = Math.max(t + depletionTimeSec * 1000, t + 1);
     }
     const utilById = new Map<string, number>();
     for (const br of byBuilding) utilById.set(br.building.id, br.utilization);
