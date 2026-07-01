@@ -30,6 +30,7 @@ import { mountPanel, Zone } from './ui-zones.js';
 import type { MutationGateway } from './mutation-gateway.js';
 import type { ResourceId } from './recipes.js';
 import {
+  BIOME_MAX_RADII,
   ISLAND_NAME_MAX_LEN,
   validateIslandName,
   type Biome,
@@ -750,7 +751,11 @@ export function mountConstructionUi(
       if (!candidate.biome) candidate.biome = 'plains';
       if (!candidate.major) candidate.major = 4;
       if (!candidate.minor) candidate.minor = 4;
-      candidate.cx = founderSpec.cx + founderSpec.majorRadius + candidate.major + 6;
+      candidate.cx =
+        founderSpec.cx +
+        Math.max(founderSpec.majorRadius, BIOME_MAX_RADII[founderSpec.biome].major) +
+        candidate.major +
+        6;
       candidate.cy = founderSpec.cy;
     }
 

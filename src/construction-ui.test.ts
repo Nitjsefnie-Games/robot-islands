@@ -8,6 +8,7 @@ import type { IslandState } from './economy.js';
 import type { MutationGateway } from './mutation-gateway.js';
 import { tileInscribedInEllipse } from './island.js';
 import { tileToCell, cellKey } from './discovery.js';
+import { computePlacementValidity, type ConstructionCandidate } from './construction-placement.js';
 
 function makeRemoteGateway(result: { ok: true } | { ok: false; error: string }): MutationGateway {
   return {
@@ -111,5 +112,33 @@ describe('mountConstructionUi — REMOTE construct', () => {
     expect(ui.isVisible()).toBe(false);
     expect(nameInput.value).toBe('');
     expect(onConstruct).not.toHaveBeenCalled();
+  });
+
+  it('seeds the default candidate clear of the founder\'s max-growth anchor zone', () => {
+    const { world, islandStates } = makeWorld();
+    const candidate: ConstructionCandidate = {
+      founderId: '',
+      biome: 'plains',
+      major: 4,
+      minor: 4,
+      cx: 0,
+      cy: 0,
+    };
+
+    const ui = mountConstructionUi(container, {
+      world,
+      islandStates,
+      candidate,
+      onConstruct: vi.fn(),
+    });
+
+    ui.show();
+
+    // Reveal the footprint at the seeded default so discovery does not mask
+    // the anti-leapfrog check.
+    revealFootprint(world, candidate.cx, candidate.cy);
+
+    const v = computePlacementValidity(world, islandStates, candidate);
+    expect(v.reason).not.toBe('leapfrog-anchor');
   });
 });

@@ -73,7 +73,7 @@ function cand(over: Partial<ConstructionCandidate> = {}): ConstructionCandidate 
 describe('computePlacementValidity', () => {
   it('returns unknown-founder when the founder id is not in state', () => {
     const states = new Map<string, IslandState>();
-    const w = world(states, revealFootprint(200, 200));
+    const w = world(states, revealFootprint(50, 50));
     expect(computePlacementValidity(w, states, cand()).reason).toBe('unknown-founder');
   });
 
