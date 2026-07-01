@@ -61,7 +61,9 @@ describe('mountConstructionUi — REMOTE construct', () => {
 
   it('#47: closes and resets the panel on a successful REMOTE construct', async () => {
     const { world, islandStates } = makeWorld();
-    revealFootprint(world, 200, 200);
+    // r16 founder at (0,0); (50,50) is anchor-clear (50-28-4=18), in-range
+    // (50-16-4=30 ≤ 48), and ratio-legal (no prior artificial islands).
+    revealFootprint(world, 50, 50);
     const gateway = makeRemoteGateway({ ok: true });
     const onConstruct = vi.fn();
 
@@ -85,13 +87,13 @@ describe('mountConstructionUi — REMOTE construct', () => {
     founderSelect.value = 'home';
     founderSelect.dispatchEvent(new Event('change'));
 
-    // Pick a non-overlapping, fully-revealed position.
+    // Pick a non-overlapping, fully-revealed, anti-leapfrog-legal position.
     const numberInputs = container.querySelectorAll('input[type="number"]');
     const posXInput = numberInputs[0] as HTMLInputElement;
     const posYInput = numberInputs[1] as HTMLInputElement;
-    posXInput.value = '200';
+    posXInput.value = '50';
     posXInput.dispatchEvent(new Event('input'));
-    posYInput.value = '200';
+    posYInput.value = '50';
     posYInput.dispatchEvent(new Event('input'));
 
     // Click the Construct button.
