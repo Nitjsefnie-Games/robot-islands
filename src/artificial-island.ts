@@ -207,6 +207,9 @@ export function constructIsland(
     buildings: [],
     modifiers: rollModifiersArtificial(worldSeed, biome, islandId, nowMs),
     artificial: true,
+    // §2.5 anti-leapfrog: attribute this island to its founder for the
+    // per-founder ratio gate. Survives merges via the lobe's own founderId.
+    founderId: founderSpec.id,
   });
   const newState = makeInitialIslandState(newSpec, nowMs);
   return { newSpec, newState };

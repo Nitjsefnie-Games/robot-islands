@@ -144,6 +144,7 @@ export function performMerge(
     // §3.6 terrain seed: the absorbed island's id, so its terrain (resource
     // veins included) reproduces under the lobe's own biome post-merge.
     originId: absorbed.id,
+    founderId: absorbed.founderId,
     major: absorbed.majorRadius,
     minor: absorbed.minorRadius,
     rotation: 0,
@@ -159,6 +160,7 @@ export function performMerge(
       absorber.extraEllipses.push({
         biome: e.biome ?? absorbed.biome,
         originId: e.originId ?? absorbed.id,
+        founderId: e.founderId,
         major: e.major,
         minor: e.minor,
         rotation: e.rotation,
