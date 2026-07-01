@@ -4,7 +4,7 @@
 // this module computes whether that candidate is buildable. NO pixi import.
 
 import { validateConstruction, type ValidationReason } from './artificial-island.js';
-import { positionIsFree, regionDiscoveredOrVisible } from './construction-gate.js';
+import { positionIsFree, regionDiscoveredOrVisible, validateArtificialPlacement, type ArtificialPlacementReason } from './construction-gate.js';
 import type { IslandState } from './economy.js';
 import type { Biome, WorldState } from './world.js';
 
@@ -19,6 +19,7 @@ export interface ConstructionCandidate {
 
 export type ConstructPlacementReason =
   | ValidationReason
+  | ArtificialPlacementReason
   | 'unknown-founder'
   | 'position-occupied'
   | 'in-unknown-space';
@@ -29,9 +30,9 @@ export interface PlacementValidity {
 }
 
 /** Validity precedence: founder existence, then SPATIAL gates (overlap,
- *  discovery) so the ghost reds correctly even when also unaffordable, then
- *  the per-island validateConstruction bundle (tier / PC / radii / materials /
- *  biome). */
+ *  discovery, anti-leapfrog anchor/range) so the ghost reds correctly even when
+ *  also unaffordable, then the per-island validateConstruction bundle (tier /
+ *  PC / radii / materials / biome). */
 export function computePlacementValidity(
   world: WorldState,
   islandStates: Map<string, IslandState>,
@@ -47,6 +48,9 @@ export function computePlacementValidity(
   if (!regionDiscoveredOrVisible(world, cand.cx, cand.cy, cand.major, cand.minor)) {
     return { ok: false, reason: 'in-unknown-space' };
   }
+
+  const anti = validateArtificialPlacement(world, spec, cand.cx, cand.cy, cand.major, cand.minor);
+  if (!anti.ok) return { ok: false, reason: anti.reason };
 
   const v = validateConstruction(state, spec, {
     biome: cand.biome,
@@ -64,7 +68,9 @@ export function computePlacementValidity(
 export function placementBlocksGhost(reason: ConstructPlacementReason | undefined): boolean {
   return reason === 'position-occupied'
     || reason === 'in-unknown-space'
-    || reason === 'radius-too-large';
+    || reason === 'radius-too-large'
+    || reason === 'leapfrog-anchor'
+    || reason === 'out-of-range';
 }
 
 /** Hit-test a world-tile point against a candidate ghost ellipse.

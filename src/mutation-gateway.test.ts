@@ -116,6 +116,34 @@ function worldWithMergedIsland() {
   return { now, world, islandStates, home };
 }
 
+function makeHomeForConstruction(now: number) {
+  const { world, islandStates } = createNewGame(now);
+  const home = world.islands.find((s) => s.id === 'home')!;
+  const state = islandStates.get('home')!;
+  state.level = 15;
+  home.buildings.push({
+    id: 'pc-1', defId: 'platform_constructor', x: 0, y: 0,
+    constructionRemainingMs: 0, placedAt: now,
+  });
+  state.buildings = home.buildings;
+  state.inventory.steel_beam = 10000;
+  state.inventory.concrete = 10000;
+  return { now, world, islandStates, home, state };
+}
+
+function revealFootprint(world: import('./world.js').WorldState, cx: number, cy: number): void {
+  const major = 4, minor = 4;
+  const xMin = -Math.ceil(major), xMax = Math.ceil(major) - 1;
+  const yMin = -Math.ceil(minor), yMax = Math.ceil(minor) - 1;
+  for (let dy = yMin; dy <= yMax; dy++) {
+    for (let dx = xMin; dx <= xMax; dx++) {
+      if (!tileInscribedInEllipse(dx, dy, major, minor)) continue;
+      const c = tileToCell(cx + dx, cy + dy);
+      world.revealedCells.add(cellKey(c.cellX, c.cellY));
+    }
+  }
+}
+
 function makeDrainingRoute() {
   const { now, world, islandStates, colony } = makeTwoPopulatedIslands();
   const gateway = makeLocalGateway(world, islandStates);
@@ -288,8 +316,8 @@ describe('makeLocalGateway — rename / edit-biome / construct-island parity', (
     state.buildings = home.buildings;
     state.inventory.steel_beam = 10000;
     state.inventory.concrete = 10000;
-    // Reveal the target footprint cells at cx=100, cy=100, radii 4x4.
-    const cx = 100, cy = 100, major = 4, minor = 4;
+    // Reveal the target footprint cells at cx=50, cy=50, radii 4x4.
+    const cx = 50, cy = 50, major = 4, minor = 4;
     const xMin = -Math.ceil(major), xMax = Math.ceil(major) - 1;
     const yMin = -Math.ceil(minor), yMax = Math.ceil(minor) - 1;
     for (let dy = yMin; dy <= yMax; dy++) {
@@ -306,15 +334,15 @@ describe('makeLocalGateway — rename / edit-biome / construct-island parity', (
         biome: 'plains',
         majorRadius: 4,
         minorRadius: 4,
-        cx: 100,
-        cy: 100,
+        cx: 50,
+        cy: 50,
       }),
     );
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     // Artificial-island ids are now position-derived (`art-<cx>-<cy>`) so they
     // can't recycle a number freed by a §3.6 merge — see `artificialIslandId`.
-    expect(result.value!.newSpec.id).toBe('art-100-100');
+    expect(result.value!.newSpec.id).toBe('art-50-50');
     expect(result.value!.newSpec.biome).toBe('plains');
   });
 
@@ -345,6 +373,69 @@ describe('makeLocalGateway — rename / edit-biome / construct-island parity', (
     );
     expect(result.ok).toBe(false);
     expect((result as { ok: false; error: string }).error).toBe('in-unknown-space');
+  });
+
+  it('rejects a placement inside the founder\'s max-growth footprint (leapfrog-anchor)', () => {
+    const now = Date.now();
+    const { world, islandStates } = makeHomeForConstruction(now);
+    revealFootprint(world, 28, 0);
+    const gateway = makeLocalGateway(world, islandStates);
+    const result = unwrapGatewayResult(
+      gateway.constructIsland({
+        founderIslandId: 'home',
+        biome: 'plains',
+        majorRadius: 4,
+        minorRadius: 4,
+        cx: 28,
+        cy: 0,
+      }),
+    );
+    expect(result.ok).toBe(false);
+    expect((result as { ok: false; reason?: string }).reason).toBe('leapfrog-anchor');
+  });
+
+  it('rejects a placement farther than 48 tiles from the founder (out-of-range)', () => {
+    const now = Date.now();
+    const { world, islandStates } = makeHomeForConstruction(now);
+    revealFootprint(world, 120, 0);
+    const gateway = makeLocalGateway(world, islandStates);
+    const result = unwrapGatewayResult(
+      gateway.constructIsland({
+        founderIslandId: 'home',
+        biome: 'plains',
+        majorRadius: 4,
+        minorRadius: 4,
+        cx: 120,
+        cy: 0,
+      }),
+    );
+    expect(result.ok).toBe(false);
+    expect((result as { ok: false; reason?: string }).reason).toBe('out-of-range');
+  });
+
+  it('rejects the build exceeding the 2×natural budget (ratio-exceeded)', () => {
+    const now = Date.now();
+    const { world, islandStates } = makeHomeForConstruction(now);
+    // Two prior artificial islands attributed to home; unpopulated and far away
+    // so they add no anchor footprint.
+    world.islands.push(
+      { id: 'art-fake-1', name: 'art-fake-1', biome: 'plains', cx: 1000, cy: 0, majorRadius: 4, minorRadius: 4, populated: false, discovered: false, buildings: [], modifiers: [], artificial: true, founderId: 'home' } as unknown as import('./world.js').IslandSpec,
+      { id: 'art-fake-2', name: 'art-fake-2', biome: 'plains', cx: 2000, cy: 0, majorRadius: 4, minorRadius: 4, populated: false, discovered: false, buildings: [], modifiers: [], artificial: true, founderId: 'home' } as unknown as import('./world.js').IslandSpec,
+    );
+    revealFootprint(world, 40, 0);
+    const gateway = makeLocalGateway(world, islandStates);
+    const result = unwrapGatewayResult(
+      gateway.constructIsland({
+        founderIslandId: 'home',
+        biome: 'plains',
+        majorRadius: 4,
+        minorRadius: 4,
+        cx: 40,
+        cy: 0,
+      }),
+    );
+    expect(result.ok).toBe(false);
+    expect((result as { ok: false; reason?: string }).reason).toBe('ratio-exceeded');
   });
 });
 

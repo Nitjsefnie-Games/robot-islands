@@ -102,6 +102,9 @@ const REASON_LABEL: Readonly<Record<ConstructPlacementReason, string>> = {
   'invalid-biome': 'Unknown biome selection',
   'position-occupied': 'Position overlaps an existing island',
   'in-unknown-space': 'Extends into unknown space',
+  'leapfrog-anchor': 'Too close — an existing island could grow to reach here',
+  'out-of-range': 'Too far from the founder island',
+  'ratio-exceeded': 'Founder needs more natural land to support another artificial island',
   'unknown-founder': 'Select a founder island',
 };
 

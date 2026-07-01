@@ -2643,8 +2643,8 @@ describe('construct-island', () => {
       state.buildings = home.buildings;
       state.inventory.steel_beam = 10000;
       state.inventory.concrete = 10000;
-      // Reveal the target footprint cells at cx=100, cy=100, radii 4x4.
-      const cx = 100, cy = 100, major = 4, minor = 4;
+      // Reveal the target footprint cells at cx=50, cy=50, radii 4x4.
+      const cx = 50, cy = 50, major = 4, minor = 4;
       const xMin = -Math.ceil(major), xMax = Math.ceil(major) - 1;
       const yMin = -Math.ceil(minor), yMax = Math.ceil(minor) - 1;
       for (let dy = yMin; dy <= yMax; dy++) {
@@ -2665,8 +2665,8 @@ describe('construct-island', () => {
           biome: 'plains',
           majorRadius: 4,
           minorRadius: 4,
-          cx: 100,
-          cy: 100,
+          cx: 50,
+          cy: 50,
           displayName: 'Artificial One',
         },
         seq: 2,
@@ -2676,7 +2676,7 @@ describe('construct-island', () => {
     expect(ack).toMatchObject({ ok: true, seq: 2 });
 
     const world = await worldSnap(uid);
-    const artificial = world.islands.find((s: any) => s.id === 'art-100-100');
+    const artificial = world.islands.find((s: any) => s.id === 'art-50-50');
     expect(artificial).toBeTruthy();
     expect(artificial.name).toBe('Artificial One');
     expect(artificial.biome).toBe('plains');
@@ -2797,8 +2797,8 @@ describe('construct-island', () => {
       state.buildings = home.buildings;
       state.inventory.steel_beam = 10000;
       state.inventory.concrete = 10000;
-      // Reveal the target footprint cells at cx=100, cy=100, radii 4x4.
-      const cx = 100, cy = 100, major = 4, minor = 4;
+      // Reveal the target footprint cells at cx=50, cy=50, radii 4x4.
+      const cx = 50, cy = 50, major = 4, minor = 4;
       const xMin = -Math.ceil(major), xMax = Math.ceil(major) - 1;
       const yMin = -Math.ceil(minor), yMax = Math.ceil(minor) - 1;
       for (let dy = yMin; dy <= yMax; dy++) {
@@ -2819,8 +2819,8 @@ describe('construct-island', () => {
           biome: 'plains',
           majorRadius: 4,
           minorRadius: 4,
-          cx: 100,
-          cy: 100,
+          cx: 50,
+          cy: 50,
           displayName: 'Revealed Island',
         },
         seq: 11,
@@ -2830,9 +2830,150 @@ describe('construct-island', () => {
     expect(ack).toMatchObject({ ok: true, seq: 11 });
 
     const world = await worldSnap(uid);
-    const artificial = world.islands.find((s: any) => s.id === 'art-100-100');
+    const artificial = world.islands.find((s: any) => s.id === 'art-50-50');
     expect(artificial).toBeTruthy();
     expect(artificial.biome).toBe('plains');
+  });
+
+  it('rejects a placement inside the founder\'s max-growth footprint (leapfrog-anchor)', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
+      const home = world.islands.find((s: any) => s.id === 'home');
+      const state = islandStates.get('home');
+      state.level = 15;
+      home.buildings.push({
+        id: 'pc-1', defId: 'platform_constructor', x: 0, y: 0,
+        constructionRemainingMs: 0, placedAt: now,
+      });
+      state.buildings = home.buildings;
+      state.inventory.steel_beam = 10000;
+      state.inventory.concrete = 10000;
+      // r16 founder at (0,0); r4 candidate at (28,0) overlaps the plains
+      // max-growth (r28) reach while clearing the current footprint.
+      const cx = 28, cy = 0, major = 4, minor = 4;
+      const xMin = -Math.ceil(major), xMax = Math.ceil(major) - 1;
+      const yMin = -Math.ceil(minor), yMax = Math.ceil(minor) - 1;
+      for (let dy = yMin; dy <= yMax; dy++) {
+        for (let dx = xMin; dx <= xMax; dx++) {
+          if (!tileInscribedInEllipse(dx, dy, major, minor)) continue;
+          const c = tileToCell(cx + dx, cy + dy);
+          world.revealedCells.add(cellKey(c.cellX, c.cellY));
+        }
+      }
+    });
+
+    const ack = await applyIntent(
+      pool, uid,
+      {
+        type: 'construct-island',
+        payload: {
+          founderIslandId: 'home',
+          biome: 'plains',
+          majorRadius: 4,
+          minorRadius: 4,
+          cx: 28,
+          cy: 0,
+        },
+        seq: 12,
+      },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: false, error: 'leapfrog-anchor' });
+  });
+
+  it('rejects a placement farther than 48 tiles from the founder (out-of-range)', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
+      const home = world.islands.find((s: any) => s.id === 'home');
+      const state = islandStates.get('home');
+      state.level = 15;
+      home.buildings.push({
+        id: 'pc-1', defId: 'platform_constructor', x: 0, y: 0,
+        constructionRemainingMs: 0, placedAt: now,
+      });
+      state.buildings = home.buildings;
+      state.inventory.steel_beam = 10000;
+      state.inventory.concrete = 10000;
+      const cx = 120, cy = 0, major = 4, minor = 4;
+      const xMin = -Math.ceil(major), xMax = Math.ceil(major) - 1;
+      const yMin = -Math.ceil(minor), yMax = Math.ceil(minor) - 1;
+      for (let dy = yMin; dy <= yMax; dy++) {
+        for (let dx = xMin; dx <= xMax; dx++) {
+          if (!tileInscribedInEllipse(dx, dy, major, minor)) continue;
+          const c = tileToCell(cx + dx, cy + dy);
+          world.revealedCells.add(cellKey(c.cellX, c.cellY));
+        }
+      }
+    });
+
+    const ack = await applyIntent(
+      pool, uid,
+      {
+        type: 'construct-island',
+        payload: {
+          founderIslandId: 'home',
+          biome: 'plains',
+          majorRadius: 4,
+          minorRadius: 4,
+          cx: 120,
+          cy: 0,
+        },
+        seq: 13,
+      },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: false, error: 'out-of-range' });
+  });
+
+  it('rejects the build exceeding the 2×natural budget (ratio-exceeded)', async () => {
+    const now = Date.now();
+    const uid = await aUserWithModifiedGame(now, (world, islandStates) => {
+      const home = world.islands.find((s: any) => s.id === 'home');
+      const state = islandStates.get('home');
+      state.level = 15;
+      home.buildings.push({
+        id: 'pc-1', defId: 'platform_constructor', x: 0, y: 0,
+        constructionRemainingMs: 0, placedAt: now,
+      });
+      state.buildings = home.buildings;
+      state.inventory.steel_beam = 10000;
+      state.inventory.concrete = 10000;
+      // Two prior artificial islands attributed to home; unpopulated and far
+      // away so they add no anchor footprint.
+      world.islands.push(
+        { id: 'art-fake-1', name: 'art-fake-1', biome: 'plains', cx: 1000, cy: 0, majorRadius: 4, minorRadius: 4, populated: false, discovered: false, buildings: [], modifiers: [], artificial: true, founderId: 'home' },
+        { id: 'art-fake-2', name: 'art-fake-2', biome: 'plains', cx: 2000, cy: 0, majorRadius: 4, minorRadius: 4, populated: false, discovered: false, buildings: [], modifiers: [], artificial: true, founderId: 'home' },
+      );
+      // Anchor- and range-legal spot: 40 - 28 - 4 = 8 clear, 40 - 16 - 4 = 20 ≤ 48.
+      const cx = 40, cy = 0, major = 4, minor = 4;
+      const xMin = -Math.ceil(major), xMax = Math.ceil(major) - 1;
+      const yMin = -Math.ceil(minor), yMax = Math.ceil(minor) - 1;
+      for (let dy = yMin; dy <= yMax; dy++) {
+        for (let dx = xMin; dx <= xMax; dx++) {
+          if (!tileInscribedInEllipse(dx, dy, major, minor)) continue;
+          const c = tileToCell(cx + dx, cy + dy);
+          world.revealedCells.add(cellKey(c.cellX, c.cellY));
+        }
+      }
+    });
+
+    const ack = await applyIntent(
+      pool, uid,
+      {
+        type: 'construct-island',
+        payload: {
+          founderIslandId: 'home',
+          biome: 'plains',
+          majorRadius: 4,
+          minorRadius: 4,
+          cx: 40,
+          cy: 0,
+        },
+        seq: 14,
+      },
+      now,
+    );
+    expect(ack).toMatchObject({ ok: false, error: 'ratio-exceeded' });
   });
 });
 

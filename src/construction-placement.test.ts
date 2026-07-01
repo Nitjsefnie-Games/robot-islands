@@ -67,7 +67,7 @@ function world(states: Map<string, IslandState>, revealed: Set<string>): WorldSt
 const enough = { steel_beam: 100000, concrete: 100000 } as Partial<Record<ResourceId, number>>;
 
 function cand(over: Partial<ConstructionCandidate> = {}): ConstructionCandidate {
-  return { founderId: 'founder', biome: 'plains', major: 4, minor: 4, cx: 200, cy: 200, ...over };
+  return { founderId: 'founder', biome: 'plains', major: 4, minor: 4, cx: 50, cy: 50, ...over };
 }
 
 describe('computePlacementValidity', () => {
@@ -94,15 +94,30 @@ describe('computePlacementValidity', () => {
 
   it('surfaces insufficient-materials only after spatial checks pass', () => {
     const states = new Map([['founder', founderState(15, {})]]); // no materials
-    const w = world(states, revealFootprint(200, 200));
+    const w = world(states, revealFootprint(50, 50));
     const v = computePlacementValidity(w, states, cand());
     expect(v.reason).toBe('insufficient-materials');
   });
 
   it('returns ok when founder valid, position free, revealed, affordable', () => {
     const states = new Map([['founder', founderState(15, enough)]]);
-    const w = world(states, revealFootprint(200, 200));
+    const w = world(states, revealFootprint(50, 50));
     expect(computePlacementValidity(w, states, cand())).toEqual({ ok: true });
+  });
+
+  it('computePlacementValidity surfaces anti-leapfrog reasons after the spatial gates', () => {
+    const states = new Map([['founder', founderState(15, enough)]]);
+    // r14 founder at (0,0); r4 candidate at (28,0) is clear of the current
+    // footprint but overlaps the plains max-growth (r28) reach.
+    const w = world(states, revealFootprint(28, 0));
+    const v = computePlacementValidity(w, states, cand({ cx: 28, cy: 0 }));
+    expect(v.reason).toBe('leapfrog-anchor');
+  });
+
+  it('placementBlocksGhost reds spatial anti-leapfrog reasons, not the budget one', () => {
+    expect(placementBlocksGhost('leapfrog-anchor')).toBe(true);
+    expect(placementBlocksGhost('out-of-range')).toBe(true);
+    expect(placementBlocksGhost('ratio-exceeded')).toBe(false);
   });
 
   it('placementBlocksGhost reds the spatial reasons only', () => {

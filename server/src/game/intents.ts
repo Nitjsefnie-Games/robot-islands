@@ -85,7 +85,7 @@ import { convertToServitor } from '../../../src/servitor.js';
 import { BIOME_DEFS } from '../../../src/biomes.js';
 import { tryRefreshMaintenance } from '../../../src/maintenance.js';
 import { hasOperationalBuilding } from '../../../src/building-operational.js';
-import { positionIsFree, regionDiscoveredOrVisible } from '../../../src/construction-gate.js';
+import { positionIsFree, regionDiscoveredOrVisible, validateArtificialPlacement } from '../../../src/construction-gate.js';
 import { candidateAnchors } from '../../../src/anchor-picker.js';
 import { ALL_RESOURCES, RECIPES, type ResourceId } from '../../../src/recipes.js';
 import { setGenesisTarget, spendTimeLock } from '../../../src/economy.js';
@@ -922,6 +922,10 @@ export const INTENTS: Record<string, IntentHandler> = {
       if (!regionDiscoveredOrVisible(game.world, cx, cy, majorRadius, minorRadius)) {
         return { ok: false, error: 'in-unknown-space' };
       }
+      // §2.5 anti-leapfrog: anchor (max-growth reach), range (founder-local),
+      // ratio (per-founder budget) — same pure gate the UI + LOCAL run.
+      const anti = validateArtificialPlacement(game.world, founder.spec, cx, cy, majorRadius, minorRadius);
+      if (!anti.ok) return { ok: false, error: anti.reason ?? 'placement invalid' };
       const id = artificialIslandId(cx, cy);
       let name: string | undefined;
       if (typeof displayName === 'string') {
