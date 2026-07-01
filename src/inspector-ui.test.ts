@@ -110,6 +110,7 @@ describe('mountInspectorUi', () => {
       satellites: [],
       repairDrones: [],
       debrisFields: [],
+      conduitLinks: [],
     } as unknown as WorldState;
     return {
       world,
@@ -209,6 +210,7 @@ describe('mountInspectorUi', () => {
       satellites: [],
       repairDrones: [],
       debrisFields: [],
+      conduitLinks: [],
     } as unknown as WorldState;
     // getRatesContext returns a §13.3 partial pooled override that pools NOTHING
     // (empty inventory) — the real shared-network case that regressed. The
@@ -248,6 +250,7 @@ describe('mountInspectorUi', () => {
       satellites: [],
       repairDrones: [],
       debrisFields: [],
+      conduitLinks: [],
     } as unknown as WorldState;
     const onSetIgnoreCap = vi.fn();
     const deps: InspectorDeps = {
