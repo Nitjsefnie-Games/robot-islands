@@ -76,7 +76,7 @@ export const STORAGE_KEY_DISPLAY = 'robot-islands:save';
 
 /** Current schema version. `loadWorld` rejects (returns null) any
  *  snapshot whose `v` is not strictly equal to this. */
-export const SCHEMA_VERSION = 32 as const;
+export const SCHEMA_VERSION = 33 as const;
 
 /** Versions that loadWorld accepts. The walker (loadWorld) chains
  *  migrateV<N>toV<N+1> functions from the lowest known version up to
@@ -84,7 +84,7 @@ export const SCHEMA_VERSION = 32 as const;
  *
  *  See AGENTS.md → "Persistence migrations" for the full "bump = migrate"
  *  policy from v7 onward. */
-export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32]);
+export const SUPPORTED_LOAD_VERSIONS: ReadonlySet<number> = new Set([7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33]);
 
 // ---------------------------------------------------------------------------
 // Serialized shapes
@@ -602,6 +602,8 @@ export type SerializedSnapshotV30 = Omit<SaveSnapshot, 'v'> & { readonly v: 30 }
 
 export type SerializedSnapshotV31 = Omit<SaveSnapshot, 'v'> & { readonly v: 31 };
 
+export type SerializedSnapshotV32 = Omit<SaveSnapshot, 'v'> & { readonly v: 32 };
+
 /** v31 → v32: introduce §4.5 cluster conduits. Old saves have no conduit
  *  links; default `world.conduitLinks` to empty so the feature is inert. */
 export function migrateV31toV32(s: SerializedSnapshotV31): SaveSnapshot {
@@ -609,6 +611,34 @@ export function migrateV31toV32(s: SerializedSnapshotV31): SaveSnapshot {
     ...s,
     v: 32 as const,
     world: { ...s.world, conduitLinks: (s.world as { conduitLinks?: unknown }).conduitLinks ?? [] },
+  } as unknown as SaveSnapshot;
+}
+
+/** v32 → v33: §2.5 anti-leapfrog founder attribution. Backfill `founderId`
+ *  on every artificial island (its own id — the true founder is unknowable
+ *  historically; self-attribution is inert because an artificial island has
+ *  0 natural constituents and can never found) and on every absorbed
+ *  artificial lobe (the absorbing island's id). Natural islands and natural
+ *  lobes are untouched. Never un-merges anything. */
+export function migrateV32toV33(s: SerializedSnapshotV32): SaveSnapshot {
+  return {
+    ...s,
+    v: 33 as const,
+    world: {
+      ...s.world,
+      islands: s.world.islands.map((isl) => {
+        const artificialSelf = (isl as { artificial?: boolean }).artificial === true;
+        const hasFounder = (isl as { founderId?: string }).founderId !== undefined;
+        return {
+          ...isl,
+          ...(artificialSelf && !hasFounder ? { founderId: isl.id } : {}),
+          extraEllipses: isl.extraEllipses?.map((e) =>
+            (e.originId ?? '').startsWith('art-') && (e as { founderId?: string }).founderId === undefined
+              ? { ...e, founderId: isl.id }
+              : e),
+        };
+      }),
+    },
   } as unknown as SaveSnapshot;
 }
 
@@ -1156,6 +1186,9 @@ export function deserializeWorld(
   }
   if ((snapshot as unknown as { v: number }).v === 31) {
     snapshot = migrateV31toV32(snapshot as unknown as SerializedSnapshotV31);
+  }
+  if ((snapshot as unknown as { v: number }).v === 32) {
+    snapshot = migrateV32toV33(snapshot as unknown as SerializedSnapshotV32);
   }
 
   if (snapshot.v !== SCHEMA_VERSION) {
