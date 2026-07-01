@@ -164,6 +164,12 @@ export interface IslandSpec {
    *  systems can deny natural-only content (rare-biome modifiers per §3.5,
    *  biome-locked uniques per §9.5). Undefined ≡ false (natural). */
   readonly artificial?: boolean;
+  /** §2.5 anti-leapfrog attribution: id of the island whose Platform
+   *  Constructor built this island. Set only on artificial islands from
+   *  schema v33 on (migration backfills older saves best-effort). Feeds the
+   *  per-founder artificial:natural ratio gate (`attributedArtificialCount`,
+   *  construction-gate.ts). Absent on natural islands. */
+  readonly founderId?: string;
   /** §3.6 island-joining: appended constituents accumulated when this island
    *  has absorbed others. Each entry is a secondary ellipse queried in addition
    *  to `majorRadius`/`minorRadius` (the primary at offset 0,0). Single-ellipse
@@ -185,6 +191,11 @@ export interface IslandSpec {
      *  merges lack it; readers default via `?? spec.id` (best-effort — a legacy
      *  lobe then uses the absorber's seed, the pre-feature look). */
     readonly originId?: string;
+    /** §2.5 anti-leapfrog attribution of an absorbed artificial constituent:
+     *  the `founderId` the island carried when it was absorbed. Undefined for
+     *  natural lobes. Lets a founder's lifetime artificial count survive the
+     *  absorbed island's removal from `world.islands` (§3.6 merge). */
+    readonly founderId?: string;
     readonly major: number;
     readonly minor: number;
     readonly rotation: number;

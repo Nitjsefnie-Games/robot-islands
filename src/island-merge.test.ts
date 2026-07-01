@@ -35,6 +35,7 @@ import {
   islandImplicitLedger,
   islandsOverlap,
   islandTileCount,
+  makeInitialIslandState,
   type IslandSpec,
   type WorldState,
 } from './world.js';
@@ -767,6 +768,37 @@ describe('performMerge', () => {
     const states = new Map<string, IslandState>([['a', makeState({ id: 'a' })]]);
     performMerge(world, states, a, b);
     expect(world.vehicles[0]?.target).toBe('a');
+  });
+
+  it('carries founderId into absorbed lobes (§2.5 attribution survives merge)', () => {
+    // absorber: natural populated island; absorbed: artificial island with founderId,
+    // itself carrying one artificial extra with its own founderId.
+    const absorber = attachTerrainAt({
+      id: 'nat-1', name: 'nat-1', biome: 'plains', cx: 0, cy: 0,
+      majorRadius: 10, minorRadius: 10, populated: true, discovered: true,
+      buildings: [], modifiers: [],
+    });
+    const absorbed = attachTerrainAt({
+      id: 'art-30-0', name: 'art-30-0', biome: 'plains', cx: 30, cy: 0,
+      majorRadius: 6, minorRadius: 6, populated: true, discovered: true,
+      buildings: [], modifiers: [], artificial: true, founderId: 'nat-1',
+      extraEllipses: [{
+        biome: 'plains', originId: 'art-44-0', major: 6, minor: 6,
+        rotation: 0, offsetX: 14, offsetY: 0, founderId: 'nat-1',
+      }],
+    });
+    const states = new Map<string, IslandState>([
+      [absorber.id, makeInitialIslandState(absorber, 0)],
+      [absorbed.id, makeInitialIslandState(absorbed, 0)],
+    ]);
+    const world = makeWorld([absorber, absorbed]);
+    performMerge(world, states, absorber, absorbed);
+    const lobes = absorber.extraEllipses!;
+    expect(lobes).toHaveLength(2);
+    expect(lobes[0]!.originId).toBe('art-30-0');
+    expect(lobes[0]!.founderId).toBe('nat-1');   // absorbed primary's founderId
+    expect(lobes[1]!.originId).toBe('art-44-0');
+    expect(lobes[1]!.founderId).toBe('nat-1');   // propagated extra's founderId
   });
 });
 

@@ -24,7 +24,7 @@ import { BUILDING_DEFS, canPlaceOnIsland, LAND_TILE_COST } from './building-defs
 import type { PlacedBuilding } from './buildings.js';
 import type { IslandState } from './economy.js';
 import { ALL_RESOURCES, type ResourceId } from './recipes.js';
-import { aggregateStorageCaps, type IslandSpec } from './world.js';
+import { aggregateStorageCaps, attachTerrainAt, makeInitialIslandState, type IslandSpec } from './world.js';
 
 // Helpers — local copies of the patterns in economy.test.ts so this file is
 // self-contained.
@@ -420,6 +420,30 @@ describe('constructIsland', () => {
         0,
       ),
     ).toThrow();
+  });
+
+  it('stamps founderId with the founding island id (§2.5 anti-leapfrog attribution)', () => {
+    const spec = attachTerrainAt({
+      id: 'founder-a', name: 'founder-a', biome: 'plains', cx: 0, cy: 0,
+      majorRadius: 10, minorRadius: 10, populated: true, discovered: true,
+      buildings: [], modifiers: [],
+    });
+    (spec.buildings as PlacedBuilding[]).push({
+      id: 'pc-1', defId: 'platform_constructor', x: 0, y: 0, rotation: 0,
+      queued: false, invalid: false, placedAt: 0, queueSeq: 1, floorLevel: 0,
+      operatingMs: 0, maintainedAt: 0, constructionTotalMs: 0, constructionRemainingMs: 0,
+    } as unknown as PlacedBuilding);
+    const state = makeInitialIslandState(spec, 0);
+    state.level = 30;
+    state.inventory['steel_beam'] = 1_000_000;
+    state.inventory['concrete'] = 10_000_000;
+    const { newSpec } = constructIsland(
+      'seed', state, spec,
+      { biome: 'plains', majorRadius: 4, minorRadius: 4 },
+      { cx: 100, cy: 100 }, 'art-100-100', 0,
+    );
+    expect(newSpec.founderId).toBe('founder-a');
+    expect(newSpec.artificial).toBe(true);
   });
 });
 
