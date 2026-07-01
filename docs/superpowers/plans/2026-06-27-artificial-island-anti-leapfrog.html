@@ -1,0 +1,389 @@
+<!-- Copyright 2026 Anthropic PBC · SPDX-License-Identifier: Apache-2.0 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Implementation plan — Artificial-island anti-leapfrog</title>
+  <style>
+    :root {
+      --ivory:    #252420;
+      --slate:    #F5F3EC;
+      --clay:     #D97757;
+      --oat:      #3A352B;
+      --olive:    #8FA56E;
+      --gray-150: #2E2C27;
+      --gray-300: #3A3833;
+      --gray-500: #8F8D82;
+      --gray-700: #CFCCC2;
+      --white:    #252420;
+
+      --serif: ui-serif, Georgia, 'Times New Roman', serif;
+      --sans:  system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono:  ui-monospace, 'SF Mono', Menlo, Monaco, monospace;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--sans);
+      background: #1B1A17;
+      color: var(--gray-700);
+      line-height: 1.55;
+      padding: 56px 32px 120px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .page { margin: 0 auto; max-width: 980px; }
+
+    header.page-head { margin-bottom: 48px; max-width: 820px; }
+
+    .eyebrow {
+      font-size: 12px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--gray-500);
+      margin-bottom: 12px;
+    }
+
+    h1 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 38px;
+      line-height: 1.15;
+      color: var(--slate);
+      margin-bottom: 18px;
+      letter-spacing: -0.01em;
+    }
+
+    .prompt-box {
+      background: var(--gray-150);
+      border: 1.5px solid var(--gray-300);
+      border-radius: 12px;
+      padding: 16px 20px;
+      font-size: 14.5px;
+      color: var(--gray-700);
+    }
+    .prompt-box .label {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    code {
+      font-family: var(--mono);
+      font-size: 0.88em;
+      background: var(--gray-150);
+      border: 1px solid var(--gray-300);
+      border-radius: 5px;
+      padding: 1px 5px;
+      color: #C9B98A;
+    }
+
+    section { margin-bottom: 64px; }
+
+    .sec-head {
+      display: flex;
+      align-items: baseline;
+      gap: 14px;
+      margin-bottom: 8px;
+    }
+    .sec-head .num {
+      font-family: var(--mono);
+      font-size: 12px;
+      background: var(--oat);
+      color: var(--slate);
+      padding: 3px 9px;
+      border-radius: 8px;
+    }
+    .sec-head h2 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 26px;
+      color: var(--slate);
+      letter-spacing: -0.01em;
+    }
+    .sec-intro {
+      font-size: 14.5px;
+      color: var(--gray-500);
+      max-width: 720px;
+      margin-bottom: 28px;
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 64px;
+    }
+    @media (max-width: 900px) { .summary { grid-template-columns: repeat(2, 1fr); } }
+    .summary .cell {
+      background: var(--white);
+      border: 1.5px solid var(--gray-300);
+      border-radius: 12px;
+      padding: 18px 20px;
+    }
+    .summary .k {
+      font-family: var(--mono);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--gray-500);
+      margin-bottom: 6px;
+    }
+    .summary .v {
+      font-size: 17px;
+      color: var(--slate);
+      font-weight: 600;
+    }
+    .summary .v.accent { color: var(--clay); }
+
+    .milestones { display: flex; flex-direction: column; gap: 0; }
+    .milestone {
+      display: grid;
+      grid-template-columns: 90px 28px 1fr;
+      gap: 0 18px;
+      position: relative;
+    }
+    .milestone .when {
+      text-align: right;
+      font-family: var(--mono);
+      font-size: 12px;
+      color: var(--gray-500);
+      padding-top: 4px;
+    }
+    .milestone .dot-col {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .milestone .dot {
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: var(--white);
+      border: 3px solid var(--clay);
+      margin-top: 4px;
+      flex-shrink: 0;
+    }
+    .milestone .line {
+      width: 2px;
+      flex: 1;
+      background: var(--gray-300);
+      margin: 4px 0;
+    }
+    .milestone:last-child .line { display: none; }
+    .milestone .body { padding-bottom: 36px; }
+    .milestone .body h3 {
+      font-family: var(--serif);
+      font-weight: 500;
+      font-size: 19px;
+      color: var(--slate);
+      margin-bottom: 4px;
+    }
+    .milestone .body p { font-size: 14px; color: var(--gray-500); margin-bottom: 10px; max-width: 680px; }
+    .milestone .tags { display: flex; gap: 8px; flex-wrap: wrap; }
+    .milestone .tag {
+      font-family: var(--mono);
+      font-size: 11.5px;
+      background: var(--gray-150);
+      border: 1px solid var(--gray-300);
+      border-radius: 6px;
+      padding: 3px 8px;
+      color: var(--gray-700);
+    }
+
+    .rules {
+      border: 1.5px solid var(--gray-300);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--white);
+      font-size: 13.5px;
+    }
+    .rules .row { display: grid; grid-template-columns: 150px 1.5fr 1.3fr; }
+    @media (max-width: 780px) { .rules .row { grid-template-columns: 1fr; } }
+    .rules .row + .row { border-top: 1.5px solid var(--gray-300); }
+    .rules .cell { padding: 14px 18px; }
+    .rules .cell + .cell { border-left: 1.5px solid var(--gray-300); }
+    @media (max-width: 780px) { .rules .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); } }
+    .rules .head { background: var(--gray-150); font-weight: 600; color: var(--slate); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .rules .name { color: var(--slate); font-weight: 600; }
+
+    .risks {
+      border: 1.5px solid var(--gray-300);
+      border-radius: 12px;
+      overflow: hidden;
+      background: var(--white);
+    }
+    .risks .row {
+      display: grid;
+      grid-template-columns: 1.6fr 90px 1.6fr;
+      gap: 0;
+    }
+    @media (max-width: 780px) { .risks .row { grid-template-columns: 1fr; } }
+    .risks .row + .row { border-top: 1.5px solid var(--gray-300); }
+    .risks .cell { padding: 14px 18px; font-size: 13.5px; }
+    .risks .cell + .cell { border-left: 1.5px solid var(--gray-300); }
+    @media (max-width: 780px) { .risks .cell + .cell { border-left: none; border-top: 1px dashed var(--gray-300); } }
+    .risks .head { background: var(--gray-150); font-weight: 600; color: var(--slate); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; }
+    .sev {
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 6px;
+      font-weight: 600;
+    }
+    .sev.med  { background: var(--oat); color: var(--slate); }
+    .sev.low  { background: #2D3A24; color: #B6CC96; }
+
+    .footer {
+      color: var(--gray-500);
+      font-size: 13px;
+      margin-top: 64px;
+      padding-top: 22px;
+      border-top: 1px solid var(--gray-300);
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+
+    <header class="page-head">
+      <div class="eyebrow">Implementation plan · Robot Islands</div>
+      <h1>Artificial-island anti-leapfrog</h1>
+      <div class="prompt-box">
+        <span class="label">Context</span>
+        Executes the approved design spec
+        (<code>docs/superpowers/specs/2026-06-27-artificial-island-anti-leapfrog-design.md</code>, commit <code>6c0ac0b</code>):
+        three placement-time gates on artificial-island construction — anchor, range, ratio —
+        enforced by one pure predicate re-run on the UI, LOCAL gateway, and server intent.
+        <strong>This page is the human-skim companion; the canonical, step-by-step artifact the
+        implementers execute is the markdown plan at
+        <code>docs/superpowers/plans/2026-06-27-artificial-island-anti-leapfrog.md</code>.</strong>
+      </div>
+    </header>
+
+    <div class="summary">
+      <div class="cell"><div class="k">Tasks</div><div class="v accent">5, sequential</div></div>
+      <div class="cell"><div class="k">Files touched</div><div class="v">9 + 6 test files</div></div>
+      <div class="cell"><div class="k">Schema</div><div class="v">v32 → v33</div></div>
+      <div class="cell"><div class="k">Branch</div><div class="v">anti-leapfrog</div></div>
+    </div>
+
+    <section>
+      <div class="sec-head"><span class="num">01</span><h2>The three gates</h2></div>
+      <p class="sec-intro">All pure, all in <code>construction-gate.ts</code>, evaluated in this order (spatial before budget) by <code>validateArtificialPlacement</code>.</p>
+      <div class="rules">
+        <div class="row">
+          <div class="cell head">Gate</div>
+          <div class="cell head">Predicate</div>
+          <div class="cell head">Kills</div>
+        </div>
+        <div class="row">
+          <div class="cell name">leapfrog-anchor</div>
+          <div class="cell">Candidate footprint must not touch the <strong>max-growth footprint</strong> of any populated island (every constituent at its <code>BIOME_MAX_RADII</code> caps, via the same <code>islandsOverlap</code> tile test merging uses).</div>
+          <div class="cell">The cheap swallow: growing an existing island one reclamation step onto a pre-positioned platform.</div>
+        </div>
+        <div class="row">
+          <div class="cell name">out-of-range</div>
+          <div class="cell">Chebyshev bbox gap to the nearest <strong>founder</strong> constituent ≤ <code>ARTIFICIAL_RANGE_TILES = 48</code> (<code>founderRangeGap</code>).</div>
+          <div class="cell">Distant land-grabs; keeps construction local to the builder.</div>
+        </div>
+        <div class="row">
+          <div class="cell name">ratio-exceeded</div>
+          <div class="cell">Founder's <strong>lifetime</strong> artificial count (<code>founderId</code>-attributed, standalone + absorbed lobes) + 1 ≤ <code>2 ×</code> its natural constituents.</div>
+          <div class="cell">Artificial land bootstrapping itself; merging a platform away never refunds budget.</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">02</span><h2>Tasks</h2></div>
+      <p class="sec-intro">Each task is TDD (failing test → implement → pass → typecheck → commit) on the <code>anti-leapfrog</code> branch. Full step-by-step code lives in the markdown plan.</p>
+
+      <div class="milestones">
+        <div class="milestone">
+          <div class="when">Task 1</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Founder attribution plumbing</h3>
+            <p><code>founderId</code> on <code>IslandSpec</code> + <code>extraEllipses</code> entries; stamped by <code>constructIsland</code>; carried through <code>performMerge</code> (absorbed primary + propagated extras).</p>
+            <div class="tags"><span class="tag">world.ts</span><span class="tag">artificial-island.ts</span><span class="tag">island-merge.ts</span></div>
+          </div>
+        </div>
+        <div class="milestone">
+          <div class="when">Task 2</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>The three pure predicates</h3>
+            <p><code>maxGrowthFootprintTouches</code>, <code>founderRangeGap</code>, <code>naturalConstituentCount</code>, <code>attributedArtificialCount</code>, <code>validateArtificialPlacement</code> + constants; full unit coverage incl. the exact leapfrog placement.</p>
+            <div class="tags"><span class="tag">construction-gate.ts</span></div>
+          </div>
+        </div>
+        <div class="milestone">
+          <div class="when">Task 3</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Schema v33 + migration</h3>
+            <p><code>SCHEMA_VERSION = 33</code>; <code>migrateV32toV33</code> backfills <code>founderId</code> (standalone artificial → own id; artificial lobe → holder); round-trip identity test.</p>
+            <div class="tags"><span class="tag">persistence.ts</span><span class="tag">bump = migrate</span></div>
+          </div>
+        </div>
+        <div class="milestone">
+          <div class="when">Task 4</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>Wire all three surfaces</h3>
+            <p>Server <code>construct-island</code> intent, LOCAL gateway, and construction UI (<code>computePlacementValidity</code>, ghost reds on the two spatial reasons, tooltip labels). LOCAL/REMOTE parity tests.</p>
+            <div class="tags"><span class="tag">server intents.ts</span><span class="tag">mutation-gateway.ts</span><span class="tag">construction-placement.ts</span><span class="tag">construction-ui.ts</span></div>
+          </div>
+        </div>
+        <div class="milestone">
+          <div class="when">Task 5</div>
+          <div class="dot-col"><span class="dot"></span><span class="line"></span></div>
+          <div class="body">
+            <h3>SPEC.md + full verification</h3>
+            <p>§2.5 anti-leapfrog constraint paragraphs, §3.6 founderId-propagation bullet, build-status row; then build + both typechecks + full client+server suite. Finish: rebase onto master, fast-forward, push.</p>
+            <div class="tags"><span class="tag">SPEC.md</span><span class="tag">npm test</span></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="sec-head"><span class="num">03</span><h2>Risks</h2></div>
+      <div class="risks">
+        <div class="row">
+          <div class="cell head">Risk</div>
+          <div class="cell head">Sev</div>
+          <div class="cell head">Mitigation</div>
+        </div>
+        <div class="row">
+          <div class="cell">Anchor-test geometry is borderline (inscribed footprints run 1–2 tiles inside the ellipse), producing flaky pass/fail at exact boundaries.</div>
+          <div class="cell"><span class="sev med">MED</span></div>
+          <div class="cell">Test positions chosen with explicit arithmetic comments and safety margin (reject case overlaps by several tiles, accept case clears by ~10).</div>
+        </div>
+        <div class="row">
+          <div class="cell">Max-growth pseudo-specs add entries to the memoized tile caches on every ghost drag.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Same cost profile as the existing <code>positionIsFree</code> candidate casts; caches are capped (4096) and cleared wholesale.</div>
+        </div>
+        <div class="row">
+          <div class="cell">Founder merged away later → its creations stop counting against the new host.</div>
+          <div class="cell"><span class="sev low">LOW</span></div>
+          <div class="cell">Accepted in the design spec: anchor + range still gate every individual placement.</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <p>Implementation plan · 2026-06-27 · executes <code>2026-06-27-artificial-island-anti-leapfrog-design</code> · canonical steps: the markdown plan beside this file</p>
+    </div>
+
+  </div>
+</body>
+</html>
