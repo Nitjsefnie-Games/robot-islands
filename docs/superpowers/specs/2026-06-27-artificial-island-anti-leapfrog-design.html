@@ -425,7 +425,7 @@
           </tr>
           <tr>
             <td class="slate">2 · Range</td>
-            <td>Reject if the candidate footprint's nearest-tile distance to the <strong>founder island</strong> exceeds <code>ARTIFICIAL_RANGE_TILES = 48</code> (placeholder, tunable).</td>
+            <td>Reject if the candidate's distance to the <strong>founder island</strong> exceeds <code>ARTIFICIAL_RANGE_TILES = 48</code> (placeholder, tunable). Metric as shipped: minimum <strong>Chebyshev gap between bounding boxes</strong> (candidate vs nearest founder constituent, <code>founderRangeGap</code>) — marginally more permissive than a true inscribed-footprint gap near ellipse corners; accepted, SPEC §2.5 documents the same.</td>
             <td>No giant leaps / distant land-grabs. With Rule 1 the legal zone is a band: beyond every max-growth reach, yet &le;48 tiles from the founder.</td>
           </tr>
           <tr>

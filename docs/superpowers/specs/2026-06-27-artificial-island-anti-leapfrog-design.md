@@ -90,9 +90,13 @@ cost-curve change — see "Out of scope").
 
 - Placeholder **`ARTIFICIAL_RANGE_TILES = 48`**, tunable (codebase convention for
   placeholder magnitudes).
-- Distance = minimum tile gap between the candidate's inscribed footprint and the
-  founder island's inscribed footprint (consistent with the footprint-based
-  anchor/overlap tests).
+- Distance metric (as shipped; reconciled post-implementation): the **minimum
+  Chebyshev gap between the candidate's bounding box and the nearest
+  founder-constituent bounding box** (`founderRangeGap`) — constituent extents,
+  not centre distance. A bbox gap is marginally more permissive than a true
+  inscribed-footprint gap near ellipse corners; accepted, since the anchor and
+  ratio gates still bound every placement and 48 is a placeholder magnitude.
+  SPEC §2.5 documents the same metric.
 - **Effect:** stops giant leaps and claiming distant ocean; construction stays
   local to the builder. Combined with the anchor rule the legal placement zone is
   a **band**: beyond every populated island's max-growth reach, yet within 48
