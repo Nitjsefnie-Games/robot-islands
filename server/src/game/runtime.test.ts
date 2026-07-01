@@ -168,9 +168,14 @@ describe('runtime loadAndCatchUp', () => {
 
     const game = await loadAndCatchUp(pool, uid, launchMs + 130_000);
     expect(game).not.toBeNull();
+    // Per SPEC §2.3 / §12 the settlement vehicle is CONSUMED on arrival;
+    // tickVehicles prunes terminal ('arrived') vehicles from world.vehicles on
+    // the tick AFTER the transition (perf commit 871d923). So after a catch-up
+    // gap that fully resolves the flight the vehicle is gone from the fleet, and
+    // the spec-correct observable of a successful settlement is the target
+    // becoming populated with its IslandState created.
     const advancedVehicle = game!.world.vehicles.find((v) => v.id === vehicle.id);
-    expect(advancedVehicle).toBeDefined();
-    expect(advancedVehicle!.status).toBe('arrived');
+    expect(advancedVehicle).toBeUndefined();
     expect(game!.world.islands.find((i) => i.id === 'target')!.populated).toBe(true);
     expect(game!.islandStates.has('target')).toBe(true);
   });
