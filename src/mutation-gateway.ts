@@ -77,7 +77,7 @@ import { applyOffer, type TradeOffer } from './trade.js';
 import { editIslandBiome } from './universe-editor.js';
 import { renameIsland } from './world.js';
 import type { Biome, IslandSpec, WorldState } from './world.js';
-import { positionIsFree, regionDiscoveredOrVisible } from './construction-gate.js';
+import { positionIsFree, regionDiscoveredOrVisible, validateArtificialPlacement } from './construction-gate.js';
 import {
   addConduitLink as addConduitLinkPure,
   canWire,
@@ -594,6 +594,8 @@ export function makeLocalGateway(
       if (!regionDiscoveredOrVisible(world, cx, cy, majorRadius, minorRadius)) {
         return err('in-unknown-space', 'in-unknown-space');
       }
+      const anti = validateArtificialPlacement(world, founder.spec, cx, cy, majorRadius, minorRadius);
+      if (!anti.ok) return err(anti.reason ?? 'placement invalid', anti.reason);
       const now = nowMsOr(performance.now(), nowMs);
       try {
         const result = constructIsland(
