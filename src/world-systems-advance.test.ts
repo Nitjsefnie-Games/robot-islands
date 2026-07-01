@@ -201,10 +201,16 @@ describe('advanceWorldSystems', () => {
     const d = r.drone;
     // Flight: launchTime=1000, expectedReturnTime = 1000 + (60/0.5)*1000 = 121_000.
     const res = advanceWorldSystems(world, islandStates, 1000, 130_000, 0);
+    // The in-flight drone completes its round-trip during the offline gap and is
+    // reported via res.dronesReturned. Per SPEC §11.6 a resolved drone is removed
+    // from the fleet; tickDrones prunes terminal drones on the tick AFTER their
+    // transition (perf commit ca49569), so once a gap fully resolves the flight
+    // the drone is gone from world.drones (the returned-object reference below
+    // still carries its final 'returned' status).
     expect(d.status).toBe('returned');
-    expect(world.drones).toHaveLength(1);
-    expect(world.drones[0]!.status).toBe('returned');
+    expect(world.drones).toHaveLength(0);
     expect(res.dronesReturned).toHaveLength(1);
+    expect(res.dronesReturned[0]!.status).toBe('returned');
     expect(res.dronesLost).toHaveLength(0);
     expect(res.steps).toBeGreaterThan(0);
   });
