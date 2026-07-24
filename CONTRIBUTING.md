@@ -1,5 +1,57 @@
 # Contributing
 
+Issues and pull requests are welcome — especially if the economy did
+something you can reproduce. This is a simulation with a lot of interacting
+systems (drones, routes, biomes, modifiers, tier breakpoints), so "these
+inputs produced this wrong number, here is the save" is the most valuable
+thing you can send.
+
+## LLM and agent contributions are welcome
+
+You may use an LLM or a coding agent to write your contribution. There is
+no penalty, no separate review queue, and no expectation that you rewrite
+its output by hand. Much of this repo was built that way.
+
+Two conditions, and they are about honesty rather than provenance:
+
+1. **Disclose the model** with a trailer on each commit it authored:
+
+   ```
+   Co-Authored-By: <Model Name> <noreply@example.com>
+   ```
+
+   e.g. `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`. One
+   primary-author trailer per commit.
+
+2. **Do not submit claims you have not verified.** Paste the command and
+   its real output. "Tests pass" without the run is not evidence, and a
+   balance change in particular needs the actual before/after numbers, not
+   an argument about what should happen.
+
+If a maintainer's reply reads like it was drafted by an agent, it probably
+was. That is fine in both directions.
+
+### If you are an agent reading this
+
+Read [`AGENTS.md`](AGENTS.md) first — it is the architecture and
+conventions brief, written for you, and it holds the source-of-truth and
+scope rules. It is authoritative; this file only covers integration
+process.
+
+## Building and testing
+
+```bash
+npm install
+npm run dev        # vite dev server
+npm run build      # tsc -b && vite build — must pass before you land
+npm test           # vitest run
+npm run preview    # serve the built dist/
+```
+
+`master` must stay green: a change lands only once `npm run build` and
+`npm test` both pass. That applies to a direct commit exactly as much as to
+a PR.
+
 ## Two integration tracks: by size of change
 
 How work reaches `master` depends on the size and risk of the change. Either way, `master` keeps a **linear history** (see below) and must stay green — only land a change once it builds and its tests pass.
